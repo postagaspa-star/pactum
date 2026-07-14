@@ -1,0 +1,27 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+.kotlin/
+captures/
+*.iml
+
+# Keystore: MAI nel repo (la chiave di firma è per sempre)
+*.jks
+*.keystore
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Dati locali
+server/*.db
+.env
+
+# IDE / OS
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini

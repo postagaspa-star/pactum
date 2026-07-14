@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nome_app">Pactum</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_titolo">Benvenuto in Pactum</string>
+    <string name="onboarding_intro">Pactum è un testimone, non un carceriere: misura l\'uso delle app e lo racconta al patto, senza bloccare niente. Per funzionare servono tre permessi.</string>
+    <string name="passo_uso_titolo">1. Accesso ai dati di utilizzo</string>
+    <string name="passo_uso_descrizione">Serve per misurare quanto tempo passi nelle app. Senza questo permesso Pactum non può fare da testimone.</string>
+    <string name="passo_batteria_titolo">2. Esenzione dalla batteria</string>
+    <string name="passo_batteria_descrizione">Evita che Android addormenti Pactum e crei buchi nel registro.</string>
+    <string name="passo_notifiche_titolo">3. Notifiche</string>
+    <string name="passo_notifiche_descrizione">Per la notifica fissa del testimone e gli avvisi del patto.</string>
+    <string name="passo_apri_impostazioni">Apri impostazioni</string>
+    <string name="passo_fatto">Fatto</string>
+    <string name="passo_da_fare">Da fare</string>
+    <string name="aiuto_restrizioni_titolo">Se Android ti blocca…</string>
+    <string name="aiuto_restrizioni_testo">Su Android 15 e 16, con l\'app installata dal browser, l\'interruttore “Accesso ai dati di utilizzo” parte bloccato dalle impostazioni con limitazioni. Il primo tentativo che fallisce è necessario: senza, la voce per sbloccare non compare.\n\n1. Tocca “Apri impostazioni” e prova ad attivare Pactum: comparirà “Impostazione non disponibile”.\n2. Torna qui e tocca “Apri info app”.\n3. Nella pagina dell\'app tocca il menu ⋮ in alto a destra.\n4. Scegli “Consenti impostazioni con limitazioni” e conferma con PIN o impronta.\n5. Torna su “Accesso ai dati di utilizzo” e attiva Pactum.</string>
+    <string name="aiuto_apri_info_app">Apri info app</string>
+    <string name="onboarding_ricontrolla">Ho fatto, ricontrolla</string>
+    <string name="onboarding_nota_avvio">Appena l\'accesso ai dati di utilizzo è attivo, Pactum parte da solo.</string>
+
+    <!-- Schermata Oggi -->
+    <string name="oggi_titolo">Oggi</string>
+    <string name="oggi_totale">Tempo nelle app oggi</string>
+    <string name="oggi_vuoto">Nessun uso registrato per oggi.</string>
+    <string name="oggi_caricamento">Sto leggendo l\'uso di oggi…</string>
+    <string name="azione_aggiorna">Aggiorna</string>
+    <string name="azione_impostazioni">Impostazioni</string>
+    <string name="formato_minuti">%1$d min</string>
+    <string name="formato_ore_minuti">%1$d h %2$d min</string>
+
+    <!-- Impostazioni -->
+    <string name="impostazioni_titolo">Impostazioni</string>
+    <string name="impostazioni_descrizione">Indirizzo del server postino e token del patto. Te li dà chi ha preparato il server, insieme a te.</string>
+    <string name="impostazioni_server_url">Indirizzo del server</string>
+    <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
+    <string name="impostazioni_token">Token del patto</string>
+    <string name="impostazioni_salvate">Impostazioni salvate</string>
+    <string name="azione_salva">Salva</string>
+    <string name="azione_indietro">Indietro</string>
+
+    <!-- Notifica del testimone -->
+    <string name="canale_testimone_nome">Testimone</string>
+    <string name="canale_testimone_descrizione">La notifica fissa che mostra che Pactum è attivo.</string>
+    <string name="notifica_testimone_titolo">Pactum</string>
+    <string name="notifica_testimone_testo">Pactum sta facendo da testimone</string>
+</resources>

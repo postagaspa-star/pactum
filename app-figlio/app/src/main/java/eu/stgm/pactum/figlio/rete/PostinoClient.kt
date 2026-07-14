@@ -7,6 +7,7 @@ import eu.stgm.pactum.figlio.dati.PaccoEventi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -54,15 +55,31 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         }
     }
 
-    private companion object {
-        val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
-        val json = Json { ignoreUnknownKeys = true }
+    companion object {
+        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+        private val json = Json { ignoreUnknownKeys = true }
 
         // Un solo client OkHttp per processo: riusa pool di connessioni e thread.
-        val http: OkHttpClient = OkHttpClient.Builder()
+        private val http: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
             .build()
+
+        /**
+         * Normalizza e valida l'indirizzo del server prima del salvataggio:
+         * aggiunge https:// se manca lo schema e valida con okhttp3.HttpUrl.
+         * Restituisce null se l'indirizzo va rifiutato — un URL sbagliato
+         * accettato in silenzio è un'app che non consegna mai niente senza
+         * che nessuno se ne accorga.
+         */
+        fun normalizzaUrlServer(grezzo: String): String? {
+            val ripulito = grezzo.trim()
+            if (ripulito.isEmpty()) return null
+            val conSchema = if ("://" in ripulito) ripulito else "https://$ripulito"
+            // toString() di HttpUrl aggiunge la "/" del percorso radice:
+            // via, perché i percorsi ("/api/...") si concatenano dopo.
+            return conSchema.toHttpUrlOrNull()?.toString()?.trimEnd('/')
+        }
     }
 }

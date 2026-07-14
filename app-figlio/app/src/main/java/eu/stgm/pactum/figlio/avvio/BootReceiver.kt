@@ -9,6 +9,8 @@ import eu.stgm.pactum.figlio.dati.CodaEventi
 import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.TipiEvento
+import eu.stgm.pactum.figlio.permessi.PermessiHelper
+import eu.stgm.pactum.figlio.servizio.PactumService
 import eu.stgm.pactum.figlio.sync.BattitoWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,9 +20,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * Al riavvio del telefono: ripianifica il battito e marca il reboot nel
- * registro. Il marcatore serve perché elapsedRealtime si azzera al riavvio
- * (architettura.md): senza, l'azzeramento sembrerebbe una manomissione.
+ * Al riavvio del telefono: ripianifica il battito, riaccende il testimone e
+ * marca il reboot nel registro. Il marcatore serve perché elapsedRealtime si
+ * azzera al riavvio (architettura.md): senza, l'azzeramento sembrerebbe una
+ * manomissione.
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -28,6 +31,15 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
 
         BattitoWorker.pianifica(context)
+
+        // La notifica "Pactum sta facendo da testimone" deve tornare da sola
+        // dopo il riavvio: senza, la promessa di trasparenza si rompe in
+        // silenzio finché qualcuno non riapre l'app. FGS specialUse avviabile
+        // da BOOT_COMPLETED (architettura.md); il controllo sull'accesso ai
+        // dati di utilizzo evita di partire prima dell'onboarding.
+        if (PermessiHelper.haAccessoUso(context)) {
+            PactumService.avvia(context)
+        }
 
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

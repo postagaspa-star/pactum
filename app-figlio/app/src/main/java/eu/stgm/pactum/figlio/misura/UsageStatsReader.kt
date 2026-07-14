@@ -18,7 +18,10 @@ data class UsoApp(val pacchetto: String, val millisPrimoPiano: Long)
  *   già in primo piano all'inizio dell'intervallo;
  * - una PAUSED come primo evento di un pacchetto (sfuggito all'innesco)
  *   conta comunque dall'inizio dell'intervallo;
- * - una sessione ancora aperta alla fine conta fino alla fine dell'intervallo.
+ * - una sessione ancora aperta alla fine conta fino alla fine dell'intervallo;
+ * - DEVICE_SHUTDOWN chiude ogni sessione al suo timestamp e DEVICE_STARTUP
+ *   azzera lo stato (costanti API 29, inlined: su API 26-28 semplicemente
+ *   non compaiono mai tra gli eventi).
  */
 class UsageStatsReader(context: Context) {
 
@@ -48,13 +51,41 @@ class UsageStatsReader(context: Context) {
             }
         }
 
+        // Base per il fallback "prima traccia = PAUSED": normalmente [inizio],
+        // ma dopo un'accensione una sessione non può essere iniziata prima.
+        var baseSessioniAperte = inizio
+
         val eventi: UsageEvents? = usageStatsManager.queryEvents(inizio, fine)
         val evento = UsageEvents.Event()
         while (eventi != null && eventi.hasNextEvent()) {
             eventi.getNextEvent(evento)
+            val ts = evento.timeStamp.coerceIn(inizio, fine)
+            when (evento.eventType) {
+                // Telefono spento: OGNI sessione aperta si chiude qui, non a
+                // mezzanotte. Senza, spegnere dentro TikTok alle 22:05 conta
+                // primo piano fantasma fino a fine intervallo.
+                UsageEvents.Event.DEVICE_SHUTDOWN -> {
+                    for (stato in stati.values) {
+                        if (stato.activityAttive.isNotEmpty()) {
+                            stato.accumulato += ts - stato.inPrimoPianoDa
+                            stato.activityAttive.clear()
+                        }
+                    }
+                    baseSessioniAperte = ts
+                    continue
+                }
+                // Telefono acceso: niente può essere in primo piano "da prima".
+                // Le sessioni rimaste aperte (spegnimento senza SHUTDOWN, es.
+                // batteria staccata) si azzerano senza accumulare: meglio non
+                // contare che contare tempo a telefono spento.
+                UsageEvents.Event.DEVICE_STARTUP -> {
+                    for (stato in stati.values) stato.activityAttive.clear()
+                    baseSessioniAperte = ts
+                    continue
+                }
+            }
             val pacchetto = evento.packageName ?: continue
             val classe = evento.className ?: pacchetto
-            val ts = evento.timeStamp.coerceIn(inizio, fine)
             val stato = stati.getOrPut(pacchetto) { StatoPacchetto() }
             when (evento.eventType) {
                 // Su API 26-28 il sistema emette MOVE_TO_FOREGROUND/MOVE_TO_BACKGROUND,
@@ -74,8 +105,9 @@ class UsageStatsReader(context: Context) {
                         }
                     } else if (!stato.primoEventoVisto) {
                         // Prima traccia del pacchetto = una chiusura: la sessione
-                        // era aperta prima di [inizio] (mezzanotte attraversata).
-                        stato.accumulato += ts - inizio
+                        // era aperta prima di [inizio] (mezzanotte attraversata)
+                        // o, al più tardi, dall'ultima accensione.
+                        stato.accumulato += ts - baseSessioniAperte
                     }
                     stato.primoEventoVisto = true
                 }
@@ -103,6 +135,15 @@ class UsageStatsReader(context: Context) {
         val evento = UsageEvents.Event()
         while (eventi != null && eventi.hasNextEvent()) {
             eventi.getNextEvent(evento)
+            // Spegnimento o accensione: nessuna sessione sopravvive al confine.
+            // Senza questo, spegnere dentro un'app la sera avvelena l'innesco
+            // del giorno dopo (sessione fantasma aperta dalla mezzanotte).
+            if (evento.eventType == UsageEvents.Event.DEVICE_SHUTDOWN ||
+                evento.eventType == UsageEvents.Event.DEVICE_STARTUP
+            ) {
+                attive.clear()
+                continue
+            }
             val pacchetto = evento.packageName ?: continue
             val classe = evento.className ?: pacchetto
             when (evento.eventType) {

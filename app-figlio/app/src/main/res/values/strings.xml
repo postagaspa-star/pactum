@@ -37,6 +37,13 @@
     <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
     <string name="impostazioni_token">Token del patto</string>
     <string name="impostazioni_salvate">Impostazioni salvate</string>
+    <string name="impostazioni_url_non_valido">Indirizzo del server non valido: controlla e riprova (es. https://pactum.esempio.it).</string>
+    <string name="impostazioni_ultimo_battito">Ultimo battito consegnato: %1$s</string>
+    <string name="impostazioni_ultimo_battito_mai">mai</string>
+    <string name="impostazioni_prova_adesso">Prova adesso</string>
+    <string name="impostazioni_prova_ok">Battito consegnato: il server risponde.</string>
+    <string name="impostazioni_prova_fallita">Consegna fallita: controlla indirizzo, token e connessione.</string>
+    <string name="impostazioni_config_incompleta">Prima salva indirizzo del server e token del patto.</string>
     <string name="azione_salva">Salva</string>
     <string name="azione_indietro">Indietro</string>
 

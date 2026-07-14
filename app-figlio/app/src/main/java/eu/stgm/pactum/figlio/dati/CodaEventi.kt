@@ -27,15 +27,40 @@ class CodaEventi(context: Context) {
         }
     }
 
+    /**
+     * Accoda una fotografia uso_giornaliero SOSTITUENDO quella eventualmente
+     * già in coda per lo stesso giorno (dedup stabile): il server tiene
+     * comunque l'ultima per giorno, ma senza sostituzione la coda si
+     * riempirebbe di fotografie quasi identiche a ogni battito.
+     */
+    suspend fun sostituisciUsoGiornaliero(evento: Evento) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val giorno = evento.dettagli["giorno"]
+            val altri = if (giorno == null) {
+                leggi()
+            } else {
+                leggi().filterNot {
+                    it.tipo == TipiEvento.USO_GIORNALIERO && it.dettagli["giorno"] == giorno
+                }
+            }
+            scrivi((altri + evento).takeLast(MAX_EVENTI))
+        }
+    }
+
     suspend fun inAttesa(): List<Evento> = withContext(Dispatchers.IO) {
         mutex.withLock { leggi() }
     }
 
-    /** Rimuove i primi [quanti] eventi: quelli appena consegnati con successo. */
-    suspend fun rimuoviPrimi(quanti: Int) {
-        if (quanti <= 0) return
+    /**
+     * Rimuove per id gli eventi appena accettati dal server. Per id e non per
+     * posizione: tra lettura e rimozione una sostituzione per giorno può aver
+     * cambiato la coda, e "togli i primi N" toglierebbe eventi mai consegnati.
+     */
+    suspend fun rimuoviConsegnati(consegnati: List<Evento>) {
+        if (consegnati.isEmpty()) return
+        val ids = consegnati.mapTo(HashSet()) { it.id }
         withContext(Dispatchers.IO) {
-            mutex.withLock { scrivi(leggi().drop(quanti)) }
+            mutex.withLock { scrivi(leggi().filterNot { it.id in ids }) }
         }
     }
 

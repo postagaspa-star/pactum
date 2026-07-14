@@ -9,19 +9,43 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.dati.Battito
+import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.rete.PostinoClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * FGS di tipo specialUse (v. manifest: PROPERTY_SPECIAL_USE_FGS_SUBTYPE).
- * Scheletro: per ora tiene solo la notifica del testimone. Il vero loop di
- * valutazione regole quasi-real-time arriverà in una tappa successiva; la
- * misura vive comunque in BattitoWorker (design retroattivo), quindi la morte
- * di questo servizio non buca il registro.
+ *
+ * Canale PRIMARIO del battito (decisione di design, review 14/07): di notte
+ * Doze rinvia WorkManager anche di 2-6 ore, e ogni mattina la finestra del
+ * genitore mostrerebbe un falso "silente". Il servizio è foreground e
+ * l'esenzione batteria concede la rete anche in Doze, quindi il loop qui
+ * dentro manda un battito ogni ~15 minuti; BattitoWorker resta come misura +
+ * mittente di riserva. I doppi battiti sono innocui lato server.
+ *
+ * Il vero loop di valutazione regole quasi-real-time arriverà in una tappa
+ * successiva; la misura vive comunque in BattitoWorker (design retroattivo),
+ * quindi la morte di questo servizio non buca il registro: al massimo
+ * riconsegna il battito al worker.
  */
 class PactumService : Service() {
+
+    private val ambito = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var loopBattito: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -39,11 +63,41 @@ class PactumService : Service() {
                 0
             },
         )
-        // Qui arriverà il loop di valutazione delle regole (tappe successive).
+        avviaLoopBattito()
         return START_STICKY
     }
 
+    override fun onDestroy() {
+        ambito.cancel()
+        super.onDestroy()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** Idempotente: onStartCommand può arrivare più volte, il loop è uno solo. */
+    private fun avviaLoopBattito() {
+        if (loopBattito?.isActive == true) return
+        loopBattito = ambito.launch {
+            while (isActive) {
+                inviaBattito()
+                delay(INTERVALLO_BATTITO_MS)
+            }
+        }
+    }
+
+    private suspend fun inviaBattito() {
+        val impostazioni = Impostazioni(applicationContext)
+        val configurazione = impostazioni.leggiConfigurazione()
+        if (!configurazione.completa) return // patto non ancora configurato
+        val consegnato = PostinoClient(configurazione).inviaBattito(
+            Battito(
+                tsDevice = System.currentTimeMillis(),
+                versioneApp = BuildConfig.VERSION_NAME,
+                elapsedRealtime = SystemClock.elapsedRealtime(),
+            ),
+        )
+        if (consegnato) impostazioni.registraBattitoConsegnato()
+    }
 
     private fun notificaTestimone(): Notification =
         NotificationCompat.Builder(this, CANALE_TESTIMONE)
@@ -69,6 +123,7 @@ class PactumService : Service() {
     companion object {
         private const val CANALE_TESTIMONE = "testimone"
         private const val ID_NOTIFICA = 1
+        private const val INTERVALLO_BATTITO_MS = 15L * 60 * 1000
 
         fun avvia(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, PactumService::class.java))

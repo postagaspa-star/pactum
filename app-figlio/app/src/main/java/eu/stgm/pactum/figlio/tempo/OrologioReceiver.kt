@@ -23,8 +23,10 @@ import kotlin.math.abs
  *
  * TIME_SET (la costante Intent.ACTION_TIME_CHANGED) arriva anche per la
  * sincronizzazione automatica dell'ora: si confronta il nuovo orologio con
- * l'ancora (wall clock vs elapsedRealtime) e si registra solo uno scarto
- * sopra soglia. Se in mezzo c'è stato un riavvio l'ancora non è confrontabile
+ * l'ancora (wall clock vs elapsedRealtime) e si registra solo quando il
+ * drift ACCUMULATO supera la soglia (i piccoli scarti si sommano, così i
+ * cambi a piccoli passi non passano inosservati; il contatore si azzera a
+ * ogni battito consegnato). Se in mezzo c'è stato un riavvio l'ancora non è confrontabile
  * e non si segnala nulla: il riavvio l'ha già marcato BootReceiver.
  * In ogni caso il timestamp che fa fede resta ts_server: qui si aggiunge solo
  * trasparenza locale.
@@ -71,7 +73,13 @@ class OrologioReceiver : BroadcastReceiver() {
         if (ancora != null && !riavviatoNelFrattempo) {
             val attesa = ancora.wallClock + (elapsedAdesso - ancora.elapsedRealtime)
             val scarto = adesso - attesa
-            if (abs(scarto) > SOGLIA_SCARTO_MS) {
+            // Anti-salame: uno scarto sotto soglia non viene assorbito e
+            // dimenticato — si somma a un contatore persistente. Tanti passi
+            // da 1m59s fanno scattare la manomissione appena il TOTALE supera
+            // la soglia. Il contatore si azzera solo a manomissione registrata
+            // o a battito consegnato (da lì fa fede l'orologio del server).
+            val driftAccumulato = impostazioni.leggiDriftOrologio() + scarto
+            if (abs(driftAccumulato) > SOGLIA_SCARTO_MS) {
                 coda.accoda(
                     Evento(
                         tipo = TipiEvento.MANOMISSIONE,
@@ -79,13 +87,17 @@ class OrologioReceiver : BroadcastReceiver() {
                         dettagli = buildJsonObject {
                             put("sotto_tipo", "cambio_ora")
                             // Il contratto vuole secondi; il segno dice la direzione.
-                            put("drift_secondi", scarto / 1000)
+                            put("drift_secondi", driftAccumulato / 1000)
                         },
                     ),
                 )
+                impostazioni.azzeraDriftOrologio()
+            } else {
+                impostazioni.salvaDriftOrologio(driftAccumulato)
             }
         }
-        // Qualunque sia l'esito, il nuovo orologio è la nuova base.
+        // Qualunque sia l'esito, il nuovo orologio è la nuova base per la
+        // MISURA del prossimo scarto (il contatore sopra tiene la memoria).
         impostazioni.salvaAncoraTempo(AncoraTempo(adesso, elapsedAdesso))
     }
 

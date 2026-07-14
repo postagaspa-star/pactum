@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.ui
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -21,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,9 +34,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.rete.PostinoClient
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /** Impostazioni minime del postino: indirizzo del server e token del patto. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,8 +55,15 @@ fun ImpostazioniScreen(onChiudi: () -> Unit) {
     var serverUrl by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
     var caricato by rememberSaveable { mutableStateOf(false) }
+    var urlNonValido by rememberSaveable { mutableStateOf(false) }
+    var provaInCorso by remember { mutableStateOf(false) }
+    val ultimoBattito by impostazioni.ultimoBattitoConsegnato.collectAsState(initial = null)
     val snackbarHostState = remember { SnackbarHostState() }
     val messaggioSalvato = stringResource(R.string.impostazioni_salvate)
+    val messaggioUrlNonValido = stringResource(R.string.impostazioni_url_non_valido)
+    val messaggioProvaOk = stringResource(R.string.impostazioni_prova_ok)
+    val messaggioProvaFallita = stringResource(R.string.impostazioni_prova_fallita)
+    val messaggioConfigIncompleta = stringResource(R.string.impostazioni_config_incompleta)
 
     LaunchedEffect(Unit) {
         if (!caricato) {
@@ -87,9 +103,18 @@ fun ImpostazioniScreen(onChiudi: () -> Unit) {
             )
             OutlinedTextField(
                 value = serverUrl,
-                onValueChange = { serverUrl = it },
+                onValueChange = {
+                    serverUrl = it
+                    urlNonValido = false
+                },
                 label = { Text(stringResource(R.string.impostazioni_server_url)) },
                 placeholder = { Text(stringResource(R.string.impostazioni_server_url_esempio)) },
+                isError = urlNonValido,
+                supportingText = if (urlNonValido) {
+                    { Text(stringResource(R.string.impostazioni_url_non_valido)) }
+                } else {
+                    null
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -102,15 +127,73 @@ fun ImpostazioniScreen(onChiudi: () -> Unit) {
             )
             Button(
                 onClick = {
-                    ambito.launch {
-                        impostazioni.salvaConfigurazione(serverUrl, token)
-                        snackbarHostState.showSnackbar(messaggioSalvato)
+                    // Un URL scritto male e accettato in silenzio = un'app che
+                    // non consegna mai niente senza dirlo: si rifiuta subito.
+                    val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
+                    if (urlNormalizzato == null) {
+                        urlNonValido = true
+                        ambito.launch { snackbarHostState.showSnackbar(messaggioUrlNonValido) }
+                    } else {
+                        urlNonValido = false
+                        serverUrl = urlNormalizzato
+                        ambito.launch {
+                            impostazioni.salvaConfigurazione(urlNormalizzato, token)
+                            snackbarHostState.showSnackbar(messaggioSalvato)
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.azione_salva))
             }
+
+            // Verifica onesta del canale: quando è arrivato l'ultimo battito
+            // e un pulsante per provarne uno adesso, con esito esplicito.
+            Text(
+                text = stringResource(
+                    R.string.impostazioni_ultimo_battito,
+                    ultimoBattito?.let { formattatoreBattito.format(Instant.ofEpochMilli(it)) }
+                        ?: stringResource(R.string.impostazioni_ultimo_battito_mai),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedButton(
+                enabled = !provaInCorso,
+                onClick = {
+                    ambito.launch {
+                        provaInCorso = true
+                        try {
+                            val configurazione = impostazioni.leggiConfigurazione()
+                            val esito = if (!configurazione.completa) {
+                                messaggioConfigIncompleta
+                            } else {
+                                val consegnato = PostinoClient(configurazione).inviaBattito(
+                                    Battito(
+                                        tsDevice = System.currentTimeMillis(),
+                                        versioneApp = BuildConfig.VERSION_NAME,
+                                        elapsedRealtime = SystemClock.elapsedRealtime(),
+                                    ),
+                                )
+                                if (consegnato) {
+                                    impostazioni.registraBattitoConsegnato()
+                                    messaggioProvaOk
+                                } else {
+                                    messaggioProvaFallita
+                                }
+                            }
+                            snackbarHostState.showSnackbar(esito)
+                        } finally {
+                            provaInCorso = false
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.impostazioni_prova_adesso))
+            }
         }
     }
 }
+
+private val formattatoreBattito: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.systemDefault())

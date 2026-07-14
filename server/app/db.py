@@ -52,15 +52,28 @@ CREATE TABLE IF NOT EXISTS proposte (
 CREATE TABLE IF NOT EXISTS eventi (
     id TEXT PRIMARY KEY,
     tipo TEXT NOT NULL,
-    payload TEXT NOT NULL DEFAULT '{}',
-    ts_device TEXT,
+    dettagli TEXT NOT NULL DEFAULT '{}',
+    ts_device INTEGER,
+    ts_server TEXT NOT NULL
+);
+
+-- uso_giornaliero e' una fotografia CUMULATIVA del giorno (contratto-api.md):
+-- il registro eventi conserva ogni fotografia ricevuta, ma la verita' sull'uso
+-- di un giorno e' SOLO l'ultima ricevuta per quel giorno, custodita qui
+-- (vince l'ultima: una nuova fotografia sostituisce la riga del suo giorno).
+CREATE TABLE IF NOT EXISTS uso_giornaliero (
+    giorno TEXT PRIMARY KEY,
+    dettagli TEXT NOT NULL,
+    evento_id TEXT NOT NULL REFERENCES eventi(id),
     ts_server TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS battiti (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batteria INTEGER,
-    ts_device TEXT,
+    versione_app TEXT,
+    elapsed_realtime INTEGER,
+    ts_device INTEGER,
     ts_server TEXT NOT NULL
 );
 

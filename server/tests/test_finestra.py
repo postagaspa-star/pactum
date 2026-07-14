@@ -34,13 +34,13 @@ def test_semaforo_colori(client, orologio):
     regola = crea_regola(client)  # creata il 14/07
     client.post(
         "/api/eventi",
-        json=[{"id": "b1", "tipo": "bonus_usato", "payload": {"regola_id": regola["id"]}}],
+        json={"eventi": [{"id": "b1", "tipo": "bonus_usato", "dettagli": {"regola_id": regola["id"]}}]},
         headers=FIGLIO,
     )
     orologio.avanza(days=1)  # 15/07
     client.post(
         "/api/eventi",
-        json=[{"id": "s1", "tipo": "sforamento", "payload": {"regola_id": regola["id"]}}],
+        json={"eventi": [{"id": "s1", "tipo": "sforamento", "dettagli": {"regola_id": regola["id"]}}]},
         headers=FIGLIO,
     )
     orologio.avanza(days=1)  # oggi = 16/07
@@ -55,10 +55,10 @@ def test_sforamento_vince_sul_bonus_nello_stesso_giorno(client):
     regola = crea_regola(client)
     client.post(
         "/api/eventi",
-        json=[
-            {"id": "b2", "tipo": "bonus_usato", "payload": {"regola_id": regola["id"]}},
-            {"id": "s2", "tipo": "sforamento", "payload": {"regola_id": regola["id"]}},
-        ],
+        json={"eventi": [
+            {"id": "b2", "tipo": "bonus_usato", "dettagli": {"regola_id": regola["id"]}},
+            {"id": "s2", "tipo": "sforamento", "dettagli": {"regola_id": regola["id"]}},
+        ]},
         headers=FIGLIO,
     )
     semaforo = _finestra(client)["regole"][0]["semaforo"]
@@ -69,10 +69,10 @@ def test_manomissioni_e_sforamenti_recenti(client):
     crea_regola(client)
     client.post(
         "/api/eventi",
-        json=[
-            {"id": "m1", "tipo": "manomissione", "payload": {"dettaglio": "orologio cambiato"}},
-            {"id": "s3", "tipo": "sforamento", "payload": {"regola_id": 1}},
-        ],
+        json={"eventi": [
+            {"id": "m1", "tipo": "manomissione", "dettagli": {"sotto_tipo": "cambio_ora"}},
+            {"id": "s3", "tipo": "sforamento", "dettagli": {"regola_id": 1}},
+        ]},
         headers=FIGLIO,
     )
     finestra = _finestra(client)

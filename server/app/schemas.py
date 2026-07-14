@@ -54,15 +54,28 @@ class RegolaPatch(BaseModel):
 
 
 class BattitoIn(BaseModel):
+    # ts_device = epoch in millisecondi UTC, SOLO informativo (fa fede ts_server).
+    ts_device: int | None = None
+    versione_app: str | None = None
+    # Millisecondi dall'ultimo avvio del telefono (euristiche su riavvii/orologio).
+    elapsed_realtime: int | None = None
     batteria: int | None = Field(default=None, ge=0, le=100)
-    ts_device: str | None = None
+
+
+TipoEvento = Literal[
+    "uso_giornaliero", "riavvio", "manomissione", "sforamento", "bonus_usato", "dichiarazione"
+]
 
 
 class EventoIn(BaseModel):
     id: str = Field(min_length=1, max_length=128)
-    tipo: Literal["uso_app", "sforamento", "manomissione", "bonus_usato", "dichiarazione"]
-    payload: dict = Field(default_factory=dict)
-    ts_device: str | None = None
+    tipo: TipoEvento
+    ts_device: int | None = None  # epoch ms UTC, informativo
+    dettagli: dict = Field(default_factory=dict)
+
+
+class EventiIn(BaseModel):
+    eventi: list[EventoIn]
 
 
 class BonusIn(BaseModel):

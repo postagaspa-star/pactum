@@ -25,7 +25,7 @@ def _evento_out(riga: sqlite3.Row) -> dict:
     return {
         "id": riga["id"],
         "tipo": riga["tipo"],
-        "payload": json.loads(riga["payload"]),
+        "dettagli": json.loads(riga["dettagli"]),
         "ts_device": riga["ts_device"],
         "ts_server": riga["ts_server"],
     }
@@ -57,8 +57,8 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
     sforamenti_per_regola = defaultdict(set)  # regola_id -> {data ISO}
     bonus_per_regola = defaultdict(set)
     for evento in eventi:
-        payload = json.loads(evento["payload"])
-        regola_id = payload.get("regola_id")
+        dettagli = json.loads(evento["dettagli"])
+        regola_id = dettagli.get("regola_id")
         if regola_id is None:
             continue
         data = evento["ts_server"][:10]

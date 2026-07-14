@@ -88,6 +88,9 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
                 put("uso_minuti", buildJsonObject {
                     uso.forEach { put(it.pacchetto, JsonPrimitive(it.millisPrimoPiano / 60_000)) }
                 })
+                // Totale del giorno dai millisecondi veri, non dalla somma dei
+                // minuti arrotondati per app (contratto-api.md: totale_minuti).
+                put("totale_minuti", uso.sumOf { it.millisPrimoPiano } / 60_000)
             },
         )
     }

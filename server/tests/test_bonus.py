@@ -15,7 +15,7 @@ def _bonus(client, minuti, motivo=None):
 
 def test_bonus_valido_e_residui(client):
     risposta = _bonus(client, 15, motivo="serie con gli amici")
-    assert risposta.status_code == 201
+    assert risposta.status_code == 200
     assert risposta.json() == {"minuti": 15, "residuo_giorno": 15, "residuo_settimana": 75}
 
 
@@ -26,7 +26,7 @@ def test_minuti_non_ammessi_422(client):
 
 
 def test_tetto_giornaliero_al_limite_esatto(client):
-    assert _bonus(client, 30).status_code == 201  # esattamente il tetto: passa
+    assert _bonus(client, 30).status_code == 200  # esattamente il tetto: passa
     risposta = _bonus(client, 5)
     assert risposta.status_code == 409
     dettaglio = risposta.json()["detail"]
@@ -36,33 +36,33 @@ def test_tetto_giornaliero_al_limite_esatto(client):
 
 
 def test_richiesta_oltre_il_residuo_parziale(client):
-    assert _bonus(client, 15).status_code == 201
-    assert _bonus(client, 5).status_code == 201
+    assert _bonus(client, 15).status_code == 200
+    assert _bonus(client, 5).status_code == 200
     risposta = _bonus(client, 15)  # residuo giorno = 10
     assert risposta.status_code == 409
     assert risposta.json()["detail"]["residuo_giorno"] == 10
 
 
 def test_il_giorno_dopo_il_tetto_giornaliero_riparte(client, orologio):
-    assert _bonus(client, 30).status_code == 201
+    assert _bonus(client, 30).status_code == 200
     assert _bonus(client, 5).status_code == 409
     orologio.avanza(days=1)
     risposta = _bonus(client, 5)
-    assert risposta.status_code == 201
+    assert risposta.status_code == 200
     assert risposta.json()["residuo_giorno"] == 25
     assert risposta.json()["residuo_settimana"] == 55  # la settimana non si azzera
 
 
 def test_cavallo_di_mezzanotte(client, orologio):
     orologio.vai_a(datetime(2026, 7, 14, 23, 50, 0, tzinfo=timezone.utc))
-    assert _bonus(client, 30).status_code == 201
+    assert _bonus(client, 30).status_code == 200
     orologio.avanza(minutes=20)  # 00:10 del giorno dopo
-    assert _bonus(client, 5).status_code == 201
+    assert _bonus(client, 5).status_code == 200
 
 
 def test_tetto_settimanale(client, orologio):
     for _ in range(3):  # mar + mer + gio = 90 minuti
-        assert _bonus(client, 30).status_code == 201
+        assert _bonus(client, 30).status_code == 200
         orologio.avanza(days=1)
     risposta = _bonus(client, 5)  # venerdi': giorno libero, settimana piena
     assert risposta.status_code == 409
@@ -73,12 +73,12 @@ def test_tetto_settimanale(client, orologio):
 
 def test_lunedi_la_settimana_riparte(client, orologio):
     for _ in range(3):
-        assert _bonus(client, 30).status_code == 201
+        assert _bonus(client, 30).status_code == 200
         orologio.avanza(days=1)
     assert _bonus(client, 5).status_code == 409
     orologio.vai_a(datetime(2026, 7, 20, 8, 0, 0, tzinfo=timezone.utc))  # lunedi'
     risposta = _bonus(client, 30)
-    assert risposta.status_code == 201
+    assert risposta.status_code == 200
     assert risposta.json()["residuo_settimana"] == 60
 
 
@@ -91,7 +91,7 @@ def test_bonus_genera_notifica_al_genitore(client):
 
 
 def test_bonus_rifiutato_non_genera_notifica(client):
-    assert _bonus(client, 30).status_code == 201
+    assert _bonus(client, 30).status_code == 200
     assert _bonus(client, 30).status_code == 409
     notifiche = client.get("/api/notifiche", headers=GENITORE).json()["notifiche"]
     assert len([n for n in notifiche if n["tipo"] == "bonus"]) == 1

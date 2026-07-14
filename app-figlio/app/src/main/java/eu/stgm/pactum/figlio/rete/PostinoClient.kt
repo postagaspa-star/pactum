@@ -15,11 +15,12 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * Client verso il server postino. Contratto v1 (da allineare col server):
+ * Client verso il server postino. Protocollo: docs/contratto-api.md
+ * (fonte di verità — ogni modifica passa prima da lì).
  *
  *   POST {base}/api/battito   corpo: Battito              → 2xx = ricevuto
  *   POST {base}/api/eventi    corpo: {"eventi": [Evento]} → 2xx = ricevuto
- *   header: Authorization: Bearer <token del patto>
+ *   header: Authorization: Bearer <token del figlio>
  *
  * Tollerante all'offline: qualunque fallimento restituisce false e gli
  * eventi restano nella CodaEventi fino al battito successivo.

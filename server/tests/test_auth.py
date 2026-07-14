@@ -7,7 +7,7 @@ CORPO_PATCH = {"parametri": {"app_o_categoria": "TikTok", "minuti_al_giorno": 30
 
 ENDPOINT_FIGLIO = [
     ("POST", "/api/battito", {}),
-    ("POST", "/api/eventi", []),
+    ("POST", "/api/eventi", {"eventi": []}),
     ("POST", "/api/regole", CORPO_REGOLA),
     ("PATCH", "/api/regole/1", CORPO_PATCH),
     ("DELETE", "/api/regole/1", None),

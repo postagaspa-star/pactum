@@ -58,7 +58,7 @@ class OrologioReceiver : BroadcastReceiver() {
                     tipo = TipiEvento.MANOMISSIONE,
                     tsDevice = adesso,
                     dettagli = buildJsonObject {
-                        put("causa", "cambio_fuso")
+                        put("sotto_tipo", "cambio_fuso")
                         put("fuso", TimeZone.getDefault().id)
                     },
                 ),
@@ -77,8 +77,9 @@ class OrologioReceiver : BroadcastReceiver() {
                         tipo = TipiEvento.MANOMISSIONE,
                         tsDevice = adesso,
                         dettagli = buildJsonObject {
-                            put("causa", "cambio_ora")
-                            put("scarto_ms", scarto)
+                            put("sotto_tipo", "cambio_ora")
+                            // Il contratto vuole secondi; il segno dice la direzione.
+                            put("drift_secondi", scarto / 1000)
                         },
                     ),
                 )

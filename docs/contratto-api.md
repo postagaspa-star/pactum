@@ -35,35 +35,171 @@ Batch di eventi del registro.
   - **uso_giornaliero** — fotografia cumulativa del giorno: `{ "giorno": "YYYY-MM-DD", "uso_minuti": {package: minuti}, "totale_minuti": n }`. Il `giorno` è il giorno locale del telefono e deve essere una data reale `YYYY-MM-DD` (altrimenti la fotografia resta solo nel registro, senza indicizzare la vigente). La fotografia **vigente** per un `giorno` è **monotona su `totale_minuti`**: una fotografia con `totale_minuti` inferiore a quella vigente non la sovrascrive (protegge da consegne fuori ordine; `totale_minuti` mancante o non valido vale 0). Il registro eventi conserva comunque ogni fotografia ricevuta.
   - **riavvio** — `{ }`. Marca l'azzeramento di `elapsed_realtime`; NON è una manomissione.
   - **manomissione** — `{ "sotto_tipo": "cambio_ora" | "cambio_fuso" | "silenzio" | altro, "drift_secondi": n? , "regola_id": n? }`.
-  - **sforamento** — `{ "regola_id": n, ... }` (dettagli liberi in più).
-  - **bonus_usato / dichiarazione** — riservati a tappe successive; il bonus autoritativo passa SOLO da `POST /api/bonus`.
+  - **sforamento** — `{ "regola_id": n, "limite_efficace"?: n, "minuti_oltre"?: n, ... }` (dettagli liberi in più). Generato **sul telefono** dal valutatore locale (tappa 5): massimo UN sforamento per regola per giorno (fuso del telefono); per le `limite_tempo` il limite efficace del giorno = `minuti_al_giorno` + bonus concessi oggi su quella regola.
+  - **bonus_usato / dichiarazione** — riservati: il bonus autoritativo passa SOLO da `POST /api/bonus`, le dichiarazioni SOLO da `POST /api/dichiarazioni`.
 - Risposta `200`: `{ "ricevuti": N, "nuovi": M, "duplicati": K }`.
 
 ### POST /api/bonus
 L'unico canale con cui il figlio si concede bonus time (i tetti li applica il server).
 ```json
-{ "minuti": 15, "motivo": "..." }
+{ "minuti": 15, "regola_id": 1, "motivo": "..." }
 ```
-- `minuti` ∈ {5, 15, 30}; `motivo` opzionale.
-- `200` con i residui aggiornati; `409` se un tetto (giorno o settimana) verrebbe superato, con i residui nel corpo.
+- `minuti` ∈ {5, 15, 30}; **`regola_id` obbligatorio** (v2): il bonus allunga una regola `limite_tempo` **attiva** specifica ("mi do +15 su TikTok") — `409 {"errore": "regola_non_valida"}` se la regola non esiste, non è attiva o non è di tipo limite_tempo. `motivo` opzionale.
+- `200` con i residui aggiornati; `409 {"errore": "tetto_superato", ...}` se un tetto (giorno o settimana) verrebbe superato, con i residui nel corpo.
 - I bucket giorno/settimana si calcolano nel **fuso del patto** (config server `PACTUM_TIMEZONE`, default `Europe/Rome`); i timestamp restano in UTC ISO.
+- Effetto sulla valutazione locale: il limite efficace di quella regola per oggi = `minuti_al_giorno` + bonus concessi oggi su di essa. Le fasce orarie non si allungano col bonus (v2).
+
+### GET /api/patto
+Lo stato completo del patto per il sync dell'app del figlio, in una risposta sola. Risposta `200`:
+```json
+{
+  "regole": [ { "id": 1, "tipo": "limite_tempo", "parametri": { }, "attiva": true,
+                "creata_ts": "…", "ultima_modifica_ts": "…", "allentabile_dal": "…" } ],
+  "bonus": { "giorno": { "usati": 15, "tetto": 30, "residui": 15 },
+             "settimana": { "usati": 15, "tetto": 90, "residui": 75 } },
+  "bonus_oggi_per_regola": { "1": 15 },
+  "proposte_pendenti": [ ],
+  "dichiarazioni_in_attesa": [ ],
+  "fuso": "Europe/Rome"
+}
+```
+- `regole`: solo le **attive** (il patto vigente), stessa forma della finestra ma senza semaforo.
+- `bonus_oggi_per_regola`: minuti bonus concessi OGGI per regola (chiave = regola_id come stringa) — serve al valutatore locale per il limite efficace.
+- `proposte_pendenti` / `dichiarazioni_in_attesa`: stesse forme delle sezioni sotto.
+
+### POST /api/dichiarazioni
+Le dichiarazioni del figlio sulle regole di vita reale.
+```json
+{ "regola_id": 3, "esito": "successo", "nota": "…", "giorno": "2026-07-15" }
+```
+- `regola_id` deve essere una regola `vita_reale` **attiva**; `esito` ∈ `successo · fallimento`; `nota` opzionale; `giorno` opzionale (default: oggi nel fuso del patto), max UNA dichiarazione per regola per giorno → `409 {"errore": "gia_dichiarato"}`.
+- **Fallimento** → stato `registrata` (creduto sulla parola, va a registro), notifica al genitore.
+- **Successo** → stato `in_attesa` (serve il verdetto del genitore/arbitro), notifica al genitore.
+- Risposta `200` con la dichiarazione creata:
+```json
+{ "id": 5, "regola_id": 3, "giorno": "2026-07-15", "esito": "successo", "nota": null,
+  "stato": "in_attesa", "ts_server": "…", "verdetto": null }
+```
+- `stato` ∈ `registrata · in_attesa · confermata · confermata_per_conto · ribaltata`.
+
+### GET /api/dichiarazioni (figlio E genitore)
+Le dichiarazioni, dalla più recente, max 50. Risposta `200`: `{ "dichiarazioni": [ … ] }` (stessa forma sopra; `verdetto` = `{ "verdetto": "conferma", "nota": null, "ts_server": "…" }` quando emesso).
 
 ### Regole — GET /api/regole · POST /api/regole · PATCH /api/regole/{id} · DELETE /api/regole/{id}
 - Tipi: `limite_tempo {app_o_categoria, minuti_al_giorno}` · `fascia_oraria {dalle:"HH:MM", alle:"HH:MM", giorni:[lun..dom]}` · `vita_reale {descrizione, arbitro_nome, frequenza}`.
 - PATCH: corpo `{ "parametri": {...}, "proposta_id": n? }` — `proposta_id` (proposta accettata, monouso) bypassa il lock dei 4 giorni (modifica concordata). La modifica concordata applica **esattamente** i parametri della proposta: se `parametri` non coincide con i `parametri_proposti` della proposta → `409 {"errore": "parametri_non_concordati"}` e la proposta NON viene consumata. Su una modifica che STRINGE, `proposta_id` viene ignorato (niente consumo, `concordata=false`).
 - Lock asimmetrico: modifica che ALLENTA entro 4 giorni dall'ultima creazione/modifica → `409` con i secondi residui; modifica che STRINGE → subito.
 - DELETE = allentamento massimo (stesso lock) e soft-delete; eliminare l'ultima regola attiva → `409 errore=ultima_regola`. DELETE concordato: `?proposta_id=n` vale solo se i `parametri_proposti` della proposta sono il marcatore `{"azione": "elimina"}`, altrimenti `409 parametri_non_concordati` senza consumo.
+- Nota v2: il flusso PATCH/DELETE con `proposta_id` resta valido, ma il percorso primario delle modifiche concordate è **l'accettazione della proposta, che applica da sola la modifica** (v. Proposte).
+
+### POST /api/proposte/{id}/risposta
+La risposta del figlio a una proposta del genitore.
+```json
+{ "esito": "accetta", "motivazione": "…" }
+```
+- `esito` ∈ `accetta · rifiuta`; `motivazione` opzionale. Solo su proposte `pendenti` → `409 {"errore": "proposta_non_pendente"}` altrimenti.
+- **`accetta` APPLICA subito la modifica** lato server, atomicamente (modifica concordata: lock bypassato, parametri esattamente quelli proposti, `concordata=true` nello storico; eliminazione se il marcatore è `{"azione": "elimina"}` — vale il vincolo `ultima_regola`). Niente secondo passaggio dall'app.
+- Notifica al genitore (`tipo: proposta_risposta`) in entrambi i casi.
+- Risposta `200` con la proposta aggiornata e, su accettazione, la regola risultante (`"regola": {…}` oppure `"regola": null` se eliminata).
 
 ## Endpoint del genitore
 
+Tutti con il token del **genitore**. Ogni `ts_server` è ISO 8601 UTC con offset esplicito e secondi interi (es. `"2026-07-14T09:00:00+00:00"`): l'app lo mostra nel fuso del telefono.
+
 ### GET /api/finestra
-La finestra: per ogni regola il semaforo (oggi + 7 giorni), sforamenti recenti, storico modifiche, bonus residui (giorno+settimana), manomissioni, stato silenzio `{ultimo_battito, silente}` (silente = nessun battito da > 45 minuti).
-- **Semaforo per regola: solo `verde` / `rosso` / `grigio`** (niente `giallo`). `rosso` = sforamento nel giorno; `grigio` = giorno prima della creazione della regola oppure giorno strettamente successivo alla sua eliminazione (soft-delete); `verde` = il resto.
-- **`bonus_giornalieri`**: riepilogo globale (non per regola) dei minuti bonus concessi in ciascun giorno della stessa finestra di 8 giorni — `[{"giorno": "YYYY-MM-DD", "minuti": n}, ...]` dal più vecchio a oggi — calcolato dalla tabella bonus autoritativa (`POST /api/bonus`), non dagli eventi.
+La finestra: tutto ciò che riguarda il patto in una risposta sola. Risposta `200`, forma esatta:
+```json
+{
+  "regole": [
+    { "id": 1,
+      "tipo": "limite_tempo",
+      "parametri": { "app_o_categoria": "TikTok", "minuti_al_giorno": 60 },
+      "attiva": true,
+      "creata_ts": "2026-07-14T09:00:00+00:00",
+      "ultima_modifica_ts": "2026-07-14T09:00:00+00:00",
+      "allentabile_dal": "2026-07-18T09:00:00+00:00",
+      "semaforo": [ { "data": "2026-07-07", "stato": "verde" } ] }
+  ],
+  "sforamenti_recenti": [
+    { "id": "550e8400-e29b-41d4-a716-446655440000",
+      "tipo": "sforamento",
+      "dettagli": { "regola_id": 1 },
+      "ts_device": 1784056519000,
+      "ts_server": "2026-07-14T10:00:00+00:00" }
+  ],
+  "manomissioni_recenti": [ ],
+  "storico_modifiche": [
+    { "id": 2, "regola_id": 1, "azione": "modifica", "direzione": "allenta",
+      "prima": { "app_o_categoria": "TikTok", "minuti_al_giorno": 60 },
+      "dopo":  { "app_o_categoria": "TikTok", "minuti_al_giorno": 90 },
+      "concordata": true, "ts_server": "2026-07-14T11:00:00+00:00" }
+  ],
+  "bonus": {
+    "giorno":    { "usati": 15, "tetto": 30, "residui": 15 },
+    "settimana": { "usati": 15, "tetto": 90, "residui": 75 }
+  },
+  "bonus_giornalieri": [ { "giorno": "2026-07-07", "minuti": 0 } ],
+  "stato_silenzio": { "ultimo_battito": "2026-07-14T10:00:00+00:00", "silente": false }
+}
+```
+- **`regole`**: TUTTE le regole, anche le eliminate (`attiva=false`) — la finestra mostra la storia, mentre `GET /api/regole` (il patto vigente) mostra solo le attive. Ordinate per `id` crescente. `allentabile_dal` = `ultima_modifica_ts` + 4 giorni (il lock asimmetrico, informativo per il genitore).
+- **`semaforo`**: 8 voci per regola (oggi + i 7 giorni precedenti), dal più vecchio a oggi (oggi in coda). `stato` ∈ **solo `verde` / `rosso` / `grigio`** (niente `giallo`). `rosso` = almeno uno sforamento della regola nel giorno; `grigio` = giorno prima della creazione oppure giorno **strettamente** successivo all'eliminazione (il giorno stesso dell'eliminazione non è grigio); `verde` = il resto.
+- **`sforamenti_recenti` / `manomissioni_recenti`**: eventi del registro (stessa forma di POST /api/eventi + `ts_server`), max 20 ciascuno, dal più recente. `ts_device` può essere `null`.
+- **`storico_modifiche`**: max 50, dal più recente. `azione` ∈ `creazione · modifica · eliminazione`; `direzione` ∈ `allenta · stringe` per le modifiche, `allenta` per le eliminazioni, `null` per le creazioni; `prima`/`dopo` = i parametri della regola (`prima=null` su creazione, `dopo=null` su eliminazione); `concordata=true` solo se nata da proposta accettata.
+- **`bonus`**: contatori del giorno e della settimana ISO (lun–dom) nel fuso del patto, dalla tabella bonus autoritativa.
+- **`bonus_giornalieri`**: riepilogo globale (non per regola) dei minuti bonus concessi in ciascun giorno della stessa finestra di 8 giorni, dal più vecchio a oggi, `minuti: 0` esplicito nei giorni senza bonus — dalla tabella bonus autoritativa (`POST /api/bonus`), non dagli eventi.
+- **`stato_silenzio`**: `silente` = nessun battito da > 45 minuti (calcolato in lettura sull'orologio del server); `ultimo_battito` è il `ts_server` dell'ultimo battito, `null` se non è mai arrivato niente (⇒ `silente=true`).
 - I giorni della finestra (semaforo e `bonus_giornalieri`) si contano nel fuso del patto (`PACTUM_TIMEZONE`, default `Europe/Rome`).
 
-### GET /api/notifiche · POST /api/notifiche/{id}/letta
-Notifiche non lette (polling in v1; push alla tappa 4) e marcatura come letta.
+### POST /api/proposte
+Il genitore propone una modifica (mai la impone). Il server calcola il **confronto col valore attuale** che comparirà nella notifica al figlio.
+```json
+{ "regola_id": 1, "parametri_proposti": { "app_o_categoria": "TikTok", "minuti_al_giorno": 60 }, "motivazione": "…" }
+```
+- `parametri_proposti` validati contro il tipo della regola, OPPURE il marcatore `{"azione": "elimina"}`. Regola inesistente o non attiva → `409 {"errore": "regola_non_valida"}`. Una sola proposta `pendente` per regola → `409 {"errore": "proposta_gia_pendente"}`.
+- Il server calcola `confronto`: testo in italiano semplice della differenza rispetto ad ora (es. `"−30 min al giorno rispetto ad ora"` per limite_tempo; per fascia_oraria la differenza di copertura; `"propone di eliminare la regola"` per il marcatore) e `direzione` ∈ `allenta · stringe · elimina`.
+- Notifica al figlio (`tipo: nuova_proposta`, il `confronto` dentro il messaggio e il payload).
+- Risposta `200` con la proposta creata:
+```json
+{ "id": 4, "regola_id": 1, "parametri_proposti": { }, "motivazione": "…",
+  "confronto": "−30 min al giorno rispetto ad ora", "direzione": "stringe",
+  "stato": "pendente", "usata": false, "ts_server": "…", "risposta": null }
+```
+- `stato` ∈ `pendente · accettata · rifiutata`; `usata=true` quando la modifica concordata è stata applicata (con l'auto-applicazione avviene insieme all'accettazione). `risposta` = `{ "esito", "motivazione", "ts_server" }` quando il figlio risponde.
+
+### GET /api/proposte (figlio E genitore)
+Le proposte, dalla più recente, max 50. Risposta `200`: `{ "proposte": [ … ] }` (stessa forma sopra).
+
+### POST /api/dichiarazioni/{id}/verdetto
+Il verdetto del genitore su una dichiarazione di successo `in_attesa` (`409 {"errore": "dichiarazione_non_in_attesa"}` altrimenti).
+```json
+{ "verdetto": "conferma_per_conto", "nota": "ho sentito la nonna al telefono" }
+```
+- `verdetto` ∈ `conferma` (l'arbitro è il genitore o ha confermato nell'app) · `conferma_per_conto` (il genitore garantisce di aver sentito l'arbitro fuori dall'app — nel registro resta *"confermato dal genitore per conto di [arbitro_nome]"*) · `ribalta` (il successo dichiarato non regge; la dichiarazione conta come fallimento).
+- Notifica al figlio (`tipo: verdetto`). Risposta `200` con la dichiarazione aggiornata.
+
+### GET /api/notifiche
+Le notifiche **non lette** (polling; ogni notifica ha un `tipo` macchina-leggibile), ordinate per `id` crescente. Risposta `200`:
+```json
+{ "notifiche": [
+  { "id": 7,
+    "tipo": "sforamento",
+    "messaggio": "Evento sforamento registrato",
+    "payload": { "evento_id": "…", "dettagli": { "regola_id": 1 } },
+    "ts_server": "2026-07-14T10:00:00+00:00" }
+] }
+```
+- `id`: intero autoincrementale del server — chiave per la marcatura come letta e per non ri-avvisare due volte lato app.
+- `destinatario` (v2): ogni notifica nasce per un destinatario — `figlio` o `genitore` — e ciascuno riceve SOLO le proprie (il GET filtra sul ruolo del token; anche l'app del figlio ora legge le notifiche, es. nuove proposte e verdetti).
+- `tipo` ∈ `sforamento · manomissione · bonus · modifica_regola · nuova_proposta · proposta_risposta · dichiarazione · verdetto` (le app tollerano tipi nuovi).
+- `payload` per tipo: **sforamento/manomissione** `{evento_id, dettagli}` (l'evento del registro che l'ha generata); **bonus** `{minuti, regola_id, motivo, residuo_giorno, residuo_settimana}`; **modifica_regola** `{regola_id, azione, …}` con `parametri` su creazione, `direzione/concordata/prima/dopo` su modifica, `concordata/prima` su eliminazione; **nuova_proposta** `{proposta_id, regola_id, confronto, direzione}`; **proposta_risposta** `{proposta_id, regola_id, esito}`; **dichiarazione** `{dichiarazione_id, regola_id, esito, giorno}`; **verdetto** `{dichiarazione_id, regola_id, verdetto}`.
+- POST /api/notifiche/{id}/letta funziona per il proprio ruolo: ciascuno può marcare come lette solo le notifiche a lui destinate (`404` sulle altrui).
+
+### POST /api/notifiche/{id}/letta
+Marcatura come letta (gesto del genitore nell'app, NON del polling automatico).
+- `200`: `{ "id": 7, "letta": true }`.
+- `404` se l'id non esiste: `{ "detail": "notifica non trovata" }`. Rimarcare una notifica già letta risponde `200` (idempotente).
 
 ---
-**Versione: v1 — 14/07/2026.** Cambi al contratto: prima qui, poi nel codice di entrambi i lati.
+**Versione: v2 — 15/07/2026.** Novità v2 (tappa 5): proposte (creazione col confronto calcolato dal server, risposta del figlio con auto-applicazione delle accettate), dichiarazioni vita reale con verdetto (conferma / per conto di / ribalta), bonus agganciato a una regola limite_tempo (`regola_id` obbligatorio), `GET /api/patto` per il sync del figlio, notifiche con `destinatario` e nuovi tipi, sforamenti generati dal valutatore locale (max 1 per regola per giorno, limite efficace = limite + bonus della regola).
+**v1 — 14/07/2026.** Cambi al contratto: prima qui, poi nel codice di entrambi i lati.

@@ -11,12 +11,17 @@ TETTO_BONUS_SETTIMANA_DEFAULT = 90
 TIMEZONE_DEFAULT = "Europe/Rome"
 
 
+def nome_fuso() -> str:
+    """Il nome del fuso del patto (es. 'Europe/Rome'), esposto al figlio in /api/patto."""
+    return os.environ.get("PACTUM_TIMEZONE", TIMEZONE_DEFAULT)
+
+
 def fuso_patto() -> ZoneInfo:
     """Il fuso del patto: i bucket giorno/settimana (tetti bonus, semaforo della
     finestra) si contano nel giorno LOCALE della famiglia, non in UTC — altrimenti
     il tetto giornaliero di un ragazzo italiano si azzererebbe alle 02:00 locali.
     I timestamp restano UTC ISO: il fuso serve solo a decidere i confini dei giorni."""
-    return ZoneInfo(os.environ.get("PACTUM_TIMEZONE", TIMEZONE_DEFAULT))
+    return ZoneInfo(nome_fuso())
 
 
 @dataclass(frozen=True)

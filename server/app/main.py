@@ -7,7 +7,7 @@ from .config import (
     VERSIONE,
     carica_settings,
 )
-from .routes import figlio, genitore, regole
+from .routes import dichiarazioni, figlio, genitore, notifiche, proposte, regole
 
 
 def create_app() -> FastAPI:
@@ -22,6 +22,9 @@ def create_app() -> FastAPI:
         return {"stato": "ok", "versione": VERSIONE}
 
     app.include_router(regole.router, prefix="/api")
+    app.include_router(proposte.router, prefix="/api")
+    app.include_router(dichiarazioni.router, prefix="/api")
+    app.include_router(notifiche.router, prefix="/api")
     app.include_router(figlio.router, prefix="/api")
     app.include_router(genitore.router, prefix="/api")
     return app

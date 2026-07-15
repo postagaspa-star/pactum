@@ -52,6 +52,9 @@ fun dataOraCompletaLocale(istante: Instant): String =
 private fun campo(parametri: JsonObject, nome: String): String? =
     (parametri[nome] as? JsonPrimitive)?.content
 
+/** Un campo testuale dei parametri di una regola (es. arbitro_nome), null se assente. */
+fun parametroTesto(parametri: JsonObject, nome: String): String? = campo(parametri, nome)
+
 /**
  * La regola raccontata in italiano semplice, costruita da tipo+parametri
  * (contratto-api.md). Un tipo sconosciuto mostra il tipo grezzo: meglio

@@ -96,3 +96,113 @@ data class Notifica(
 
 @Serializable
 data class PaccoNotifiche(val notifiche: List<Notifica> = emptyList())
+
+// --- Proposte (tappa 5) -----------------------------------------------------
+// Il genitore propone una modifica; il server calcola il `confronto` testuale e
+// la `direzione`, e il figlio accetta/rifiuta. La proposta accettata applica da
+// sola la modifica lato server (contratto-api.md, sezione Proposte).
+
+/** La proposta come la restituisce POST /api/proposte e GET /api/proposte. */
+@Serializable
+data class Proposta(
+    val id: Long,
+    @SerialName("regola_id") val regolaId: Long,
+    @SerialName("parametri_proposti") val parametriProposti: JsonObject = JsonObject(emptyMap()),
+    val motivazione: String? = null,
+    val confronto: String = "",
+    val direzione: String = "",
+    val stato: String,
+    val usata: Boolean = false,
+    @SerialName("ts_server") val tsServer: String = "",
+    val risposta: RispostaProposta? = null,
+)
+
+/** La risposta del figlio a una proposta (presente quando ha risposto). */
+@Serializable
+data class RispostaProposta(
+    val esito: String,
+    val motivazione: String? = null,
+    @SerialName("ts_server") val tsServer: String = "",
+)
+
+@Serializable
+data class PaccoProposte(val proposte: List<Proposta> = emptyList())
+
+/** Corpo di POST /api/proposte. Per l'eliminazione, `parametriProposti` è il marcatore. */
+@Serializable
+data class NuovaProposta(
+    @SerialName("regola_id") val regolaId: Long,
+    @SerialName("parametri_proposti") val parametriProposti: JsonObject,
+    val motivazione: String? = null,
+)
+
+object StatiProposta {
+    const val PENDENTE = "pendente"
+    const val ACCETTATA = "accettata"
+    const val RIFIUTATA = "rifiutata"
+}
+
+object DirezioniProposta {
+    const val ALLENTA = "allenta"
+    const val STRINGE = "stringe"
+    const val ELIMINA = "elimina"
+}
+
+object EsitiRisposta {
+    const val ACCETTA = "accetta"
+    const val RIFIUTA = "rifiuta"
+}
+
+// --- Dichiarazioni e verdetti (tappa 5) -------------------------------------
+// Il figlio dichiara com'è andata una regola di vita reale; il successo resta
+// `in_attesa` finché il genitore conferma / conferma per conto dell'arbitro /
+// ribalta (contratto-api.md, sezione Dichiarazioni).
+
+@Serializable
+data class Dichiarazione(
+    val id: Long,
+    @SerialName("regola_id") val regolaId: Long,
+    val giorno: String = "",
+    val esito: String,
+    val nota: String? = null,
+    val stato: String,
+    @SerialName("ts_server") val tsServer: String = "",
+    val verdetto: Verdetto? = null,
+)
+
+/** Il verdetto del genitore su una dichiarazione (presente quando emesso). */
+@Serializable
+data class Verdetto(
+    val verdetto: String,
+    val nota: String? = null,
+    @SerialName("ts_server") val tsServer: String = "",
+)
+
+@Serializable
+data class PaccoDichiarazioni(val dichiarazioni: List<Dichiarazione> = emptyList())
+
+/** Corpo di POST /api/dichiarazioni/{id}/verdetto. */
+@Serializable
+data class CorpoVerdetto(
+    val verdetto: String,
+    val nota: String? = null,
+)
+
+object StatiDichiarazione {
+    const val REGISTRATA = "registrata"
+    const val IN_ATTESA = "in_attesa"
+    const val CONFERMATA = "confermata"
+    const val CONFERMATA_PER_CONTO = "confermata_per_conto"
+    const val RIBALTATA = "ribaltata"
+}
+
+object EsitiDichiarazione {
+    const val SUCCESSO = "successo"
+    const val FALLIMENTO = "fallimento"
+}
+
+object TipiVerdetto {
+    const val CONFERMA = "conferma"
+    const val CONFERMA_PER_CONTO = "conferma_per_conto"
+    const val RIBALTA = "ribalta"
+}

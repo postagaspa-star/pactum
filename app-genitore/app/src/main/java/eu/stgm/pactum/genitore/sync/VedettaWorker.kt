@@ -145,6 +145,7 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             context,
             titolo = context.getString(etichettaTipo(notifica.tipo)),
             testo = notifica.messaggio,
+            destinazione = destinazionePerTipo(notifica.tipo),
         )
 
     private fun avvisoSilenzio(context: Context, stato: StatoSilenzio): Notification {
@@ -166,12 +167,24 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         )
     }
 
-    private fun notificaBase(context: Context, titolo: String, testo: String): Notification {
+    private fun notificaBase(
+        context: Context,
+        titolo: String,
+        testo: String,
+        destinazione: String? = null,
+    ): Notification {
+        val intent = Intent(context, MainActivity::class.java)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        if (destinazione != null) {
+            intent.putExtra(MainActivity.EXTRA_DESTINAZIONE, destinazione)
+        }
+        // requestCode diverso per destinazione: con lo stesso PendingIntent
+        // Android riuserebbe l'extra del primo (le notifiche aprirebbero tutte
+        // la stessa scheda). L'extra cambia → serve un codice diverso.
         val apriApp = PendingIntent.getActivity(
             context,
-            0,
-            Intent(context, MainActivity::class.java)
-                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            (destinazione ?: "").hashCode(),
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(context, CANALE_ID)
@@ -240,7 +253,18 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             "manomissione" -> R.string.tipo_manomissione
             "bonus" -> R.string.tipo_bonus
             "modifica_regola" -> R.string.tipo_modifica_regola
+            // Tappa 5: il genitore riceve anche le risposte alle proposte e le
+            // dichiarazioni del figlio (contratto-api.md, notifiche con destinatario).
+            "proposta_risposta" -> R.string.tipo_proposta_risposta
+            "dichiarazione" -> R.string.tipo_dichiarazione
             else -> R.string.tipo_novita // tipo nuovo dal server: tolleranza evolutiva
+        }
+
+        /** Su quale scheda aprire l'app toccando la notifica (hook di navigazione). */
+        private fun destinazionePerTipo(tipo: String): String? = when (tipo) {
+            "proposta_risposta" -> MainActivity.DEST_PROPOSTE
+            "dichiarazione" -> MainActivity.DEST_VERDETTI
+            else -> null // le altre aprono la finestra (default)
         }
     }
 }

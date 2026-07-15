@@ -101,4 +101,83 @@
     <string name="impostazioni_prova_fallita">Verifica fallita: controlla indirizzo, token e connessione.</string>
     <string name="impostazioni_config_incompleta">Compila indirizzo del server e token del genitore prima di provare.</string>
     <string name="azione_salva">Salva</string>
+    <string name="azione_annulla">Annulla</string>
+    <string name="azione_ok">Va bene</string>
+
+    <!-- Navigazione (tappa 5) -->
+    <string name="scheda_proposte">Proposte</string>
+    <string name="scheda_verdetti">Verdetti</string>
+
+    <!-- Proposte -->
+    <string name="proposte_titolo">Proposte</string>
+    <string name="proposte_caricamento">Sto leggendo le proposte…</string>
+    <string name="proposte_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
+    <string name="proposte_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
+    <string name="proposte_sezione_proponi">Proponi una modifica</string>
+    <string name="proposte_nessuna_regola_attiva">Nessuna regola attiva su cui proporre: le regole nascono sul telefono del figlio.</string>
+    <string name="proposte_bottone_proponi">Proponi una modifica</string>
+    <string name="proposte_sezione_elenco">Le tue proposte</string>
+    <string name="proposte_elenco_vuoto">Nessuna proposta ancora.</string>
+    <string name="proposta_stato_pendente">In attesa di risposta</string>
+    <string name="proposta_stato_accettata">Accettata</string>
+    <string name="proposta_stato_rifiutata">Rifiutata</string>
+    <string name="proposta_tag_allenta">allenta</string>
+    <string name="proposta_tag_stringe">stringe</string>
+    <string name="proposta_tag_elimina">eliminazione</string>
+    <string name="proposta_motivazione">Motivazione: %1$s</string>
+    <string name="proposta_risposta_accettata">Il figlio ha accettato</string>
+    <string name="proposta_risposta_rifiutata">Il figlio ha rifiutato</string>
+    <string name="proposta_risposta_motivazione">Ha detto: %1$s</string>
+    <string name="proposta_inviata_titolo">Proposta inviata</string>
+    <string name="proposta_inviata_confronto">Il figlio vedrà: %1$s</string>
+    <string name="proposta_errore_generico">Non sono riuscito a inviare la proposta: riprova.</string>
+    <string name="proposta_errore_gia_pendente">C\'è già una proposta in attesa su questa regola.</string>
+    <string name="proposta_errore_regola_non_valida">Questa regola non è più valida per una proposta.</string>
+
+    <!-- Proposte: dialogo di creazione -->
+    <string name="proposta_crea_titolo">Proponi una modifica</string>
+    <string name="proposta_crea_regola">Regola attuale: %1$s</string>
+    <string name="proposta_modalita_modifica">Modifica i parametri</string>
+    <string name="proposta_modalita_elimina">Proponi di eliminare la regola</string>
+    <string name="proposta_campo_app">App o categoria</string>
+    <string name="proposta_campo_minuti">Minuti al giorno</string>
+    <string name="proposta_campo_dalle">Dalle (HH:MM)</string>
+    <string name="proposta_campo_alle">Alle (HH:MM)</string>
+    <string name="proposta_campo_giorni">Giorni (es. lun, mar, mer)</string>
+    <string name="proposta_campo_descrizione">Descrizione</string>
+    <string name="proposta_campo_arbitro">Arbitro</string>
+    <string name="proposta_campo_frequenza">Frequenza</string>
+    <string name="proposta_campo_motivazione">Motivazione (facoltativa)</string>
+    <string name="proposta_invia">Invia proposta</string>
+
+    <!-- Verdetti -->
+    <string name="verdetti_titolo">Verdetti</string>
+    <string name="verdetti_caricamento">Sto leggendo le dichiarazioni…</string>
+    <string name="verdetti_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
+    <string name="verdetti_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
+    <string name="verdetti_sezione_attesa">In attesa del tuo verdetto</string>
+    <string name="verdetti_attesa_vuoto">Nessuna dichiarazione in attesa.</string>
+    <string name="verdetti_sezione_risolte">Dichiarazioni risolte</string>
+    <string name="verdetti_risolte_vuoto">Nessuna dichiarazione ancora.</string>
+    <string name="dichiarazione_regola_sconosciuta">Regola di vita reale</string>
+    <string name="dichiarazione_giorno">Giorno: %1$s</string>
+    <string name="dichiarazione_successo_dichiarato">Ha dichiarato: successo</string>
+    <string name="dichiarazione_nota">Nota del figlio: %1$s</string>
+    <string name="verdetto_nota_campo">Nota (facoltativa)</string>
+    <string name="verdetto_conferma">Confermo</string>
+    <string name="verdetto_conferma_per_conto">Confermo per conto di %1$s</string>
+    <string name="verdetto_conferma_per_conto_arbitro">Confermo per conto dell\'arbitro</string>
+    <string name="verdetto_ribalta">Non è vero</string>
+    <string name="verdetto_inviato">Verdetto registrato.</string>
+    <string name="verdetto_errore">Non sono riuscito a registrare il verdetto: riprova.</string>
+    <string name="verdetto_errore_non_in_attesa">Questa dichiarazione non è più in attesa.</string>
+    <string name="dichiarazione_stato_registrata">Fallimento dichiarato — creduto sulla parola</string>
+    <string name="dichiarazione_stato_confermata">Successo confermato</string>
+    <string name="dichiarazione_stato_confermata_per_conto">Confermato dal genitore per conto di %1$s</string>
+    <string name="dichiarazione_stato_ribaltata">Ribaltata — conta come fallimento</string>
+    <string name="dichiarazione_verdetto_nota">Con nota: %1$s</string>
+
+    <!-- Tipi di notifica aggiunti in tappa 5 -->
+    <string name="tipo_proposta_risposta">Risposta a una proposta</string>
+    <string name="tipo_dichiarazione">Dichiarazione del figlio</string>
 </resources>

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -50,6 +51,8 @@ fun OggiScreen(
     }
 
     Scaffold(
+        // Le barre di sistema le copre lo Scaffold esterno (MainActivity).
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.oggi_titolo)) },
@@ -138,11 +141,3 @@ private fun Contenitore(contenuto: @Composable () -> Unit) {
         contenuto()
     }
 }
-
-@Composable
-private fun testoDurata(minuti: Long): String =
-    if (minuti < 60) {
-        stringResource(R.string.formato_minuti, minuti)
-    } else {
-        stringResource(R.string.formato_ore_minuti, minuti / 60, minuti % 60)
-    }

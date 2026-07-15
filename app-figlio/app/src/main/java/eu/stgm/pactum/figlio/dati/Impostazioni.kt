@@ -4,10 +4,12 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 
 // Delegato a livello di file: una sola istanza di DataStore per processo.
 private val Context.dataStore by preferencesDataStore(name = "impostazioni")
@@ -32,6 +34,10 @@ class Impostazioni(private val context: Context) {
         val ANCORA_ELAPSED = longPreferencesKey("ancora_elapsed_realtime")
         val ULTIMO_BATTITO_OK = longPreferencesKey("ultimo_battito_ok")
         val DRIFT_OROLOGIO = longPreferencesKey("drift_orologio_ms")
+
+        // Tappa 5.
+        val SFORAMENTI_SEGNALATI = stringSetPreferencesKey("sforamenti_segnalati")
+        val NOTIFICHE_AVVISATE = stringSetPreferencesKey("notifiche_avvisate")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -42,8 +48,17 @@ class Impostazioni(private val context: Context) {
 
     suspend fun salvaConfigurazione(serverUrl: String, token: String) {
         context.dataStore.edit { p ->
-            p[Chiavi.SERVER_URL] = serverUrl.trim().trimEnd('/')
-            p[Chiavi.TOKEN] = token.trim()
+            val urlNuovo = serverUrl.trim().trimEnd('/')
+            val tokenNuovo = token.trim()
+            // Server o token diversi = patto diverso: gli sforamenti già segnalati
+            // e gli id delle notifiche già avvisate appartengono al patto vecchio e
+            // soffocherebbero gli avvisi del nuovo (regole e id riciclati).
+            if (p[Chiavi.SERVER_URL] != urlNuovo || p[Chiavi.TOKEN] != tokenNuovo) {
+                p.remove(Chiavi.SFORAMENTI_SEGNALATI)
+                p.remove(Chiavi.NOTIFICHE_AVVISATE)
+            }
+            p[Chiavi.SERVER_URL] = urlNuovo
+            p[Chiavi.TOKEN] = tokenNuovo
         }
     }
 
@@ -91,5 +106,56 @@ class Impostazioni(private val context: Context) {
 
     suspend fun azzeraDriftOrologio() {
         context.dataStore.edit { p -> p.remove(Chiavi.DRIFT_OROLOGIO) }
+    }
+
+    // --- Dedup degli sforamenti (tappa 5) -----------------------------------
+    // Chiave = "regolaId:giorno" (giorno = data locale del telefono): il
+    // contratto vuole al massimo UNO sforamento per regola per giorno. Le voci
+    // più vecchie di una settimana si potano a ogni scrittura: la memoria serve
+    // solo per il giorno corrente e i confini di mezzanotte, non per sempre.
+
+    private fun chiaveSforamento(regolaId: Long, giorno: String) = "$regolaId:$giorno"
+
+    suspend fun sforamentoGiaSegnalato(regolaId: Long, giorno: String): Boolean =
+        chiaveSforamento(regolaId, giorno) in
+            (context.dataStore.data.first()[Chiavi.SFORAMENTI_SEGNALATI].orEmpty())
+
+    suspend fun registraSforamentoSegnalato(regolaId: Long, giorno: String) {
+        context.dataStore.edit { p ->
+            val soglia = LocalDate.now().minusDays(GIORNI_MEMORIA_SFORAMENTI)
+            val recenti = p[Chiavi.SFORAMENTI_SEGNALATI].orEmpty().filter { chiave ->
+                val g = chiave.substringAfter(':', "")
+                runCatching { LocalDate.parse(g) }.getOrNull()?.isBefore(soglia) != true
+            }
+            p[Chiavi.SFORAMENTI_SEGNALATI] = (recenti + chiaveSforamento(regolaId, giorno)).toSet()
+        }
+    }
+
+    // --- Dedup delle notifiche del figlio già avvisate (proposte, verdetti) ---
+
+    suspend fun leggiIdAvvisati(): Set<Long> =
+        context.dataStore.data.first()[Chiavi.NOTIFICHE_AVVISATE]
+            .orEmpty()
+            .mapNotNull { it.toLongOrNull() }
+            .toSet()
+
+    suspend fun registraIdAvvisati(nuovi: Collection<Long>) {
+        if (nuovi.isEmpty()) return
+        context.dataStore.edit { p ->
+            val unione = p[Chiavi.NOTIFICHE_AVVISATE].orEmpty()
+                .mapNotNull { it.toLongOrNull() }
+                .toSet() + nuovi
+            // Gli id del server crescono sempre: si tiene solo la coda più recente.
+            p[Chiavi.NOTIFICHE_AVVISATE] = unione
+                .sortedDescending()
+                .take(TETTO_ID_AVVISATI)
+                .map { it.toString() }
+                .toSet()
+        }
+    }
+
+    private companion object {
+        const val GIORNI_MEMORIA_SFORAMENTI = 7L
+        const val TETTO_ID_AVVISATI = 500
     }
 }

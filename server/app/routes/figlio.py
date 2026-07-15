@@ -1,15 +1,23 @@
-"""Endpoint del figlio: battito (heartbeat), eventi in batch, bonus."""
+"""Endpoint del figlio: battito (heartbeat), eventi in batch, bonus, patto."""
 
 import json
 import sqlite3
-from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from .. import clock
 from ..auth import richiede_figlio
-from ..db import accoda_notifica, get_conn, stato_bonus
+from ..config import nome_fuso
+from ..db import (
+    accoda_notifica,
+    bonus_oggi_per_regola,
+    get_conn,
+    stato_bonus,
+)
 from ..schemas import BattitoIn, BonusIn, EventiIn, EventoIn
+from .dichiarazioni import formatta_dichiarazione
+from .proposte import formatta_proposta
+from .regole import _riga_regola
 
 router = APIRouter(dependencies=[Depends(richiede_figlio)])
 
@@ -33,16 +41,6 @@ def battito(
     return {"ricevuto": True}
 
 
-def _giorno_valido(giorno) -> bool:
-    """Vero solo per una data reale in forma YYYY-MM-DD (contratto-api.md)."""
-    if not isinstance(giorno, str) or len(giorno) != 10:
-        return False
-    try:
-        return date.fromisoformat(giorno).isoformat() == giorno
-    except ValueError:
-        return False
-
-
 def _totale_minuti(dettagli: dict) -> int:
     """totale_minuti mancante o non valido vale 0 (contratto-api.md)."""
     totale = dettagli.get("totale_minuti")
@@ -57,7 +55,7 @@ def _aggiorna_uso_giornaliero(conn: sqlite3.Connection, evento: EventoIn, ts: st
     ritardo con un totale piu' basso non regredisce quella vigente. Il registro
     eventi conserva comunque tutte le fotografie; qui si aggiorna solo la vigente."""
     giorno = evento.dettagli.get("giorno")
-    if not _giorno_valido(giorno):
+    if not clock.giorno_valido(giorno):
         # Senza un giorno valido non c'e' fotografia da indicizzare:
         # l'evento resta comunque nel registro.
         return
@@ -107,6 +105,15 @@ def registra_eventi(corpo: EventiIn, conn: sqlite3.Connection = Depends(get_conn
 @router.post("/bonus")
 def concedi_bonus(corpo: BonusIn, conn: sqlite3.Connection = Depends(get_conn)):
     # Risposta 200 con i residui aggiornati (contratto-api.md), 409 se un tetto salta.
+    # Il bonus allunga una regola limite_tempo ATTIVA specifica (v2): si allunga un
+    # limite, non il vuoto -> 409 regola_non_valida se la regola non esiste, non e'
+    # attiva o non e' di tipo limite_tempo.
+    regola = conn.execute(
+        "SELECT tipo FROM regole WHERE id = ? AND attiva = 1", (corpo.regola_id,)
+    ).fetchone()
+    if regola is None or regola["tipo"] != "limite_tempo":
+        raise HTTPException(status_code=409, detail={"errore": "regola_non_valida"})
+
     # BEGIN IMMEDIATE: leggi-controlla-inserisci deve essere atomico, altrimenti
     # N richieste simultanee leggono lo stesso residuo e il tetto salta N volte.
     # Il lock di scrittura serializza i concorrenti; chi arriva secondo rilegge
@@ -128,8 +135,8 @@ def concedi_bonus(corpo: BonusIn, conn: sqlite3.Connection = Depends(get_conn)):
             )
         ts = clock.iso(ora)
         conn.execute(
-            "INSERT INTO bonus (minuti, motivo, ts_server) VALUES (?, ?, ?)",
-            (corpo.minuti, corpo.motivo, ts),
+            "INSERT INTO bonus (minuti, regola_id, motivo, ts_server) VALUES (?, ?, ?, ?)",
+            (corpo.minuti, corpo.regola_id, corpo.motivo, ts),
         )
         accoda_notifica(
             conn,
@@ -137,6 +144,7 @@ def concedi_bonus(corpo: BonusIn, conn: sqlite3.Connection = Depends(get_conn)):
             f"Bonus di {corpo.minuti} minuti auto-concesso",
             {
                 "minuti": corpo.minuti,
+                "regola_id": corpo.regola_id,
                 "motivo": corpo.motivo,
                 "residuo_giorno": residuo_giorno - corpo.minuti,
                 "residuo_settimana": residuo_settimana - corpo.minuti,
@@ -151,4 +159,37 @@ def concedi_bonus(corpo: BonusIn, conn: sqlite3.Connection = Depends(get_conn)):
         "minuti": corpo.minuti,
         "residuo_giorno": residuo_giorno - corpo.minuti,
         "residuo_settimana": residuo_settimana - corpo.minuti,
+    }
+
+
+@router.get("/patto")
+def patto(conn: sqlite3.Connection = Depends(get_conn)):
+    """Lo stato completo del patto per il sync dell'app del figlio, in una risposta
+    sola: regole attive (senza semaforo), residui bonus, bonus di oggi per regola
+    (per il limite efficace del valutatore locale), proposte pendenti, dichiarazioni
+    in attesa, fuso del patto."""
+    ora = clock.now()
+    regole = [
+        _riga_regola(r)
+        for r in conn.execute("SELECT * FROM regole WHERE attiva = 1 ORDER BY id").fetchall()
+    ]
+    proposte_pendenti = [
+        formatta_proposta(r)
+        for r in conn.execute(
+            "SELECT * FROM proposte WHERE stato = 'pendente' ORDER BY id DESC"
+        ).fetchall()
+    ]
+    dichiarazioni_in_attesa = [
+        formatta_dichiarazione(r)
+        for r in conn.execute(
+            "SELECT * FROM dichiarazioni WHERE stato = 'in_attesa' ORDER BY id DESC"
+        ).fetchall()
+    ]
+    return {
+        "regole": regole,
+        "bonus": stato_bonus(conn, ora),
+        "bonus_oggi_per_regola": bonus_oggi_per_regola(conn, ora),
+        "proposte_pendenti": proposte_pendenti,
+        "dichiarazioni_in_attesa": dichiarazioni_in_attesa,
+        "fuso": nome_fuso(),
     }

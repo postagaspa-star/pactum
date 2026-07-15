@@ -46,6 +46,79 @@ def _regola_attiva_o_404(conn: sqlite3.Connection, regola_id: int) -> sqlite3.Ro
     return riga
 
 
+def _verifica_non_ultima(conn: sqlite3.Connection) -> None:
+    # concept.md: almeno una regola obbligatoria. Vale anche per l'eliminazione
+    # concordata nata da proposta accettata.
+    attive = conn.execute("SELECT COUNT(*) AS n FROM regole WHERE attiva = 1").fetchone()["n"]
+    if attive <= 1:
+        raise HTTPException(status_code=409, detail={"errore": "ultima_regola"})
+
+
+def applica_modifica(
+    conn: sqlite3.Connection,
+    riga: sqlite3.Row,
+    parametri_dopo: dict,
+    concordata: bool,
+    ora: datetime,
+) -> sqlite3.Row:
+    """Scrive la modifica di una regola attiva (senza controllare il lock: lo fa
+    chi chiama), la registra nello storico e notifica il genitore. Condivisa dal
+    PATCH col figlio e dall'auto-applicazione di una proposta accettata."""
+    parametri_prima = json.loads(riga["parametri"])
+    direzione = "allenta" if lock.allenta(riga["tipo"], parametri_prima, parametri_dopo) else "stringe"
+    ts = clock.iso(ora)
+    conn.execute(
+        "UPDATE regole SET parametri = ?, ultima_modifica_ts = ? WHERE id = ?",
+        (json.dumps(parametri_dopo), ts, riga["id"]),
+    )
+    registra_modifica(
+        conn, riga["id"], "modifica", direzione, parametri_prima, parametri_dopo, concordata, ts
+    )
+    accoda_notifica(
+        conn,
+        "modifica_regola",
+        f"Regola {riga['id']} ({riga['tipo']}) modificata ({direzione})",
+        {
+            "regola_id": riga["id"],
+            "azione": "modifica",
+            "direzione": direzione,
+            "concordata": concordata,
+            "prima": parametri_prima,
+            "dopo": parametri_dopo,
+        },
+        ts,
+    )
+    return conn.execute("SELECT * FROM regole WHERE id = ?", (riga["id"],)).fetchone()
+
+
+def applica_eliminazione(
+    conn: sqlite3.Connection, riga: sqlite3.Row, concordata: bool, ora: datetime
+) -> None:
+    """Soft-delete di una regola attiva (senza controllare lock ne' ultima_regola:
+    lo fa chi chiama), registrato e notificato. Condivisa dal DELETE del figlio e
+    dall'auto-applicazione di una proposta di eliminazione accettata."""
+    ts = clock.iso(ora)
+    parametri_prima = json.loads(riga["parametri"])
+    conn.execute(
+        "UPDATE regole SET attiva = 0, ultima_modifica_ts = ? WHERE id = ?", (ts, riga["id"])
+    )
+    registra_modifica(
+        conn, riga["id"], "eliminazione", "allenta", parametri_prima, None, concordata, ts
+    )
+    accoda_notifica(
+        conn,
+        "modifica_regola",
+        f"Regola {riga['id']} ({riga['tipo']}) eliminata",
+        {
+            "regola_id": riga["id"],
+            "azione": "eliminazione",
+            "concordata": concordata,
+            "prima": parametri_prima,
+        },
+        ts,
+    )
+
+
 def _controlla_lock(riga: sqlite3.Row, ora: datetime) -> None:
     sblocco = datetime.fromisoformat(riga["ultima_modifica_ts"]) + timedelta(days=LOCK_GIORNI)
     if ora < sblocco:
@@ -135,39 +208,15 @@ def modifica_regola(
     # La proposta serve SOLO a scavalcare il lock di un allentamento:
     # su una stretta (gia' immediata) il proposta_id si ignora e non si consuma.
     concordata = False
-    e_allentamento = lock.allenta(riga["tipo"], parametri_prima, parametri_dopo)
-    if e_allentamento:
+    if lock.allenta(riga["tipo"], parametri_prima, parametri_dopo):
         if corpo.proposta_id is not None:
             _consuma_proposta(conn, corpo.proposta_id, regola_id, parametri_dopo)
             concordata = True
         else:
             _controlla_lock(riga, ora)
 
-    ts = clock.iso(ora)
-    direzione = "allenta" if e_allentamento else "stringe"
-    conn.execute(
-        "UPDATE regole SET parametri = ?, ultima_modifica_ts = ? WHERE id = ?",
-        (json.dumps(parametri_dopo), ts, regola_id),
-    )
-    registra_modifica(
-        conn, regola_id, "modifica", direzione, parametri_prima, parametri_dopo, concordata, ts
-    )
-    accoda_notifica(
-        conn,
-        "modifica_regola",
-        f"Regola {regola_id} ({riga['tipo']}) modificata ({direzione})",
-        {
-            "regola_id": regola_id,
-            "azione": "modifica",
-            "direzione": direzione,
-            "concordata": concordata,
-            "prima": parametri_prima,
-            "dopo": parametri_dopo,
-        },
-        ts,
-    )
+    aggiornata = applica_modifica(conn, riga, parametri_dopo, concordata, ora)
     conn.commit()
-    aggiornata = conn.execute("SELECT * FROM regole WHERE id = ?", (regola_id,)).fetchone()
     return _riga_regola(aggiornata)
 
 
@@ -179,10 +228,7 @@ def elimina_regola(
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     riga = _regola_attiva_o_404(conn, regola_id)
-    attive = conn.execute("SELECT COUNT(*) AS n FROM regole WHERE attiva = 1").fetchone()["n"]
-    if attive <= 1:
-        # concept.md: almeno una regola obbligatoria.
-        raise HTTPException(status_code=409, detail={"errore": "ultima_regola"})
+    _verifica_non_ultima(conn)
 
     ora = clock.now()
     concordata = False
@@ -194,25 +240,6 @@ def elimina_regola(
     if not concordata:
         _controlla_lock(riga, ora)  # eliminare = sempre allentare
 
-    ts = clock.iso(ora)
-    parametri_prima = json.loads(riga["parametri"])
-    conn.execute(
-        "UPDATE regole SET attiva = 0, ultima_modifica_ts = ? WHERE id = ?", (ts, regola_id)
-    )
-    registra_modifica(
-        conn, regola_id, "eliminazione", "allenta", parametri_prima, None, concordata, ts
-    )
-    accoda_notifica(
-        conn,
-        "modifica_regola",
-        f"Regola {regola_id} ({riga['tipo']}) eliminata",
-        {
-            "regola_id": regola_id,
-            "azione": "eliminazione",
-            "concordata": concordata,
-            "prima": parametri_prima,
-        },
-        ts,
-    )
+    applica_eliminazione(conn, riga, concordata, ora)
     conn.commit()
     return {"id": regola_id, "eliminata": True}

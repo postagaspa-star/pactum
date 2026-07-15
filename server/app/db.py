@@ -36,20 +36,48 @@ CREATE TABLE IF NOT EXISTS storico_modifiche (
     ts_server TEXT NOT NULL
 );
 
--- Stub: il flusso completo delle proposte arriva alla tappa 5.
--- Serve gia' adesso perche' concordata=true e' legittimo solo se nasce
--- da una proposta accettata, mai da un campo libero del client.
+-- Proposte del genitore (tappa 5). Il genitore non impone mai: propone.
 -- parametri_proposti (JSON) sono i parametri ESATTI concordati: la modifica
 -- concordata li applica tali e quali (il figlio non puo' cambiarli al volo).
--- Per una proposta di ELIMINAZIONE il valore e' il marcatore {"azione": "elimina"}
--- (gli endpoint che creano le proposte arrivano alla tappa 5).
+-- Per una proposta di ELIMINAZIONE il valore e' il marcatore {"azione": "elimina"}.
+-- confronto/direzione li calcola il server alla creazione (differenza vs valore
+-- attuale, testo per la notifica al figlio). risposta_* si riempiono quando il
+-- figlio accetta/rifiuta; usata=1 quando la modifica concordata e' stata applicata
+-- (con l'auto-applicazione avviene insieme all'accettazione).
 CREATE TABLE IF NOT EXISTS proposte (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     regola_id INTEGER NOT NULL REFERENCES regole(id),
     parametri_proposti TEXT,
     motivazione TEXT,
-    stato TEXT NOT NULL DEFAULT 'in_attesa' CHECK (stato IN ('in_attesa', 'accettata', 'rifiutata')),
+    confronto TEXT,
+    direzione TEXT,
+    stato TEXT NOT NULL DEFAULT 'pendente' CHECK (stato IN ('pendente', 'accettata', 'rifiutata')),
     usata INTEGER NOT NULL DEFAULT 0,
+    risposta_esito TEXT,
+    risposta_motivazione TEXT,
+    risposta_ts TEXT,
+    ts_server TEXT NOT NULL
+);
+
+-- Dichiarazioni del figlio sulle regole di vita reale (tappa 5).
+-- Fallimento = creduto sulla parola -> stato 'registrata'. Successo = serve il
+-- verdetto del genitore/arbitro -> 'in_attesa'. Il verdetto porta a 'confermata',
+-- 'confermata_per_conto' (il genitore garantisce di aver sentito l'arbitro fuori
+-- dall'app) o 'ribaltata'. verdetto_registro conserva la frase leggibile del
+-- registro (es. "confermato dal genitore per conto di [arbitro]") al momento del
+-- verdetto, cosi' resta vera anche se la regola cambia dopo. Max una dichiarazione
+-- per regola per giorno (fuso del patto), controllata in scrittura.
+CREATE TABLE IF NOT EXISTS dichiarazioni (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    regola_id INTEGER NOT NULL REFERENCES regole(id),
+    giorno TEXT NOT NULL,
+    esito TEXT NOT NULL CHECK (esito IN ('successo', 'fallimento')),
+    nota TEXT,
+    stato TEXT NOT NULL CHECK (stato IN ('registrata', 'in_attesa', 'confermata', 'confermata_per_conto', 'ribaltata')),
+    verdetto_verdetto TEXT,
+    verdetto_nota TEXT,
+    verdetto_registro TEXT,
+    verdetto_ts TEXT,
     ts_server TEXT NOT NULL
 );
 
@@ -83,15 +111,23 @@ CREATE TABLE IF NOT EXISTS battiti (
     ts_server TEXT NOT NULL
 );
 
+-- Bonus autoritativo (tappa 5): agganciato a una regola limite_tempo specifica
+-- ("mi do +15 su TikTok"). regola_id e' obbligatorio dagli endpoint v2; resta
+-- nullable per le righe dei database v1 (nessun aggancio da retro-attribuire).
 CREATE TABLE IF NOT EXISTS bonus (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     minuti INTEGER NOT NULL,
+    regola_id INTEGER REFERENCES regole(id),
     motivo TEXT,
     ts_server TEXT NOT NULL
 );
 
+-- Ogni notifica nasce per un destinatario ('figlio' o 'genitore'): il GET e la
+-- marcatura come letta filtrano sul ruolo del token. Le righe v1 erano tutte del
+-- genitore (backfill via _migra).
 CREATE TABLE IF NOT EXISTS notifiche (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    destinatario TEXT NOT NULL DEFAULT 'genitore' CHECK (destinatario IN ('figlio', 'genitore')),
     tipo TEXT NOT NULL,
     messaggio TEXT NOT NULL,
     payload TEXT NOT NULL DEFAULT '{}',
@@ -110,13 +146,66 @@ def connetti(db_path: str) -> sqlite3.Connection:
     return conn
 
 
+def _colonne(conn: sqlite3.Connection, tabella: str) -> set[str]:
+    return {r[1] for r in conn.execute(f"PRAGMA table_info({tabella})")}
+
+
 def _migra(conn: sqlite3.Connection) -> None:
-    """Micro-migrazioni per database creati con schemi precedenti."""
-    colonne = {r[1] for r in conn.execute("PRAGMA table_info(uso_giornaliero)")}
-    if "totale_minuti" not in colonne:
+    """Micro-migrazioni per database creati con schemi precedenti. SCHEMA
+    (CREATE TABLE IF NOT EXISTS) gira prima: le tabelle nuove (dichiarazioni)
+    nascono gia' bene, qui si aggiornano solo quelle preesistenti."""
+    if "totale_minuti" not in _colonne(conn, "uso_giornaliero"):
         conn.execute(
             "ALTER TABLE uso_giornaliero ADD COLUMN totale_minuti INTEGER NOT NULL DEFAULT 0"
         )
+
+    # bonus: aggancio a una regola (v2). Le righe v1 restano senza regola_id.
+    if "regola_id" not in _colonne(conn, "bonus"):
+        conn.execute("ALTER TABLE bonus ADD COLUMN regola_id INTEGER REFERENCES regole(id)")
+
+    # notifiche: destinatario (v2). Backfill delle righe v1 come 'genitore'.
+    if "destinatario" not in _colonne(conn, "notifiche"):
+        conn.execute(
+            "ALTER TABLE notifiche ADD COLUMN destinatario TEXT NOT NULL DEFAULT 'genitore'"
+        )
+
+    # proposte: lo stub v1 non aveva confronto/direzione/risposta_* e usava lo
+    # stato 'in_attesa'. Il CHECK dello stato non si altera con ALTER: si
+    # ricostruisce la tabella (di norma vuota, gli endpoint non esistevano in v1).
+    colonne_proposte = _colonne(conn, "proposte")
+    if colonne_proposte and "confronto" not in colonne_proposte:
+        # PRAGMA foreign_keys e' un no-op dentro una transazione: si chiude prima
+        # quella eventualmente aperta dagli ALTER qui sopra.
+        conn.commit()
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.executescript(
+            """
+            ALTER TABLE proposte RENAME TO _proposte_v1;
+            CREATE TABLE proposte (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                regola_id INTEGER NOT NULL REFERENCES regole(id),
+                parametri_proposti TEXT,
+                motivazione TEXT,
+                confronto TEXT,
+                direzione TEXT,
+                stato TEXT NOT NULL DEFAULT 'pendente'
+                    CHECK (stato IN ('pendente', 'accettata', 'rifiutata')),
+                usata INTEGER NOT NULL DEFAULT 0,
+                risposta_esito TEXT,
+                risposta_motivazione TEXT,
+                risposta_ts TEXT,
+                ts_server TEXT NOT NULL
+            );
+            INSERT INTO proposte
+                (id, regola_id, parametri_proposti, motivazione, stato, usata, ts_server)
+            SELECT id, regola_id, parametri_proposti, motivazione,
+                CASE stato WHEN 'in_attesa' THEN 'pendente' ELSE stato END,
+                usata, ts_server
+            FROM _proposte_v1;
+            DROP TABLE _proposte_v1;
+            """
+        )
+        conn.execute("PRAGMA foreign_keys=ON")
 
 
 def init_db(db_path: str, tetto_giorno: int, tetto_settimana: int) -> None:
@@ -152,10 +241,18 @@ def valore_patto(conn: sqlite3.Connection, chiave: str) -> str:
     return riga["valore"]
 
 
-def accoda_notifica(conn: sqlite3.Connection, tipo: str, messaggio: str, payload: dict, ts: str) -> None:
+def accoda_notifica(
+    conn: sqlite3.Connection,
+    tipo: str,
+    messaggio: str,
+    payload: dict,
+    ts: str,
+    destinatario: str = "genitore",
+) -> None:
     conn.execute(
-        "INSERT INTO notifiche (tipo, messaggio, payload, ts_server) VALUES (?, ?, ?, ?)",
-        (tipo, messaggio, json.dumps(payload), ts),
+        "INSERT INTO notifiche (destinatario, tipo, messaggio, payload, ts_server)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (destinatario, tipo, messaggio, json.dumps(payload), ts),
     )
 
 
@@ -185,17 +282,38 @@ def registra_modifica(
     )
 
 
+def _inizio_giorno_settimana(ora: datetime) -> tuple[datetime, datetime]:
+    """Confini (UTC) del giorno e della settimana ISO correnti, calcolati nel
+    fuso del patto: il giorno di un ragazzo italiano non si azzera alle 02:00."""
+    ora_locale = ora.astimezone(config.fuso_patto())
+    inizio_giorno_locale = ora_locale.replace(hour=0, minute=0, second=0, microsecond=0)
+    inizio_settimana_locale = inizio_giorno_locale - timedelta(days=ora_locale.weekday())
+    return (
+        inizio_giorno_locale.astimezone(timezone.utc),
+        inizio_settimana_locale.astimezone(timezone.utc),
+    )
+
+
+def bonus_oggi_per_regola(conn: sqlite3.Connection, ora: datetime) -> dict:
+    """Minuti bonus concessi OGGI (fuso del patto) per regola, chiave = regola_id
+    come stringa: il valutatore locale del figlio ne ha bisogno per il limite
+    efficace del giorno (minuti_al_giorno + bonus di quella regola)."""
+    inizio_giorno, _ = _inizio_giorno_settimana(ora)
+    righe = conn.execute(
+        "SELECT regola_id, COALESCE(SUM(minuti), 0) AS totale FROM bonus"
+        " WHERE ts_server >= ? AND regola_id IS NOT NULL GROUP BY regola_id",
+        (clock.iso(inizio_giorno),),
+    ).fetchall()
+    return {str(r["regola_id"]): r["totale"] for r in righe}
+
+
 def stato_bonus(conn: sqlite3.Connection, ora: datetime) -> dict:
     """Contatori bonus del giorno e della settimana ISO (lunedi'-domenica).
     I confini dei bucket sono nel fuso del patto (config.fuso_patto);
     il confronto avviene sui ts_server UTC."""
     tetto_giorno = int(valore_patto(conn, "tetto_bonus_giorno"))
     tetto_settimana = int(valore_patto(conn, "tetto_bonus_settimana"))
-    ora_locale = ora.astimezone(config.fuso_patto())
-    inizio_giorno_locale = ora_locale.replace(hour=0, minute=0, second=0, microsecond=0)
-    inizio_settimana_locale = inizio_giorno_locale - timedelta(days=ora_locale.weekday())
-    inizio_giorno = inizio_giorno_locale.astimezone(timezone.utc)
-    inizio_settimana = inizio_settimana_locale.astimezone(timezone.utc)
+    inizio_giorno, inizio_settimana = _inizio_giorno_settimana(ora)
 
     def usati_da(inizio: datetime) -> int:
         riga = conn.execute(

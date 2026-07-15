@@ -6,7 +6,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from .. import clock
 from ..auth import richiede_genitore
@@ -132,33 +132,3 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         "bonus_giornalieri": bonus_giornalieri,
         "stato_silenzio": _stato_silenzio(conn, ora),
     }
-
-
-@router.get("/notifiche")
-def elenca_notifiche(conn: sqlite3.Connection = Depends(get_conn)):
-    righe = conn.execute(
-        "SELECT * FROM notifiche WHERE letta = 0 ORDER BY id"
-    ).fetchall()
-    return {
-        "notifiche": [
-            {
-                "id": r["id"],
-                "tipo": r["tipo"],
-                "messaggio": r["messaggio"],
-                "payload": json.loads(r["payload"]),
-                "ts_server": r["ts_server"],
-            }
-            for r in righe
-        ]
-    }
-
-
-@router.post("/notifiche/{notifica_id}/letta")
-def segna_letta(notifica_id: int, conn: sqlite3.Connection = Depends(get_conn)):
-    cursore = conn.execute(
-        "UPDATE notifiche SET letta = 1 WHERE id = ?", (notifica_id,)
-    )
-    if cursore.rowcount == 0:
-        raise HTTPException(status_code=404, detail="notifica non trovata")
-    conn.commit()
-    return {"id": notifica_id, "letta": True}

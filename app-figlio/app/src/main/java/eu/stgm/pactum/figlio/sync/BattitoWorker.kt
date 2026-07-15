@@ -14,10 +14,13 @@ import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.CodaEventi
 import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.TipiEvento
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
+import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.rete.PostinoClient
+import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -70,6 +73,16 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         }
 
         val postino = PostinoClient(configurazione)
+
+        // Sync del patto (tappa 5): il server è la fonte di verità, la copia
+        // locale serve alla sentinella anche offline. Best effort: se non
+        // arriva, la sentinella usa la copia precedente.
+        postino.leggiPatto()?.let { PattoLocale(context).salva(it) }
+
+        // Valutazione locale degli sforamenti PRIMA della consegna: uno
+        // sforamento di oggi parte con questo stesso giro. Dedup interno.
+        SentinellaPatto(context).valuta()
+
         val battitoOk = postino.inviaBattito(
             Battito(
                 tsDevice = System.currentTimeMillis(),
@@ -83,7 +96,40 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         val eventiOk = postino.inviaEventi(eventi)
         if (eventiOk) coda.rimuoviConsegnati(eventi)
 
+        // Le notifiche del figlio (nuova proposta, verdetto): best effort,
+        // il giro dopo recupera le arretrate.
+        avvisaNovitaDelPatto(context, impostazioni, postino)
+
         return if (battitoOk && eventiOk) Result.success() else Result.retry()
+    }
+
+    /**
+     * Alza una notifica locale per ogni notifica del server mai avvisata prima
+     * (il GET col token del figlio restituisce solo le sue: nuove proposte,
+     * verdetti). Senza permesso non si avvisa E non si segna: appena il
+     * permesso arriva, il giro successivo recupera.
+     */
+    private suspend fun avvisaNovitaDelPatto(
+        context: Context,
+        impostazioni: Impostazioni,
+        postino: PostinoClient,
+    ) {
+        val notifiche = postino.leggiNotifiche() ?: return
+        val giaAvvisate = impostazioni.leggiIdAvvisati()
+        val nuove = notifiche.filter { it.id !in giaAvvisate }
+        if (nuove.isEmpty()) return
+        if (!AvvisiLocali.puoAvvisare(context)) return
+
+        nuove.forEach { notifica ->
+            AvvisiLocali.avvisa(
+                context,
+                id = notifica.id.toInt(),
+                titolo = AvvisiLocali.titoloTipo(context, notifica.tipo),
+                testo = notifica.messaggio,
+                destinazione = AvvisiLocali.destinazioneTipo(notifica.tipo),
+            )
+        }
+        impostazioni.registraIdAvvisati(nuove.map { it.id })
     }
 
     /**

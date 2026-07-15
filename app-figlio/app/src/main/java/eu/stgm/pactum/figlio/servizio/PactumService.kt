@@ -18,6 +18,7 @@ import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.rete.PostinoClient
+import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -80,6 +81,15 @@ class PactumService : Service() {
         loopBattito = ambito.launch {
             while (isActive) {
                 inviaBattito()
+                // Sentinella quasi-real-time (tappa 5): valuta l'uso di oggi
+                // contro la copia locale del patto. Dedup interno (una per
+                // regola per giorno); un errore qui non deve uccidere il
+                // battito, che è la promessa più vecchia.
+                try {
+                    SentinellaPatto(applicationContext).valuta()
+                } catch (e: Exception) {
+                    // meglio un giro senza valutazione che un testimone morto
+                }
                 delay(INTERVALLO_BATTITO_MS)
             }
         }

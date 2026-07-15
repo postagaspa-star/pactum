@@ -1,6 +1,7 @@
 package eu.stgm.pactum.genitore
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
@@ -40,32 +43,71 @@ import eu.stgm.pactum.genitore.sync.VedettaWorker
 import eu.stgm.pactum.genitore.ui.FinestraScreen
 import eu.stgm.pactum.genitore.ui.ImpostazioniScreen
 import eu.stgm.pactum.genitore.ui.NotificheScreen
+import eu.stgm.pactum.genitore.ui.ProposteScreen
+import eu.stgm.pactum.genitore.ui.VerdettiScreen
 import eu.stgm.pactum.genitore.ui.theme.PactumTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    // La scheda su cui aprirsi quando si arriva da una notifica di sistema
+    // (hook di navigazione). Attività a singleTop: onNewIntent la aggiorna
+    // quando l'app è già viva. null = avvio normale, si parte dalla finestra.
+    private val destinazioneRichiesta = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        destinazioneRichiesta.value = intent?.getStringExtra(EXTRA_DESTINAZIONE)
         setContent {
             PactumTheme {
-                GenitoreRoot()
+                GenitoreRoot(
+                    destinazioneRichiesta = destinazioneRichiesta.value,
+                    onDestinazioneConsumata = { destinazioneRichiesta.value = null },
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        destinazioneRichiesta.value = intent.getStringExtra(EXTRA_DESTINAZIONE)
+    }
+
+    companion object {
+        const val EXTRA_DESTINAZIONE = "destinazione_iniziale"
+        const val DEST_PROPOSTE = "proposte"
+        const val DEST_VERDETTI = "verdetti"
+        const val DEST_NOTIFICHE = "notifiche"
     }
 }
 
 private enum class Destinazione(val icona: ImageVector, val etichetta: Int) {
     FINESTRA(Icons.Filled.Home, R.string.scheda_finestra),
+    PROPOSTE(Icons.Filled.Edit, R.string.scheda_proposte),
+    VERDETTI(Icons.Filled.CheckCircle, R.string.scheda_verdetti),
     NOTIFICHE(Icons.Filled.Notifications, R.string.scheda_notifiche),
     IMPOSTAZIONI(Icons.Filled.Settings, R.string.scheda_impostazioni),
 }
 
-/** Tre destinazioni, una barra in basso: la finestra è la casa. */
+/** Cinque destinazioni, una barra in basso: la finestra è la casa. */
 @Composable
-private fun GenitoreRoot() {
+private fun GenitoreRoot(
+    destinazioneRichiesta: String?,
+    onDestinazioneConsumata: () -> Unit,
+) {
     var destinazione by rememberSaveable { mutableStateOf(Destinazione.FINESTRA) }
 
     RichiestaPermessoNotifiche()
+
+    // Arrivo da una notifica: salta alla scheda giusta, una volta sola.
+    LaunchedEffect(destinazioneRichiesta) {
+        when (destinazioneRichiesta) {
+            MainActivity.DEST_PROPOSTE -> destinazione = Destinazione.PROPOSTE
+            MainActivity.DEST_VERDETTI -> destinazione = Destinazione.VERDETTI
+            MainActivity.DEST_NOTIFICHE -> destinazione = Destinazione.NOTIFICHE
+        }
+        if (destinazioneRichiesta != null) onDestinazioneConsumata()
+    }
 
     Scaffold(
         bottomBar = {
@@ -87,6 +129,8 @@ private fun GenitoreRoot() {
         Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
             when (destinazione) {
                 Destinazione.FINESTRA -> FinestraScreen()
+                Destinazione.PROPOSTE -> ProposteScreen()
+                Destinazione.VERDETTI -> VerdettiScreen()
                 Destinazione.NOTIFICHE -> NotificheScreen()
                 Destinazione.IMPOSTAZIONI -> ImpostazioniScreen()
             }

@@ -110,8 +110,8 @@ def test_regola_eliminata_resta_visibile_nella_finestra(client, orologio):
 
 
 def test_bonus_residui_nella_finestra(client):
-    crea_regola(client)
-    client.post("/api/bonus", json={"minuti": 15}, headers=FIGLIO)
+    regola = crea_regola(client)
+    client.post("/api/bonus", json={"minuti": 15, "regola_id": regola["id"]}, headers=FIGLIO)
     bonus = _finestra(client)["bonus"]
     assert bonus["giorno"] == {"usati": 15, "tetto": 30, "residui": 15}
     assert bonus["settimana"] == {"usati": 15, "tetto": 90, "residui": 75}
@@ -137,11 +137,12 @@ def test_giorni_dopo_eliminazione_grigi(client, orologio):
 # --- bonus_giornalieri: riepilogo globale per giorno, dalla tabella bonus ---
 
 def test_bonus_giornalieri_forma_e_somme(client, orologio):
-    crea_regola(client)
-    client.post("/api/bonus", json={"minuti": 15}, headers=FIGLIO)
-    client.post("/api/bonus", json={"minuti": 5}, headers=FIGLIO)
+    regola = crea_regola(client)
+    rid = regola["id"]
+    client.post("/api/bonus", json={"minuti": 15, "regola_id": rid}, headers=FIGLIO)
+    client.post("/api/bonus", json={"minuti": 5, "regola_id": rid}, headers=FIGLIO)
     orologio.avanza(days=1)  # 15/07
-    client.post("/api/bonus", json={"minuti": 30}, headers=FIGLIO)
+    client.post("/api/bonus", json={"minuti": 30, "regola_id": rid}, headers=FIGLIO)
     per_giorno = _finestra(client)["bonus_giornalieri"]
     assert len(per_giorno) == 8  # stessa finestra del semaforo, dal piu' vecchio a oggi
     assert per_giorno[-1] == {"giorno": "2026-07-15", "minuti": 30}
@@ -163,7 +164,7 @@ def test_bonus_giornalieri_ignora_gli_eventi_bonus_usato(client):
 # --- i giorni della finestra sono giorni locali del patto (Europe/Rome) ---
 
 def test_finestra_conta_i_giorni_nel_fuso_del_patto(client, orologio):
-    crea_regola(client)
+    regola = crea_regola(client)
     # 23:30 UTC del 14/07 = 01:30 locali del 15/07: per il patto e' gia' il 15
     orologio.vai_a(datetime(2026, 7, 14, 23, 30, 0, tzinfo=timezone.utc))
     client.post(
@@ -171,7 +172,7 @@ def test_finestra_conta_i_giorni_nel_fuso_del_patto(client, orologio):
         json={"eventi": [{"id": "s-notte", "tipo": "sforamento", "dettagli": {"regola_id": 1}}]},
         headers=FIGLIO,
     )
-    client.post("/api/bonus", json={"minuti": 5}, headers=FIGLIO)
+    client.post("/api/bonus", json={"minuti": 5, "regola_id": regola["id"]}, headers=FIGLIO)
     finestra = _finestra(client)
     semaforo = {v["data"]: v["stato"] for v in finestra["regole"][0]["semaforo"]}
     assert finestra["regole"][0]["semaforo"][-1]["data"] == "2026-07-15"  # oggi locale

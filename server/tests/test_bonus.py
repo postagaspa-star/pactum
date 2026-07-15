@@ -6,10 +6,23 @@ martedi' 14/07/2026 alle 10:00 UTC (12:00 locali)."""
 import threading
 from datetime import datetime, timezone
 
-from conftest import FIGLIO, GENITORE
+from conftest import FIGLIO, GENITORE, crea_regola
 
-def _bonus(client, minuti, motivo=None):
-    corpo = {"minuti": minuti}
+
+def _regola_limite(client):
+    """Assicura (una volta) una regola limite_tempo attiva: il bonus v2 si aggancia
+    sempre a un limite specifico (regola_id obbligatorio)."""
+    regole = client.get("/api/regole", headers=FIGLIO).json()["regole"]
+    for r in regole:
+        if r["tipo"] == "limite_tempo":
+            return r["id"]
+    return crea_regola(client)["id"]
+
+
+def _bonus(client, minuti, motivo=None, regola_id=None):
+    if regola_id is None:
+        regola_id = _regola_limite(client)
+    corpo = {"minuti": minuti, "regola_id": regola_id}
     if motivo:
         corpo["motivo"] = motivo
     return client.post("/api/bonus", json=corpo, headers=FIGLIO)
@@ -25,6 +38,48 @@ def test_minuti_non_ammessi_422(client):
     assert _bonus(client, 10).status_code == 422
     assert _bonus(client, 0).status_code == 422
     assert _bonus(client, 45).status_code == 422
+
+
+def test_regola_id_obbligatorio_422(client):
+    crea_regola(client)
+    assert client.post("/api/bonus", json={"minuti": 15}, headers=FIGLIO).status_code == 422
+
+
+def test_bonus_su_regola_inesistente_409(client):
+    crea_regola(client)
+    risposta = _bonus(client, 15, regola_id=999)
+    assert risposta.status_code == 409
+    assert risposta.json()["detail"]["errore"] == "regola_non_valida"
+
+
+def test_bonus_su_regola_non_limite_tempo_409(client):
+    # Il bonus allunga un limite di tempo, non una fascia oraria o una vita reale.
+    fascia = crea_regola(
+        client,
+        tipo="fascia_oraria",
+        parametri={"dalle": "23:00", "alle": "07:00", "giorni": ["lun", "mar"]},
+    )
+    risposta = _bonus(client, 15, regola_id=fascia["id"])
+    assert risposta.status_code == 409
+    assert risposta.json()["detail"]["errore"] == "regola_non_valida"
+
+
+def test_bonus_su_regola_eliminata_409(client, orologio):
+    crea_regola(client)  # la regola che resta
+    limite = crea_regola(client, parametri={"app_o_categoria": "YouTube", "minuti_al_giorno": 120})
+    orologio.avanza(days=4)
+    assert client.delete(f"/api/regole/{limite['id']}", headers=FIGLIO).status_code == 200
+    risposta = _bonus(client, 15, regola_id=limite["id"])
+    assert risposta.status_code == 409
+    assert risposta.json()["detail"]["errore"] == "regola_non_valida"
+
+
+def test_bonus_notifica_porta_la_regola_id(client):
+    regola_id = _regola_limite(client)
+    _bonus(client, 5, regola_id=regola_id)
+    notifiche = client.get("/api/notifiche", headers=GENITORE).json()["notifiche"]
+    di_bonus = [n for n in notifiche if n["tipo"] == "bonus"][0]
+    assert di_bonus["payload"]["regola_id"] == regola_id
 
 
 def test_tetto_giornaliero_al_limite_esatto(client):
@@ -119,13 +174,14 @@ def test_bonus_concorrenti_ne_passa_uno_solo(client):
     """12 richieste simultanee da 30 minuti contro un tetto giornaliero di 30:
     esattamente UNA deve passare. Senza transazione atomica tutte leggevano
     residuo=30 prima che la prima scrivesse, e passavano tutte (360 minuti)."""
+    regola_id = _regola_limite(client)  # la regola nasce PRIMA della barriera
     quante = 12
     barriera = threading.Barrier(quante)
     esiti = []
 
     def spara():
         barriera.wait()  # partenza simultanea
-        esiti.append(_bonus(client, 30).status_code)
+        esiti.append(_bonus(client, 30, regola_id=regola_id).status_code)
 
     thread = [threading.Thread(target=spara) for _ in range(quante)]
     for t in thread:
@@ -141,13 +197,14 @@ def test_bonus_concorrenti_ne_passa_uno_solo(client):
 def test_bonus_concorrenti_sotto_il_tetto_passano_tutti(client):
     """Il lock serializza ma non blocca il legittimo: 3 bonus da 5 in parallelo
     stanno tutti nel tetto (15 <= 30) e passano tutti."""
+    regola_id = _regola_limite(client)
     quante = 3
     barriera = threading.Barrier(quante)
     esiti = []
 
     def spara():
         barriera.wait()
-        esiti.append(_bonus(client, 5).status_code)
+        esiti.append(_bonus(client, 5, regola_id=regola_id).status_code)
 
     thread = [threading.Thread(target=spara) for _ in range(quante)]
     for t in thread:

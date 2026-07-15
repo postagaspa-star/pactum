@@ -1,0 +1,317 @@
+package eu.stgm.pactum.figlio.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.dati.DirezioniProposta
+import eu.stgm.pactum.figlio.dati.EsitiRisposta
+import eu.stgm.pactum.figlio.dati.Proposta
+import eu.stgm.pactum.figlio.dati.StatiProposta
+
+/** Le proposte del genitore: il confronto in evidenza, la decisione è tua. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
+    val stato by vm.stato.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LifecycleResumeEffect(Unit) {
+        vm.aggiorna()
+        onPauseOrDispose { }
+    }
+
+    val messaggioAccettata = stringResource(R.string.proposta_accettata_ok)
+    val messaggioRifiutata = stringResource(R.string.proposta_rifiutata_ok)
+    val messaggioNonPendente = stringResource(R.string.proposta_non_pendente)
+    val messaggioErrore = stringResource(R.string.proposta_errore)
+    LaunchedEffect(stato.evento) {
+        when (stato.evento) {
+            is ProposteViewModel.Evento.Accettata -> snackbarHostState.showSnackbar(messaggioAccettata)
+            is ProposteViewModel.Evento.Rifiutata -> snackbarHostState.showSnackbar(messaggioRifiutata)
+            is ProposteViewModel.Evento.NonPiuPendente ->
+                snackbarHostState.showSnackbar(messaggioNonPendente)
+            is ProposteViewModel.Evento.Errore -> snackbarHostState.showSnackbar(messaggioErrore)
+            null -> Unit
+        }
+        if (stato.evento != null) vm.consumaEvento()
+    }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0.dp),
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.proposte_titolo)) },
+                actions = {
+                    IconButton(onClick = { vm.aggiorna() }) {
+                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
+                    }
+                },
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { padding ->
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            when {
+                stato.caricamento && stato.proposte.isEmpty() -> Centro {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = stringResource(R.string.proposte_caricamento),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+
+                stato.configurazioneMancante -> Centro {
+                    TestoCentrato(stringResource(R.string.regole_config_mancante))
+                }
+
+                stato.errore && stato.proposte.isEmpty() -> Centro {
+                    TestoCentrato(stringResource(R.string.proposte_errore_lettura))
+                }
+
+                else -> ContenutoProposte(
+                    proposte = stato.proposte,
+                    invioInCorso = stato.invioInCorso,
+                    mostraErrore = stato.errore,
+                    onRispondi = { id, esito, motivazione -> vm.rispondi(id, esito, motivazione) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContenutoProposte(
+    proposte: List<Proposta>,
+    invioInCorso: Boolean,
+    mostraErrore: Boolean,
+    onRispondi: (Long, String, String?) -> Unit,
+) {
+    val pendenti = proposte.filter { it.stato == StatiProposta.PENDENTE }
+    val storia = proposte.filter { it.stato != StatiProposta.PENDENTE }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (mostraErrore) {
+            item { BannerDatiVecchi() }
+        }
+
+        item { TitoloSezione(stringResource(R.string.proposte_sezione_pendenti)) }
+        if (pendenti.isEmpty()) {
+            item { TestoVuoto(stringResource(R.string.proposte_pendenti_vuoto)) }
+        } else {
+            items(pendenti, key = { "pendente-${it.id}" }) { proposta ->
+                CardPropostaPendente(proposta, invioInCorso, onRispondi)
+            }
+        }
+
+        item { TitoloSezione(stringResource(R.string.proposte_sezione_storia)) }
+        if (storia.isEmpty()) {
+            item { TestoVuoto(stringResource(R.string.proposte_storia_vuota)) }
+        } else {
+            items(storia, key = { "storia-${it.id}" }) { CardPropostaStorica(it) }
+        }
+    }
+}
+
+@Composable
+private fun CardPropostaPendente(
+    proposta: Proposta,
+    invioInCorso: Boolean,
+    onRispondi: (Long, String, String?) -> Unit,
+) {
+    var motivazione by remember(proposta.id) { mutableStateOf("") }
+    val motivazionePulita = { motivazione.trim().ifBlank { null } }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.proposta_dal_genitore),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                TagDirezione(proposta.direzione)
+            }
+            // Il confronto autoritativo del server, IN EVIDENZA: è la frase che
+            // dice cosa cambierebbe rispetto ad ora.
+            Text(
+                text = proposta.confronto?.ifBlank { null }
+                    ?: stringResource(R.string.proposta_senza_confronto),
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            proposta.motivazione?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = stringResource(R.string.proposta_motivazione_genitore, it),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            istanteServer(proposta.tsServer)?.let {
+                Text(
+                    text = dataOraLocale(it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = motivazione,
+                onValueChange = { motivazione = it },
+                label = { Text(stringResource(R.string.proposta_campo_motivazione)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                Button(
+                    enabled = !invioInCorso,
+                    onClick = {
+                        onRispondi(proposta.id, EsitiRisposta.ACCETTA, motivazionePulita())
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.proposta_accetta))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(
+                    enabled = !invioInCorso,
+                    onClick = {
+                        onRispondi(proposta.id, EsitiRisposta.RIFIUTA, motivazionePulita())
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.proposta_rifiuta))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardPropostaStorica(proposta: Proposta) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = etichettaStatoProposta(proposta.stato),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                TagDirezione(proposta.direzione)
+            }
+            proposta.confronto?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            proposta.motivazione?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = stringResource(R.string.proposta_motivazione_genitore, it),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            proposta.risposta?.let { risposta ->
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = if (risposta.esito == EsitiRisposta.ACCETTA) {
+                        stringResource(R.string.proposta_tua_risposta_accettata)
+                    } else {
+                        stringResource(R.string.proposta_tua_risposta_rifiutata)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                risposta.motivazione?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = stringResource(R.string.proposta_tua_motivazione, it),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            istanteServer(proposta.tsServer)?.let {
+                Text(
+                    text = dataOraLocale(it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TagDirezione(direzione: String?) {
+    val testo = when (direzione) {
+        DirezioniProposta.ALLENTA -> stringResource(R.string.proposta_tag_allenta)
+        DirezioniProposta.STRINGE -> stringResource(R.string.proposta_tag_stringe)
+        DirezioniProposta.ELIMINA -> stringResource(R.string.proposta_tag_elimina)
+        else -> return
+    }
+    Etichetta(testo)
+}
+
+@Composable
+private fun etichettaStatoProposta(stato: String): String = when (stato) {
+    StatiProposta.PENDENTE -> stringResource(R.string.proposta_stato_pendente)
+    StatiProposta.ACCETTATA -> stringResource(R.string.proposta_stato_accettata)
+    StatiProposta.RIFIUTATA -> stringResource(R.string.proposta_stato_rifiutata)
+    else -> stato
+}

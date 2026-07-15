@@ -38,6 +38,9 @@ object TipiEvento {
 
     /** Cambio manuale di ora o fuso orario. */
     const val MANOMISSIONE = "manomissione"
+
+    /** Sforamento rilevato dal valutatore locale (max uno per regola per giorno). */
+    const val SFORAMENTO = "sforamento"
 }
 
 /** Il battito "sono viva" inviato ogni ~15 minuti. */

@@ -1,20 +1,41 @@
 package eu.stgm.pactum.genitore.rete
 
 import eu.stgm.pactum.genitore.dati.ConfigurazionePostino
+import eu.stgm.pactum.genitore.dati.CorpoVerdetto
+import eu.stgm.pactum.genitore.dati.Dichiarazione
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Notifica
+import eu.stgm.pactum.genitore.dati.NuovaProposta
+import eu.stgm.pactum.genitore.dati.PaccoDichiarazioni
 import eu.stgm.pactum.genitore.dati.PaccoNotifiche
+import eu.stgm.pactum.genitore.dati.PaccoProposte
+import eu.stgm.pactum.genitore.dati.Proposta
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+
+/**
+ * L'esito di una scrittura verso il postino. `Riuscito` porta il dato creato
+ * dal server (la proposta col confronto, la dichiarazione col verdetto);
+ * `Rifiutato` è un 409 col codice `errore` del contratto (es. proposta già
+ * pendente); `Fallito` è tutto il resto (offline, altro HTTP, JSON inatteso).
+ */
+sealed interface EsitoScrittura<out T> {
+    data class Riuscito<T>(val dato: T) : EsitoScrittura<T>
+    data class Rifiutato(val errore: String?) : EsitoScrittura<Nothing>
+    data object Fallito : EsitoScrittura<Nothing>
+}
 
 /**
  * Client verso il server postino, lato genitore. Protocollo: docs/contratto-api.md
@@ -38,6 +59,34 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             ?.let { decodifica(PaccoNotifiche.serializer(), it) }
             ?.notifiche
 
+    suspend fun leggiProposte(): List<Proposta>? =
+        leggi("/api/proposte")
+            ?.let { decodifica(PaccoProposte.serializer(), it) }
+            ?.proposte
+
+    suspend fun leggiDichiarazioni(): List<Dichiarazione>? =
+        leggi("/api/dichiarazioni")
+            ?.let { decodifica(PaccoDichiarazioni.serializer(), it) }
+            ?.dichiarazioni
+
+    /** POST /api/proposte: la proposta creata (col confronto del server) o l'errore. */
+    suspend fun creaProposta(nuova: NuovaProposta): EsitoScrittura<Proposta> {
+        val corpo = json.encodeToString(NuovaProposta.serializer(), nuova)
+        val risposta = scrivi("/api/proposte", corpo) ?: return EsitoScrittura.Fallito
+        return interpreta(risposta, Proposta.serializer())
+    }
+
+    /** POST /api/dichiarazioni/{id}/verdetto: la dichiarazione aggiornata o l'errore. */
+    suspend fun emettiVerdetto(
+        dichiarazioneId: Long,
+        corpoVerdetto: CorpoVerdetto,
+    ): EsitoScrittura<Dichiarazione> {
+        val corpo = json.encodeToString(CorpoVerdetto.serializer(), corpoVerdetto)
+        val risposta = scrivi("/api/dichiarazioni/$dichiarazioneId/verdetto", corpo)
+            ?: return EsitoScrittura.Fallito
+        return interpreta(risposta, Dichiarazione.serializer())
+    }
+
     suspend fun segnaLetta(notificaId: Long): Boolean = withContext(Dispatchers.IO) {
         if (!configurazione.completa) return@withContext false
         try {
@@ -49,6 +98,51 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             false
         } catch (e: IllegalArgumentException) {
             false // URL malformato nelle impostazioni: non è un motivo per crashare.
+        }
+    }
+
+    /** Una POST con corpo JSON: codice HTTP + corpo (letto sempre), null se la rete cade. */
+    private suspend fun scrivi(percorso: String, corpo: String): RispostaHttp? {
+        if (!configurazione.completa) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val richiesta = richiesta(percorso)
+                    .post(corpo.toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+                http.newCall(richiesta).execute().use { risposta ->
+                    RispostaHttp(risposta.code, risposta.body?.string())
+                }
+            } catch (e: IOException) {
+                null
+            } catch (e: IllegalArgumentException) {
+                null // URL malformato nelle impostazioni: non è un motivo per crashare.
+            }
+        }
+    }
+
+    private fun <T> interpreta(
+        risposta: RispostaHttp,
+        serializer: kotlinx.serialization.KSerializer<T>,
+    ): EsitoScrittura<T> = when {
+        risposta.codice in 200..299 -> {
+            val dato = risposta.corpo?.let { decodifica(serializer, it) }
+            if (dato != null) EsitoScrittura.Riuscito(dato) else EsitoScrittura.Fallito
+        }
+        // 409 = rifiuto del contratto (proposta già pendente, dichiarazione non
+        // più in attesa, regola non valida): si porta su il codice `errore`.
+        risposta.codice == 409 -> EsitoScrittura.Rifiutato(estraiErrore(risposta.corpo))
+        else -> EsitoScrittura.Fallito
+    }
+
+    private fun estraiErrore(corpo: String?): String? {
+        if (corpo == null) return null
+        return try {
+            val oggetto = json.parseToJsonElement(corpo) as? JsonObject ?: return null
+            (oggetto["errore"] as? JsonPrimitive)?.content
+        } catch (e: SerializationException) {
+            null
+        } catch (e: IllegalArgumentException) {
+            null
         }
     }
 
@@ -84,8 +178,12 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         null
     }
 
+    /** Codice HTTP + corpo grezzo di una risposta di scrittura. */
+    private data class RispostaHttp(val codice: Int, val corpo: String?)
+
     companion object {
         private val CORPO_VUOTO = ByteArray(0).toRequestBody(null)
+        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private val json = Json { ignoreUnknownKeys = true }
 
         // Un solo client OkHttp per processo: riusa pool di connessioni e thread.

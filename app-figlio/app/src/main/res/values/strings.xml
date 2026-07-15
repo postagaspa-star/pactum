@@ -52,4 +52,144 @@
     <string name="canale_testimone_descrizione">La notifica fissa che mostra che Pactum è attivo.</string>
     <string name="notifica_testimone_titolo">Pactum</string>
     <string name="notifica_testimone_testo">Pactum sta facendo da testimone</string>
+
+    <!-- Navigazione (tappa 5) -->
+    <string name="scheda_oggi">Oggi</string>
+    <string name="scheda_regole">Regole</string>
+    <string name="scheda_bonus">Bonus</string>
+    <string name="scheda_proposte">Proposte</string>
+    <string name="scheda_diario">Diario</string>
+    <string name="azione_annulla">Annulla</string>
+    <string name="azione_conferma">Conferma</string>
+    <string name="dati_vecchi">Impossibile aggiornare — questi sono gli ultimi dati ricevuti.</string>
+
+    <!-- Descrizioni delle regole -->
+    <string name="regola_limite_tempo">%1$s: al massimo %2$s al giorno</string>
+    <string name="regola_fascia_oraria">Niente telefono dalle %1$s alle %2$s (%3$s)</string>
+    <string name="regola_vita_reale">%1$s — arbitro: %2$s, %3$s</string>
+
+    <!-- Attese in parole (lock dei 4 giorni) -->
+    <string name="durata_un_giorno">un giorno</string>
+    <string name="durata_giorni">%1$d giorni</string>
+    <string name="durata_un_ora">un\'ora</string>
+    <string name="durata_ore">%1$d ore</string>
+    <string name="durata_un_minuto">un minuto</string>
+    <string name="durata_minuti">%1$d minuti</string>
+    <string name="durata_e">%1$s e %2$s</string>
+
+    <!-- Regole -->
+    <string name="regole_titolo">Le tue regole</string>
+    <string name="regole_caricamento">Sto leggendo il patto…</string>
+    <string name="regole_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
+    <string name="regole_vuoto">Il patto vuole almeno una regola: creane una con il pulsante +.</string>
+    <string name="regole_unica_regola">Questa è l\'unica regola del patto: puoi modificarla, ma non eliminarla.</string>
+    <string name="regole_nuova">Nuova regola</string>
+    <string name="regola_concordata">concordata</string>
+    <string name="regola_allentabile_dal">Allentabile dal %1$s</string>
+    <string name="azione_modifica">Modifica</string>
+    <string name="azione_elimina">Elimina</string>
+    <string name="regola_salvata">Regola salvata. Il genitore riceve una notifica.</string>
+    <string name="regola_eliminata_ok">Regola eliminata. Il genitore riceve una notifica.</string>
+    <string name="regola_lock_messaggio">Questa modifica allenta la regola: potrai allentarla tra %1$s. Stringerla invece si può sempre.</string>
+    <string name="regola_elimina_lock_messaggio">Eliminare è l\'allentamento massimo: potrai farlo tra %1$s.</string>
+    <string name="regola_ultima_messaggio">Il patto vuole almeno una regola: creane un\'altra prima di eliminare questa.</string>
+    <string name="regola_errore_generico">Non sono riuscito a salvare: controlla i campi e la connessione, poi riprova.</string>
+    <string name="regola_elimina_conferma_titolo">Eliminare la regola?</string>
+    <string name="regola_elimina_conferma_testo">\"%1$s\" uscirà dal patto. Il genitore riceverà una notifica.</string>
+    <string name="regola_crea_titolo">Nuova regola</string>
+    <string name="regola_modifica_titolo">Modifica la regola</string>
+    <string name="regola_tipo_limite_tempo">Limite di tempo</string>
+    <string name="regola_tipo_fascia_oraria">Fascia oraria</string>
+    <string name="regola_tipo_vita_reale">Vita reale</string>
+    <string name="regola_campo_app">App o categoria (es. TikTok)</string>
+    <string name="regola_campo_minuti">Minuti al giorno</string>
+    <string name="regola_campo_dalle">Dalle (HH:MM)</string>
+    <string name="regola_campo_alle">Alle (HH:MM)</string>
+    <string name="regola_campo_giorni">Giorni</string>
+    <string name="regola_campo_descrizione">Cosa ti impegni a fare (es. cammino un\'ora)</string>
+    <string name="regola_campo_arbitro">Arbitro: chi verifica (es. la mamma)</string>
+    <string name="regola_campo_frequenza">Frequenza (es. ogni giorno)</string>
+
+    <!-- Bonus -->
+    <string name="bonus_titolo">Bonus</string>
+    <string name="bonus_caricamento">Sto leggendo i bonus…</string>
+    <string name="bonus_spiegazione">Puoi darti +5, +15 o +30 minuti su una regola di tempo, con un tetto al giorno e alla settimana. Il genitore lo vede: il patto resta trasparente.</string>
+    <string name="bonus_residui_giorno">Oggi: ancora %1$d min su %2$d</string>
+    <string name="bonus_residui_settimana">Questa settimana: ancora %1$d min su %2$d</string>
+    <string name="bonus_scegli_regola">Su quale limite?</string>
+    <string name="bonus_nessuna_regola">Il bonus allunga un limite di tempo, e non hai regole di questo tipo. Puoi crearne una nella scheda Regole.</string>
+    <string name="bonus_oggi_su_regola">Oggi già +%1$d min su questa regola</string>
+    <string name="bonus_motivo">Motivo (facoltativo)</string>
+    <string name="bonus_piu_minuti">+%1$d min</string>
+    <string name="bonus_concesso">Fatto: +%1$d min per oggi su questa regola. Il genitore riceve una notifica.</string>
+    <string name="bonus_tetto_superato">Tetto superato: oggi restano %1$d min, questa settimana %2$d.</string>
+    <string name="bonus_regola_non_valida">Questa regola non è più valida per un bonus: aggiorna e riprova.</string>
+    <string name="bonus_errore">Non sono riuscito a concedere il bonus: controlla la connessione e riprova.</string>
+
+    <!-- Proposte -->
+    <string name="proposte_titolo">Proposte</string>
+    <string name="proposte_caricamento">Sto leggendo le proposte…</string>
+    <string name="proposte_errore_lettura">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
+    <string name="proposte_sezione_pendenti">Da decidere</string>
+    <string name="proposte_pendenti_vuoto">Nessuna proposta in attesa della tua risposta.</string>
+    <string name="proposte_sezione_storia">Storia</string>
+    <string name="proposte_storia_vuota">Nessuna proposta ancora.</string>
+    <string name="proposta_dal_genitore">Proposta del genitore</string>
+    <string name="proposta_senza_confronto">Proposta di modifica</string>
+    <string name="proposta_motivazione_genitore">Il genitore dice: %1$s</string>
+    <string name="proposta_campo_motivazione">La tua motivazione (facoltativa)</string>
+    <string name="proposta_accetta">Accetto</string>
+    <string name="proposta_rifiuta">Rifiuto</string>
+    <string name="proposta_accettata_ok">Proposta accettata: la regola è già aggiornata.</string>
+    <string name="proposta_rifiutata_ok">Proposta rifiutata. Il genitore riceve la tua risposta.</string>
+    <string name="proposta_non_pendente">Questa proposta non è più in attesa.</string>
+    <string name="proposta_errore">Non sono riuscito a inviare la risposta: riprova.</string>
+    <string name="proposta_stato_pendente">In attesa</string>
+    <string name="proposta_stato_accettata">Accettata</string>
+    <string name="proposta_stato_rifiutata">Rifiutata</string>
+    <string name="proposta_tag_allenta">allenta</string>
+    <string name="proposta_tag_stringe">stringe</string>
+    <string name="proposta_tag_elimina">eliminazione</string>
+    <string name="proposta_tua_risposta_accettata">Hai accettato</string>
+    <string name="proposta_tua_risposta_rifiutata">Hai rifiutato</string>
+    <string name="proposta_tua_motivazione">Hai detto: %1$s</string>
+
+    <!-- Diario (dichiarazioni vita reale) -->
+    <string name="diario_titolo">Diario</string>
+    <string name="diario_caricamento">Sto leggendo le dichiarazioni…</string>
+    <string name="diario_sezione_regole">Le tue regole di vita reale</string>
+    <string name="diario_regole_vuoto">Nessuna regola di vita reale nel patto. Puoi crearne una nella scheda Regole.</string>
+    <string name="diario_sezione_dichiarazioni">Le tue dichiarazioni</string>
+    <string name="diario_dichiarazioni_vuoto">Nessuna dichiarazione ancora.</string>
+    <string name="diario_gia_dichiarato_oggi">Per oggi hai già dichiarato: si torna domani.</string>
+    <string name="dichiara_successo">Ce l\'ho fatta</string>
+    <string name="dichiara_fallimento">Non ce l\'ho fatta</string>
+    <string name="dichiarazione_conferma_successo_titolo">Dichiari un successo?</string>
+    <string name="dichiarazione_conferma_successo_testo">Il successo resta in attesa finché l\'arbitro o il genitore lo confermano.</string>
+    <string name="dichiarazione_conferma_fallimento_titolo">Dichiari che non è andata?</string>
+    <string name="dichiarazione_conferma_fallimento_testo">Ti crediamo sulla parola: va a registro, senza conferme. Dirlo a viso aperto vale già qualcosa.</string>
+    <string name="dichiarazione_nota_campo">Nota (facoltativa)</string>
+    <string name="dichiarazione_inviata_successo">Dichiarazione inviata: in attesa di conferma.</string>
+    <string name="dichiarazione_inviata_fallimento">Registrato, creduto sulla parola.</string>
+    <string name="dichiarazione_gia_dichiarato">Per oggi hai già dichiarato su questa regola.</string>
+    <string name="dichiarazione_errore">Non sono riuscito a inviare la dichiarazione: riprova.</string>
+    <string name="dichiarazione_giorno">Giorno: %1$s</string>
+    <string name="dichiarazione_stato_in_attesa">In attesa di conferma</string>
+    <string name="dichiarazione_stato_registrata">Fallimento — creduto sulla parola</string>
+    <string name="dichiarazione_stato_confermata">Successo confermato</string>
+    <string name="dichiarazione_stato_confermata_per_conto">Confermato dal genitore per conto di %1$s</string>
+    <string name="dichiarazione_stato_ribaltata">Ribaltata — conta come fallimento</string>
+    <string name="dichiarazione_tua_nota">La tua nota: %1$s</string>
+    <string name="dichiarazione_verdetto_nota">Nota del verdetto: %1$s</string>
+
+    <!-- Canale e notifiche locali del patto -->
+    <string name="canale_patto_nome">Avvisi del patto</string>
+    <string name="canale_patto_descrizione">Le novità del tuo patto: proposte, verdetti e promemoria sui limiti.</string>
+    <string name="notifica_sforamento_limite_titolo">Limite superato</string>
+    <string name="notifica_sforamento_limite_testo">%1$s: oggi sei andato %2$d min oltre il limite che ti sei dato (%3$d min). Nessun blocco: è il tuo patto.</string>
+    <string name="notifica_sforamento_fascia_titolo">Fascia non rispettata</string>
+    <string name="notifica_sforamento_fascia_testo">Hai usato il telefono %1$d min in una fascia che ti sei chiuso (%2$s–%3$s). Nessun blocco: è il tuo patto.</string>
+    <string name="tipo_nuova_proposta">Nuova proposta del genitore</string>
+    <string name="tipo_verdetto">Verdetto sulla tua dichiarazione</string>
+    <string name="tipo_novita">Novità dal patto</string>
 </resources>

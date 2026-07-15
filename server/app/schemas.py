@@ -80,4 +80,31 @@ class EventiIn(BaseModel):
 
 class BonusIn(BaseModel):
     minuti: Literal[5, 15, 30]
+    # regola_id obbligatorio (v2): il bonus allunga una regola limite_tempo attiva.
+    regola_id: int
     motivo: str | None = None
+
+
+class ProponiIn(BaseModel):
+    regola_id: int
+    # parametri per il tipo della regola OPPURE il marcatore {"azione": "elimina"}.
+    parametri_proposti: dict
+    motivazione: str | None = None
+
+
+class RispostaPropostaIn(BaseModel):
+    esito: Literal["accetta", "rifiuta"]
+    motivazione: str | None = None
+
+
+class DichiarazioneIn(BaseModel):
+    regola_id: int
+    esito: Literal["successo", "fallimento"]
+    nota: str | None = None
+    # YYYY-MM-DD; default: oggi nel fuso del patto (validato nella route).
+    giorno: str | None = None
+
+
+class VerdettoIn(BaseModel):
+    verdetto: Literal["conferma", "conferma_per_conto", "ribalta"]
+    nota: str | None = None

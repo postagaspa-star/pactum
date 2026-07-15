@@ -165,9 +165,11 @@ def test_proposta_accettata_scavalca_il_lock(client, db_path):
     assert storico[0]["direzione"] == "allenta"
 
 
-def test_proposta_in_attesa_non_scavalca(client, db_path):
+def test_proposta_pendente_non_scavalca(client, db_path):
+    # Solo una proposta 'accettata' e non ancora usata scavalca il lock via PATCH:
+    # una ancora 'pendente' no (il figlio deve prima accettarla).
     regola = crea_regola(client, parametri=_limite(60))
-    proposta_id = inserisci_proposta(db_path, regola["id"], stato="in_attesa", parametri=_limite(120))
+    proposta_id = inserisci_proposta(db_path, regola["id"], stato="pendente", parametri=_limite(120))
     risposta = _patch(client, regola["id"], _limite(120), proposta_id=proposta_id)
     assert risposta.status_code == 400
     assert risposta.json()["detail"]["errore"] == "proposta_non_valida"

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nome_app">Pactum Genitore</string>
+
+    <!-- Navigazione -->
+    <string name="scheda_finestra">Finestra</string>
+    <string name="scheda_notifiche">Notifiche</string>
+    <string name="scheda_impostazioni">Impostazioni</string>
+    <string name="azione_aggiorna">Aggiorna</string>
+
+    <!-- Permesso notifiche (Android 13+) -->
+    <string name="permesso_notifiche_titolo">Avvisi del patto</string>
+    <string name="permesso_notifiche_testo">Pactum ti avvisa quando succede qualcosa nel patto: uno sforamento, un bonus, una regola cambiata, un silenzio. Senza questo permesso vedrai le novità solo aprendo l\'app.</string>
+    <string name="permesso_notifiche_ok">Va bene</string>
+    <string name="permesso_notifiche_non_ora">Non ora</string>
+
+    <!-- Finestra -->
+    <string name="finestra_titolo">La finestra</string>
+    <string name="finestra_caricamento">Sto aprendo la finestra…</string>
+    <string name="finestra_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
+    <string name="finestra_config_mancante">Prima di aprire la finestra servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
+    <string name="silenzio_in_contatto">In contatto — ultimo battito alle %1$s</string>
+    <string name="silenzio_allarme">Silenzio dalle %1$s — l\'app del figlio non si fa sentire</string>
+    <string name="silenzio_mai">Silenzio — l\'app del figlio non si è mai fatta sentire</string>
+    <string name="finestra_aggiornata_alle">Finestra aggiornata alle %1$s</string>
+
+    <string name="sezione_regole">Le regole</string>
+    <string name="regole_vuoto">Nessuna regola ancora: il patto nasce sul telefono del figlio.</string>
+    <string name="regola_eliminata">eliminata</string>
+    <string name="regola_limite_tempo">%1$s: al massimo %2$s al giorno</string>
+    <string name="regola_fascia_oraria">Niente telefono dalle %1$s alle %2$s (%3$s)</string>
+    <string name="regola_vita_reale">%1$s — arbitro: %2$s, %3$s</string>
+    <string name="semaforo_oggi">oggi</string>
+
+    <string name="sezione_bonus">Bonus</string>
+    <string name="bonus_residui_giorno">Oggi: %1$d min ancora disponibili su %2$d</string>
+    <string name="bonus_residui_settimana">Questa settimana: %1$d min ancora disponibili su %2$d</string>
+    <string name="bonus_striscia_titolo">Minuti bonus negli ultimi 8 giorni</string>
+
+    <string name="sezione_sforamenti">Sforamenti recenti</string>
+    <string name="sforamenti_vuoto">Nessuno sforamento recente.</string>
+    <string name="sforamento_su_regola">Sforamento su: %1$s</string>
+    <string name="sforamento_generico">Sforamento</string>
+
+    <string name="sezione_storico">Storico modifiche</string>
+    <string name="storico_vuoto">Nessuna modifica registrata.</string>
+    <string name="storico_creazione">Regola creata</string>
+    <string name="storico_modifica_allenta">Regola allentata</string>
+    <string name="storico_modifica_stringe">Regola stretta</string>
+    <string name="storico_eliminazione">Regola eliminata</string>
+    <string name="storico_concordata">concordata</string>
+
+    <string name="sezione_manomissioni">Manomissioni recenti</string>
+    <string name="manomissioni_vuoto">Nessuna manomissione: buon segno.</string>
+    <string name="manomissione_cambio_ora">Cambio manuale dell\'ora</string>
+    <string name="manomissione_cambio_fuso">Cambio del fuso orario</string>
+    <string name="manomissione_silenzio">Silenzio dell\'app</string>
+    <string name="manomissione_generica">Manomissione: %1$s</string>
+
+    <string name="formato_minuti">%1$d min</string>
+    <string name="formato_ore_minuti">%1$d h %2$d min</string>
+
+    <!-- Notifiche -->
+    <string name="notifiche_titolo">Notifiche</string>
+    <string name="notifiche_caricamento">Sto leggendo le notifiche…</string>
+    <string name="notifiche_vuoto">Nessuna novità.</string>
+    <string name="notifiche_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
+    <string name="notifiche_dati_vecchi">Impossibile aggiornare — questi sono gli ultimi dati ricevuti.</string>
+    <string name="notifiche_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
+    <string name="notifica_segna_letta">Segna come letta</string>
+    <string name="notifica_letta_fallita">Non sono riuscito a segnarla come letta: riprova.</string>
+    <string name="tipo_sforamento">Sforamento</string>
+    <string name="tipo_manomissione">Manomissione</string>
+    <string name="tipo_bonus">Bonus</string>
+    <string name="tipo_modifica_regola">Modifica del patto</string>
+    <string name="tipo_novita">Novità dal patto</string>
+
+    <!-- Canale notifiche di sistema -->
+    <string name="canale_patto_nome">Avvisi del patto</string>
+    <string name="canale_patto_descrizione">Le novità del patto: sforamenti, bonus, modifiche, silenzi.</string>
+
+    <!-- Avvisi di sistema sul silenzio (vedetta) -->
+    <string name="notifica_silenzio_titolo">Silenzio</string>
+    <string name="notifica_silenzio_testo">L\'app del figlio non si fa sentire dalle %1$s.</string>
+    <string name="notifica_silenzio_testo_mai">L\'app del figlio non si è mai fatta sentire.</string>
+    <string name="notifica_contatto_titolo">Di nuovo in contatto</string>
+    <string name="notifica_contatto_testo">L\'app del figlio si è rifatta sentire alle %1$s. Tutto a posto.</string>
+
+    <!-- Impostazioni -->
+    <string name="impostazioni_titolo">Impostazioni</string>
+    <string name="impostazioni_descrizione">Indirizzo del server postino e token del genitore. Te li dà chi ha preparato il server, insieme a te.</string>
+    <string name="impostazioni_server_url">Indirizzo del server</string>
+    <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
+    <string name="impostazioni_token">Token del genitore</string>
+    <string name="impostazioni_salvate">Impostazioni salvate</string>
+    <string name="impostazioni_url_non_valido">Indirizzo del server non valido: controlla e riprova (es. https://pactum.esempio.it).</string>
+    <string name="impostazioni_ultima_verifica">Ultima verifica riuscita: %1$s</string>
+    <string name="impostazioni_ultima_verifica_mai">mai</string>
+    <string name="impostazioni_prova_adesso">Prova adesso</string>
+    <string name="impostazioni_prova_ok">Il server risponde: finestra ricevuta.</string>
+    <string name="impostazioni_prova_fallita">Verifica fallita: controlla indirizzo, token e connessione.</string>
+    <string name="impostazioni_config_incompleta">Compila indirizzo del server e token del genitore prima di provare.</string>
+    <string name="azione_salva">Salva</string>
+</resources>

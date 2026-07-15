@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Binocolo stilizzato: la finestra del genitore. Contenuto nella zona sicura (66dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M41,45 a13,13 0 1,0 0.001,0 z M41,52 a6,6 0 1,1 -0.001,0 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M67,45 a13,13 0 1,0 0.001,0 z M67,52 a6,6 0 1,1 -0.001,0 z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M41,43 a13,13 0 0,1 26,0" />
+</vector>

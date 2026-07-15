@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo in debug: consente HTTP in chiaro per i test contro il NAS in LAN.
+     La release parla solo https (tunnel Cloudflare). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="true" />
+</manifest>

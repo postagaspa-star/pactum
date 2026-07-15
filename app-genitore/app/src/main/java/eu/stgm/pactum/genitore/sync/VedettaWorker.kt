@@ -1,0 +1,246 @@
+package eu.stgm.pactum.genitore.sync
+
+import android.Manifest
+import android.app.Notification
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import eu.stgm.pactum.genitore.MainActivity
+import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.dati.Impostazioni
+import eu.stgm.pactum.genitore.dati.Notifica
+import eu.stgm.pactum.genitore.dati.StatoSilenzio
+import eu.stgm.pactum.genitore.rete.PostinoClient
+import eu.stgm.pactum.genitore.ui.istanteServer
+import eu.stgm.pactum.genitore.ui.oraOppureDataOra
+import java.util.concurrent.TimeUnit
+
+/**
+ * La vedetta: ogni ~15 minuti chiede al postino le notifiche non lette e
+ * alza UNA notifica di sistema per ogni novità mai avvisata prima (gli id
+ * già avvisati vivono in DataStore). NON segna niente come letta sul server:
+ * "letta" è un gesto del genitore dentro l'app, non un effetto collaterale
+ * del polling — altrimenti le novità sparirebbero prima di essere viste.
+ *
+ * Sorveglia anche il silenzio: legge la finestra e avvisa quando
+ * `stato_silenzio.silente` passa da false a true (e, con tono tranquillo,
+ * quando il contatto torna). È la promessa dei "silenzi" nelle stringhe.
+ */
+class VedettaWorker(appContext: Context, params: WorkerParameters) :
+    CoroutineWorker(appContext, params) {
+
+    override suspend fun doWork(): Result {
+        val context = applicationContext
+        val impostazioni = Impostazioni(context)
+
+        val configurazione = impostazioni.leggiConfigurazione()
+        if (!configurazione.completa) return Result.success() // patto non ancora configurato
+
+        val postino = PostinoClient(configurazione)
+        val notifiche = postino.leggiNotifiche()
+            ?: return Result.retry() // offline o server muto: si riprova col backoff
+        impostazioni.registraVerificaRiuscita()
+
+        avvisaNovitaDelPatto(context, impostazioni, notifiche)
+        sorvegliaSilenzio(context, impostazioni, postino)
+
+        return Result.success()
+    }
+
+    private suspend fun avvisaNovitaDelPatto(
+        context: Context,
+        impostazioni: Impostazioni,
+        notifiche: List<Notifica>,
+    ) {
+        val giaAvvisate = impostazioni.leggiIdAvvisati()
+        val nuove = notifiche.filter { it.id !in giaAvvisate }
+        if (nuove.isEmpty()) return
+
+        // Senza permesso non si avvisa E non si segna: appena il permesso
+        // arriva, il giro successivo recupera le novità arretrate.
+        if (!puoAvvisare(context)) return
+
+        creaCanale(context)
+        val gestore = NotificationManagerCompat.from(context)
+        nuove.forEach { notifica ->
+            try {
+                gestore.notify(notifica.id.toInt(), notificaDiSistema(context, notifica))
+            } catch (e: SecurityException) {
+                return // permesso revocato tra il controllo e la notify
+            }
+        }
+        impostazioni.registraIdAvvisati(nuove.map { it.id })
+    }
+
+    /**
+     * Avvisa quando `silente` scatta a true e quando il contatto torna.
+     * Lo stato osservato (silente + battito su cui si basa) vive in DataStore
+     * per non ri-avvisare a ogni giro sullo stesso silenzio.
+     */
+    private suspend fun sorvegliaSilenzio(
+        context: Context,
+        impostazioni: Impostazioni,
+        postino: PostinoClient,
+    ) {
+        // Meglio sforzo: se la finestra non arriva, si ritenta al giro dopo
+        // (le notifiche sono già state gestite, niente Result.retry per questo).
+        val finestra = postino.leggiFinestra() ?: return
+        val attuale = finestra.statoSilenzio
+        val noto = impostazioni.leggiSilenzioNoto()
+
+        if (noto == null) {
+            // Prima osservazione (app appena configurata): si prende la base
+            // senza allarmare — un silenzio già in corso non è un "flip".
+            impostazioni.registraSilenzioNoto(attuale.silente, attuale.ultimoBattito)
+            return
+        }
+
+        // Un silenzio è nuovo anche se il ritorno in contatto non si è mai
+        // visto: silente=true con un battito DIVERSO da quello osservato
+        // significa contatto ripreso e riperso tra due giri della vedetta.
+        val nuovoSilenzio = attuale.silente &&
+            (!noto.silente || noto.ultimoBattito != attuale.ultimoBattito)
+        val contattoTornato = !attuale.silente && noto.silente
+
+        if (!nuovoSilenzio && !contattoTornato) {
+            // Nessun flip: si aggiorna solo il battito su cui poggia lo stato.
+            impostazioni.registraSilenzioNoto(attuale.silente, attuale.ultimoBattito)
+            return
+        }
+
+        // Senza permesso non si avvisa E non si registra: il giro dopo recupera.
+        if (!puoAvvisare(context)) return
+        creaCanale(context)
+        val avviso = if (nuovoSilenzio) {
+            avvisoSilenzio(context, attuale)
+        } else {
+            avvisoContattoTornato(context, attuale)
+        }
+        try {
+            // Stesso id per i due versi: "di nuovo in contatto" sostituisce
+            // l'avviso di silenzio ormai superato invece di accodarsi.
+            NotificationManagerCompat.from(context).notify(ID_AVVISO_SILENZIO, avviso)
+        } catch (e: SecurityException) {
+            return
+        }
+        impostazioni.registraSilenzioNoto(attuale.silente, attuale.ultimoBattito)
+    }
+
+    private fun notificaDiSistema(context: Context, notifica: Notifica): Notification =
+        notificaBase(
+            context,
+            titolo = context.getString(etichettaTipo(notifica.tipo)),
+            testo = notifica.messaggio,
+        )
+
+    private fun avvisoSilenzio(context: Context, stato: StatoSilenzio): Notification {
+        val quando = istanteServer(stato.ultimoBattito)?.let { oraOppureDataOra(it) }
+        val testo = if (quando != null) {
+            context.getString(R.string.notifica_silenzio_testo, quando)
+        } else {
+            context.getString(R.string.notifica_silenzio_testo_mai)
+        }
+        return notificaBase(context, context.getString(R.string.notifica_silenzio_titolo), testo)
+    }
+
+    private fun avvisoContattoTornato(context: Context, stato: StatoSilenzio): Notification {
+        val quando = istanteServer(stato.ultimoBattito)?.let { oraOppureDataOra(it) } ?: "—"
+        return notificaBase(
+            context,
+            titolo = context.getString(R.string.notifica_contatto_titolo),
+            testo = context.getString(R.string.notifica_contatto_testo, quando),
+        )
+    }
+
+    private fun notificaBase(context: Context, titolo: String, testo: String): Notification {
+        val apriApp = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java)
+                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(context, CANALE_ID)
+            .setSmallIcon(R.drawable.ic_notifica_binocolo)
+            .setContentTitle(titolo)
+            .setContentText(testo)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(testo))
+            .setContentIntent(apriApp)
+            .setAutoCancel(true)
+            .build()
+    }
+
+    companion object {
+        private const val NOME_LAVORO = "vedetta"
+        const val CANALE_ID = "avvisi_patto"
+
+        /** Id fisso per l'avviso di silenzio/contatto, fuori dalla portata degli id del server. */
+        private const val ID_AVVISO_SILENZIO = 2_000_000_000
+
+        /**
+         * UPDATE: mantiene il ciclo dei 15 minuti già in corsa (niente riparti
+         * da zero a ogni avvio dell'app) ma applica la richiesta nuova.
+         */
+        fun pianifica(context: Context) {
+            val richiesta = PeriodicWorkRequestBuilder<VedettaWorker>(15, TimeUnit.MINUTES)
+                // Rete richiesta: la vedetta SOLO interroga (l'opposto del BattitoWorker
+                // del figlio, che deve girare anche offline perché MISURA) — senza rete
+                // sarebbero solo catene di retry a vuoto tutta la notte.
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build(),
+                )
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
+                .build()
+            WorkManager.getInstance(context)
+                .enqueueUniquePeriodicWork(NOME_LAVORO, ExistingPeriodicWorkPolicy.UPDATE, richiesta)
+        }
+
+        /** Canale creato pigramente, solo quando c'è davvero qualcosa da dire. */
+        fun creaCanale(context: Context) {
+            NotificationManagerCompat.from(context).createNotificationChannel(
+                NotificationChannelCompat.Builder(
+                    CANALE_ID,
+                    NotificationManagerCompat.IMPORTANCE_DEFAULT,
+                )
+                    .setName(context.getString(R.string.canale_patto_nome))
+                    .setDescription(context.getString(R.string.canale_patto_descrizione))
+                    .build(),
+            )
+        }
+
+        fun puoAvvisare(context: Context): Boolean =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                NotificationManagerCompat.from(context).areNotificationsEnabled()
+            }
+
+        /** Titolo leggibile per il tipo di notifica del patto. */
+        fun etichettaTipo(tipo: String): Int = when (tipo) {
+            "sforamento" -> R.string.tipo_sforamento
+            "manomissione" -> R.string.tipo_manomissione
+            "bonus" -> R.string.tipo_bonus
+            "modifica_regola" -> R.string.tipo_modifica_regola
+            else -> R.string.tipo_novita // tipo nuovo dal server: tolleranza evolutiva
+        }
+    }
+}

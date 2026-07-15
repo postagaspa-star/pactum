@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Blu del binocolo: distingue a colpo d'occhio l'app del genitore dal verde del figlio. -->
+    <color name="ic_launcher_background">#2C5D8F</color>
+</resources>

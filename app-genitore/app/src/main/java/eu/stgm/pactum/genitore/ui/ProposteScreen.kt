@@ -3,6 +3,8 @@ package eu.stgm.pactum.genitore.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -25,6 +28,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,9 +46,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -73,8 +79,12 @@ import kotlinx.serialization.json.putJsonArray
 fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    var regolaScelta by remember { mutableStateOf<RegolaFinestra?>(null) }
-    var confrontoInviato by remember { mutableStateOf<String?>(null) }
+    // rememberSaveable: una rotazione non deve buttare via la proposta in corso né
+    // il confronto appena ricevuto. Della regola scelta si salva l'id (Long,
+    // salvabile) e la si risale dall'elenco corrente.
+    var regolaSceltaId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var confrontoInviato by rememberSaveable { mutableStateOf<String?>(null) }
+    val regolaScelta = regolaSceltaId?.let { id -> stato.regoleAttive.firstOrNull { it.id == id } }
 
     LifecycleResumeEffect(Unit) {
         vm.aggiorna()
@@ -84,16 +94,18 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
     val messaggioErroreGenerico = stringResource(R.string.proposta_errore_generico)
     val messaggioGiaPendente = stringResource(R.string.proposta_errore_gia_pendente)
     val messaggioRegolaNonValida = stringResource(R.string.proposta_errore_regola_non_valida)
+    val messaggioParametriNonValidi = stringResource(R.string.proposta_errore_parametri_non_validi)
     LaunchedEffect(stato.evento) {
         when (val evento = stato.evento) {
             is ProposteViewModel.Evento.Inviata -> {
-                regolaScelta = null // chiudi il dialogo di creazione
+                regolaSceltaId = null // chiudi il dialogo di creazione
                 confrontoInviato = evento.confronto
             }
             is ProposteViewModel.Evento.Errore -> {
                 val messaggio = when (evento.codice) {
                     "proposta_gia_pendente" -> messaggioGiaPendente
                     "regola_non_valida" -> messaggioRegolaNonValida
+                    "parametri_non_validi" -> messaggioParametriNonValidi
                     else -> messaggioErroreGenerico
                 }
                 snackbarHostState.showSnackbar(messaggio)
@@ -142,7 +154,7 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
                     regoleAttive = stato.regoleAttive,
                     proposte = stato.proposte,
                     mostraErrore = stato.errore,
-                    onProponi = { regolaScelta = it },
+                    onProponi = { regolaSceltaId = it.id },
                 )
             }
         }
@@ -152,7 +164,7 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
         DialogoNuovaProposta(
             regola = regola,
             invioInCorso = stato.invioInCorso,
-            onAnnulla = { regolaScelta = null },
+            onAnnulla = { regolaSceltaId = null },
             onInvia = { parametri, motivazione -> vm.creaProposta(regola.id, parametri, motivazione) },
         )
     }
@@ -304,6 +316,13 @@ private fun etichettaStatoProposta(stato: String): String = when (stato) {
     else -> stato
 }
 
+// I sette giorni del contratto (giorni:[lun..dom]), in ordine canonico: il
+// selettore a chip li usa come token e per l'ordine di serializzazione.
+private val GIORNI_SETTIMANA = listOf("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+
+// Tetto dei minuti al giorno di una regola limite_tempo: un giorno intero.
+private const val MINUTI_MAX = 1440
+
 /**
  * Creazione di una proposta: modifica dei parametri (per tipo di regola) oppure
  * eliminazione (il marcatore {"azione":"elimina"}). Il confronto lo calcola il
@@ -316,28 +335,39 @@ private fun DialogoNuovaProposta(
     onAnnulla: () -> Unit,
     onInvia: (JsonObject, String?) -> Unit,
 ) {
-    var elimina by remember { mutableStateOf(false) }
-    var motivazione by remember { mutableStateOf("") }
-
-    // Campi pre-riempiti dai parametri attuali della regola.
-    var app by remember { mutableStateOf(parametroTesto(regola.parametri, "app_o_categoria") ?: "") }
-    var minuti by remember {
+    // rememberSaveable: una rotazione col dialogo aperto non deve azzerare i campi
+    // in corso. I valori iniziali vengono dai parametri attuali della regola; dopo
+    // una ricreazione si ripristina invece ciò che il genitore stava scrivendo.
+    var elimina by rememberSaveable { mutableStateOf(false) }
+    var motivazione by rememberSaveable { mutableStateOf("") }
+    var app by rememberSaveable {
+        mutableStateOf(parametroTesto(regola.parametri, "app_o_categoria") ?: "")
+    }
+    var minuti by rememberSaveable {
         mutableStateOf(parametroTesto(regola.parametri, "minuti_al_giorno") ?: "")
     }
-    var dalle by remember { mutableStateOf(parametroTesto(regola.parametri, "dalle") ?: "") }
-    var alle by remember { mutableStateOf(parametroTesto(regola.parametri, "alle") ?: "") }
-    var giorni by remember { mutableStateOf(giorniTesto(regola.parametri)) }
-    var descrizione by remember {
+    var dalle by rememberSaveable { mutableStateOf(parametroTesto(regola.parametri, "dalle") ?: "") }
+    var alle by rememberSaveable { mutableStateOf(parametroTesto(regola.parametri, "alle") ?: "") }
+    // I giorni restano una stringa "lun, mar" (salvabile); i chip la leggono e la
+    // riscrivono in ordine canonico.
+    var giorni by rememberSaveable { mutableStateOf(giorniTesto(regola.parametri)) }
+    var descrizione by rememberSaveable {
         mutableStateOf(parametroTesto(regola.parametri, "descrizione") ?: "")
     }
-    var arbitro by remember { mutableStateOf(parametroTesto(regola.parametri, "arbitro_nome") ?: "") }
-    var frequenza by remember { mutableStateOf(parametroTesto(regola.parametri, "frequenza") ?: "") }
+    var arbitro by rememberSaveable {
+        mutableStateOf(parametroTesto(regola.parametri, "arbitro_nome") ?: "")
+    }
+    var frequenza by rememberSaveable {
+        mutableStateOf(parametroTesto(regola.parametri, "frequenza") ?: "")
+    }
 
     val parametri: JsonObject? = when {
         elimina -> buildJsonObject { put("azione", "elimina") }
         regola.tipo == TipiRegola.LIMITE_TEMPO -> {
             val n = minuti.trim().toIntOrNull()
-            if (app.isBlank() || n == null || n <= 0) {
+            // Limite entro 1..1440 (un giorno): oltre non ha senso e il server lo
+            // rifiuterebbe comunque. Resta il server l'autorità sul valore.
+            if (app.isBlank() || n == null || n !in 1..MINUTI_MAX) {
                 null
             } else {
                 buildJsonObject {
@@ -394,15 +424,25 @@ private fun DialogoNuovaProposta(
                     when (regola.tipo) {
                         TipiRegola.LIMITE_TEMPO -> {
                             CampoTesto(app, { app = it }, R.string.proposta_campo_app)
-                            CampoTesto(
-                                minuti, { minuti = it }, R.string.proposta_campo_minuti,
-                                numerico = true,
-                            )
+                            CampoMinuti(minuti) { minuti = it }
                         }
                         TipiRegola.FASCIA_ORARIA -> {
                             CampoTesto(dalle, { dalle = it }, R.string.proposta_campo_dalle)
                             CampoTesto(alle, { alle = it }, R.string.proposta_campo_alle)
-                            CampoTesto(giorni, { giorni = it }, R.string.proposta_campo_giorni)
+                            val giorniSelezionati = giorni.split(",")
+                                .map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                            SelettoreGiorni(
+                                selezionati = giorniSelezionati,
+                                onToggle = { g ->
+                                    val nuovo = if (g in giorniSelezionati) {
+                                        giorniSelezionati - g
+                                    } else {
+                                        giorniSelezionati + g
+                                    }
+                                    giorni = GIORNI_SETTIMANA.filter { it in nuovo }
+                                        .joinToString(", ")
+                                },
+                            )
                         }
                         TipiRegola.VITA_REALE -> {
                             CampoTesto(
@@ -459,24 +499,62 @@ private fun RigaRadio(selezionato: Boolean, testo: String, onClick: () -> Unit) 
 }
 
 @Composable
-private fun CampoTesto(
-    valore: String,
-    onValore: (String) -> Unit,
-    etichetta: Int,
-    numerico: Boolean = false,
-) {
+private fun CampoTesto(valore: String, onValore: (String) -> Unit, etichetta: Int) {
     OutlinedTextField(
         value = valore,
         onValueChange = onValore,
         label = { Text(stringResource(etichetta)) },
         singleLine = true,
-        keyboardOptions = if (numerico) {
-            androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number)
-        } else {
-            androidx.compose.foundation.text.KeyboardOptions.Default
-        },
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * I minuti al giorno come numero limitato: solo cifre, entro 1..1440 (un giorno).
+ * Il campo si limita da sé per ridurre i 422, ma il valore lo valida il server.
+ */
+@Composable
+private fun CampoMinuti(valore: String, onValore: (String) -> Unit) {
+    val n = valore.trim().toIntOrNull()
+    val fuoriRange = valore.isNotBlank() && (n == null || n !in 1..MINUTI_MAX)
+    OutlinedTextField(
+        value = valore,
+        onValueChange = { grezzo -> onValore(grezzo.filter { it.isDigit() }.take(4)) },
+        label = { Text(stringResource(R.string.proposta_campo_minuti)) },
+        singleLine = true,
+        isError = fuoriRange,
+        supportingText = { Text(stringResource(R.string.proposta_minuti_range)) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * I giorni della fascia oraria come chip a selezione multipla (invece del testo
+ * libero separato da virgole): meno errori di battitura, meno 422. La scelta
+ * viaggia comunque come i token del contratto (lun..dom).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SelettoreGiorni(selezionati: Set<String>, onToggle: (String) -> Unit) {
+    val etichette = stringArrayResource(R.array.proposta_giorni_etichette)
+    Column {
+        Text(
+            text = stringResource(R.string.proposta_giorni_scegli),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GIORNI_SETTIMANA.forEachIndexed { indice, giorno ->
+                FilterChip(
+                    selected = giorno in selezionati,
+                    onClick = { onToggle(giorno) },
+                    label = { Text(etichette.getOrElse(indice) { giorno }) },
+                )
+            }
+        }
+    }
 }
 
 private fun giorniTesto(parametri: JsonObject): String =

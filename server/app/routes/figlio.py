@@ -174,7 +174,7 @@ def patto(conn: sqlite3.Connection = Depends(get_conn)):
         for r in conn.execute("SELECT * FROM regole WHERE attiva = 1 ORDER BY id").fetchall()
     ]
     proposte_pendenti = [
-        formatta_proposta(r)
+        formatta_proposta(r, conn)  # conn: confronto ricalcolato vs la regola attuale (v2.1)
         for r in conn.execute(
             "SELECT * FROM proposte WHERE stato = 'pendente' ORDER BY id DESC"
         ).fetchall()

@@ -21,10 +21,18 @@ object AvvisiLocali {
 
     const val CANALE_PATTO = "avvisi_patto"
 
-    /** Base fuori dalla portata degli id delle notifiche del server. */
+    /** Basi separate per non collidere tra loro né con la notifica fissa (FGS id 1). */
     private const val BASE_ID_SFORAMENTO = 1_000_000L
+    private const val BASE_ID_SERVER = 2_000_000L
 
     fun idSforamento(regolaId: Long): Int = (BASE_ID_SFORAMENTO + (regolaId % 100_000)).toInt()
+
+    /**
+     * Id di notifica per una notifica del server: l'id grezzo del server
+     * partirebbe da 1 e collide con la notifica fissa del testimone (FGS id 1),
+     * che verrebbe sostituita. L'offset la mette fuori portata.
+     */
+    fun idNotificaServer(id: Long): Int = (BASE_ID_SERVER + (id % 100_000)).toInt()
 
     fun puoAvvisare(context: Context): Boolean = PermessiHelper.haPermessoNotifiche(context)
 

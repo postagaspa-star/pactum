@@ -48,6 +48,18 @@ def _data_locale(ts_server: str, tz) -> str:
     return datetime.fromisoformat(ts_server).astimezone(tz).date().isoformat()
 
 
+def _semaforo_vita(stato_dich: str | None) -> str:
+    """(v2.1) Colore di una regola vita_reale in un giorno, dalla dichiarazione:
+    verde = confermata (anche per conto), rosso = fallimento dichiarato o successo
+    ribaltato, grigio = nessuna dichiarazione o verdetto ancora in attesa. Il rosso
+    di un fallimento dichiarato fotografa il fatto, non punisce l'onesta'."""
+    if stato_dich in ("confermata", "confermata_per_conto"):
+        return "verde"
+    if stato_dich in ("registrata", "ribaltata"):
+        return "rosso"
+    return "grigio"  # in_attesa o nessuna dichiarazione
+
+
 @router.get("/finestra")
 def finestra(conn: sqlite3.Connection = Depends(get_conn)):
     ora = clock.now()
@@ -71,9 +83,17 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         if evento["tipo"] == "sforamento":
             sforamenti_per_regola[regola_id].add(_data_locale(evento["ts_server"], tz))
 
+    # Dichiarazioni per le regole vita_reale: (regola_id, giorno locale) -> stato.
+    # Max una per regola per giorno, quindi la mappa e' univoca.
+    dich_per_regola = defaultdict(dict)  # regola_id -> {giorno ISO: stato dichiarazione}
+    for d in conn.execute("SELECT regola_id, giorno, stato FROM dichiarazioni").fetchall():
+        dich_per_regola[d["regola_id"]][d["giorno"]] = d["stato"]
+
     # Semaforo a tre colori: verde/rosso/grigio. Il giallo non esiste piu':
     # il bonus autoritativo vive nella tabella bonus (senza regola_id) e viene
     # riassunto per giorno in bonus_giornalieri, non appeso a una regola.
+    # Per limite_tempo/fascia_oraria il rosso viene dagli sforamenti; per le
+    # vita_reale (v2.1) dalle dichiarazioni e dai verdetti.
     regole = []
     for riga in conn.execute("SELECT * FROM regole ORDER BY id").fetchall():
         creata = _data_locale(riga["creata_ts"], tz)
@@ -87,6 +107,8 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
             data = giorno.isoformat()
             if data < creata or (eliminata is not None and data > eliminata):
                 stato = "grigio"
+            elif riga["tipo"] == "vita_reale":
+                stato = _semaforo_vita(dich_per_regola[riga["id"]].get(data))
             elif data in sforamenti_per_regola[riga["id"]]:
                 stato = "rosso"
             else:

@@ -131,6 +131,11 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         // 409 = rifiuto del contratto (proposta già pendente, dichiarazione non
         // più in attesa, regola non valida): si porta su il codice `errore`.
         risposta.codice == 409 -> EsitoScrittura.Rifiutato(estraiErrore(risposta.corpo))
+        // 422 = validazione del server fallita (un campo libero non valido, es.
+        // un orario o un giorno malformato nella proposta). Rifiuto distinto: il
+        // corpo FastAPI porta `detail`, non `errore`, e un generico "riprova"
+        // sarebbe fuorviante su un dato che va corretto, non ritentato.
+        risposta.codice == 422 -> EsitoScrittura.Rifiutato(PARAMETRI_NON_VALIDI)
         else -> EsitoScrittura.Fallito
     }
 
@@ -182,6 +187,11 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     private data class RispostaHttp(val codice: Int, val corpo: String?)
 
     companion object {
+        // Codice d'errore sintetico per il 422 di validazione del server: non è
+        // un codice del contratto (il 422 non ne porta uno), lo coniamo qui per
+        // dare alla UI un messaggio specifico invece del generico "riprova".
+        const val PARAMETRI_NON_VALIDI = "parametri_non_validi"
+
         private val CORPO_VUOTO = ByteArray(0).toRequestBody(null)
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private val json = Json { ignoreUnknownKeys = true }

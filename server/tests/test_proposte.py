@@ -3,6 +3,8 @@ server, notifica al figlio, e risposta del figlio con AUTO-APPLICAZIONE delle
 accettate (lock bypassato, parametri esatti, concordata=true nello storico;
 eliminazione via marcatore che rispetta il vincolo ultima_regola)."""
 
+import threading
+
 from conftest import FIGLIO, GENITORE, crea_regola
 
 MENO = "−"  # segno meno tipografico U+2212, come nel contratto
@@ -75,8 +77,16 @@ def test_proposta_fascia_toglie_un_giorno(client):
         client, tipo="fascia_oraria", parametri=_fascia(giorni=["lun", "mar", "mer"])
     )
     dati = _proponi(client, regola["id"], _fascia(giorni=["lun", "mar"])).json()
-    assert dati["confronto"] == "giorni da 3 a 2"
+    assert dati["confronto"] == "esce mer"
     assert dati["direzione"] == "allenta"
+
+
+def test_proposta_fascia_scambio_giorno_pari_numero(client):
+    # (fix #8) uno scambio di pari numero non deve piu' rendere "giorni da 1 a 1":
+    # elenca i giorni che entrano e che escono.
+    regola = crea_regola(client, tipo="fascia_oraria", parametri=_fascia(giorni=["lun"]))
+    dati = _proponi(client, regola["id"], _fascia(giorni=["dom"])).json()
+    assert dati["confronto"] == "esce lun, entra dom"
 
 
 def test_proposta_vita_reale_confronto(client):
@@ -302,3 +312,145 @@ def test_risposta_notifica_il_genitore(client):
     assert len(risposte) == 1
     assert risposte[0]["payload"]["esito"] == "accetta"
     assert risposte[0]["payload"]["regola_id"] == regola["id"]
+
+
+# --- (fix #4) l'eliminazione diretta annulla le proposte pendenti ---
+
+def test_eliminazione_diretta_annulla_le_proposte_pendenti(client, orologio):
+    """Eliminare direttamente una regola annulla le sue proposte pendenti (stato
+    annullata + notifica al genitore); rispondere a una annullata -> 409."""
+    crea_regola(client)  # la regola che resta
+    regola = crea_regola(client, parametri=_limite(120, app="YouTube"))
+    proposta = _proponi(client, regola["id"], _limite(60, app="YouTube")).json()
+    orologio.avanza(days=4)  # lock scaduto: eliminazione diretta permessa
+    assert client.delete(f"/api/regole/{regola['id']}", headers=FIGLIO).status_code == 200
+
+    chiusa = [
+        p for p in client.get("/api/proposte", headers=GENITORE).json()["proposte"]
+        if p["id"] == proposta["id"]
+    ][0]
+    assert chiusa["stato"] == "annullata"
+
+    notifiche = client.get("/api/notifiche", headers=GENITORE).json()["notifiche"]
+    assert any(
+        n["tipo"] == "proposta_annullata" and n["payload"]["proposta_id"] == proposta["id"]
+        for n in notifiche
+    )
+
+    r = _rispondi(client, proposta["id"], "accetta")
+    assert r.status_code == 409
+    assert r.json()["detail"]["errore"] == "proposta_non_pendente"
+
+
+# --- (fix #5) confronto ricalcolato in lettura per le pendenti, congelato alla risposta ---
+
+def test_confronto_pendente_ricalcolato_in_lettura(client):
+    """La regola cambia dopo la proposta: la pendente mostra sempre il confronto
+    vero vs la regola ATTUALE (non quello congelato alla creazione)."""
+    regola = crea_regola(client, parametri=_limite(60))
+    proposta = _proponi(client, regola["id"], _limite(30)).json()
+    assert proposta["confronto"] == f"{MENO}30 min al giorno rispetto ad ora"
+    # il figlio stringe la regola a 40 (immediato): 30 ora e' -10, non -30
+    client.patch(f"/api/regole/{regola['id']}", json={"parametri": _limite(40)}, headers=FIGLIO)
+    letta = client.get("/api/proposte", headers=FIGLIO).json()["proposte"][0]
+    assert letta["confronto"] == f"{MENO}10 min al giorno rispetto ad ora"
+    assert letta["direzione"] == "stringe"
+    # anche nel patto del figlio
+    pendente = client.get("/api/patto", headers=FIGLIO).json()["proposte_pendenti"][0]
+    assert pendente["confronto"] == f"{MENO}10 min al giorno rispetto ad ora"
+
+
+def test_confronto_congelato_al_momento_della_risposta(client):
+    """Una volta risposta, il confronto si congela a quello del momento e non si
+    ricalcola piu', anche se la regola cambia ancora."""
+    regola = crea_regola(client, parametri=_limite(60))
+    proposta = _proponi(client, regola["id"], _limite(30)).json()
+    client.patch(f"/api/regole/{regola['id']}", json={"parametri": _limite(40)}, headers=FIGLIO)
+    _rispondi(client, proposta["id"], "rifiuta")  # al momento: 30 vs 40 = -10
+    # la regola cambia ancora (stringe a 20): la chiusa resta congelata a -10
+    client.patch(f"/api/regole/{regola['id']}", json={"parametri": _limite(20)}, headers=FIGLIO)
+    chiusa = client.get("/api/proposte", headers=FIGLIO).json()["proposte"][0]
+    assert chiusa["stato"] == "rifiutata"
+    assert chiusa["confronto"] == f"{MENO}10 min al giorno rispetto ad ora"
+
+
+# --- (fix #1) risposta atomica sotto concorrenza ---
+
+def test_accetta_concorrenti_una_sola_applica(client):
+    """Sei 'accetta' simultanei sulla stessa proposta: uno solo applica (200),
+    gli altri trovano la proposta gia' chiusa (409). Senza transazione atomica
+    tutti leggevano 'pendente' e applicavano la modifica piu' volte."""
+    regola = crea_regola(client, parametri=_limite(60))
+    proposta = _proponi(client, regola["id"], _limite(120)).json()
+    quante = 6
+    barriera = threading.Barrier(quante)
+    esiti = []
+
+    def spara():
+        barriera.wait()
+        esiti.append(_rispondi(client, proposta["id"], "accetta").status_code)
+
+    thread = [threading.Thread(target=spara) for _ in range(quante)]
+    for t in thread:
+        t.start()
+    for t in thread:
+        t.join()
+    assert sorted(esiti) == [200] + [409] * (quante - 1)
+    # la modifica e' finita nello storico UNA sola volta
+    storico = client.get("/api/finestra", headers=GENITORE).json()["storico_modifiche"]
+    assert [s["azione"] for s in storico] == ["modifica", "creazione"]
+    regole = client.get("/api/regole", headers=FIGLIO).json()["regole"]
+    assert regole[0]["parametri"]["minuti_al_giorno"] == 120
+
+
+def test_accetta_elimina_concorrenti_non_svuotano_il_patto(client):
+    """Due proposte di eliminazione su due regole diverse accettate insieme:
+    ne passa una sola, l'altra trova gia' una sola regola attiva -> 409 ultima_regola.
+    Il patto non resta mai senza regole (era il buco 'due accept lasciano ZERO')."""
+    a = crea_regola(client, parametri=_limite(60, app="TikTok"))
+    b = crea_regola(client, parametri=_limite(90, app="YouTube"))
+    pa = _proponi(client, a["id"], {"azione": "elimina"}).json()
+    pb = _proponi(client, b["id"], {"azione": "elimina"}).json()
+    barriera = threading.Barrier(2)
+    esiti = []
+
+    def spara(pid):
+        barriera.wait()
+        esiti.append(_rispondi(client, pid, "accetta").status_code)
+
+    thread = [threading.Thread(target=spara, args=(pid,)) for pid in (pa["id"], pb["id"])]
+    for t in thread:
+        t.start()
+    for t in thread:
+        t.join()
+    assert sorted(esiti) == [200, 409]
+    attive = client.get("/api/regole", headers=FIGLIO).json()["regole"]
+    assert len(attive) == 1  # una sopravvive sempre
+
+
+# --- (fix #9) una sola pendente per regola anche sotto concorrenza ---
+
+def test_proposte_concorrenti_una_sola_pendente(client):
+    """Sei proposte simultanee sulla stessa regola: ne nasce una sola (200),
+    le altre trovano gia' una pendente (409). Senza transazione atomica
+    superavano tutte il controllo 'una sola pendente'."""
+    regola = crea_regola(client, parametri=_limite(60))
+    quante = 6
+    barriera = threading.Barrier(quante)
+    esiti = []
+
+    def spara():
+        barriera.wait()
+        esiti.append(_proponi(client, regola["id"], _limite(30)).status_code)
+
+    thread = [threading.Thread(target=spara) for _ in range(quante)]
+    for t in thread:
+        t.start()
+    for t in thread:
+        t.join()
+    assert sorted(esiti) == [200] + [409] * (quante - 1)
+    pendenti = [
+        p for p in client.get("/api/proposte", headers=GENITORE).json()["proposte"]
+        if p["stato"] == "pendente"
+    ]
+    assert len(pendenti) == 1

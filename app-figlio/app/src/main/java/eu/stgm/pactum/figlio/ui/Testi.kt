@@ -2,8 +2,10 @@ package eu.stgm.pactum.figlio.ui
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -51,11 +53,17 @@ fun giorniTesto(parametri: JsonObject): String =
  */
 @Composable
 fun descrizioneRegola(tipo: String, parametri: JsonObject): String = when (tipo) {
-    TipiRegola.LIMITE_TEMPO -> stringResource(
-        R.string.regola_limite_tempo,
-        parametroTesto(parametri, "app_o_categoria") ?: "?",
-        testoDurata(parametroTesto(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
-    )
+    TipiRegola.LIMITE_TEMPO -> {
+        // app_o_categoria è un pacchetto o una chiave categoria:* (contratto
+        // v2.1): si mostra l'etichetta leggibile, non il valore grezzo.
+        val context = LocalContext.current
+        stringResource(
+            R.string.regola_limite_tempo,
+            parametroTesto(parametri, "app_o_categoria")
+                ?.let { CatalogoApp.etichettaValore(context, it) } ?: "?",
+            testoDurata(parametroTesto(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
+        )
+    }
 
     TipiRegola.FASCIA_ORARIA -> stringResource(
         R.string.regola_fascia_oraria,

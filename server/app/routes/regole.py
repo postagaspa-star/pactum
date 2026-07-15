@@ -119,6 +119,25 @@ def applica_eliminazione(
     )
 
 
+def _annulla_proposte_pendenti(conn: sqlite3.Connection, regola_id: int, ts: str) -> None:
+    """L'eliminazione diretta di una regola annulla le sue proposte pendenti (v2.1):
+    non ha senso rispondere a una proposta su una regola che non esiste piu'. Il
+    genitore viene avvisato; rispondere a una annullata -> 409 proposta_non_pendente."""
+    pendenti = conn.execute(
+        "SELECT id FROM proposte WHERE regola_id = ? AND stato = 'pendente'", (regola_id,)
+    ).fetchall()
+    for p in pendenti:
+        conn.execute("UPDATE proposte SET stato = 'annullata' WHERE id = ?", (p["id"],))
+        accoda_notifica(
+            conn,
+            "proposta_annullata",
+            "Proposta annullata: la regola collegata e' stata eliminata",
+            {"proposta_id": p["id"], "regola_id": regola_id, "motivo": "regola_eliminata"},
+            ts,
+            destinatario="genitore",
+        )
+
+
 def _controlla_lock(riga: sqlite3.Row, ora: datetime) -> None:
     sblocco = datetime.fromisoformat(riga["ultima_modifica_ts"]) + timedelta(days=LOCK_GIORNI)
     if ora < sblocco:
@@ -200,23 +219,33 @@ def modifica_regola(
     ruolo: str = Depends(richiede_figlio),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    riga = _regola_attiva_o_404(conn, regola_id)
-    parametri_prima = json.loads(riga["parametri"])
-    parametri_dopo = _valida_o_422(riga["tipo"], corpo.parametri)
     ora = clock.now()
+    # BEGIN IMMEDIATE: rileggi-regola, controlla-lock/consuma-proposta e applica
+    # devono essere atomici. Senza, un PATCH e un'accettazione di proposta (o due
+    # PATCH) concorrenti leggono lo stesso 'prima' e scrivono uno storico bugiardo,
+    # o consumano due volte la stessa proposta. Il lock di scrittura serializza;
+    # chi arriva secondo rilegge i parametri e lo stato proposta gia' aggiornati.
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        riga = _regola_attiva_o_404(conn, regola_id)
+        parametri_prima = json.loads(riga["parametri"])
+        parametri_dopo = _valida_o_422(riga["tipo"], corpo.parametri)
 
-    # La proposta serve SOLO a scavalcare il lock di un allentamento:
-    # su una stretta (gia' immediata) il proposta_id si ignora e non si consuma.
-    concordata = False
-    if lock.allenta(riga["tipo"], parametri_prima, parametri_dopo):
-        if corpo.proposta_id is not None:
-            _consuma_proposta(conn, corpo.proposta_id, regola_id, parametri_dopo)
-            concordata = True
-        else:
-            _controlla_lock(riga, ora)
+        # La proposta serve SOLO a scavalcare il lock di un allentamento:
+        # su una stretta (gia' immediata) il proposta_id si ignora e non si consuma.
+        concordata = False
+        if lock.allenta(riga["tipo"], parametri_prima, parametri_dopo):
+            if corpo.proposta_id is not None:
+                _consuma_proposta(conn, corpo.proposta_id, regola_id, parametri_dopo)
+                concordata = True
+            else:
+                _controlla_lock(riga, ora)
 
-    aggiornata = applica_modifica(conn, riga, parametri_dopo, concordata, ora)
-    conn.commit()
+        aggiornata = applica_modifica(conn, riga, parametri_dopo, concordata, ora)
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
     return _riga_regola(aggiornata)
 
 
@@ -227,19 +256,30 @@ def elimina_regola(
     ruolo: str = Depends(richiede_figlio),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    riga = _regola_attiva_o_404(conn, regola_id)
-    _verifica_non_ultima(conn)
-
     ora = clock.now()
-    concordata = False
-    if proposta_id is not None:
-        # L'eliminazione concordata vale solo se la proposta accettata era
-        # proprio un'eliminazione (marcatore {"azione": "elimina"}, db.py).
-        _consuma_proposta(conn, proposta_id, regola_id, MARCATORE_ELIMINA)
-        concordata = True
-    if not concordata:
-        _controlla_lock(riga, ora)  # eliminare = sempre allentare
+    # BEGIN IMMEDIATE: rileggi-regola, verifica-non-ultima e soft-delete atomici.
+    # Senza, due DELETE su regole diverse leggono entrambi 2 attive, passano il
+    # controllo ultima_regola e lasciano ZERO regole attive. Il lock serializza;
+    # chi arriva secondo rilegge il conteggio delle attive gia' sceso.
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        riga = _regola_attiva_o_404(conn, regola_id)
+        _verifica_non_ultima(conn)
 
-    applica_eliminazione(conn, riga, concordata, ora)
-    conn.commit()
+        concordata = False
+        if proposta_id is not None:
+            # L'eliminazione concordata vale solo se la proposta accettata era
+            # proprio un'eliminazione (marcatore {"azione": "elimina"}, db.py).
+            _consuma_proposta(conn, proposta_id, regola_id, MARCATORE_ELIMINA)
+            concordata = True
+        if not concordata:
+            _controlla_lock(riga, ora)  # eliminare = sempre allentare
+
+        applica_eliminazione(conn, riga, concordata, ora)
+        # (v2.1) le proposte pendenti su questa regola non hanno piu' oggetto.
+        _annulla_proposte_pendenti(conn, regola_id, clock.iso(ora))
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
     return {"id": regola_id, "eliminata": True}

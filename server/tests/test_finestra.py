@@ -179,3 +179,71 @@ def test_finestra_conta_i_giorni_nel_fuso_del_patto(client, orologio):
     assert semaforo["2026-07-15"] == "rosso"  # lo sforamento cade nel giorno locale giusto
     assert semaforo["2026-07-14"] == "verde"
     assert finestra["bonus_giornalieri"][-1] == {"giorno": "2026-07-15", "minuti": 5}
+
+
+# --- (fix #10) semaforo delle regole vita_reale: da dichiarazioni e verdetti ---
+
+def _vita_params(arbitro="Mamma"):
+    return {"descrizione": "Cammino", "arbitro_nome": arbitro, "frequenza": "ogni giorno"}
+
+
+def _regola_vita(client):
+    crea_regola(client)  # una regola qualsiasi: la vita_reale non deve restare sola
+    return crea_regola(client, tipo="vita_reale", parametri=_vita_params())
+
+
+def _semaforo_oggi(client, regola_id):
+    regola = [r for r in _finestra(client)["regole"] if r["id"] == regola_id][0]
+    return {v["data"]: v["stato"] for v in regola["semaforo"]}["2026-07-14"]
+
+
+def _dichiara(client, regola_id, esito):
+    return client.post(
+        "/api/dichiarazioni", json={"regola_id": regola_id, "esito": esito}, headers=FIGLIO
+    ).json()
+
+
+def _verdetto(client, dichiarazione_id, verdetto):
+    client.post(
+        f"/api/dichiarazioni/{dichiarazione_id}/verdetto",
+        json={"verdetto": verdetto},
+        headers=GENITORE,
+    )
+
+
+def test_vita_reale_grigio_senza_dichiarazione(client):
+    vita = _regola_vita(client)
+    assert _semaforo_oggi(client, vita["id"]) == "grigio"
+
+
+def test_vita_reale_grigio_col_verdetto_in_attesa(client):
+    vita = _regola_vita(client)
+    _dichiara(client, vita["id"], "successo")  # successo senza verdetto = in attesa
+    assert _semaforo_oggi(client, vita["id"]) == "grigio"
+
+
+def test_vita_reale_verde_su_conferma(client):
+    vita = _regola_vita(client)
+    dic = _dichiara(client, vita["id"], "successo")
+    _verdetto(client, dic["id"], "conferma")
+    assert _semaforo_oggi(client, vita["id"]) == "verde"
+
+
+def test_vita_reale_verde_su_conferma_per_conto(client):
+    vita = _regola_vita(client)
+    dic = _dichiara(client, vita["id"], "successo")
+    _verdetto(client, dic["id"], "conferma_per_conto")
+    assert _semaforo_oggi(client, vita["id"]) == "verde"
+
+
+def test_vita_reale_rosso_su_fallimento(client):
+    vita = _regola_vita(client)
+    _dichiara(client, vita["id"], "fallimento")
+    assert _semaforo_oggi(client, vita["id"]) == "rosso"
+
+
+def test_vita_reale_rosso_su_successo_ribaltato(client):
+    vita = _regola_vita(client)
+    dic = _dichiara(client, vita["id"], "successo")
+    _verdetto(client, dic["id"], "ribalta")
+    assert _semaforo_oggi(client, vita["id"]) == "rosso"

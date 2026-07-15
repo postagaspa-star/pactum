@@ -2,6 +2,8 @@
 4 giorni dall'ultima creazione/modifica, stringere e' immediato, una proposta
 accettata (concordata) scavalca il lock."""
 
+import threading
+
 from conftest import FIGLIO, GENITORE, crea_regola, inserisci_proposta
 
 UN_GIORNO = 86400
@@ -336,3 +338,66 @@ def test_regola_eliminata_non_modificabile(client, orologio):
     orologio.avanza(days=4)
     client.delete(f"/api/regole/{regola['id']}", headers=FIGLIO)
     assert _patch(client, regola["id"], _limite(30, app="YouTube")).status_code == 404
+
+
+# --- (fix #2) concorrenza: DELETE e PATCH atomici ---
+
+def test_delete_concorrenti_non_raggiungono_zero_regole(client, orologio):
+    """Due DELETE simultanei su due regole diverse (2 attive, lock scaduto): ne
+    passa uno solo, l'altro trova gia' una sola attiva -> 409 ultima_regola. Senza
+    transazione atomica entrambi leggevano 2 attive e lasciavano ZERO regole."""
+    a = crea_regola(client, parametri=_limite(60, app="TikTok"))
+    b = crea_regola(client, parametri=_limite(90, app="YouTube"))
+    orologio.avanza(days=4)  # lock scaduto per entrambe
+    barriera = threading.Barrier(2)
+    risultati = []
+
+    def spara(rid):
+        barriera.wait()
+        r = client.delete(f"/api/regole/{rid}", headers=FIGLIO)
+        risultati.append((r.status_code, r.json() if r.status_code != 200 else None))
+
+    thread = [threading.Thread(target=spara, args=(rid,)) for rid in (a["id"], b["id"])]
+    for t in thread:
+        t.start()
+    for t in thread:
+        t.join()
+    assert sorted(x[0] for x in risultati) == [200, 409]
+    errore = [x[1]["detail"]["errore"] for x in risultati if x[0] == 409][0]
+    assert errore == "ultima_regola"
+    assert len(client.get("/api/regole", headers=FIGLIO).json()["regole"]) == 1
+
+
+def test_patch_e_accetta_concorrenti_storico_coerente(client, db_path):
+    """Un PATCH (stringe) e una modifica concordata (allenta) simultanei sulla
+    stessa regola: serializzati, lo storico incatena i valori veri (prima della
+    seconda == dopo della prima), non due modifiche che partono entrambe dal
+    valore iniziale — che sarebbe uno storico bugiardo."""
+    regola = crea_regola(client, parametri=_limite(60))
+    proposta_id = inserisci_proposta(db_path, regola["id"], parametri=_limite(120))
+    barriera = threading.Barrier(2)
+
+    def stringe():
+        barriera.wait()
+        _patch(client, regola["id"], _limite(30))
+
+    def allenta():
+        barriera.wait()
+        _patch(client, regola["id"], _limite(120), proposta_id=proposta_id)
+
+    thread = [threading.Thread(target=stringe), threading.Thread(target=allenta)]
+    for t in thread:
+        t.start()
+    for t in thread:
+        t.join()
+
+    storico = client.get("/api/finestra", headers=GENITORE).json()["storico_modifiche"]
+    modifiche = sorted(
+        [s for s in storico if s["azione"] == "modifica"], key=lambda s: s["id"]
+    )
+    assert len(modifiche) == 2
+    assert modifiche[0]["prima"]["minuti_al_giorno"] == 60  # la prima parte dall'inizio
+    # la seconda parte ESATTAMENTE dal risultato della prima: catena veritiera
+    assert (
+        modifiche[1]["prima"]["minuti_al_giorno"] == modifiche[0]["dopo"]["minuti_al_giorno"]
+    )

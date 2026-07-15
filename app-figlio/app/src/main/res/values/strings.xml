@@ -101,14 +101,31 @@
     <string name="regola_tipo_limite_tempo">Limite di tempo</string>
     <string name="regola_tipo_fascia_oraria">Fascia oraria</string>
     <string name="regola_tipo_vita_reale">Vita reale</string>
-    <string name="regola_campo_app">App o categoria (es. TikTok)</string>
     <string name="regola_campo_minuti">Minuti al giorno</string>
+    <!-- Selettore app o categoria (contratto v2.1) -->
+    <string name="regola_scegli_app">Scegli app o categoria</string>
+    <string name="regola_scegli_app_titolo">Su cosa vale il limite?</string>
+    <string name="regola_sezione_categorie">Categorie</string>
+    <string name="regola_sezione_app">App installate</string>
+    <string name="categoria_social">Social</string>
+    <string name="categoria_giochi">Giochi</string>
+    <string name="categoria_video">Video</string>
+    <string name="categoria_musica">Musica</string>
+    <string name="categoria_altro">Altre app</string>
     <string name="regola_campo_dalle">Dalle (HH:MM)</string>
     <string name="regola_campo_alle">Alle (HH:MM)</string>
     <string name="regola_campo_giorni">Giorni</string>
     <string name="regola_campo_descrizione">Cosa ti impegni a fare (es. cammino un\'ora)</string>
     <string name="regola_campo_arbitro">Arbitro: chi verifica (es. la mamma)</string>
     <string name="regola_campo_frequenza">Frequenza (es. ogni giorno)</string>
+
+    <!-- Prima regola obbligatoria (concept.md: almeno una regola) -->
+    <string name="prima_regola_titolo">Il tuo patto inizia qui</string>
+    <string name="prima_regola_intro">Pactum è il tuo patto: le regole le scrivi tu. Per iniziare, dattene almeno una.</string>
+    <string name="prima_regola_spiegazione">Un limite di tempo su un\'app, una fascia senza telefono, o un impegno di vita reale. Potrai aggiungerne altre e modificarle quando vuoi — e allentarle dopo qualche giorno.</string>
+    <string name="prima_regola_crea">Crea la prima regola</string>
+    <string name="prima_regola_config_intro">Prima servono l\'indirizzo del server e il token del patto: te li dà chi ha preparato il server. Inseriscili nelle Impostazioni, poi torna qui.</string>
+    <string name="prima_regola_apri_impostazioni">Apri impostazioni</string>
 
     <!-- Bonus -->
     <string name="bonus_titolo">Bonus</string>

@@ -51,6 +51,7 @@ import eu.stgm.pactum.figlio.dati.Dichiarazione
 import eu.stgm.pactum.figlio.dati.EsitiDichiarazione
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.StatiDichiarazione
+import eu.stgm.pactum.figlio.dati.zonaPatto
 import java.time.LocalDate
 
 /** Il diario: dichiara com'è andata sulle regole di vita reale, a viso aperto. */
@@ -129,6 +130,7 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
                 else -> ContenutoDiario(
                     regole = stato.regoleVitaReale,
                     dichiarazioni = stato.dichiarazioni,
+                    fuso = stato.fuso,
                     mostraErrore = stato.errore,
                     onDichiara = { regola, esito -> dichiarazioneInCorso = regola to esito },
                 )
@@ -151,10 +153,14 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
 private fun ContenutoDiario(
     regole: List<Regola>,
     dichiarazioni: List<Dichiarazione>,
+    fuso: String?,
     mostraErrore: Boolean,
     onDichiara: (Regola, String) -> Unit,
 ) {
-    val oggi = LocalDate.now().toString()
+    // "Oggi" nel fuso del patto, come lo assegna il server alle dichiarazioni:
+    // col fuso del telefono, vicino a mezzanotte, il figlio vedrebbe libero un
+    // giorno che il server considera già dichiarato (o viceversa).
+    val oggi = LocalDate.now(zonaPatto(fuso)).toString()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),

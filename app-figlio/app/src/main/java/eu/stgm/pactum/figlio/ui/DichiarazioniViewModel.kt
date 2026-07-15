@@ -35,6 +35,9 @@ class DichiarazioniViewModel(application: Application) : AndroidViewModel(applic
         val caricamento: Boolean = true,
         val regoleVitaReale: List<Regola> = emptyList(),
         val dichiarazioni: List<Dichiarazione> = emptyList(),
+        // Il fuso del patto (GET /api/patto): serve a calcolare "oggi" come il
+        // server, non col fuso del telefono (il vincolo "già dichiarato oggi").
+        val fuso: String? = null,
         val configurazioneMancante: Boolean = false,
         val errore: Boolean = false,
         val invioInCorso: Boolean = false,
@@ -64,6 +67,7 @@ class DichiarazioniViewModel(application: Application) : AndroidViewModel(applic
                     regoleVitaReale = patto?.regole?.filter { it.tipo == TipiRegola.VITA_REALE }
                         ?: locale?.regole?.filter { it.tipo == TipiRegola.VITA_REALE }
                         ?: _stato.value.regoleVitaReale,
+                    fuso = patto?.fuso ?: locale?.fuso ?: _stato.value.fuso,
                     dichiarazioni = dichiarazioni ?: _stato.value.dichiarazioni,
                 )
                 return@launch
@@ -74,6 +78,7 @@ class DichiarazioniViewModel(application: Application) : AndroidViewModel(applic
                 configurazioneMancante = false,
                 errore = false,
                 regoleVitaReale = patto.regole.filter { it.tipo == TipiRegola.VITA_REALE },
+                fuso = patto.fuso,
                 dichiarazioni = dichiarazioni,
             )
         }

@@ -57,6 +57,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         destinazioneRichiesta.value = intent?.getStringExtra(EXTRA_DESTINAZIONE)
+        // Consumato: senza rimuoverlo dall'intent, ogni ricreazione dell'attività
+        // (es. rotazione) rileggerebbe lo stesso extra e ri-salterebbe alla scheda
+        // della notifica, ignorando la scheda su cui il genitore si era spostato.
+        intent?.removeExtra(EXTRA_DESTINAZIONE)
         setContent {
             PactumTheme {
                 GenitoreRoot(
@@ -71,6 +75,9 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         destinazioneRichiesta.value = intent.getStringExtra(EXTRA_DESTINAZIONE)
+        // Consumato subito, come in onCreate: evita che una rotazione successiva
+        // rilegga l'extra e ri-salti alla scheda della notifica.
+        intent.removeExtra(EXTRA_DESTINAZIONE)
     }
 
     companion object {

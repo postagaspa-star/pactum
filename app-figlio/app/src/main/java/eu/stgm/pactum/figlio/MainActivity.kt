@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -27,11 +28,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.figlio.permessi.StatoPermessi
 import eu.stgm.pactum.figlio.servizio.PactumService
 import eu.stgm.pactum.figlio.ui.BonusScreen
@@ -39,8 +43,10 @@ import eu.stgm.pactum.figlio.ui.DichiarazioniScreen
 import eu.stgm.pactum.figlio.ui.ImpostazioniScreen
 import eu.stgm.pactum.figlio.ui.OggiScreen
 import eu.stgm.pactum.figlio.ui.OnboardingScreen
+import eu.stgm.pactum.figlio.ui.PrimaRegolaScreen
 import eu.stgm.pactum.figlio.ui.ProposteScreen
 import eu.stgm.pactum.figlio.ui.RegoleScreen
+import eu.stgm.pactum.figlio.ui.RegoleViewModel
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
 
 class MainActivity : ComponentActivity() {
@@ -117,6 +123,41 @@ private fun PactumRoot(
     var scheda by rememberSaveable { mutableStateOf(Scheda.OGGI) }
     var mostraImpostazioni by rememberSaveable { mutableStateOf(false) }
 
+    // Gate della prima regola (concept.md: almeno una regola obbligatoria). Lo
+    // stesso RegoleViewModel dell'Activity serve il gate e la scheda Regole.
+    val regoleVm: RegoleViewModel = viewModel()
+    val statoRegole by regoleVm.stato.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(Unit) {
+        regoleVm.aggiorna()
+        onPauseOrDispose { }
+    }
+
+    // Le Impostazioni sono raggiungibili anche dal gate (per inserire server e
+    // token quando mancano), quindi si valutano prima di tutto il resto.
+    if (mostraImpostazioni) {
+        BackHandler { mostraImpostazioni = false }
+        ImpostazioniScreen(onChiudi = { mostraImpostazioni = false; regoleVm.aggiorna() })
+        return
+    }
+
+    // Finché il patto non ha nemmeno una regola, prima si crea quella: è il
+    // figlio a scrivere il patto. Creata la prima, il server vieta di togliere
+    // l'ultima, così il gate non torna; offline la copia locale già sincronizzata
+    // basta a superarlo.
+    if (statoRegole.regole.isEmpty()) {
+        if (statoRegole.caricamento) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            PrimaRegolaScreen(
+                vm = regoleVm,
+                onApriImpostazioni = { mostraImpostazioni = true },
+            )
+        }
+        return
+    }
+
     // Arrivo da una notifica: salta alla scheda giusta, una volta sola.
     LaunchedEffect(destinazioneRichiesta) {
         when (destinazioneRichiesta) {
@@ -128,12 +169,6 @@ private fun PactumRoot(
             mostraImpostazioni = false
             onDestinazioneConsumata()
         }
-    }
-
-    if (mostraImpostazioni) {
-        BackHandler { mostraImpostazioni = false }
-        ImpostazioniScreen(onChiudi = { mostraImpostazioni = false })
-        return
     }
 
     Scaffold(

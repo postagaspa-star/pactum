@@ -115,6 +115,14 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             json.encodeToString(DichiarazioneIn.serializer(), corpo),
         )
 
+    /**
+     * Marca come letta una notifica del figlio (ciascun ruolo può marcare le
+     * proprie — contratto-api.md). Best effort: senza, il server accumula le
+     * non lette all'infinito e, oltre il tetto locale, il figlio si ri-avvisa.
+     */
+    suspend fun marcaNotificaLetta(id: Long): Boolean =
+        mutazione("POST", "/api/notifiche/$id/letta", null).ok
+
     // --- Interni -------------------------------------------------------------
 
     private suspend fun inviaSemplice(percorso: String, corpo: String): Boolean {

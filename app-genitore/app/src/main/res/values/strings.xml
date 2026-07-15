@@ -133,6 +133,7 @@
     <string name="proposta_errore_generico">Non sono riuscito a inviare la proposta: riprova.</string>
     <string name="proposta_errore_gia_pendente">C\'è già una proposta in attesa su questa regola.</string>
     <string name="proposta_errore_regola_non_valida">Questa regola non è più valida per una proposta.</string>
+    <string name="proposta_errore_parametri_non_validi">Qualche valore non va bene: controlla i campi e riprova.</string>
 
     <!-- Proposte: dialogo di creazione -->
     <string name="proposta_crea_titolo">Proponi una modifica</string>
@@ -141,14 +142,26 @@
     <string name="proposta_modalita_elimina">Proponi di eliminare la regola</string>
     <string name="proposta_campo_app">App o categoria</string>
     <string name="proposta_campo_minuti">Minuti al giorno</string>
+    <string name="proposta_minuti_range">Da 1 a 1440 minuti</string>
     <string name="proposta_campo_dalle">Dalle (HH:MM)</string>
     <string name="proposta_campo_alle">Alle (HH:MM)</string>
-    <string name="proposta_campo_giorni">Giorni (es. lun, mar, mer)</string>
+    <string name="proposta_giorni_scegli">Giorni</string>
     <string name="proposta_campo_descrizione">Descrizione</string>
     <string name="proposta_campo_arbitro">Arbitro</string>
     <string name="proposta_campo_frequenza">Frequenza</string>
     <string name="proposta_campo_motivazione">Motivazione (facoltativa)</string>
     <string name="proposta_invia">Invia proposta</string>
+
+    <!-- Giorni della settimana (chip del selettore fasce orarie), token: lun..dom -->
+    <string-array name="proposta_giorni_etichette">
+        <item>Lun</item>
+        <item>Mar</item>
+        <item>Mer</item>
+        <item>Gio</item>
+        <item>Ven</item>
+        <item>Sab</item>
+        <item>Dom</item>
+    </string-array>
 
     <!-- Verdetti -->
     <string name="verdetti_titolo">Verdetti</string>

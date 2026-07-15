@@ -5,6 +5,7 @@ import eu.stgm.pactum.figlio.dati.TipiRegola
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonArray
+import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeParseException
@@ -14,21 +15,28 @@ import java.time.format.DateTimeParseException
  * `limiteEfficace` è valorizzato solo per limite_tempo (= minuti_al_giorno +
  * bonus di oggi su quella regola); per le fasce orarie non c'è un tetto di
  * minuti, `minutiOltre` racconta quanti minuti d'uso sono caduti nella fascia.
+ * `giornoAncora` è valorizzato solo per le fasce: è il giorno di ANCORAGGIO
+ * dell'occorrenza (quando la fascia parte) e fa da chiave di dedup, così una
+ * fascia che scavalca la mezzanotte resta UNA sola occorrenza.
  */
 data class Sforamento(
     val regolaId: Long,
     val tipo: String,
     val limiteEfficace: Int?,
     val minutiOltre: Int,
+    val giornoAncora: String? = null,
 )
+
+/** Un intervallo proibito da una fascia, con il giorno di ancoraggio dell'occorrenza. */
+data class IntervalloProibito(val giornoAncora: String, val inizio: Long, val fine: Long)
 
 /**
  * Il valutatore locale: confronta l'uso di oggi con le regole attive del patto e
  * restituisce gli sforamenti. È logica pura (nessun IO): l'uso arriva da due
- * lambde — per etichetta app (limite_tempo) e per intervallo di tempo
+ * lambde — per chiave app_o_categoria (limite_tempo) e per intervallo di tempo
  * (fascia_oraria) — così è testabile e riusabile dal worker e dal loop del
  * servizio. NON blocca niente e NON deduplica: la deduplica (una per regola per
- * giorno) e la notifica le fa il chiamante.
+ * giorno, o per giorno di ancoraggio per le fasce) e la notifica le fa il chiamante.
  */
 object Valutatore {
 
@@ -49,15 +57,15 @@ object Valutatore {
         val risultati = mutableListOf<Sforamento>()
         for (regola in regole) {
             if (!regola.attiva) continue
-            val sforamento = when (regola.tipo) {
+            when (regola.tipo) {
                 TipiRegola.LIMITE_TEMPO ->
                     valutaLimite(regola, bonusOggiPerRegola, usoMinutiEtichetta)
+                        ?.let { risultati += it }
                 TipiRegola.FASCIA_ORARIA ->
-                    valutaFascia(regola, usoMinutiIntervallo, now, zona)
+                    risultati += valutaFascia(regola, usoMinutiIntervallo, now, zona)
                 // vita_reale: niente sforamento automatico, si dichiara a mano.
-                else -> null
+                else -> Unit
             }
-            if (sforamento != null) risultati += sforamento
         }
         return risultati
     }
@@ -81,34 +89,47 @@ object Valutatore {
         )
     }
 
+    /**
+     * Una fascia può avere due parti visibili oggi (la coda mattutina della
+     * fascia di ieri e la testa serale di quella di oggi): sono DUE occorrenze
+     * diverse, quindi si raggruppano per giorno di ancoraggio e ognuna genera al
+     * più uno sforamento. Le due parti della stessa occorrenza (sera + mattina
+     * dopo mezzanotte) condividono invece lo stesso ancoraggio, così non si
+     * contano due volte.
+     */
     private fun valutaFascia(
         regola: Regola,
         usoMinutiIntervallo: (Long, Long) -> Long,
         now: Long,
         zona: ZoneId,
-    ): Sforamento? {
-        val dalle = ora(regola.parametri, "dalle") ?: return null
-        val alle = ora(regola.parametri, "alle") ?: return null
+    ): List<Sforamento> {
+        val dalle = ora(regola.parametri, "dalle") ?: return emptyList()
+        val alle = ora(regola.parametri, "alle") ?: return emptyList()
         val giorni = stringhe(regola.parametri, "giorni")
-        if (giorni.isEmpty()) return null
+        if (giorni.isEmpty()) return emptyList()
 
-        val intervalli = intervalliProibitiOggi(dalle, alle, giorni, now, zona)
-        val usoTot = intervalli.sumOf { usoMinutiIntervallo(it.first, it.second) }
-        if (usoTot < TOLLERANZA_FASCIA_MIN) return null
-        return Sforamento(
-            regolaId = regola.id,
-            tipo = regola.tipo,
-            limiteEfficace = null,
-            minutiOltre = usoTot.toInt(),
-        )
+        return intervalliProibitiOggi(dalle, alle, giorni, now, zona)
+            .groupBy { it.giornoAncora }
+            .mapNotNull { (giornoAncora, intervalli) ->
+                val usoTot = intervalli.sumOf { usoMinutiIntervallo(it.inizio, it.fine) }
+                if (usoTot < TOLLERANZA_FASCIA_MIN) return@mapNotNull null
+                Sforamento(
+                    regolaId = regola.id,
+                    tipo = regola.tipo,
+                    limiteEfficace = null,
+                    minutiOltre = usoTot.toInt(),
+                    giornoAncora = giornoAncora,
+                )
+            }
     }
 
     /**
      * Gli intervalli proibiti da una fascia oraria che ricadono OGGI (fuso del
-     * telefono) e sono già iniziati, clippati a [inizio di oggi, adesso]. Gestisce
-     * le fasce che scavalcano la mezzanotte (es. 23:00→07:00): la parte serale
+     * telefono) e sono già iniziati, clippati a [inizio di oggi, adesso], ognuno
+     * etichettato col giorno di ANCORAGGIO (quando la fascia parte). Gestisce le
+     * fasce che scavalcano la mezzanotte (es. 23:00→07:00): la parte serale
      * appartiene al giorno che la fa partire, quella mattutina al giorno prima —
-     * il controllo su `giorni` usa il giorno di ANCORAGGIO (quando la fascia parte).
+     * il controllo su `giorni` e l'ancoraggio usano il giorno di partenza.
      */
     fun intervalliProibitiOggi(
         dalle: LocalTime,
@@ -116,10 +137,10 @@ object Valutatore {
         giorni: List<String>,
         now: Long,
         zona: ZoneId,
-    ): List<Pair<Long, Long>> {
-        val oggi = java.time.Instant.ofEpochMilli(now).atZone(zona).toLocalDate()
+    ): List<IntervalloProibito> {
+        val oggi = Instant.ofEpochMilli(now).atZone(zona).toLocalDate()
         val inizioOggi = oggi.atStartOfDay(zona).toInstant().toEpochMilli()
-        val risultati = mutableListOf<Pair<Long, Long>>()
+        val risultati = mutableListOf<IntervalloProibito>()
         // Due ancoraggi bastano: la fascia di ieri (parte mattutina di oggi) e
         // quella di oggi (parte serale). Clippando a [inizioOggi, now] non c'è
         // doppio conteggio con i giorni vicini.
@@ -133,7 +154,7 @@ object Valutatore {
             val fineMs = fineLocale.atZone(zona).toInstant().toEpochMilli()
             val s = maxOf(inizioMs, inizioOggi)
             val e = minOf(fineMs, now)
-            if (e > s) risultati += s to e
+            if (e > s) risultati += IntervalloProibito(ancora.toString(), s, e)
         }
         return risultati
     }

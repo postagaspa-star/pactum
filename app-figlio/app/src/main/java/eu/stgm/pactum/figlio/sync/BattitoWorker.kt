@@ -74,14 +74,14 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
 
         val postino = PostinoClient(configurazione)
 
-        // Sync del patto (tappa 5): il server è la fonte di verità, la copia
-        // locale serve alla sentinella anche offline. Best effort: se non
-        // arriva, la sentinella usa la copia precedente.
-        postino.leggiPatto()?.let { PattoLocale(context).salva(it) }
-
-        // Valutazione locale degli sforamenti PRIMA della consegna: uno
-        // sforamento di oggi parte con questo stesso giro. Dedup interno.
-        SentinellaPatto(context).valuta()
+        // Sync del patto (tappa 5) + valutazione locale degli sforamenti PRIMA
+        // della consegna: il server è la fonte di verità, la copia locale serve
+        // alla sentinella anche offline. In runCatching (come PactumService): un
+        // errore qui NON deve saltare battito ed eventi di questo giro.
+        runCatching {
+            postino.leggiPatto()?.let { PattoLocale(context).salva(it) }
+            SentinellaPatto(context).valuta()
+        }
 
         val battitoOk = postino.inviaBattito(
             Battito(
@@ -106,8 +106,9 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
     /**
      * Alza una notifica locale per ogni notifica del server mai avvisata prima
      * (il GET col token del figlio restituisce solo le sue: nuove proposte,
-     * verdetti). Senza permesso non si avvisa E non si segna: appena il
-     * permesso arriva, il giro successivo recupera.
+     * verdetti) e poi le marca lette sul server. Senza permesso non si avvisa E
+     * non si segna né marca: appena il permesso arriva, il giro successivo
+     * recupera (marcare prima di avvisare perderebbe l'avviso).
      */
     private suspend fun avvisaNovitaDelPatto(
         context: Context,
@@ -115,21 +116,28 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         postino: PostinoClient,
     ) {
         val notifiche = postino.leggiNotifiche() ?: return
-        val giaAvvisate = impostazioni.leggiIdAvvisati()
-        val nuove = notifiche.filter { it.id !in giaAvvisate }
-        if (nuove.isEmpty()) return
+        if (notifiche.isEmpty()) return
         if (!AvvisiLocali.puoAvvisare(context)) return
 
+        val giaAvvisate = impostazioni.leggiIdAvvisati()
+        val nuove = notifiche.filter { it.id !in giaAvvisate }
         nuove.forEach { notifica ->
             AvvisiLocali.avvisa(
                 context,
-                id = notifica.id.toInt(),
+                // Id con offset: l'id grezzo del server collide con la notifica
+                // fissa del testimone (FGS id 1), che verrebbe sostituita.
+                id = AvvisiLocali.idNotificaServer(notifica.id),
                 titolo = AvvisiLocali.titoloTipo(context, notifica.tipo),
                 testo = notifica.messaggio,
                 destinazione = AvvisiLocali.destinazioneTipo(notifica.tipo),
             )
         }
-        impostazioni.registraIdAvvisati(nuove.map { it.id })
+        if (nuove.isNotEmpty()) impostazioni.registraIdAvvisati(nuove.map { it.id })
+
+        // Marcate lette sul server (best effort, idempotente): senza, il server
+        // accumula le non lette all'infinito e, oltre il tetto locale di 500 id,
+        // il figlio si ri-avviserebbe le vecchie. Il giro dopo riprova le fallite.
+        notifiche.forEach { postino.marcaNotificaLetta(it.id) }
     }
 
     /**

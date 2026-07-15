@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import java.time.ZoneId
 
 /**
  * Le forme del contratto per il patto completo (tappa 5, docs/contratto-api.md,
@@ -22,7 +23,20 @@ data class Patto(
     @SerialName("proposte_pendenti") val propostePendenti: List<Proposta> = emptyList(),
     @SerialName("dichiarazioni_in_attesa") val dichiarazioniInAttesa: List<Dichiarazione> = emptyList(),
     val fuso: String? = null,
+    // App-interno (NON dal server): il giorno del patto in cui `bonusOggiPerRegola`
+    // è valido, stampato da PattoLocale al salvataggio. Se al momento della
+    // valutazione non è più oggi (notte offline), i bonus di "oggi" non valgono.
+    @SerialName("bonus_giorno_locale") val bonusGiornoLocale: String? = null,
 )
+
+/**
+ * Il fuso in cui contare i "giorni" del patto (bonus, dichiarazioni): quello
+ * dato dal server (GET /api/patto, campo `fuso`), col ripiego sul fuso del
+ * telefono se assente o ignoto. Il server resta la fonte di verità; questo
+ * serve solo alla logica locale che deve dire "oggi" come lo direbbe il server.
+ */
+fun zonaPatto(fuso: String?): ZoneId =
+    fuso?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
 
 @Serializable
 data class Regola(

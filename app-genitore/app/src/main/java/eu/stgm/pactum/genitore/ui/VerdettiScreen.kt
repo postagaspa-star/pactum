@@ -249,11 +249,16 @@ private fun CardInAttesa(
 @Composable
 private fun CardRisolta(dichiarazione: Dichiarazione, regola: RegolaFinestra?) {
     val arbitro = regola?.let { parametroTesto(it.parametri, "arbitro_nome") } ?: "?"
+    // (v2.1) La frase del registro la congela il server sul verdetto (cita
+    // l'arbitro di allora): si mostra QUELLA verbatim, non la si ricostruisce
+    // dai parametri attuali della regola. Se manca (es. fallimento dichiarato,
+    // che non passa da un verdetto) si ripiega sulla descrizione locale.
+    val registro = dichiarazione.verdetto?.registro?.takeIf { it.isNotBlank() }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             IntestazioneDichiarazione(dichiarazione, regola)
             Text(
-                text = descrizioneStato(dichiarazione, arbitro),
+                text = registro ?: descrizioneStato(dichiarazione, arbitro),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 4.dp),
             )

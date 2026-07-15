@@ -175,6 +175,10 @@ data class Dichiarazione(
 data class Verdetto(
     val verdetto: String,
     val nota: String? = null,
+    // (v2.1) La frase autoritativa del registro, congelata dal server al momento
+    // del verdetto (es. "confermato dal genitore per conto di Nonna"): l'app la
+    // mostra così com'è, senza ricostruirla — cita l'arbitro di allora.
+    val registro: String? = null,
     @SerialName("ts_server") val tsServer: String = "",
 )
 

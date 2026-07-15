@@ -59,8 +59,11 @@ class ProposteViewModel(application: Application) : AndroidViewModel(application
                 return@launch
             }
             impostazioni.registraVerificaRiuscita()
-            // Le regole attive servono per la creazione: best effort (stesso server,
-            // se le proposte arrivano di solito arrivano anche loro).
+            // Le regole attive servono per la creazione. Se la finestra non arriva
+            // (ma le proposte sì) si tiene l'ultimo elenco buono E si segnala l'errore:
+            // altrimenti la sezione "Proponi" mostrerebbe una lista vecchia o vuota
+            // spacciandola per aggiornata (o "nessuna regola attiva" quando in realtà
+            // non l'abbiamo letta).
             val finestra = postino.leggiFinestra()
             val regoleAttive = finestra?.regole?.filter { it.attiva }
                 ?: _stato.value.regoleAttive
@@ -69,7 +72,7 @@ class ProposteViewModel(application: Application) : AndroidViewModel(application
                 regoleAttive = regoleAttive,
                 proposte = proposte,
                 configurazioneMancante = false,
-                errore = false,
+                errore = finestra == null,
             )
         }
     }

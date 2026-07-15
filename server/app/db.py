@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS proposte (
     motivazione TEXT,
     confronto TEXT,
     direzione TEXT,
-    stato TEXT NOT NULL DEFAULT 'pendente' CHECK (stato IN ('pendente', 'accettata', 'rifiutata')),
+    stato TEXT NOT NULL DEFAULT 'pendente' CHECK (stato IN ('pendente', 'accettata', 'rifiutata', 'annullata')),
     usata INTEGER NOT NULL DEFAULT 0,
     risposta_esito TEXT,
     risposta_motivazione TEXT,
@@ -65,14 +65,19 @@ CREATE TABLE IF NOT EXISTS proposte (
 -- 'confermata_per_conto' (il genitore garantisce di aver sentito l'arbitro fuori
 -- dall'app) o 'ribaltata'. verdetto_registro conserva la frase leggibile del
 -- registro (es. "confermato dal genitore per conto di [arbitro]") al momento del
--- verdetto, cosi' resta vera anche se la regola cambia dopo. Max una dichiarazione
--- per regola per giorno (fuso del patto), controllata in scrittura.
+-- verdetto, cosi' resta vera anche se la regola cambia dopo. arbitro_nome (v2.1)
+-- e' l'arbitro CONGELATO alla creazione: i verdetti "per conto di" citano
+-- l'arbitro di allora, anche se la regola cambia arbitro dopo. Max una
+-- dichiarazione per regola per giorno (fuso del patto), garantita anche sotto
+-- richieste concorrenti dall'indice UNIQUE (regola_id, giorno) qui sotto,
+-- non dalla sola SELECT di controllo.
 CREATE TABLE IF NOT EXISTS dichiarazioni (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     regola_id INTEGER NOT NULL REFERENCES regole(id),
     giorno TEXT NOT NULL,
     esito TEXT NOT NULL CHECK (esito IN ('successo', 'fallimento')),
     nota TEXT,
+    arbitro_nome TEXT,
     stato TEXT NOT NULL CHECK (stato IN ('registrata', 'in_attesa', 'confermata', 'confermata_per_conto', 'ribaltata')),
     verdetto_verdetto TEXT,
     verdetto_nota TEXT,
@@ -80,6 +85,9 @@ CREATE TABLE IF NOT EXISTS dichiarazioni (
     verdetto_ts TEXT,
     ts_server TEXT NOT NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dichiarazioni_regola_giorno
+    ON dichiarazioni (regola_id, giorno);
 
 CREATE TABLE IF NOT EXISTS eventi (
     id TEXT PRIMARY KEY,
@@ -169,6 +177,11 @@ def _migra(conn: sqlite3.Connection) -> None:
             "ALTER TABLE notifiche ADD COLUMN destinatario TEXT NOT NULL DEFAULT 'genitore'"
         )
 
+    # dichiarazioni: arbitro_nome congelato sulla riga (v2.1). Le righe preesistenti
+    # restano NULL: la route ricade sull'arbitro corrente della regola solo per loro.
+    if _colonne(conn, "dichiarazioni") and "arbitro_nome" not in _colonne(conn, "dichiarazioni"):
+        conn.execute("ALTER TABLE dichiarazioni ADD COLUMN arbitro_nome TEXT")
+
     # proposte: lo stub v1 non aveva confronto/direzione/risposta_* e usava lo
     # stato 'in_attesa'. Il CHECK dello stato non si altera con ALTER: si
     # ricostruisce la tabella (di norma vuota, gli endpoint non esistevano in v1).
@@ -189,7 +202,7 @@ def _migra(conn: sqlite3.Connection) -> None:
                 confronto TEXT,
                 direzione TEXT,
                 stato TEXT NOT NULL DEFAULT 'pendente'
-                    CHECK (stato IN ('pendente', 'accettata', 'rifiutata')),
+                    CHECK (stato IN ('pendente', 'accettata', 'rifiutata', 'annullata')),
                 usata INTEGER NOT NULL DEFAULT 0,
                 risposta_esito TEXT,
                 risposta_motivazione TEXT,
@@ -206,6 +219,53 @@ def _migra(conn: sqlite3.Connection) -> None:
             """
         )
         conn.execute("PRAGMA foreign_keys=ON")
+
+    # proposte v2 -> v2.1: aggiungere 'annullata' al CHECK dello stato (l'eliminazione
+    # diretta di una regola annulla le sue proposte pendenti). SQLite non altera un
+    # CHECK: si ricostruisce preservando tutte le colonne v2. Il ramo v1 qui sopra
+    # crea gia' la tabella col CHECK nuovo, quindi qui si intercetta solo il DB v2.
+    sql_proposte = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'proposte'"
+    ).fetchone()
+    if sql_proposte is not None and "annullata" not in sql_proposte[0]:
+        conn.commit()
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.executescript(
+            """
+            ALTER TABLE proposte RENAME TO _proposte_v2;
+            CREATE TABLE proposte (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                regola_id INTEGER NOT NULL REFERENCES regole(id),
+                parametri_proposti TEXT,
+                motivazione TEXT,
+                confronto TEXT,
+                direzione TEXT,
+                stato TEXT NOT NULL DEFAULT 'pendente'
+                    CHECK (stato IN ('pendente', 'accettata', 'rifiutata', 'annullata')),
+                usata INTEGER NOT NULL DEFAULT 0,
+                risposta_esito TEXT,
+                risposta_motivazione TEXT,
+                risposta_ts TEXT,
+                ts_server TEXT NOT NULL
+            );
+            INSERT INTO proposte
+                (id, regola_id, parametri_proposti, motivazione, confronto, direzione,
+                 stato, usata, risposta_esito, risposta_motivazione, risposta_ts, ts_server)
+            SELECT id, regola_id, parametri_proposti, motivazione, confronto, direzione,
+                 stato, usata, risposta_esito, risposta_motivazione, risposta_ts, ts_server
+            FROM _proposte_v2;
+            DROP TABLE _proposte_v2;
+            """
+        )
+        conn.execute("PRAGMA foreign_keys=ON")
+
+    # Indici UNIQUE: garantiscono l'unicita' anche sotto richieste concorrenti (una
+    # sola dichiarazione per regola per giorno). Ricreati qui perche' una ricostruzione
+    # della tabella qui sopra li avrebbe persi. IF NOT EXISTS = idempotente.
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_dichiarazioni_regola_giorno"
+        " ON dichiarazioni (regola_id, giorno)"
+    )
 
 
 def init_db(db_path: str, tetto_giorno: int, tetto_settimana: int) -> None:

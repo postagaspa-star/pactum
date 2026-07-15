@@ -56,6 +56,10 @@ class VerdettiViewModel(application: Application) : AndroidViewModel(application
                 return@launch
             }
             impostazioni.registraVerificaRiuscita()
+            // Serve la finestra per la mappa regola→descrizione/arbitro. Se non arriva
+            // (ma le dichiarazioni sì) si tiene l'ultima mappa buona E si segnala
+            // l'errore: senza il flag le card mostrerebbero regola/arbitro vecchi o
+            // "sconosciuta" facendoli passare per aggiornati.
             val finestra = postino.leggiFinestra()
             val regolePerId = finestra?.regole?.associateBy { it.id }
                 ?: _stato.value.regolePerId
@@ -64,7 +68,7 @@ class VerdettiViewModel(application: Application) : AndroidViewModel(application
                 regolePerId = regolePerId,
                 dichiarazioni = dichiarazioni,
                 configurazioneMancante = false,
-                errore = false,
+                errore = finestra == null,
             )
         }
     }

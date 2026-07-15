@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,6 +33,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -44,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,8 +61,12 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.catalogo.AppInstallata
+import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiRegola
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -406,7 +414,7 @@ private fun DialogoRegola(
 
                 when (tipo) {
                     TipiRegola.LIMITE_TEMPO -> {
-                        CampoTesto(app, { app = it }, R.string.regola_campo_app)
+                        SelettoreAppOCategoria(valore = app, onScegli = { app = it })
                         CampoTesto(
                             minuti, { minuti = it }, R.string.regola_campo_minuti,
                             numerico = true,
@@ -492,6 +500,157 @@ private fun CampoTesto(
         },
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * Il selettore di `app_o_categoria` (contratto v2.1): niente più testo libero
+ * (una regola scritta a mano non troverebbe mai un pacchetto e non scatterebbe
+ * mai in silenzio). Si sceglie una categoria fissa o un'app installata dal
+ * selettore; si salva la chiave `categoria:*` o il nome pacchetto.
+ */
+@Composable
+private fun SelettoreAppOCategoria(valore: String, onScegli: (String) -> Unit) {
+    val context = LocalContext.current
+    var apertoPicker by remember { mutableStateOf(false) }
+    val etichetta = remember(valore) {
+        if (valore.isBlank()) null else CatalogoApp.etichettaValore(context, valore)
+    }
+
+    OutlinedButton(onClick = { apertoPicker = true }, modifier = Modifier.fillMaxWidth()) {
+        Text(etichetta ?: stringResource(R.string.regola_scegli_app))
+    }
+
+    if (apertoPicker) {
+        DialogoSceltaApp(
+            onScegli = { onScegli(it); apertoPicker = false },
+            onAnnulla = { apertoPicker = false },
+        )
+    }
+}
+
+@Composable
+private fun DialogoSceltaApp(onScegli: (String) -> Unit, onAnnulla: () -> Unit) {
+    val context = LocalContext.current
+    // PackageManager è lento: si carica l'elenco fuori dal main thread una volta.
+    val app by produceState<List<AppInstallata>?>(initialValue = null) {
+        value = withContext(Dispatchers.IO) { CatalogoApp.appInstallate(context) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onAnnulla,
+        title = { Text(stringResource(R.string.regola_scegli_app_titolo)) },
+        text = {
+            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
+                item { TitoloSezione(stringResource(R.string.regola_sezione_categorie)) }
+                items(CatalogoApp.CATEGORIE, key = { it }) { chiave ->
+                    RigaScelta(CatalogoApp.nomeCategoria(context, chiave)) { onScegli(chiave) }
+                }
+                item { TitoloSezione(stringResource(R.string.regola_sezione_app)) }
+                when (val lista = app) {
+                    null -> item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                        ) { CircularProgressIndicator() }
+                    }
+                    else -> items(lista, key = { it.pacchetto }) { installata ->
+                        RigaScelta(installata.etichetta) { onScegli(installata.pacchetto) }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onAnnulla) { Text(stringResource(R.string.azione_annulla)) }
+        },
+    )
+}
+
+@Composable
+private fun RigaScelta(testo: String, onClick: () -> Unit) {
+    Text(
+        text = testo,
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+    )
+}
+
+/**
+ * Il gate della prima regola (concept.md: "almeno una obbligatoria"). Dopo i
+ * permessi, il figlio non entra nell'app finché non si dà la prima regola: è lui
+ * a scrivere il patto, e un patto senza regole non esiste. Creata la prima, il
+ * server vieta di togliere l'ultima, quindi il gate non ricompare; offline la
+ * copia locale (già sincronizzata almeno una volta) basta a superarlo.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PrimaRegolaScreen(vm: RegoleViewModel, onApriImpostazioni: () -> Unit) {
+    val stato by vm.stato.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var dialogoAperto by remember { mutableStateOf(false) }
+
+    val messaggioErrore = stringResource(R.string.regola_errore_generico)
+    LaunchedEffect(stato.evento) {
+        when (stato.evento) {
+            is RegoleViewModel.Evento.Salvata -> dialogoAperto = false
+            is RegoleViewModel.Evento.Errore -> snackbarHostState.showSnackbar(messaggioErrore)
+            else -> Unit
+        }
+        if (stato.evento != null) vm.consumaEvento()
+    }
+
+    Scaffold(
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.prima_regola_titolo)) }) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            if (stato.configurazioneMancante) {
+                Text(
+                    text = stringResource(R.string.prima_regola_config_intro),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Button(onClick = onApriImpostazioni, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.prima_regola_apri_impostazioni))
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.prima_regola_intro),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = stringResource(R.string.prima_regola_spiegazione),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = { dialogoAperto = true },
+                    enabled = !stato.invioInCorso,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.prima_regola_crea))
+                }
+            }
+        }
+    }
+
+    if (dialogoAperto) {
+        DialogoRegola(
+            regola = null,
+            invioInCorso = stato.invioInCorso,
+            onAnnulla = { dialogoAperto = false },
+            onSalva = { tipo, parametri -> vm.crea(tipo, parametri) },
+        )
+    }
 }
 
 // --- Mattoni condivisi dalle schermate del patto -----------------------------

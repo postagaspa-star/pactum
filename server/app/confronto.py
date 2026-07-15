@@ -6,6 +6,8 @@ from . import lock
 
 MENO = "−"  # segno meno tipografico (U+2212), come nel contratto
 
+ORDINE_GIORNI = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
+
 
 def _confronto_limite(prima: dict, dopo: dict) -> str:
     if prima["app_o_categoria"] != dopo["app_o_categoria"]:
@@ -24,8 +26,18 @@ def _confronto_fascia(prima: dict, dopo: dict) -> str:
         parti.append(
             f"orario da {prima['dalle']}-{prima['alle']} a {dopo['dalle']}-{dopo['alle']}"
         )
-    if set(prima["giorni"]) != set(dopo["giorni"]):
-        parti.append(f"giorni da {len(prima['giorni'])} a {len(dopo['giorni'])}")
+    prima_g, dopo_g = set(prima["giorni"]), set(dopo["giorni"])
+    if prima_g != dopo_g:
+        # Elencare i giorni che entrano/escono: uno scambio di pari numero (es. esce
+        # lun, entra dom) rendeva "giorni da 1 a 1", che non diceva niente.
+        escono = [g for g in ORDINE_GIORNI if g in prima_g - dopo_g]
+        entrano = [g for g in ORDINE_GIORNI if g in dopo_g - prima_g]
+        frasi = []
+        if escono:
+            frasi.append("esce " + ", ".join(escono))
+        if entrano:
+            frasi.append("entra " + ", ".join(entrano))
+        parti.append(", ".join(frasi))
     return "; ".join(parti) if parti else "nessuna modifica alla copertura"
 
 

@@ -5,6 +5,8 @@ di qui (SCHEMA lo crea gia' v2): qui si simula il vecchio a mano."""
 
 import sqlite3
 
+import pytest
+
 from app import db
 
 SCHEMA_V1 = """
@@ -114,4 +116,101 @@ def test_init_idempotente_su_db_gia_v2(tmp_path):
     db.init_db(path, 30, 90)  # secondo giro: nessun errore
     conn = sqlite3.connect(path)
     assert "confronto" in _colonne(conn, "proposte")
+    conn.close()
+
+
+# --- v2 -> v2.1: 'annullata' nel CHECK proposte, arbitro_nome + indice UNIQUE dichiarazioni ---
+
+SCHEMA_V2_PRE21 = """
+CREATE TABLE regole (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL,
+    parametri TEXT NOT NULL,
+    attiva INTEGER NOT NULL DEFAULT 1,
+    creata_ts TEXT NOT NULL,
+    ultima_modifica_ts TEXT NOT NULL
+);
+CREATE TABLE proposte (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    regola_id INTEGER NOT NULL REFERENCES regole(id),
+    parametri_proposti TEXT,
+    motivazione TEXT,
+    confronto TEXT,
+    direzione TEXT,
+    stato TEXT NOT NULL DEFAULT 'pendente' CHECK (stato IN ('pendente', 'accettata', 'rifiutata')),
+    usata INTEGER NOT NULL DEFAULT 0,
+    risposta_esito TEXT,
+    risposta_motivazione TEXT,
+    risposta_ts TEXT,
+    ts_server TEXT NOT NULL
+);
+CREATE TABLE dichiarazioni (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    regola_id INTEGER NOT NULL REFERENCES regole(id),
+    giorno TEXT NOT NULL,
+    esito TEXT NOT NULL CHECK (esito IN ('successo', 'fallimento')),
+    nota TEXT,
+    stato TEXT NOT NULL CHECK (stato IN ('registrata', 'in_attesa', 'confermata', 'confermata_per_conto', 'ribaltata')),
+    verdetto_verdetto TEXT,
+    verdetto_nota TEXT,
+    verdetto_registro TEXT,
+    verdetto_ts TEXT,
+    ts_server TEXT NOT NULL
+);
+"""
+
+
+def _db_v2_pre21(path):
+    conn = sqlite3.connect(path)
+    conn.executescript(SCHEMA_V2_PRE21)
+    conn.execute(
+        "INSERT INTO regole (id, tipo, parametri, attiva, creata_ts, ultima_modifica_ts)"
+        " VALUES (1, 'vita_reale',"
+        " '{\"descrizione\": \"Cammino\", \"arbitro_nome\": \"Mamma\", \"frequenza\": \"ogni giorno\"}',"
+        " 1, ?, ?)",
+        (TS, TS),
+    )
+    conn.execute(
+        "INSERT INTO proposte (id, regola_id, parametri_proposti, stato, usata, ts_server)"
+        " VALUES (5, 1, '{\"azione\": \"elimina\"}', 'pendente', 0, ?)",
+        (TS,),
+    )
+    conn.execute(
+        "INSERT INTO dichiarazioni (id, regola_id, giorno, esito, stato, ts_server)"
+        " VALUES (9, 1, '2026-07-10', 'fallimento', 'registrata', ?)",
+        (TS,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_migrazione_da_v2_a_v21(tmp_path):
+    path = str(tmp_path / "v2.db")
+    _db_v2_pre21(path)
+
+    db.init_db(path, 30, 90)
+
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+
+    # proposte: i dati sopravvivono e il CHECK ora ammette 'annullata'
+    proposta = conn.execute("SELECT * FROM proposte WHERE id = 5").fetchone()
+    assert proposta["stato"] == "pendente"
+    assert proposta["parametri_proposti"] == '{"azione": "elimina"}'
+    conn.execute("UPDATE proposte SET stato = 'annullata' WHERE id = 5")  # non solleva piu'
+    assert conn.execute("SELECT stato FROM proposte WHERE id = 5").fetchone()["stato"] == "annullata"
+
+    # dichiarazioni: arbitro_nome aggiunto (NULL sulle righe vecchie), dati vivi
+    assert "arbitro_nome" in _colonne(conn, "dichiarazioni")
+    riga = conn.execute("SELECT * FROM dichiarazioni WHERE id = 9").fetchone()
+    assert riga["arbitro_nome"] is None
+    assert riga["esito"] == "fallimento"
+
+    # indice UNIQUE (regola_id, giorno): niente due dichiarazioni stesso giorno
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO dichiarazioni (regola_id, giorno, esito, stato, ts_server)"
+            " VALUES (1, '2026-07-10', 'successo', 'in_attesa', ?)",
+            (TS,),
+        )
     conn.close()

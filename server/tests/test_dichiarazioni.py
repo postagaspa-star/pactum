@@ -3,6 +3,7 @@ fallimento e' creduto sulla parola (registrata), successo resta in attesa del
 verdetto del genitore/arbitro (conferma / conferma per conto di / ribalta). Max una
 per regola per giorno. Il registro conserva chi ha garantito cosa."""
 
+import threading
 from datetime import datetime, timezone
 
 from conftest import FIGLIO, GENITORE, crea_regola
@@ -113,6 +114,70 @@ def test_stessa_regola_giorni_diversi_ok(client):
     regola = _regola_vita(client)
     assert _dichiara(client, regola["id"], "successo", giorno="2026-07-13").status_code == 200
     assert _dichiara(client, regola["id"], "successo", giorno="2026-07-14").status_code == 200
+
+
+def test_dichiarazioni_concorrenti_ne_passa_una_sola(client):
+    """(fix #3) Sei dichiarazioni simultanee sulla stessa regola nello stesso
+    giorno: ne entra UNA sola (200), le altre -> 409 gia_dichiarato. Il vincolo lo
+    garantisce l'indice UNIQUE (regola_id, giorno), non la sola SELECT di controllo
+    (che due POST simultanei superano entrambi)."""
+    regola = _regola_vita(client)
+    quante = 6
+    barriera = threading.Barrier(quante)
+    esiti = []
+
+    def spara():
+        barriera.wait()
+        esiti.append(_dichiara(client, regola["id"], "successo").status_code)
+
+    thread = [threading.Thread(target=spara) for _ in range(quante)]
+    for t in thread:
+        t.start()
+    for t in thread:
+        t.join()
+    assert sorted(esiti) == [200] + [409] * (quante - 1)
+    tutte = client.get("/api/dichiarazioni", headers=FIGLIO).json()["dichiarazioni"]
+    assert len(tutte) == 1
+
+
+# --- (fix #6) giorno vincolato a [oggi-7g, oggi] nel fuso del patto ---
+
+def test_giorno_nel_futuro_409(client):
+    regola = _regola_vita(client)
+    r = _dichiara(client, regola["id"], "successo", giorno="2026-07-15")  # domani
+    assert r.status_code == 409
+    assert r.json()["detail"]["errore"] == "giorno_non_valido"
+
+
+def test_giorno_troppo_vecchio_409(client):
+    regola = _regola_vita(client)
+    r = _dichiara(client, regola["id"], "successo", giorno="2026-07-06")  # 8 giorni fa
+    assert r.status_code == 409
+    assert r.json()["detail"]["errore"] == "giorno_non_valido"
+
+
+def test_giorno_al_limite_dei_sette_giorni_ok(client):
+    regola = _regola_vita(client)
+    # esattamente 7 giorni fa (oggi = 14/07 nel fuso del patto): dentro il limite
+    assert _dichiara(client, regola["id"], "successo", giorno="2026-07-07").status_code == 200
+
+
+# --- (fix #7) l'arbitro si congela sulla dichiarazione, non e' quello attuale ---
+
+def test_arbitro_congelato_alla_dichiarazione(client, orologio):
+    """La regola cambia arbitro TRA la dichiarazione e il verdetto: la frase del
+    registro cita l'arbitro di quando il figlio dichiaro' (Mamma), non quello
+    nuovo (Papa)."""
+    regola = _regola_vita(client, arbitro="Mamma")
+    dic = _dichiara(client, regola["id"], "successo").json()
+    orologio.avanza(days=4)  # lock scaduto: la regola puo' cambiare arbitro
+    client.patch(
+        f"/api/regole/{regola['id']}",
+        json={"parametri": _vita(arbitro="Papa")},
+        headers=FIGLIO,
+    )
+    dati = _verdetto(client, dic["id"], "conferma_per_conto").json()
+    assert dati["verdetto"]["registro"] == "confermato dal genitore per conto di Mamma"
 
 
 def test_regole_diverse_stesso_giorno_ok(client):

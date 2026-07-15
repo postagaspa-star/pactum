@@ -5,6 +5,7 @@ ribalta. Il registro conserva sempre chi ha garantito cosa."""
 
 import json
 import sqlite3
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -76,17 +77,26 @@ def crea_dichiarazione(
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     regola = conn.execute(
-        "SELECT tipo FROM regole WHERE id = ? AND attiva = 1", (corpo.regola_id,)
+        "SELECT tipo, parametri FROM regole WHERE id = ? AND attiva = 1", (corpo.regola_id,)
     ).fetchone()
     if regola is None or regola["tipo"] != "vita_reale":
         raise HTTPException(status_code=409, detail={"errore": "regola_non_valida"})
+    # (v2.1) l'arbitro si congela sulla dichiarazione: il verdetto "per conto di"
+    # citera' l'arbitro di adesso anche se la regola cambia arbitro dopo.
+    arbitro_nome = json.loads(regola["parametri"]).get("arbitro_nome", "arbitro")
 
+    oggi = clock.now().astimezone(fuso_patto()).date()
     if corpo.giorno is None:
-        giorno = clock.now().astimezone(fuso_patto()).date().isoformat()
-    elif clock.giorno_valido(corpo.giorno):
-        giorno = corpo.giorno
-    else:
+        giorno = oggi.isoformat()
+    elif not clock.giorno_valido(corpo.giorno):
         raise HTTPException(status_code=422, detail="giorno non valido")
+    else:
+        giorno = corpo.giorno
+
+    # (v2.1) giorno entro [oggi-7g, oggi] nel fuso del patto: niente dichiarazioni
+    # nel futuro ne' piu' vecchie di una settimana.
+    if not (oggi - timedelta(days=7) <= date.fromisoformat(giorno) <= oggi):
+        raise HTTPException(status_code=409, detail={"errore": "giorno_non_valido"})
 
     gia = conn.execute(
         "SELECT 1 FROM dichiarazioni WHERE regola_id = ? AND giorno = ?",
@@ -98,26 +108,33 @@ def crea_dichiarazione(
     # Fallimento: creduto sulla parola -> registrata. Successo: serve il verdetto.
     stato = "registrata" if corpo.esito == "fallimento" else "in_attesa"
     ts = clock.iso(clock.now())
-    cursore = conn.execute(
-        "INSERT INTO dichiarazioni (regola_id, giorno, esito, nota, stato, ts_server)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
-        (corpo.regola_id, giorno, corpo.esito, corpo.nota, stato, ts),
-    )
-    dichiarazione_id = cursore.lastrowid
-    accoda_notifica(
-        conn,
-        "dichiarazione",
-        f"Dichiarazione del figlio: {corpo.esito} ({giorno})",
-        {
-            "dichiarazione_id": dichiarazione_id,
-            "regola_id": corpo.regola_id,
-            "esito": corpo.esito,
-            "giorno": giorno,
-        },
-        ts,
-        destinatario="genitore",
-    )
-    conn.commit()
+    try:
+        cursore = conn.execute(
+            "INSERT INTO dichiarazioni"
+            " (regola_id, giorno, esito, nota, arbitro_nome, stato, ts_server)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (corpo.regola_id, giorno, corpo.esito, corpo.nota, arbitro_nome, stato, ts),
+        )
+        dichiarazione_id = cursore.lastrowid
+        accoda_notifica(
+            conn,
+            "dichiarazione",
+            f"Dichiarazione del figlio: {corpo.esito} ({giorno})",
+            {
+                "dichiarazione_id": dichiarazione_id,
+                "regola_id": corpo.regola_id,
+                "esito": corpo.esito,
+                "giorno": giorno,
+            },
+            ts,
+            destinatario="genitore",
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        # L'indice UNIQUE (regola_id, giorno) e' l'autorita' sotto concorrenza: due
+        # POST simultanei superano entrambi la SELECT ma solo uno riesce a inserire.
+        conn.rollback()
+        raise HTTPException(status_code=409, detail={"errore": "gia_dichiarato"})
     return formatta_dichiarazione(_dichiarazione_o_404(conn, dichiarazione_id))
 
 
@@ -142,10 +159,17 @@ def emetti_verdetto(
     if dichiarazione["stato"] != "in_attesa":
         raise HTTPException(status_code=409, detail={"errore": "dichiarazione_non_in_attesa"})
 
-    regola = conn.execute(
-        "SELECT parametri FROM regole WHERE id = ?", (dichiarazione["regola_id"],)
-    ).fetchone()
-    arbitro_nome = json.loads(regola["parametri"]).get("arbitro_nome", "arbitro")
+    # (v2.1) l'arbitro e' quello CONGELATO sulla dichiarazione, non quello attuale
+    # della regola: la frase del registro cita chi era l'arbitro quando il figlio
+    # dichiaro'. Le righe vecchie (senza congelamento) ricadono sull'arbitro corrente.
+    arbitro_nome = dichiarazione["arbitro_nome"]
+    if arbitro_nome is None:
+        regola = conn.execute(
+            "SELECT parametri FROM regole WHERE id = ?", (dichiarazione["regola_id"],)
+        ).fetchone()
+        arbitro_nome = (
+            json.loads(regola["parametri"]).get("arbitro_nome", "arbitro") if regola else "arbitro"
+        )
     registro = _frase_registro(corpo.verdetto, arbitro_nome)
 
     ts = clock.iso(clock.now())

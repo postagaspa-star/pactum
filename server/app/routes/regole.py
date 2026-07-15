@@ -59,8 +59,18 @@ def _controlla_lock(riga: sqlite3.Row, ora: datetime) -> None:
         )
 
 
-def _consuma_proposta(conn: sqlite3.Connection, proposta_id: int, regola_id: int) -> None:
-    """Una modifica e' concordata solo se nasce da una proposta accettata e mai usata."""
+# Marcatore dei parametri_proposti per una proposta di ELIMINAZIONE (db.py):
+# il DELETE concordato vale solo se la proposta accettata dice esattamente questo.
+MARCATORE_ELIMINA = {"azione": "elimina"}
+
+
+def _consuma_proposta(
+    conn: sqlite3.Connection, proposta_id: int, regola_id: int, parametri_attesi: dict
+) -> None:
+    """Una modifica e' concordata solo se nasce da una proposta accettata e mai usata,
+    e applica ESATTAMENTE i parametri concordati: il proposta_id sblocca il lock dei
+    4 giorni solo per quei parametri, non per quello che il client decide di mandare.
+    Parametri diversi -> 409 parametri_non_concordati e la proposta NON si consuma."""
     riga = conn.execute("SELECT * FROM proposte WHERE id = ?", (proposta_id,)).fetchone()
     if (
         riga is None
@@ -69,6 +79,9 @@ def _consuma_proposta(conn: sqlite3.Connection, proposta_id: int, regola_id: int
         or riga["usata"]
     ):
         raise HTTPException(status_code=400, detail={"errore": "proposta_non_valida"})
+    proposti = json.loads(riga["parametri_proposti"]) if riga["parametri_proposti"] else None
+    if proposti != parametri_attesi:
+        raise HTTPException(status_code=409, detail={"errore": "parametri_non_concordati"})
     conn.execute("UPDATE proposte SET usata = 1 WHERE id = ?", (proposta_id,))
 
 
@@ -119,14 +132,16 @@ def modifica_regola(
     parametri_dopo = _valida_o_422(riga["tipo"], corpo.parametri)
     ora = clock.now()
 
+    # La proposta serve SOLO a scavalcare il lock di un allentamento:
+    # su una stretta (gia' immediata) il proposta_id si ignora e non si consuma.
     concordata = False
-    if corpo.proposta_id is not None:
-        _consuma_proposta(conn, corpo.proposta_id, regola_id)
-        concordata = True
-
     e_allentamento = lock.allenta(riga["tipo"], parametri_prima, parametri_dopo)
-    if e_allentamento and not concordata:
-        _controlla_lock(riga, ora)
+    if e_allentamento:
+        if corpo.proposta_id is not None:
+            _consuma_proposta(conn, corpo.proposta_id, regola_id, parametri_dopo)
+            concordata = True
+        else:
+            _controlla_lock(riga, ora)
 
     ts = clock.iso(ora)
     direzione = "allenta" if e_allentamento else "stringe"
@@ -172,7 +187,9 @@ def elimina_regola(
     ora = clock.now()
     concordata = False
     if proposta_id is not None:
-        _consuma_proposta(conn, proposta_id, regola_id)
+        # L'eliminazione concordata vale solo se la proposta accettata era
+        # proprio un'eliminazione (marcatore {"azione": "elimina"}, db.py).
+        _consuma_proposta(conn, proposta_id, regola_id, MARCATORE_ELIMINA)
         concordata = True
     if not concordata:
         _controlla_lock(riga, ora)  # eliminare = sempre allentare

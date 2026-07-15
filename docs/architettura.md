@@ -63,12 +63,14 @@ Pactum/
 
 | # | Tappa | Contenuto | Stato |
 |---|-------|-----------|-------|
-| 1 | Fondamenta | repo, docs, scheletri | in corso (14/07) |
-| 2 | Il cuore | app figlio misura uso + prima regola + registro locale | in corso (14/07) |
-| 3 | Il postino | heartbeat, registro remoto, rilevamento silenzio | server v1 in corso |
+| 1 | Fondamenta | repo, docs, scheletri | ✅ fatta (14/07) |
+| 2 | Il cuore | app figlio misura uso + registro locale + battiti | ✅ costruita e compilata (APK debug ~10,7 MB, 14/07) — da collaudare su telefono |
+| 3 | Il postino | heartbeat, registro remoto, rilevamento silenzio | server v1 pronto (118 test verdi) — da deployare sul NAS; collaudo end-to-end da fare |
 | 4 | Il binocolo | app genitore: finestra + notifiche push | — |
-| 5 | Il patto completo | tutti i tipi di regole, lock asimmetrico, bonus, proposte con confronto, arbitro | logica server in corso |
-| 6 | La corazza | anti-manomissione completa, firma APK, pagina download, self-update | — |
+| 5 | Il patto completo | tutti i tipi di regole, lock asimmetrico, bonus, proposte con confronto, arbitro | logica server pronta (lock, bonus, finestra); endpoint proposte e arbitro da fare; UI regole nell'app da fare |
+| 6 | La corazza | anti-manomissione completa, firma APK, pagina download, self-update | rilevamento locale fatto (orologio, riavvii, shutdown); firma/download/self-update da fare |
+
+Nota di build (14/07): toolchain = JBR di Android Studio (`C:\Program Files\Android\Android Studio\jbr`, OpenJDK 21) + SDK in `%LOCALAPPDATA%\Android\Sdk`; `gradlew.bat assembleDebug` con `JAVA_HOME` puntato al JBR. Prima build verde al primo colpo. Nota Doze: il canale primario dei battiti è il FGS (il worker WorkManager è misuratore + backstop) — deciso dopo revisione, per evitare falsi "silente" notturni.
 
 ## Convenzioni
 - Termini di dominio in italiano nel codice (regola, sforamento, bonus, patto, finestra, arbitro); plumbing tecnico in inglese.

@@ -4,11 +4,11 @@ le regole eliminate diventano attiva=0."""
 
 import json
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Request
 
-from . import clock
+from . import clock, config
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS patto (
@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS storico_modifiche (
 -- Stub: il flusso completo delle proposte arriva alla tappa 5.
 -- Serve gia' adesso perche' concordata=true e' legittimo solo se nasce
 -- da una proposta accettata, mai da un campo libero del client.
+-- parametri_proposti (JSON) sono i parametri ESATTI concordati: la modifica
+-- concordata li applica tali e quali (il figlio non puo' cambiarli al volo).
+-- Per una proposta di ELIMINAZIONE il valore e' il marcatore {"azione": "elimina"}
+-- (gli endpoint che creano le proposte arrivano alla tappa 5).
 CREATE TABLE IF NOT EXISTS proposte (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     regola_id INTEGER NOT NULL REFERENCES regole(id),
@@ -59,13 +63,15 @@ CREATE TABLE IF NOT EXISTS eventi (
 
 -- uso_giornaliero e' una fotografia CUMULATIVA del giorno (contratto-api.md):
 -- il registro eventi conserva ogni fotografia ricevuta, ma la verita' sull'uso
--- di un giorno e' SOLO l'ultima ricevuta per quel giorno, custodita qui
--- (vince l'ultima: una nuova fotografia sostituisce la riga del suo giorno).
+-- di un giorno e' custodita qui ed e' MONOTONA su totale_minuti: una fotografia
+-- sostituisce la vigente solo se il suo totale non regredisce (una consegna in
+-- ritardo di una fotografia piu' vecchia/bassa non cancella quella piu' alta).
 CREATE TABLE IF NOT EXISTS uso_giornaliero (
     giorno TEXT PRIMARY KEY,
     dettagli TEXT NOT NULL,
     evento_id TEXT NOT NULL REFERENCES eventi(id),
-    ts_server TEXT NOT NULL
+    ts_server TEXT NOT NULL,
+    totale_minuti INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS battiti (
@@ -104,10 +110,20 @@ def connetti(db_path: str) -> sqlite3.Connection:
     return conn
 
 
+def _migra(conn: sqlite3.Connection) -> None:
+    """Micro-migrazioni per database creati con schemi precedenti."""
+    colonne = {r[1] for r in conn.execute("PRAGMA table_info(uso_giornaliero)")}
+    if "totale_minuti" not in colonne:
+        conn.execute(
+            "ALTER TABLE uso_giornaliero ADD COLUMN totale_minuti INTEGER NOT NULL DEFAULT 0"
+        )
+
+
 def init_db(db_path: str, tetto_giorno: int, tetto_settimana: int) -> None:
     conn = connetti(db_path)
     try:
         conn.executescript(SCHEMA)
+        _migra(conn)
         conn.execute(
             "INSERT OR IGNORE INTO patto (chiave, valore) VALUES ('tetto_bonus_giorno', ?)",
             (str(tetto_giorno),),
@@ -170,11 +186,16 @@ def registra_modifica(
 
 
 def stato_bonus(conn: sqlite3.Connection, ora: datetime) -> dict:
-    """Contatori bonus del giorno (UTC) e della settimana ISO (lunedi'-domenica, UTC)."""
+    """Contatori bonus del giorno e della settimana ISO (lunedi'-domenica).
+    I confini dei bucket sono nel fuso del patto (config.fuso_patto);
+    il confronto avviene sui ts_server UTC."""
     tetto_giorno = int(valore_patto(conn, "tetto_bonus_giorno"))
     tetto_settimana = int(valore_patto(conn, "tetto_bonus_settimana"))
-    inizio_giorno = ora.replace(hour=0, minute=0, second=0, microsecond=0)
-    inizio_settimana = inizio_giorno - timedelta(days=ora.weekday())
+    ora_locale = ora.astimezone(config.fuso_patto())
+    inizio_giorno_locale = ora_locale.replace(hour=0, minute=0, second=0, microsecond=0)
+    inizio_settimana_locale = inizio_giorno_locale - timedelta(days=ora_locale.weekday())
+    inizio_giorno = inizio_giorno_locale.astimezone(timezone.utc)
+    inizio_settimana = inizio_settimana_locale.astimezone(timezone.utc)
 
     def usati_da(inizio: datetime) -> int:
         riga = conn.execute(

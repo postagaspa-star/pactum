@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 VERSIONE = "0.1.0"
 
@@ -7,6 +8,15 @@ LOCK_GIORNI = 4
 SOGLIA_SILENZIO_MINUTI = 45
 TETTO_BONUS_GIORNO_DEFAULT = 30
 TETTO_BONUS_SETTIMANA_DEFAULT = 90
+TIMEZONE_DEFAULT = "Europe/Rome"
+
+
+def fuso_patto() -> ZoneInfo:
+    """Il fuso del patto: i bucket giorno/settimana (tetti bonus, semaforo della
+    finestra) si contano nel giorno LOCALE della famiglia, non in UTC — altrimenti
+    il tetto giornaliero di un ragazzo italiano si azzererebbe alle 02:00 locali.
+    I timestamp restano UTC ISO: il fuso serve solo a decidere i confini dei giorni."""
+    return ZoneInfo(os.environ.get("PACTUM_TIMEZONE", TIMEZONE_DEFAULT))
 
 
 @dataclass(frozen=True)

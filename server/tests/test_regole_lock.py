@@ -192,11 +192,83 @@ def test_proposta_usabile_una_sola_volta(client, db_path):
 def test_eliminazione_concordata_scavalca_il_lock(client, db_path):
     crea_regola(client)
     regola = crea_regola(client, parametri=_limite(120, app="YouTube"))
-    proposta_id = inserisci_proposta(db_path, regola["id"], parametri=None)
+    # una proposta di eliminazione porta il marcatore {"azione": "elimina"} (db.py)
+    proposta_id = inserisci_proposta(db_path, regola["id"], parametri={"azione": "elimina"})
     risposta = client.delete(
         f"/api/regole/{regola['id']}?proposta_id={proposta_id}", headers=FIGLIO
     )
     assert risposta.status_code == 200
+
+
+def test_eliminazione_con_proposta_di_modifica_non_vale(client, db_path):
+    """Una proposta accettata di MODIFICA non autorizza un'eliminazione:
+    serve il marcatore {"azione": "elimina"}. E la proposta non si brucia."""
+    crea_regola(client)
+    regola = crea_regola(client, parametri=_limite(120, app="YouTube"))
+    proposta_id = inserisci_proposta(db_path, regola["id"], parametri=_limite(240, app="YouTube"))
+    risposta = client.delete(
+        f"/api/regole/{regola['id']}?proposta_id={proposta_id}", headers=FIGLIO
+    )
+    assert risposta.status_code == 409
+    assert risposta.json()["detail"]["errore"] == "parametri_non_concordati"
+    # la regola e' ancora viva e la proposta resta spendibile per il SUO scopo
+    risposta = _patch(client, regola["id"], _limite(240, app="YouTube"), proposta_id=proposta_id)
+    assert risposta.status_code == 200
+
+
+def test_eliminazione_con_proposta_senza_parametri_non_vale(client, db_path):
+    crea_regola(client)
+    regola = crea_regola(client, parametri=_limite(120, app="YouTube"))
+    proposta_id = inserisci_proposta(db_path, regola["id"], parametri=None)
+    risposta = client.delete(
+        f"/api/regole/{regola['id']}?proposta_id={proposta_id}", headers=FIGLIO
+    )
+    assert risposta.status_code == 409
+    assert risposta.json()["detail"]["errore"] == "parametri_non_concordati"
+
+
+# --- concordata = ESATTAMENTE i parametri della proposta ---
+
+def test_proposta_applica_solo_i_parametri_concordati(client, db_path):
+    """Il genitore ha accettato 90 minuti: il proposta_id non e' un lasciapassare
+    per applicare 1440. Parametri diversi -> 409 e la proposta NON si consuma."""
+    regola = crea_regola(client, parametri=_limite(60))
+    proposta_id = inserisci_proposta(db_path, regola["id"], parametri=_limite(90))
+    risposta = _patch(client, regola["id"], _limite(1440), proposta_id=proposta_id)
+    assert risposta.status_code == 409
+    assert risposta.json()["detail"]["errore"] == "parametri_non_concordati"
+    # la regola non e' cambiata e non c'e' traccia nello storico
+    regole = client.get("/api/regole", headers=FIGLIO).json()["regole"]
+    assert regole[0]["parametri"]["minuti_al_giorno"] == 60
+    storico = client.get("/api/finestra", headers=GENITORE).json()["storico_modifiche"]
+    assert [s["azione"] for s in storico] == ["creazione"]
+    # la proposta non e' bruciata: coi parametri concordati passa
+    risposta = _patch(client, regola["id"], _limite(90), proposta_id=proposta_id)
+    assert risposta.status_code == 200
+    assert risposta.json()["parametri"]["minuti_al_giorno"] == 90
+
+
+# --- una stretta ignora la proposta: niente consumo, niente concordata ---
+
+def test_stringere_ignora_la_proposta(client, db_path):
+    """La proposta serve solo a scavalcare il lock di un allentamento: su una
+    stretta (gia' immediata) va ignorata, non consumata ne' registrata concordata."""
+    regola = crea_regola(client, parametri=_limite(60))
+    proposta_id = inserisci_proposta(db_path, regola["id"], parametri=_limite(120))
+    risposta = _patch(client, regola["id"], _limite(30), proposta_id=proposta_id)
+    assert risposta.status_code == 200
+    storico = client.get("/api/finestra", headers=GENITORE).json()["storico_modifiche"]
+    assert storico[0]["direzione"] == "stringe"
+    assert storico[0]["concordata"] is False  # non era una modifica concordata
+    # la proposta e' intatta: resta spendibile per l'allentamento concordato
+    risposta = _patch(client, regola["id"], _limite(120), proposta_id=proposta_id)
+    assert risposta.status_code == 200
+    assert risposta.json()["parametri"]["minuti_al_giorno"] == 120
+
+
+def test_stringere_con_proposta_inesistente_passa_comunque(client):
+    regola = crea_regola(client, parametri=_limite(60))
+    assert _patch(client, regola["id"], _limite(30), proposta_id=999).status_code == 200
 
 
 def test_concordata_non_impostabile_dal_corpo(client):

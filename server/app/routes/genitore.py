@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import clock
 from ..auth import richiede_genitore
-from ..config import SOGLIA_SILENZIO_MINUTI
+from ..config import SOGLIA_SILENZIO_MINUTI, fuso_patto
 from ..db import get_conn, stato_bonus
 from .regole import _riga_regola
 
@@ -43,46 +43,65 @@ def _stato_silenzio(conn: sqlite3.Connection, ora: datetime) -> dict:
     }
 
 
+def _data_locale(ts_server: str, tz) -> str:
+    """Il giorno LOCALE (fuso del patto) di un ts_server UTC ISO."""
+    return datetime.fromisoformat(ts_server).astimezone(tz).date().isoformat()
+
+
 @router.get("/finestra")
 def finestra(conn: sqlite3.Connection = Depends(get_conn)):
     ora = clock.now()
-    oggi = ora.date()
+    tz = fuso_patto()
+    # I giorni della finestra sono giorni LOCALI del patto (contratto-api.md):
+    # in UTC il confine cadrebbe alle 02:00 locali italiane.
+    oggi = ora.astimezone(tz).date()
     giorni = [oggi - timedelta(days=n) for n in range(GIORNI_SEMAFORO, -1, -1)]
 
     eventi = conn.execute(
-        "SELECT * FROM eventi WHERE tipo IN ('sforamento', 'manomissione', 'bonus_usato')"
+        "SELECT * FROM eventi WHERE tipo IN ('sforamento', 'manomissione')"
         " ORDER BY ts_server DESC, id DESC"
     ).fetchall()
 
-    sforamenti_per_regola = defaultdict(set)  # regola_id -> {data ISO}
-    bonus_per_regola = defaultdict(set)
+    sforamenti_per_regola = defaultdict(set)  # regola_id -> {data ISO locale}
     for evento in eventi:
         dettagli = json.loads(evento["dettagli"])
         regola_id = dettagli.get("regola_id")
         if regola_id is None:
             continue
-        data = evento["ts_server"][:10]
         if evento["tipo"] == "sforamento":
-            sforamenti_per_regola[regola_id].add(data)
-        elif evento["tipo"] == "bonus_usato":
-            bonus_per_regola[regola_id].add(data)
+            sforamenti_per_regola[regola_id].add(_data_locale(evento["ts_server"], tz))
 
+    # Semaforo a tre colori: verde/rosso/grigio. Il giallo non esiste piu':
+    # il bonus autoritativo vive nella tabella bonus (senza regola_id) e viene
+    # riassunto per giorno in bonus_giornalieri, non appeso a una regola.
     regole = []
     for riga in conn.execute("SELECT * FROM regole ORDER BY id").fetchall():
-        creata = riga["creata_ts"][:10]
+        creata = _data_locale(riga["creata_ts"], tz)
+        eliminata = None
+        if not riga["attiva"]:
+            # Soft-delete: i giorni STRETTAMENTE successivi all'eliminazione
+            # sono fuori dalla vita della regola -> grigio, non verde.
+            eliminata = _data_locale(riga["ultima_modifica_ts"], tz)
         semaforo = []
         for giorno in giorni:
             data = giorno.isoformat()
-            if data < creata:
+            if data < creata or (eliminata is not None and data > eliminata):
                 stato = "grigio"
             elif data in sforamenti_per_regola[riga["id"]]:
                 stato = "rosso"
-            elif data in bonus_per_regola[riga["id"]]:
-                stato = "giallo"
             else:
                 stato = "verde"
             semaforo.append({"data": data, "stato": stato})
         regole.append({**_riga_regola(riga), "semaforo": semaforo})
+
+    # Riepilogo bonus per giorno (globale, stessa finestra di 8 giorni):
+    # dalla tabella bonus autoritativa, coi giorni nel fuso del patto.
+    minuti_per_giorno = defaultdict(int)
+    for riga in conn.execute("SELECT minuti, ts_server FROM bonus").fetchall():
+        minuti_per_giorno[_data_locale(riga["ts_server"], tz)] += riga["minuti"]
+    bonus_giornalieri = [
+        {"giorno": g.isoformat(), "minuti": minuti_per_giorno[g.isoformat()]} for g in giorni
+    ]
 
     storico = [
         {
@@ -110,6 +129,7 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         ][:RECENTI],
         "storico_modifiche": storico,
         "bonus": stato_bonus(conn, ora),
+        "bonus_giornalieri": bonus_giornalieri,
         "stato_silenzio": _stato_silenzio(conn, ora),
     }
 

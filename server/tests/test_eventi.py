@@ -1,7 +1,8 @@
 """Batch di eventi (contratto-api.md): corpo {"eventi": [...]}, ts_server
 assegnato dal server, ts_device epoch in millisecondi informativo, idempotenza
 sull'id generato dal client, notifiche solo per sforamenti e manomissioni nuovi,
-uso_giornaliero = fotografia cumulativa (vince l'ultima ricevuta per giorno)."""
+uso_giornaliero = fotografia cumulativa (la vigente e' monotona su totale_minuti:
+una fotografia in ritardo con totale piu' basso non regredisce quella vigente)."""
 
 import json
 import sqlite3
@@ -133,7 +134,7 @@ def test_ts_server_fa_fede_e_ts_device_resta_informativo(client):
     assert sforamento["ts_device"] == 915148800000
 
 
-# --- uso_giornaliero: fotografia cumulativa, vince l'ultima ricevuta per giorno ---
+# --- uso_giornaliero: fotografia cumulativa, la vigente e' monotona sul totale ---
 
 def _foto(evento_id, giorno, totale, uso=None):
     return {
@@ -148,13 +149,56 @@ def _foto(evento_id, giorno, totale, uso=None):
     }
 
 
-def test_uso_giornaliero_ultima_fotografia_vince(client, db_path):
+def test_uso_giornaliero_fotografia_piu_alta_vince(client, db_path):
     _posta(client, [_foto("foto-1", "2026-07-14", 30)])
     _posta(client, [_foto("foto-2", "2026-07-14", 137)])
     vigente = _uso_giornaliero(db_path)
     assert list(vigente.keys()) == ["2026-07-14"]
     assert vigente["2026-07-14"]["evento_id"] == "foto-2"
     assert vigente["2026-07-14"]["dettagli"]["totale_minuti"] == 137
+
+
+def test_uso_giornaliero_fotografia_in_ritardo_non_regredisce(client, db_path):
+    """Consegna fuori ordine: la 137 arriva prima, poi (in ritardo) una vecchia
+    fotografia da 30 con id NUOVO. La vigente resta 137: e' monotona sul totale."""
+    _posta(client, [_foto("foto-alta", "2026-07-14", 137)])
+    risposta = _posta(client, [_foto("foto-bassa-in-ritardo", "2026-07-14", 30)])
+    assert risposta.json()["nuovi"] == 1  # il registro la conserva comunque
+    vigente = _uso_giornaliero(db_path)
+    assert vigente["2026-07-14"]["evento_id"] == "foto-alta"
+    assert vigente["2026-07-14"]["dettagli"]["totale_minuti"] == 137
+
+
+def test_uso_giornaliero_a_parita_di_totale_vince_la_piu_recente(client, db_path):
+    _posta(client, [_foto("foto-a", "2026-07-14", 137)])
+    _posta(client, [_foto("foto-b", "2026-07-14", 137)])
+    assert _uso_giornaliero(db_path)["2026-07-14"]["evento_id"] == "foto-b"
+
+
+def test_uso_giornaliero_totale_invalido_vale_zero(client, db_path):
+    # totale non numerico: la fotografia vale 0 e non scalza una vigente vera...
+    _posta(client, [_foto("foto-vera", "2026-07-14", 10)])
+    _posta(
+        client,
+        [{
+            "id": "foto-sballata",
+            "tipo": "uso_giornaliero",
+            "dettagli": {"giorno": "2026-07-14", "totale_minuti": "tanti"},
+        }],
+    )
+    assert _uso_giornaliero(db_path)["2026-07-14"]["evento_id"] == "foto-vera"
+    # ...ma per un giorno nuovo la fotografia (con totale 0) si indicizza comunque
+    _posta(
+        client,
+        [{
+            "id": "foto-senza-totale",
+            "tipo": "uso_giornaliero",
+            "dettagli": {"giorno": "2026-07-15", "uso_minuti": {}},
+        }],
+    )
+    assert _uso_giornaliero(db_path)["2026-07-15"]["evento_id"] == "foto-senza-totale"
+    _posta(client, [_foto("foto-15", "2026-07-15", 3)])  # 3 >= 0: sostituisce
+    assert _uso_giornaliero(db_path)["2026-07-15"]["evento_id"] == "foto-15"
 
 
 def test_uso_giornaliero_giorni_diversi_convivono(client, db_path):
@@ -195,6 +239,29 @@ def test_uso_giornaliero_senza_giorno_resta_nel_registro(client, db_path):
     )
     assert risposta.json()["nuovi"] == 1
     assert _uso_giornaliero(db_path) == {}  # niente giorno, niente fotografia vigente
+
+
+def test_uso_giornaliero_giorno_non_valido_resta_nel_registro(client, db_path):
+    """Il giorno deve essere una data reale YYYY-MM-DD: tutto il resto non
+    indicizza la vigente (ma il registro conserva l'evento cosi' com'e')."""
+    cattivi = ["14/07/2026", "2026-13-01", "2026-02-30", "2026-7-4", "oggi", "2026-07-14T00", 12345]
+    for n, giorno in enumerate(cattivi):
+        risposta = _posta(
+            client,
+            [{
+                "id": f"foto-cattiva-{n}",
+                "tipo": "uso_giornaliero",
+                "dettagli": {"giorno": giorno, "totale_minuti": 5},
+            }],
+        )
+        assert risposta.json()["nuovi"] == 1, giorno
+    assert _uso_giornaliero(db_path) == {}
+    conn = sqlite3.connect(db_path)
+    quante = conn.execute(
+        "SELECT COUNT(*) FROM eventi WHERE tipo = 'uso_giornaliero'"
+    ).fetchone()[0]
+    conn.close()
+    assert quante == len(cattivi)  # il registro non giudica, conserva
 
 
 def test_uso_giornaliero_non_notifica(client):

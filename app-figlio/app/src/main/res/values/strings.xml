@@ -209,4 +209,12 @@
     <string name="tipo_nuova_proposta">Nuova proposta del genitore</string>
     <string name="tipo_verdetto">Verdetto sulla tua dichiarazione</string>
     <string name="tipo_novita">Novità dal patto</string>
+
+    <!-- Manomissioni per revoca permessi (tappa 6) -->
+    <string name="notifica_permesso_revocato_titolo">Il testimone è cieco</string>
+    <string name="notifica_permesso_revocato_testo">L\'accesso ai dati di utilizzo è stato tolto: Pactum non può più misurare l\'uso delle app. Il genitore lo vede. Riattivalo dalle impostazioni per rimettere a posto il patto.</string>
+
+    <!-- Auto-aggiornamento (tappa 6) -->
+    <string name="notifica_aggiornamento_titolo">Aggiornamento pronto</string>
+    <string name="notifica_aggiornamento_testo">C\'è una versione nuova di Pactum. Tocca per installarla.</string>
 </resources>

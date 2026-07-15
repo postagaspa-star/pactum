@@ -1,7 +1,9 @@
 package eu.stgm.pactum.figlio.dati
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -38,6 +40,16 @@ class Impostazioni(private val context: Context) {
         // Tappa 5.
         val SFORAMENTI_SEGNALATI = stringSetPreferencesKey("sforamenti_segnalati")
         val NOTIFICHE_AVVISATE = stringSetPreferencesKey("notifiche_avvisate")
+
+        // Tappa 6 — corazza.
+        // Ultimo stato NOTO dei permessi (null = mai osservato): serve a
+        // rilevare la REVOCA come transizione (concesso→revocato), non come
+        // stato istantaneo, così l'evento manomissione nasce una volta sola.
+        val ACCESSO_USO_NOTO = booleanPreferencesKey("accesso_uso_noto")
+        val NOTIFICHE_NOTE = booleanPreferencesKey("notifiche_note")
+        // L'ultimo versionCode per cui è già stato tentato l'auto-aggiornamento:
+        // evita di riscaricare l'APK e ripresentare il dialogo a ogni giro.
+        val VERSIONE_TENTATA = intPreferencesKey("versione_tentata")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -56,6 +68,10 @@ class Impostazioni(private val context: Context) {
             if (p[Chiavi.SERVER_URL] != urlNuovo || p[Chiavi.TOKEN] != tokenNuovo) {
                 p.remove(Chiavi.SFORAMENTI_SEGNALATI)
                 p.remove(Chiavi.NOTIFICHE_AVVISATE)
+                // Nuovo patto = nuova base dei permessi: senza azzerare, una revoca
+                // già in corso verrebbe rimandata come manomissione al server nuovo.
+                p.remove(Chiavi.ACCESSO_USO_NOTO)
+                p.remove(Chiavi.NOTIFICHE_NOTE)
             }
             p[Chiavi.SERVER_URL] = urlNuovo
             p[Chiavi.TOKEN] = tokenNuovo
@@ -152,6 +168,34 @@ class Impostazioni(private val context: Context) {
                 .map { it.toString() }
                 .toSet()
         }
+    }
+
+    // --- Stato noto dei permessi (tappa 6, rilevamento revoca) --------------
+    // null = mai osservato: la prima osservazione fissa solo la base, senza
+    // emettere manomissioni (un permesso già assente all'inizio non è una revoca).
+
+    suspend fun leggiAccessoUsoNoto(): Boolean? =
+        context.dataStore.data.first()[Chiavi.ACCESSO_USO_NOTO]
+
+    suspend fun registraAccessoUsoNoto(concesso: Boolean) {
+        context.dataStore.edit { p -> p[Chiavi.ACCESSO_USO_NOTO] = concesso }
+    }
+
+    suspend fun leggiNotificheNote(): Boolean? =
+        context.dataStore.data.first()[Chiavi.NOTIFICHE_NOTE]
+
+    suspend fun registraNotificheNote(attive: Boolean) {
+        context.dataStore.edit { p -> p[Chiavi.NOTIFICHE_NOTE] = attive }
+    }
+
+    // --- Auto-aggiornamento (tappa 6) ---------------------------------------
+
+    /** L'ultimo versionCode per cui l'installazione è già stata tentata (0 = nessuno). */
+    suspend fun leggiVersioneTentata(): Int =
+        context.dataStore.data.first()[Chiavi.VERSIONE_TENTATA] ?: 0
+
+    suspend fun registraVersioneTentata(versioneCode: Int) {
+        context.dataStore.edit { p -> p[Chiavi.VERSIONE_TENTATA] = versioneCode }
     }
 
     private companion object {

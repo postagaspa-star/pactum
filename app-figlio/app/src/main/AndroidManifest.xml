@@ -14,6 +14,10 @@
         android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
         tools:ignore="BatteryLife" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Auto-aggiornamento (tappa 6): installazione dell'APK nuovo via
+         PackageInstaller. In sideload nessuna policy Play si applica; la firma
+         con la stessa chiave e' la garanzia d'integrita' (architettura.md). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Visibilita' pacchetti: serve per mostrare nome delle app misurate.
          Sideload: nessuna policy Play si applica (architettura.md). -->
     <uses-permission
@@ -68,6 +72,13 @@
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- Esito della sessione di PackageInstaller (auto-aggiornamento).
+             Interno: l'invoca solo il PendingIntent della sessione. -->
+        <receiver
+            android:name=".aggiornamento.InstallReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 
 </manifest>

@@ -210,3 +210,23 @@ object TipiVerdetto {
     const val CONFERMA_PER_CONTO = "conferma_per_conto"
     const val RIBALTA = "ribalta"
 }
+
+// --- Versioni e auto-aggiornamento (tappa 6) --------------------------------
+// GET /api/versione (senza auth): l'ultima versione disponibile di ciascuna app.
+// L'app confronta `versione_code` col proprio versionCode e, se il server è più
+// avanti, scarica `url` (relativo al base del server) e lancia PackageInstaller
+// (contratto-api.md, sezione "GET /api/versione").
+
+@Serializable
+data class InfoVersioni(
+    val figlio: InfoApp? = null,
+    val genitore: InfoApp? = null,
+)
+
+@Serializable
+data class InfoApp(
+    @SerialName("versione_code") val versioneCode: Int,
+    @SerialName("versione_nome") val versioneNome: String = "",
+    val url: String = "",
+    val note: String? = null,
+)

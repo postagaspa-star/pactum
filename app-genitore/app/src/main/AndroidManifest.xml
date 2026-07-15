@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Auto-aggiornamento (tappa 6): scarica l'APK nuovo e lancia
+         PackageInstaller. La firma con la stessa chiave e' la garanzia
+         d'integrita' (architettura.md). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".PactumApp"
@@ -31,6 +35,14 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- Esito della sessione PackageInstaller dell'auto-aggiornamento.
+             exported="false": lo invoca solo il sistema via il PendingIntent
+             che gli passiamo noi. -->
+        <receiver
+            android:name=".aggiornamento.AggiornamentoReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 
 </manifest>

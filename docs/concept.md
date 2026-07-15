@@ -49,7 +49,11 @@ Se un giorno una famiglia disinstalla Pactum perché non serve più, Pactum ha v
 - **La notifica della proposta mostra sempre il confronto col valore attuale** (es. "IG a 1h" → "−30 min rispetto ad ora").
 
 ### La finestra del genitore (finestra, non vetrata)
-Il genitore vede **tutto ciò che riguarda il patto**: regole esistenti, semaforo di rispetto, sforamenti, storico modifiche, bonus residui, tentativi di manomissione, silenzi dell'app. **Non vede** il minuto-per-minuto del telefono fuori dalle regole. (Se una regola nomina TikTok, gli sforamenti nominano TikTok: è dentro il patto, quindi dentro la finestra.)
+Il genitore vede **tutto ciò che riguarda il patto**: regole esistenti, semaforo di rispetto, sforamenti, storico modifiche, bonus residui, tentativi di manomissione, silenzi dell'app. (Se una regola nomina TikTok, gli sforamenti nominano TikTok: è dentro il patto, quindi dentro la finestra.)
+
+**Allargamento deciso il 15/07/2026** (richiesta di Andrea su feedback diretto del padre, primo utente genitore): la finestra include anche **i tempi d'uso giornalieri di TUTTE le app** (totale + per app, con l'eventuale limite accanto), non solo di quelle con una regola. È un allargamento consapevole rispetto alla scelta iniziale: restano comunque fuori i contenuti, i messaggi, la posizione e il tempo reale — sono tempi aggregati per giornata, e vedere "2h su TikTok, nessun limite" è materiale per una conversazione, non per una punizione.
+
+**Il digest giornaliero:** il genitore sceglie un'ora e riceve ogni giorno una notifica con il tempo totale del figlio e le prime app (il dettaglio completo nella sezione Tempo dell'app).
 
 ### Anti-manomissione ("il registro è il prodotto")
 Siccome l'app non blocca, tutto il valore sta nella credibilità del registro:

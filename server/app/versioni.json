@@ -1,0 +1,14 @@
+{
+  "figlio": {
+    "versione_code": 2,
+    "versione_nome": "0.2.0",
+    "url": "/scarica/pactum-figlio.apk",
+    "note": "Tappa 6: rilevamento manomissioni completo e auto-aggiornamento."
+  },
+  "genitore": {
+    "versione_code": 2,
+    "versione_nome": "0.2.0",
+    "url": "/scarica/pactum-genitore.apk",
+    "note": "Tappa 6: auto-aggiornamento dal postino."
+  }
+}

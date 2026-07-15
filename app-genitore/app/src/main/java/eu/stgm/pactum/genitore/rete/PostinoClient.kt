@@ -4,6 +4,7 @@ import eu.stgm.pactum.genitore.dati.ConfigurazionePostino
 import eu.stgm.pactum.genitore.dati.CorpoVerdetto
 import eu.stgm.pactum.genitore.dati.Dichiarazione
 import eu.stgm.pactum.genitore.dati.Finestra
+import eu.stgm.pactum.genitore.dati.InfoVersioni
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.NuovaProposta
 import eu.stgm.pactum.genitore.dati.PaccoDichiarazioni
@@ -22,6 +23,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -68,6 +70,44 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         leggi("/api/dichiarazioni")
             ?.let { decodifica(PaccoDichiarazioni.serializer(), it) }
             ?.dichiarazioni
+
+    /**
+     * GET /api/versione (tappa 6): l'ultima versione disponibile delle due app.
+     * Endpoint pubblico (nessun auth), ma passa dal solito `leggi` — l'header
+     * Bearer è innocuo su un endpoint pubblico e ci serve comunque il base URL
+     * configurato per sapere da dove scaricare. null = offline o risposta strana.
+     */
+    suspend fun leggiVersione(): InfoVersioni? =
+        leggi("/api/versione")?.let { decodifica(InfoVersioni.serializer(), it) }
+
+    /**
+     * Scarica l'APK di aggiornamento in [destinazione] (streaming, per non
+     * tenere ~10 MB in memoria). [url] è quello di GET /api/versione: relativo
+     * al base del server (es. `/scarica/pactum-genitore.apk`) o assoluto.
+     * Nessun auth: è il download di un file pubblico; la firma dell'APK (stessa
+     * chiave) è la vera garanzia d'integrità (contratto-api.md). false = fallito.
+     */
+    suspend fun scaricaApk(url: String, destinazione: File): Boolean {
+        if (!configurazione.completa) return false
+        val assoluto = if ("://" in url) url else configurazione.serverUrl + url
+        return withContext(Dispatchers.IO) {
+            try {
+                val richiesta = Request.Builder().url(assoluto).get().build()
+                http.newCall(richiesta).execute().use { risposta ->
+                    val corpo = risposta.body
+                    if (!risposta.isSuccessful || corpo == null) return@use false
+                    destinazione.outputStream().use { uscita ->
+                        corpo.byteStream().copyTo(uscita)
+                    }
+                    true
+                }
+            } catch (e: IOException) {
+                false
+            } catch (e: IllegalArgumentException) {
+                false // URL malformato: non è un motivo per crashare.
+            }
+        }
+    }
 
     /** POST /api/proposte: la proposta creata (col confronto del server) o l'errore. */
     suspend fun creaProposta(nuova: NuovaProposta): EsitoScrittura<Proposta> {

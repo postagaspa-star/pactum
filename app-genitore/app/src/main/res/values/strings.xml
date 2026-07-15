@@ -55,6 +55,8 @@
     <string name="manomissione_cambio_ora">Cambio manuale dell\'ora</string>
     <string name="manomissione_cambio_fuso">Cambio del fuso orario</string>
     <string name="manomissione_silenzio">Silenzio dell\'app</string>
+    <string name="manomissione_permesso_revocato">Permesso di lettura uso revocato</string>
+    <string name="manomissione_notifiche_disattivate">Notifiche di Pactum disattivate sul telefono del figlio</string>
     <string name="manomissione_generica">Manomissione: %1$s</string>
 
     <string name="formato_minuti">%1$d min</string>
@@ -103,6 +105,16 @@
     <string name="azione_salva">Salva</string>
     <string name="azione_annulla">Annulla</string>
     <string name="azione_ok">Va bene</string>
+
+    <!-- Aggiornamenti (tappa 6) -->
+    <string name="impostazioni_aggiornamenti_titolo">Aggiornamenti</string>
+    <string name="impostazioni_versione_attuale">Versione installata: %1$s</string>
+    <string name="impostazioni_controlla_aggiornamenti">Controlla aggiornamenti</string>
+    <string name="aggiornamento_gia_aggiornato">Sei già all\'ultima versione.</string>
+    <string name="aggiornamento_avviato">Nuova versione %1$s: installazione avviata. Conferma quando il sistema te lo chiede.</string>
+    <string name="aggiornamento_config_mancante">Prima salva indirizzo del server e token qui sopra.</string>
+    <string name="aggiornamento_irraggiungibile">Non riesco a raggiungere il server per controllare gli aggiornamenti.</string>
+    <string name="aggiornamento_fallito">Aggiornamento non riuscito: riprova.</string>
 
     <!-- Navigazione (tappa 5) -->
     <string name="scheda_proposte">Proposte</string>

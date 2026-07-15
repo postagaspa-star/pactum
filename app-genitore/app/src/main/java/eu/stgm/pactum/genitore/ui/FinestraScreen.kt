@@ -416,6 +416,9 @@ private fun RigaManomissione(evento: EventoFinestra) {
         "cambio_ora" -> stringResource(R.string.manomissione_cambio_ora)
         "cambio_fuso" -> stringResource(R.string.manomissione_cambio_fuso)
         "silenzio" -> stringResource(R.string.manomissione_silenzio)
+        // Tappa 6: rilevate al giro del worker sul telefono del figlio.
+        "permesso_revocato" -> stringResource(R.string.manomissione_permesso_revocato)
+        "notifiche_disattivate" -> stringResource(R.string.manomissione_notifiche_disattivate)
         else -> stringResource(R.string.manomissione_generica, sottoTipo ?: "?")
     }
     RigaEvento(titolo = titolo, tsServer = evento.tsServer)

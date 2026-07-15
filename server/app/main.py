@@ -7,7 +7,15 @@ from .config import (
     VERSIONE,
     carica_settings,
 )
-from .routes import dichiarazioni, figlio, genitore, notifiche, proposte, regole
+from .routes import (
+    dichiarazioni,
+    distribuzione,
+    figlio,
+    genitore,
+    notifiche,
+    proposte,
+    regole,
+)
 
 
 def create_app() -> FastAPI:
@@ -27,4 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(notifiche.router, prefix="/api")
     app.include_router(figlio.router, prefix="/api")
     app.include_router(genitore.router, prefix="/api")
+    # Distribuzione (tappa 6): /api/versione sotto /api; /scarica alla radice.
+    app.include_router(distribuzione.versione_router, prefix="/api")
+    app.include_router(distribuzione.scarica_router)
     return app

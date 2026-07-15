@@ -20,6 +20,10 @@ __pycache__/
 server/*.db
 .env
 
+# APK release: artefatti di build, consegnati fuori dal repo (server/apk/README.md
+# spiega come). La cartella resta tracciata via .gitkeep e README.
+server/apk/*.apk
+
 # IDE / OS
 .idea/
 .vscode/

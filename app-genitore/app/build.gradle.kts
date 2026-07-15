@@ -1,8 +1,23 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+}
+
+// Firma di release (tappa 6). La chiave di Pactum vive FUORI dal repo e da
+// OneDrive (C:\Users\andre\pactum-keys): mai versionata, la stessa per sempre —
+// è la STESSA chiave dell'app del figlio (un solo keystore per tutto il progetto).
+// Se il file manca (altra macchina, CI), la release resta non firmata ma la
+// build NON si rompe: le build di debug restano intatte ovunque.
+val keystorePropsFile = file("C:/Users/andre/pactum-keys/keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        FileInputStream(keystorePropsFile).use { load(it) }
+    }
 }
 
 android {
@@ -13,13 +28,27 @@ android {
         applicationId = "eu.stgm.pactum.genitore"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+    }
+
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            isDebuggable = false
+            signingConfig =
+                if (keystorePropsFile.exists()) signingConfigs.getByName("release") else null
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

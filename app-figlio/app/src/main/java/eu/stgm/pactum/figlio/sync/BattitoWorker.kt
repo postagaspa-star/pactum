@@ -8,7 +8,10 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.core.app.NotificationManagerCompat
 import eu.stgm.pactum.figlio.BuildConfig
+import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.aggiornamento.Aggiornatore
 import eu.stgm.pactum.figlio.dati.AncoraTempo
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.CodaEventi
@@ -61,6 +64,10 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         val configurazione = impostazioni.leggiConfigurazione()
         if (!configurazione.completa) return Result.success() // patto non ancora configurato
 
+        // Manomissioni per revoca di permessi (tappa 6): rilevate PRIMA di leggere
+        // gli eventi da consegnare, così l'eventuale evento parte in questo giro.
+        rilevaManomissioniPermessi(context, impostazioni, coda)
+
         if (PermessiHelper.haAccessoUso(context)) {
             val oggi = LocalDate.now()
             // Oggi + IERI: l'uso dopo l'ultima run del giorno andrebbe perso
@@ -100,8 +107,60 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         // il giro dopo recupera le arretrate.
         avvisaNovitaDelPatto(context, impostazioni, postino)
 
+        // Auto-aggiornamento (tappa 6): in runCatching come il sync del patto —
+        // un errore di rete o d'installazione non deve saltare l'esito del giro.
+        runCatching {
+            val versioni = postino.leggiVersioni()
+            Aggiornatore(context).controlla(configurazione, versioni?.figlio)
+        }
+
         return if (battitoOk && eventiOk) Result.success() else Result.retry()
     }
+
+    /**
+     * Rileva la REVOCA (dopo l'onboarding) dei due permessi che tengono in piedi
+     * il testimone: l'accesso ai dati di utilizzo e le notifiche. Si confronta lo
+     * stato attuale con l'ultimo NOTO (persistito): l'evento manomissione nasce
+     * solo sulla transizione concesso→revocato, una volta sola. La prima
+     * osservazione fissa solo la base (un permesso già assente non è una revoca).
+     */
+    private suspend fun rilevaManomissioniPermessi(
+        context: Context,
+        impostazioni: Impostazioni,
+        coda: CodaEventi,
+    ) {
+        val adesso = System.currentTimeMillis()
+
+        val usoOra = PermessiHelper.haAccessoUso(context)
+        val usoNoto = impostazioni.leggiAccessoUsoNoto()
+        if (usoNoto == true && !usoOra) {
+            coda.accoda(manomissionePermesso("permesso_revocato", adesso))
+            // Le notifiche sono ancora attive (è l'accesso all'uso a mancare):
+            // un promemoria gentile aiuta a rimettere a posto il patto.
+            AvvisiLocali.avvisa(
+                context,
+                id = AvvisiLocali.ID_MANOMISSIONE_PERMESSO,
+                titolo = context.getString(R.string.notifica_permesso_revocato_titolo),
+                testo = context.getString(R.string.notifica_permesso_revocato_testo),
+            )
+        }
+        if (usoNoto != usoOra) impostazioni.registraAccessoUsoNoto(usoOra)
+
+        val notifOra = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        val notifNote = impostazioni.leggiNotificheNote()
+        if (notifNote == true && !notifOra) {
+            // Niente avviso locale: le notifiche sono spente. L'evento va comunque
+            // al registro e il genitore lo vede nella finestra (difesa fuori dal telefono).
+            coda.accoda(manomissionePermesso("notifiche_disattivate", adesso))
+        }
+        if (notifNote != notifOra) impostazioni.registraNotificheNote(notifOra)
+    }
+
+    private fun manomissionePermesso(sottoTipo: String, adesso: Long): Evento = Evento(
+        tipo = TipiEvento.MANOMISSIONE,
+        tsDevice = adesso,
+        dettagli = buildJsonObject { put("sotto_tipo", sottoTipo) },
+    )
 
     /**
      * Alza una notifica locale per ogni notifica del server mai avvisata prima

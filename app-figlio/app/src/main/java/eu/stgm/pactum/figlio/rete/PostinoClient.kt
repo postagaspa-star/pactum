@@ -7,6 +7,7 @@ import eu.stgm.pactum.figlio.dati.CreaRegolaIn
 import eu.stgm.pactum.figlio.dati.Dichiarazione
 import eu.stgm.pactum.figlio.dati.DichiarazioneIn
 import eu.stgm.pactum.figlio.dati.Evento
+import eu.stgm.pactum.figlio.dati.InfoVersioni
 import eu.stgm.pactum.figlio.dati.ModificaRegolaIn
 import eu.stgm.pactum.figlio.dati.Notifica
 import eu.stgm.pactum.figlio.dati.PaccoDichiarazioni
@@ -27,6 +28,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -76,6 +78,40 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
 
     suspend fun leggiNotifiche(): List<Notifica>? =
         leggi("/api/notifiche")?.let { decodifica(PaccoNotifiche.serializer(), it) }?.notifiche
+
+    /**
+     * GET /api/versione (nessun auth lato server; l'header non dà fastidio):
+     * il metadata delle ultime versioni. null se offline, 404 (server vecchio
+     * senza l'endpoint) o corpo inatteso — in tutti i casi "niente da aggiornare".
+     */
+    suspend fun leggiVersioni(): InfoVersioni? =
+        leggi("/api/versione")?.let { decodifica(InfoVersioni.serializer(), it) }
+
+    /**
+     * Scarica un file (l'APK dell'aggiornamento) da un percorso RELATIVO al
+     * server configurato, in streaming su [destinazione]. Rifiuta i percorsi
+     * assoluti (`http…`): l'aggiornamento arriva SOLO dal server del patto,
+     * mai da un host suggerito dal payload. `true` solo a download completo.
+     */
+    suspend fun scaricaSuFile(percorso: String, destinazione: File): Boolean {
+        if (!configurazione.completa) return false
+        if (!percorso.startsWith("/")) return false
+        return withContext(Dispatchers.IO) {
+            try {
+                val richiesta = richiesta(percorso).get().build()
+                http.newCall(richiesta).execute().use { risposta ->
+                    val corpo = risposta.body
+                    if (!risposta.isSuccessful || corpo == null) return@use false
+                    destinazione.outputStream().use { out -> corpo.byteStream().copyTo(out) }
+                    true
+                }
+            } catch (e: IOException) {
+                false
+            } catch (e: IllegalArgumentException) {
+                false // URL malformato nelle impostazioni: non è un motivo per crashare.
+            }
+        }
+    }
 
     // --- Mutazioni del patto -------------------------------------------------
 

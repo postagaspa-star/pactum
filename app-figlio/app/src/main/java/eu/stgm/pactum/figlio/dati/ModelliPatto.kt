@@ -149,6 +149,25 @@ data class Notifica(
     @SerialName("ts_server") val tsServer: String = "",
 )
 
+/**
+ * GET /api/versione (tappa 6, nessun auth): l'ultima versione disponibile di
+ * ciascuna app. L'app confronta `versioneCode` col proprio BuildConfig.VERSION_CODE
+ * e, se il server è più avanti, scarica `url` (relativo al base del server).
+ */
+@Serializable
+data class InfoVersioni(
+    val figlio: InfoVersione? = null,
+    val genitore: InfoVersione? = null,
+)
+
+@Serializable
+data class InfoVersione(
+    @SerialName("versione_code") val versioneCode: Int = 0,
+    @SerialName("versione_nome") val versioneNome: String = "",
+    val url: String = "",
+    val note: String? = null,
+)
+
 // Buste degli elenchi.
 @Serializable
 data class PaccoProposte(val proposte: List<Proposta> = emptyList())

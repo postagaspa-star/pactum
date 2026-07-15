@@ -21,6 +21,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import eu.stgm.pactum.genitore.MainActivity
 import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.aggiornamento.Aggiornatore
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
@@ -57,6 +58,12 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
 
         avvisaNovitaDelPatto(context, impostazioni, notifiche)
         sorvegliaSilenzio(context, impostazioni, postino)
+
+        // Auto-aggiornamento (tappa 6): best effort, non deve MAI far fallire il
+        // giro della vedetta. Se il server ha una versione più nuova del binocolo,
+        // scarica l'APK e lancia PackageInstaller; il primo update passa dal
+        // dialogo di sistema, i successivi più silenziosi dove Android lo permette.
+        runCatching { Aggiornatore(context).controlla() }
 
         return Result.success()
     }

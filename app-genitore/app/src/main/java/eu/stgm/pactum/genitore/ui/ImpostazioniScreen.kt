@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -30,7 +31,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import eu.stgm.pactum.genitore.BuildConfig
 import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.aggiornamento.Aggiornatore
+import eu.stgm.pactum.genitore.aggiornamento.EsitoAggiornamento
 import eu.stgm.pactum.genitore.dati.ConfigurazionePostino
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.rete.PostinoClient
@@ -50,6 +54,8 @@ fun ImpostazioniScreen() {
     var caricato by rememberSaveable { mutableStateOf(false) }
     var urlNonValido by rememberSaveable { mutableStateOf(false) }
     var provaInCorso by remember { mutableStateOf(false) }
+    var controlloInCorso by remember { mutableStateOf(false) }
+    val aggiornatore = remember { Aggiornatore(context.applicationContext) }
     val ultimaVerifica by impostazioni.ultimaVerificaRiuscita.collectAsState(initial = null)
     val snackbarHostState = remember { SnackbarHostState() }
     val messaggioSalvato = stringResource(R.string.impostazioni_salvate)
@@ -185,6 +191,56 @@ fun ImpostazioniScreen() {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.impostazioni_prova_adesso))
+            }
+
+            // Aggiornamenti (tappa 6): la versione installata e un controllo
+            // manuale. La vedetta lo fa anche da sola a ogni giro; questo è per
+            // chi non vuole aspettare.
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            Text(
+                text = stringResource(R.string.impostazioni_aggiornamenti_titolo),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.impostazioni_versione_attuale,
+                    BuildConfig.VERSION_NAME,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedButton(
+                enabled = !controlloInCorso,
+                onClick = {
+                    ambito.launch {
+                        controlloInCorso = true
+                        try {
+                            val messaggio = when (val esito = aggiornatore.controlla()) {
+                                is EsitoAggiornamento.Avviato -> context.getString(
+                                    R.string.aggiornamento_avviato,
+                                    esito.versioneNome,
+                                )
+
+                                EsitoAggiornamento.GiaAggiornato ->
+                                    context.getString(R.string.aggiornamento_gia_aggiornato)
+
+                                EsitoAggiornamento.ConfigMancante ->
+                                    context.getString(R.string.aggiornamento_config_mancante)
+
+                                EsitoAggiornamento.Irraggiungibile ->
+                                    context.getString(R.string.aggiornamento_irraggiungibile)
+
+                                EsitoAggiornamento.Fallito ->
+                                    context.getString(R.string.aggiornamento_fallito)
+                            }
+                            snackbarHostState.showSnackbar(messaggio)
+                        } finally {
+                            controlloInCorso = false
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.impostazioni_controlla_aggiornamenti))
             }
         }
     }

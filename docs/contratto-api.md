@@ -32,7 +32,7 @@ Batch di eventi del registro.
 - `id`: UUID generato dall'app alla creazione dell'evento — **chiave di idempotenza**: un id già visto non viene reinserito.
 - `tipo` ∈ `uso_giornaliero · riavvio · manomissione · sforamento · bonus_usato · dichiarazione`.
 - `dettagli` per tipo:
-  - **uso_giornaliero** — fotografia cumulativa del giorno: `{ "giorno": "YYYY-MM-DD", "uso_minuti": {package: minuti}, "totale_minuti": n }`. Il `giorno` è il giorno locale del telefono e deve essere una data reale `YYYY-MM-DD` (altrimenti la fotografia resta solo nel registro, senza indicizzare la vigente). La fotografia **vigente** per un `giorno` è **monotona su `totale_minuti`**: una fotografia con `totale_minuti` inferiore a quella vigente non la sovrascrive (protegge da consegne fuori ordine; `totale_minuti` mancante o non valido vale 0). Il registro eventi conserva comunque ogni fotografia ricevuta.
+  - **uso_giornaliero** — fotografia cumulativa del giorno: `{ "giorno": "YYYY-MM-DD", "uso_minuti": {package: minuti}, "totale_minuti": n, "nomi": {package: "TikTok"}, "uso_categorie": {"categoria:social": n} }`. (v2.2) `nomi` = etichette leggibili risolte sul telefono del figlio (il genitore non può risolvere i pacchetti); `uso_categorie` = totali per categoria calcolati dall'app col suo mapping interno — entrambi opzionali per tolleranza evolutiva. Il `giorno` è il giorno locale del telefono e deve essere una data reale `YYYY-MM-DD` (altrimenti la fotografia resta solo nel registro, senza indicizzare la vigente). La fotografia **vigente** per un `giorno` è **monotona su `totale_minuti`**: una fotografia con `totale_minuti` inferiore a quella vigente non la sovrascrive (protegge da consegne fuori ordine; `totale_minuti` mancante o non valido vale 0). Il registro eventi conserva comunque ogni fotografia ricevuta.
   - **riavvio** — `{ }`. Marca l'azzeramento di `elapsed_realtime`; NON è una manomissione.
   - **manomissione** — `{ "sotto_tipo": "cambio_ora" | "cambio_fuso" | "silenzio" | altro, "drift_secondi": n? , "regola_id": n? }`.
   - **sforamento** — `{ "regola_id": n, "limite_efficace"?: n, "minuti_oltre"?: n, ... }` (dettagli liberi in più). Generato **sul telefono** dal valutatore locale (tappa 5): massimo UN sforamento per regola per giorno (fuso del telefono); per le `limite_tempo` il limite efficace del giorno = `minuti_al_giorno` + bonus concessi oggi su quella regola. (v2.1) Per le `fascia_oraria` che scavalcano la mezzanotte l'unità di dedup è **l'occorrenza**, identificata dal giorno di **ancoraggio** (quando la fascia parte): la coda mattutina e la testa serale della stessa notte sono un solo sforamento, non due.
@@ -153,6 +153,13 @@ La finestra: tutto ciò che riguarda il patto in una risposta sola. Risposta `20
 - **`bonus`**: contatori del giorno e della settimana ISO (lun–dom) nel fuso del patto, dalla tabella bonus autoritativa.
 - **`bonus_giornalieri`**: riepilogo globale (non per regola) dei minuti bonus concessi in ciascun giorno della stessa finestra di 8 giorni, dal più vecchio a oggi, `minuti: 0` esplicito nei giorni senza bonus — dalla tabella bonus autoritativa (`POST /api/bonus`), non dagli eventi.
 - **`stato_silenzio`**: `silente` = nessun battito da > 45 minuti (calcolato in lettura sull'orologio del server); `ultimo_battito` è il `ts_server` dell'ultimo battito, `null` se non è mai arrivato niente (⇒ `silente=true`).
+- **`uso_recente`** (v2.2, deciso da Andrea il 15/07 su richiesta del padre: il genitore vede i tempi di TUTTE le app, non solo di quelle coi limiti): 8 voci dal più vecchio a oggi, dalla fotografia `uso_giornaliero` vigente —
+```json
+{ "giorno": "2026-07-15", "totale_minuti": 192, "aggiornato_ts": "…",
+  "app": [ { "chiave": "com.zhiliaoapp.musically", "nome": "TikTok", "minuti": 65, "limite": 60, "regola_id": 1 } ],
+  "categorie": [ { "chiave": "categoria:social", "minuti": 130, "limite": 120, "regola_id": 4 } ] }
+```
+  `app` ordinate per minuti decrescenti; `nome` = etichetta dai `nomi` della fotografia (fallback: il pacchetto); `limite`/`regola_id` presenti SOLO dove una regola `limite_tempo` **attiva** combacia esattamente con la `chiave` (limite base: gli eventuali bonus del giorno sono già visibili in `bonus_giornalieri`); `categorie` dai totali `uso_categorie`. Un giorno senza fotografia ha `totale_minuti: null` e liste vuote — MAI uno zero finto: "nessun dato ricevuto" è un'informazione.
 - I giorni della finestra (semaforo e `bonus_giornalieri`) si contano nel fuso del patto (`PACTUM_TIMEZONE`, default `Europe/Rome`).
 
 ### POST /api/proposte
@@ -183,6 +190,18 @@ Il verdetto del genitore su una dichiarazione di successo `in_attesa` (`409 {"er
 - `verdetto` ∈ `conferma` (l'arbitro è il genitore o ha confermato nell'app) · `conferma_per_conto` (il genitore garantisce di aver sentito l'arbitro fuori dall'app — nel registro resta *"confermato dal genitore per conto di [arbitro_nome]"*) · `ribalta` (il successo dichiarato non regge; la dichiarazione conta come fallimento).
 - Notifica al figlio (`tipo: verdetto`). Risposta `200` con la dichiarazione aggiornata.
 
+### GET /api/versione (nessun auth) — tappa 6
+Per l'auto-aggiornamento: l'ultima versione disponibile di ciascuna app.
+```json
+{ "figlio":   { "versione_code": 2, "versione_nome": "0.2.0", "url": "/scarica/pactum-figlio.apk", "note": "…" },
+  "genitore": { "versione_code": 2, "versione_nome": "0.2.0", "url": "/scarica/pactum-genitore.apk", "note": "…" } }
+```
+- L'app confronta `versione_code` col proprio `versionCode`: se il server è maggiore, scarica `url` (relativo al base del server) e lancia l'installazione (PackageInstaller). `note` = changelog breve, opzionale.
+- Nessun auth: è solo metadata pubblico + il download dell'APK; la firma dell'APK (stessa chiave) è la vera garanzia d'integrità.
+
+### GET /scarica (nessun auth) — tappa 6
+Pagina HTML statica in italiano servita dal postino: i due APK con pulsanti di download, le istruzioni di installazione (avviso Play Protect, "consenti impostazioni con limitazioni" per l'accesso all'uso), e quale app installa chi. `GET /scarica/pactum-figlio.apk` e `GET /scarica/pactum-genitore.apk` servono i file.
+
 ### GET /api/notifiche
 Le notifiche **non lette** (polling; ogni notifica ha un `tipo` macchina-leggibile), ordinate per `id` crescente. Risposta `200`:
 ```json
@@ -206,6 +225,7 @@ Marcatura come letta (gesto del genitore nell'app, NON del polling automatico).
 - `404` se l'id non esiste: `{ "detail": "notifica non trovata" }`. Rimarcare una notifica già letta risponde `200` (idempotente).
 
 ---
-**Versione: v2.1 — 15/07/2026** (dopo revisione adversariale tappa 5): atomicità garantita su risposta-proposta/regole/dichiarazioni concorrenti; proposte `annullata` all'eliminazione della regola; confronto ricalcolato in lettura per le pendenti; `giorno` dichiarazioni vincolato (oggi ↔ −7gg); arbitro congelato sulla dichiarazione; campo `verdetto.registro`; semaforo per le `vita_reale`; convenzione `app_o_categoria` (pacchetto o `categoria:*`).
+**Versione: v2.2 — 15/07/2026** (richieste di Andrea + feedback del padre): fotografia uso_giornaliero con `nomi` e `uso_categorie`; finestra con `uso_recente` (tempi di TUTTE le app, 8 giorni, limiti accanto dove esistono, mai zeri finti). Il digest giornaliero del genitore (notifica all'ora scelta con totale + prime app) è comportamento dell'app genitore, nessun endpoint nuovo.
+**v2.1 — 15/07/2026** (dopo revisione adversariale tappa 5): atomicità garantita su risposta-proposta/regole/dichiarazioni concorrenti; proposte `annullata` all'eliminazione della regola; confronto ricalcolato in lettura per le pendenti; `giorno` dichiarazioni vincolato (oggi ↔ −7gg); arbitro congelato sulla dichiarazione; campo `verdetto.registro`; semaforo per le `vita_reale`; convenzione `app_o_categoria` (pacchetto o `categoria:*`).
 **v2 — 15/07/2026.** Novità v2 (tappa 5): proposte (creazione col confronto calcolato dal server, risposta del figlio con auto-applicazione delle accettate), dichiarazioni vita reale con verdetto (conferma / per conto di / ribalta), bonus agganciato a una regola limite_tempo (`regola_id` obbligatorio), `GET /api/patto` per il sync del figlio, notifiche con `destinatario` e nuovi tipi, sforamenti generati dal valutatore locale (max 1 per regola per giorno, limite efficace = limite + bonus della regola).
 **v1 — 14/07/2026.** Cambi al contratto: prima qui, poi nel codice di entrambi i lati.

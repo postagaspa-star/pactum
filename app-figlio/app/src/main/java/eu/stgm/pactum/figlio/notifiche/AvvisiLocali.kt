@@ -25,6 +25,10 @@ object AvvisiLocali {
     private const val BASE_ID_SFORAMENTO = 1_000_000L
     private const val BASE_ID_SERVER = 2_000_000L
 
+    /** Id fissi (tappa 6), fuori dalla portata delle basi sopra. */
+    const val ID_MANOMISSIONE_PERMESSO = 3_000_001
+    const val ID_AGGIORNAMENTO = 4_000_001
+
     fun idSforamento(regolaId: Long): Int = (BASE_ID_SFORAMENTO + (regolaId % 100_000)).toInt()
 
     /**
@@ -102,5 +106,39 @@ object AvvisiLocali {
         TipiNotifica.NUOVA_PROPOSTA -> MainActivity.DEST_PROPOSTE
         TipiNotifica.VERDETTO -> MainActivity.DEST_DIARIO
         else -> null
+    }
+
+    /**
+     * L'aggiornamento è pronto e Android chiede conferma: si mostra come notifica
+     * (l'avvio diretto dell'Activity dal background è soppresso), toccarla apre il
+     * dialogo di installazione di sistema. [conferma] è l'intent di conferma dato
+     * da PackageInstaller (già completo): FLAG_IMMUTABLE va bene.
+     */
+    fun avvisaAggiornamento(context: Context, conferma: Intent): Boolean {
+        if (!puoAvvisare(context)) return false
+        creaCanale(context)
+        val apri = PendingIntent.getActivity(
+            context,
+            ID_AGGIORNAMENTO,
+            conferma,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notifica = NotificationCompat.Builder(context, CANALE_PATTO)
+            .setSmallIcon(R.drawable.ic_notifica_testimone)
+            .setContentTitle(context.getString(R.string.notifica_aggiornamento_titolo))
+            .setContentText(context.getString(R.string.notifica_aggiornamento_testo))
+            .setContentIntent(apri)
+            .setAutoCancel(true)
+            .build()
+        return try {
+            NotificationManagerCompat.from(context).notify(ID_AGGIORNAMENTO, notifica)
+            true
+        } catch (e: SecurityException) {
+            false
+        }
+    }
+
+    fun cancellaAggiornamento(context: Context) {
+        NotificationManagerCompat.from(context).cancel(ID_AGGIORNAMENTO)
     }
 }

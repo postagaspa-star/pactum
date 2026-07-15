@@ -64,8 +64,8 @@ Pactum/
 | # | Tappa | Contenuto | Stato |
 |---|-------|-----------|-------|
 | 1 | Fondamenta | repo, docs, scheletri | ✅ fatta (14/07) |
-| 2 | Il cuore | app figlio misura uso + registro locale + battiti | ✅ costruita e compilata (APK debug ~10,7 MB, 14/07) — da collaudare su telefono |
-| 3 | Il postino | heartbeat, registro remoto, rilevamento silenzio | server v1 pronto (118 test verdi) — da deployare sul NAS; collaudo end-to-end da fare |
+| 2 | Il cuore | app figlio misura uso + registro locale + battiti | ✅ costruita, compilata e **collaudata end-to-end su emulatore Android 15** (15/07): misura reale ok, battiti su entrambi i canali (FGS + worker), eventi uso_giornaliero consegnati e indicizzati, finestra corretta. Resta il collaudo su telefono reale (percorso restricted settings) |
+| 3 | Il postino | heartbeat, registro remoto, rilevamento silenzio | server v1 pronto (**135 test verdi** dopo revisione adversariale: proposta a parametri esatti, bonus atomico, snapshot monotono, fuso del patto Europe/Rome) — da deployare sul NAS |
 | 4 | Il binocolo | app genitore: finestra + notifiche push | — |
 | 5 | Il patto completo | tutti i tipi di regole, lock asimmetrico, bonus, proposte con confronto, arbitro | logica server pronta (lock, bonus, finestra); endpoint proposte e arbitro da fare; UI regole nell'app da fare |
 | 6 | La corazza | anti-manomissione completa, firma APK, pagina download, self-update | rilevamento locale fatto (orologio, riavvii, shutdown); firma/download/self-update da fare |

@@ -66,9 +66,12 @@ Pactum/
 | 1 | Fondamenta | repo, docs, scheletri | ✅ fatta (14/07) |
 | 2 | Il cuore | app figlio misura uso + registro locale + battiti | ✅ costruita, compilata e **collaudata end-to-end su emulatore Android 15** (15/07): misura reale ok, battiti su entrambi i canali (FGS + worker), eventi uso_giornaliero consegnati e indicizzati, finestra corretta. Resta il collaudo su telefono reale (percorso restricted settings) |
 | 3 | Il postino | heartbeat, registro remoto, rilevamento silenzio | server v1 pronto (**135 test verdi** dopo revisione adversariale: proposta a parametri esatti, bonus atomico, snapshot monotono, fuso del patto Europe/Rome) — da deployare sul NAS |
-| 4 | Il binocolo | app genitore: finestra + notifiche push | — |
-| 5 | Il patto completo | tutti i tipi di regole, lock asimmetrico, bonus, proposte con confronto, arbitro | logica server pronta (lock, bonus, finestra); endpoint proposte e arbitro da fare; UI regole nell'app da fare |
-| 6 | La corazza | anti-manomissione completa, firma APK, pagina download, self-update | rilevamento locale fatto (orologio, riavvii, shutdown); firma/download/self-update da fare |
+| 4 | Il binocolo | app genitore: finestra + notifiche | ✅ costruita, compilata, revisionata (8 fix) |
+| 5 | Il patto completo | regole, sforamenti, bonus, proposte col confronto, dichiarazioni+arbitro | ✅ fatta e revisionata (server 249→ test, corse concorrenti chiuse, selettore app) |
+| 6 | La corazza | manomissioni complete, firma release, download, self-update | ✅ fatta e revisionata (keystore fuori repo, APK firmati 0.3.0, /scarica) |
+| + | Uso tutte le app + digest | richiesta del padre: uso_recente + digest giornaliero | ✅ fatta e revisionata |
+
+Stato al 15/07/2026: **tutte le tappe costruite, revisionate (revisione adversariale a ogni tappa) e committate.** Server: 275 test verdi. APK di release firmati 0.3.0 (stesso certificato per le due app, chiave in `C:\Users\andre\pactum-keys` fuori dal repo). Resta il **collaudo su telefono reale** (guida in [collaudo-telefono.md](collaudo-telefono.md)) e, per Andrea: deploy sul NAS, token di produzione, custodia della chiave, scelta push istantaneo. Nota onesta: il flusso completo del patto (regole→sforamenti→proposte→dichiarazioni→digest) è coperto da unit test del server + build verdi + revisione, ma non è stato guidato end-to-end tra le due app dal vivo dopo la tappa 2 — il collaudo sul telefono è esattamente quella prova.
 
 Nota di build (14/07): toolchain = JBR di Android Studio (`C:\Program Files\Android\Android Studio\jbr`, OpenJDK 21) + SDK in `%LOCALAPPDATA%\Android\Sdk`; `gradlew.bat assembleDebug` con `JAVA_HOME` puntato al JBR. Prima build verde al primo colpo. Nota Doze: il canale primario dei battiti è il FGS (il worker WorkManager è misuratore + backstop) — deciso dopo revisione, per evitare falsi "silente" notturni.
 

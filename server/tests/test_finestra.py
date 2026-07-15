@@ -14,6 +14,7 @@ CHIAVI_ATTESE = {
     "bonus",
     "bonus_giornalieri",
     "stato_silenzio",
+    "uso_recente",
 }
 
 

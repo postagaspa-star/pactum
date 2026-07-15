@@ -19,6 +19,42 @@ data class Finestra(
     val bonus: StatoBonus,
     @SerialName("bonus_giornalieri") val bonusGiornalieri: List<BonusGiorno> = emptyList(),
     @SerialName("stato_silenzio") val statoSilenzio: StatoSilenzio,
+    @SerialName("uso_recente") val usoRecente: List<UsoGiorno> = emptyList(),
+)
+
+// --- Uso recente (v2.2) ------------------------------------------------------
+// I tempi d'uso giornalieri di TUTTE le app, dalla fotografia `uso_giornaliero`
+// vigente: 8 voci dal più vecchio a oggi. Un giorno senza fotografia ha
+// `totale_minuti: null` e liste vuote — MAI uno zero finto: "nessun dato
+// ricevuto" è un'informazione (contratto-api.md, sezione uso_recente).
+
+@Serializable
+data class UsoGiorno(
+    val giorno: String,
+    @SerialName("totale_minuti") val totaleMinuti: Int? = null,
+    @SerialName("aggiornato_ts") val aggiornatoTs: String? = null,
+    val app: List<UsoApp> = emptyList(),
+    val categorie: List<UsoCategoria> = emptyList(),
+)
+
+/** Una app della fotografia: `nome` risolto sul telefono del figlio (fallback: il pacchetto). */
+@Serializable
+data class UsoApp(
+    val chiave: String,
+    val nome: String? = null,
+    val minuti: Int = 0,
+    // `limite`/`regolaId` presenti SOLO dove una regola limite_tempo attiva
+    // combacia esattamente con la chiave (limite base, senza i bonus del giorno).
+    val limite: Int? = null,
+    @SerialName("regola_id") val regolaId: Long? = null,
+)
+
+@Serializable
+data class UsoCategoria(
+    val chiave: String,
+    val minuti: Int = 0,
+    val limite: Int? = null,
+    @SerialName("regola_id") val regolaId: Long? = null,
 )
 
 @Serializable

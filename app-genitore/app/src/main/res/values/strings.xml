@@ -106,6 +106,41 @@
     <string name="azione_annulla">Annulla</string>
     <string name="azione_ok">Va bene</string>
 
+    <!-- Sezione Tempo (contratto v2.2, uso_recente) -->
+    <string name="scheda_tempo">Tempo</string>
+    <string name="tempo_titolo">Tempo</string>
+    <string name="tempo_caricamento">Sto leggendo i tempi…</string>
+    <string name="tempo_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
+    <string name="tempo_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
+    <string name="tempo_dati_vecchi">Impossibile aggiornare — questi sono gli ultimi dati ricevuti.</string>
+    <string name="tempo_aggiornato_alle">Dati aggiornati alle %1$s</string>
+    <string name="tempo_nessuna_fotografia">Il telefono del figlio non ha ancora mandato nessuna fotografia d\'uso.</string>
+    <string name="tempo_chip_oggi">oggi</string>
+    <string name="tempo_totale_oggi">Oggi: %1$s</string>
+    <string name="tempo_totale_giorno">Il %1$s: %2$s</string>
+    <string name="tempo_nessun_dato_oggi">Oggi: nessun dato ricevuto</string>
+    <string name="tempo_nessun_dato_giorno">Il %1$s: nessun dato ricevuto</string>
+    <string name="tempo_nessun_dato_spiega">Il telefono del figlio non ha mandato la fotografia di questo giorno. Non è uno zero: è un\'assenza di notizie.</string>
+    <string name="tempo_fotografia_delle">Ultima fotografia: %1$s</string>
+    <string name="tempo_sezione_app">Per app</string>
+    <string name="tempo_app_vuoto">Nessuna app registrata in questo giorno.</string>
+    <string name="tempo_limite">limite %1$s</string>
+    <string name="tempo_sezione_categorie">Per categoria</string>
+
+    <!-- Digest giornaliero -->
+    <string name="impostazioni_digest_titolo">Digest giornaliero</string>
+    <string name="impostazioni_digest_descrizione">Ogni giorno, all\'ora scelta, una notifica col tempo totale di oggi e le prime app. Il dettaglio completo vive nella scheda Tempo.</string>
+    <string name="impostazioni_digest_attivo">Digest attivo</string>
+    <string name="impostazioni_digest_ora">Ora del digest</string>
+    <string name="digest_titolo">Oggi: %1$s</string>
+    <string name="digest_titolo_nessun_dato">Oggi: nessun dato ricevuto</string>
+    <string name="digest_testo_nessun_dato">Il telefono del figlio non ha ancora mandato la fotografia di oggi. Tocca per il dettaglio.</string>
+    <string name="digest_app">%1$s %2$s</string>
+    <string name="digest_app_con_limite">%1$s %2$s (limite %3$s)</string>
+    <string name="digest_testo">%1$s — tocca per il dettaglio</string>
+    <string name="digest_tocca">Tocca per il dettaglio.</string>
+    <string name="digest_freschezza">Dati fermi alle %1$s — il telefono del figlio non manda aggiornamenti da un po\'.</string>
+
     <!-- Aggiornamenti (tappa 6) -->
     <string name="impostazioni_aggiornamenti_titolo">Aggiornamenti</string>
     <string name="impostazioni_versione_attuale">Versione installata: %1$s</string>
@@ -115,6 +150,7 @@
     <string name="aggiornamento_config_mancante">Prima salva indirizzo del server e token qui sopra.</string>
     <string name="aggiornamento_irraggiungibile">Non riesco a raggiungere il server per controllare gli aggiornamenti.</string>
     <string name="aggiornamento_fallito">Aggiornamento non riuscito: riprova.</string>
+    <string name="aggiornamento_installazione_pendente">Installazione già avviata: conferma la richiesta di sistema quando compare.</string>
 
     <!-- Navigazione (tappa 5) -->
     <string name="scheda_proposte">Proposte</string>

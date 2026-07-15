@@ -1,13 +1,17 @@
 package eu.stgm.pactum.genitore.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +20,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -27,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -40,6 +46,7 @@ import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.util.Locale
 
 /** Impostazioni minime del binocolo: indirizzo del server e token del genitore. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -193,6 +200,11 @@ fun ImpostazioniScreen() {
                 Text(stringResource(R.string.impostazioni_prova_adesso))
             }
 
+            // Digest giornaliero: l'ora scelta e l'interruttore. Si salva al
+            // gesto, senza pulsante: è una preferenza, non una configurazione.
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            SezioneDigest(impostazioni)
+
             // Aggiornamenti (tappa 6): la versione installata e un controllo
             // manuale. La vedetta lo fa anche da sola a ogni giro; questo è per
             // chi non vuole aspettare.
@@ -214,7 +226,10 @@ fun ImpostazioniScreen() {
                     ambito.launch {
                         controlloInCorso = true
                         try {
-                            val messaggio = when (val esito = aggiornatore.controlla()) {
+                            // forza=true: il gesto esplicito del genitore può
+                            // ritentare anche una versione già tentata (es. un
+                            // dialogo di sistema chiuso per sbaglio).
+                            val messaggio = when (val esito = aggiornatore.controlla(forza = true)) {
                                 is EsitoAggiornamento.Avviato -> context.getString(
                                     R.string.aggiornamento_avviato,
                                     esito.versioneNome,
@@ -222,6 +237,9 @@ fun ImpostazioniScreen() {
 
                                 EsitoAggiornamento.GiaAggiornato ->
                                     context.getString(R.string.aggiornamento_gia_aggiornato)
+
+                                EsitoAggiornamento.InstallazionePendente ->
+                                    context.getString(R.string.aggiornamento_installazione_pendente)
 
                                 EsitoAggiornamento.ConfigMancante ->
                                     context.getString(R.string.aggiornamento_config_mancante)
@@ -245,3 +263,76 @@ fun ImpostazioniScreen() {
         }
     }
 }
+
+/**
+ * Il digest giornaliero: ogni giorno, all'ora scelta, la vedetta manda una
+ * notifica col tempo totale di oggi e le prime app (il dettaglio nella sezione
+ * Tempo). Interruttore + ora, salvati subito in DataStore.
+ */
+@Composable
+private fun SezioneDigest(impostazioni: Impostazioni) {
+    val ambito = rememberCoroutineScope()
+    // null = DataStore non ancora letto: meglio niente che valori inventati.
+    val digest by impostazioni.configDigest.collectAsState(initial = null)
+    val config = digest ?: return
+
+    Text(
+        text = stringResource(R.string.impostazioni_digest_titolo),
+        style = MaterialTheme.typography.titleMedium,
+    )
+    Text(
+        text = stringResource(R.string.impostazioni_digest_descrizione),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = stringResource(R.string.impostazioni_digest_attivo),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = config.attivo,
+            onCheckedChange = { attivo ->
+                ambito.launch { impostazioni.salvaConfigDigest(attivo, config.ora) }
+            },
+        )
+    }
+    if (config.attivo) {
+        var menuOreAperto by remember { mutableStateOf(false) }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = stringResource(R.string.impostazioni_digest_ora),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Box {
+                OutlinedButton(onClick = { menuOreAperto = true }) {
+                    Text(testoOra(config.ora))
+                }
+                DropdownMenu(
+                    expanded = menuOreAperto,
+                    onDismissRequest = { menuOreAperto = false },
+                ) {
+                    (0..23).forEach { ora ->
+                        DropdownMenuItem(
+                            text = { Text(testoOra(ora)) },
+                            onClick = {
+                                menuOreAperto = false
+                                ambito.launch { impostazioni.salvaConfigDigest(true, ora) }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "21" → "21:00" (formato fisso: è un orario, non una frase da tradurre). */
+private fun testoOra(ora: Int): String = String.format(Locale.ROOT, "%02d:00", ora)

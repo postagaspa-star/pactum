@@ -21,14 +21,14 @@ from fastapi.responses import FileResponse, HTMLResponse
 # l'app ci si appoggia per decidere se aggiornarsi.
 VERSIONI_DEFAULT = {
     "figlio": {
-        "versione_code": 2,
-        "versione_nome": "0.2.0",
+        "versione_code": 3,
+        "versione_nome": "0.3.0",
         "url": "/scarica/pactum-figlio.apk",
         "note": None,
     },
     "genitore": {
-        "versione_code": 2,
-        "versione_nome": "0.2.0",
+        "versione_code": 3,
+        "versione_nome": "0.3.0",
         "url": "/scarica/pactum-genitore.apk",
         "note": None,
     },

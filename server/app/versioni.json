@@ -1,14 +1,14 @@
 {
   "figlio": {
-    "versione_code": 2,
-    "versione_nome": "0.2.0",
+    "versione_code": 3,
+    "versione_nome": "0.3.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "Tappa 6: rilevamento manomissioni completo e auto-aggiornamento."
+    "note": "v0.3.0: fotografia uso_giornaliero arricchita (nomi app e categorie) inviata al postino."
   },
   "genitore": {
-    "versione_code": 2,
-    "versione_nome": "0.2.0",
+    "versione_code": 3,
+    "versione_nome": "0.3.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "Tappa 6: auto-aggiornamento dal postino."
+    "note": "v0.3.0: tempi d'uso di tutte le app nella finestra (uso_recente) + digest giornaliero."
   }
 }

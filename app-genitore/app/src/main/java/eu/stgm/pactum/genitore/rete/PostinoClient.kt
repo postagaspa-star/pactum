@@ -82,14 +82,18 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
 
     /**
      * Scarica l'APK di aggiornamento in [destinazione] (streaming, per non
-     * tenere ~10 MB in memoria). [url] è quello di GET /api/versione: relativo
-     * al base del server (es. `/scarica/pactum-genitore.apk`) o assoluto.
-     * Nessun auth: è il download di un file pubblico; la firma dell'APK (stessa
-     * chiave) è la vera garanzia d'integrità (contratto-api.md). false = fallito.
+     * tenere ~10 MB in memoria). [url] è quello di GET /api/versione e deve
+     * essere un percorso RELATIVO al server del patto (es.
+     * `/scarica/pactum-genitore.apk`): un URL assoluto arrivato nel metadata
+     * viene rifiutato — l'update non segue mai un host del payload (come
+     * nell'app del figlio). Nessun auth: è il download di un file pubblico; la
+     * firma dell'APK (stessa chiave) è la vera garanzia d'integrità
+     * (contratto-api.md). false = fallito.
      */
     suspend fun scaricaApk(url: String, destinazione: File): Boolean {
         if (!configurazione.completa) return false
-        val assoluto = if ("://" in url) url else configurazione.serverUrl + url
+        if ("://" in url || !url.startsWith("/")) return false
+        val assoluto = configurazione.serverUrl + url
         return withContext(Dispatchers.IO) {
             try {
                 val richiesta = Request.Builder().url(assoluto).get().build()

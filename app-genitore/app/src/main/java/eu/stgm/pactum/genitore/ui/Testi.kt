@@ -1,6 +1,8 @@
 package eu.stgm.pactum.genitore.ui
 
+import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.TipiRegola
@@ -88,9 +90,32 @@ fun descrizioneRegola(tipo: String, parametri: JsonObject): String = when (tipo)
 }
 
 @Composable
-fun testoDurata(minuti: Long): String =
+fun testoDurata(minuti: Long): String = testoDurata(LocalContext.current, minuti)
+
+/** Versione non-composable (serve anche alla vedetta per il digest). */
+fun testoDurata(context: Context, minuti: Long): String =
     if (minuti < 60) {
-        stringResource(R.string.formato_minuti, minuti)
+        context.getString(R.string.formato_minuti, minuti)
     } else {
-        stringResource(R.string.formato_ore_minuti, minuti / 60, minuti % 60)
+        context.getString(R.string.formato_ore_minuti, minuti / 60, minuti % 60)
     }
+
+/** Un giorno ISO del contratto ("2026-07-15") come "15/07"; il grezzo se malformato. */
+fun giornoBreve(giornoIso: String): String = try {
+    LocalDate.parse(giornoIso).format(formatoGiornoBreve)
+} catch (e: DateTimeParseException) {
+    giornoIso
+}
+
+private val formatoGiornoBreve: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM")
+
+/**
+ * L'etichetta leggibile di una chiave di categoria del contratto
+ * ("categoria:social" → "Social"). Una chiave fuori convenzione resta com'è:
+ * meglio onesta che muta (tolleranza evolutiva).
+ */
+fun etichettaCategoria(chiave: String): String {
+    val nome = chiave.removePrefix("categoria:")
+    if (nome.isEmpty()) return chiave
+    return nome.replaceFirstChar { it.uppercaseChar() }
+}

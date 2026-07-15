@@ -60,6 +60,79 @@ def _semaforo_vita(stato_dich: str | None) -> str:
     return "grigio"  # in_attesa o nessuna dichiarazione
 
 
+def _minuti_validi(mappa) -> dict:
+    """Tiene solo le voci {chiave: minuti} con minuti numerici non negativi:
+    una fotografia sporca non deve far crollare la finestra."""
+    if not isinstance(mappa, dict):
+        return {}
+    return {
+        chiave: minuti
+        for chiave, minuti in mappa.items()
+        if isinstance(minuti, (int, float)) and not isinstance(minuti, bool) and minuti >= 0
+    }
+
+
+def _uso_recente(conn: sqlite3.Connection, giorni: list, limiti: dict) -> list:
+    """(v2.2) I tempi d'uso di TUTTE le app negli 8 giorni della finestra, dalla
+    fotografia uso_giornaliero VIGENTE di ciascun giorno. Un giorno senza
+    fotografia ha totale_minuti null e liste vuote — MAI uno zero finto:
+    "nessun dato ricevuto" e' un'informazione (contratto-api.md).
+    `limiti` = {app_o_categoria: {"limite", "regola_id"}} delle regole
+    limite_tempo ATTIVE: il limite compare SOLO dove la chiave combacia
+    esattamente. E' il limite BASE (minuti_al_giorno): gli eventuali bonus del
+    giorno sono gia' visibili in bonus_giornalieri."""
+    date_iso = [g.isoformat() for g in giorni]
+    segnaposto = ",".join("?" * len(date_iso))
+    vigenti = {
+        r["giorno"]: r
+        for r in conn.execute(
+            f"SELECT * FROM uso_giornaliero WHERE giorno IN ({segnaposto})", date_iso
+        ).fetchall()
+    }
+
+    voci = []
+    for data in date_iso:
+        riga = vigenti.get(data)
+        if riga is None:
+            voci.append(
+                {"giorno": data, "totale_minuti": None, "aggiornato_ts": None,
+                 "app": [], "categorie": []}
+            )
+            continue
+        dettagli = json.loads(riga["dettagli"])
+        # nomi e uso_categorie sono nati in v2.2: le fotografie vecchie non li
+        # hanno (tolleranza evolutiva) -> fallback sul pacchetto e lista vuota.
+        nomi = dettagli.get("nomi")
+        if not isinstance(nomi, dict):
+            nomi = {}
+        app = []
+        for chiave, minuti in sorted(
+            _minuti_validi(dettagli.get("uso_minuti")).items(),
+            key=lambda voce: (-voce[1], voce[0]),  # minuti decrescenti, poi chiave
+        ):
+            voce = {"chiave": chiave, "nome": nomi.get(chiave) or chiave, "minuti": minuti}
+            voce.update(limiti.get(chiave, {}))
+            app.append(voce)
+        categorie = []
+        for chiave, minuti in sorted(
+            _minuti_validi(dettagli.get("uso_categorie")).items(),
+            key=lambda voce: (-voce[1], voce[0]),
+        ):
+            voce = {"chiave": chiave, "minuti": minuti}
+            voce.update(limiti.get(chiave, {}))
+            categorie.append(voce)
+        voci.append(
+            {
+                "giorno": data,
+                "totale_minuti": riga["totale_minuti"],
+                "aggiornato_ts": riga["ts_server"],
+                "app": app,
+                "categorie": categorie,
+            }
+        )
+    return voci
+
+
 @router.get("/finestra")
 def finestra(conn: sqlite3.Connection = Depends(get_conn)):
     ora = clock.now()
@@ -95,7 +168,14 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
     # Per limite_tempo/fascia_oraria il rosso viene dagli sforamenti; per le
     # vita_reale (v2.1) dalle dichiarazioni e dai verdetti.
     regole = []
+    limiti = {}  # app_o_categoria -> {"limite", "regola_id"} delle limite_tempo ATTIVE
     for riga in conn.execute("SELECT * FROM regole ORDER BY id").fetchall():
+        if riga["attiva"] and riga["tipo"] == "limite_tempo":
+            parametri = json.loads(riga["parametri"])
+            limiti.setdefault(
+                parametri["app_o_categoria"],
+                {"limite": parametri["minuti_al_giorno"], "regola_id": riga["id"]},
+            )
         creata = _data_locale(riga["creata_ts"], tz)
         eliminata = None
         if not riga["attiva"]:
@@ -153,4 +233,5 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         "bonus": stato_bonus(conn, ora),
         "bonus_giornalieri": bonus_giornalieri,
         "stato_silenzio": _stato_silenzio(conn, ora),
+        "uso_recente": _uso_recente(conn, giorni, limiti),
     }

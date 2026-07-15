@@ -12,6 +12,7 @@ import androidx.core.app.NotificationManagerCompat
 import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.aggiornamento.Aggiornatore
+import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.AncoraTempo
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.CodaEventi
@@ -202,6 +203,12 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
     /**
      * Fotografia cumulativa dell'uso di [giorno]. Il server, ricevendo più
      * fotografie dello stesso giorno, tiene l'ultima: idempotente per design.
+     *
+     * (v2.2) La fotografia porta anche `nomi` (etichette leggibili: solo il
+     * telefono del figlio può risolvere i pacchetti) e `uso_categorie` (totali
+     * per categoria col mapping interno di CatalogoApp — LO STESSO che
+     * SentinellaPatto dà in pasto al valutatore, così "categoria:social" nella
+     * finestra e nel valutatore contano le stesse app).
      */
     private fun eventoUsoGiornaliero(context: Context, giorno: LocalDate): Evento {
         val uso = UsageStatsReader(context).usoDelGiorno(giorno)
@@ -216,6 +223,24 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
                 // Totale del giorno dai millisecondi veri, non dalla somma dei
                 // minuti arrotondati per app (contratto-api.md: totale_minuti).
                 put("totale_minuti", uso.sumOf { it.millisPrimoPiano } / 60_000)
+                // Solo etichette risolte per i pacchetti presenti in uso_minuti:
+                // se il pacchetto non si risolve, il server ripiega da solo sul
+                // nome pacchetto (contratto: uso_recente).
+                put("nomi", buildJsonObject {
+                    uso.forEach {
+                        val etichetta = CatalogoApp.etichettaValore(context, it.pacchetto)
+                        if (etichetta != it.pacchetto) put(it.pacchetto, JsonPrimitive(etichetta))
+                    }
+                })
+                // Per categoria: somma dei minuti arrotondati per app, così il
+                // totale di una categoria torna con le sue app in uso_minuti
+                // (stesso arrotondamento per-app di SentinellaPatto).
+                put("uso_categorie", buildJsonObject {
+                    uso.groupBy { CatalogoApp.categoriaDiPacchetto(context, it.pacchetto) }
+                        .forEach { (categoria, usi) ->
+                            put(categoria, JsonPrimitive(usi.sumOf { it.millisPrimoPiano / 60_000 }))
+                        }
+                })
             },
         )
     }

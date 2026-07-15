@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
@@ -44,6 +45,7 @@ import eu.stgm.pactum.genitore.ui.FinestraScreen
 import eu.stgm.pactum.genitore.ui.ImpostazioniScreen
 import eu.stgm.pactum.genitore.ui.NotificheScreen
 import eu.stgm.pactum.genitore.ui.ProposteScreen
+import eu.stgm.pactum.genitore.ui.TempoScreen
 import eu.stgm.pactum.genitore.ui.VerdettiScreen
 import eu.stgm.pactum.genitore.ui.theme.PactumTheme
 import kotlinx.coroutines.launch
@@ -82,6 +84,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_DESTINAZIONE = "destinazione_iniziale"
+        const val DEST_TEMPO = "tempo"
         const val DEST_PROPOSTE = "proposte"
         const val DEST_VERDETTI = "verdetti"
         const val DEST_NOTIFICHE = "notifiche"
@@ -90,13 +93,14 @@ class MainActivity : ComponentActivity() {
 
 private enum class Destinazione(val icona: ImageVector, val etichetta: Int) {
     FINESTRA(Icons.Filled.Home, R.string.scheda_finestra),
+    TEMPO(Icons.Filled.DateRange, R.string.scheda_tempo),
     PROPOSTE(Icons.Filled.Edit, R.string.scheda_proposte),
     VERDETTI(Icons.Filled.CheckCircle, R.string.scheda_verdetti),
     NOTIFICHE(Icons.Filled.Notifications, R.string.scheda_notifiche),
     IMPOSTAZIONI(Icons.Filled.Settings, R.string.scheda_impostazioni),
 }
 
-/** Cinque destinazioni, una barra in basso: la finestra è la casa. */
+/** Sei destinazioni, una barra in basso: la finestra è la casa. */
 @Composable
 private fun GenitoreRoot(
     destinazioneRichiesta: String?,
@@ -109,6 +113,7 @@ private fun GenitoreRoot(
     // Arrivo da una notifica: salta alla scheda giusta, una volta sola.
     LaunchedEffect(destinazioneRichiesta) {
         when (destinazioneRichiesta) {
+            MainActivity.DEST_TEMPO -> destinazione = Destinazione.TEMPO
             MainActivity.DEST_PROPOSTE -> destinazione = Destinazione.PROPOSTE
             MainActivity.DEST_VERDETTI -> destinazione = Destinazione.VERDETTI
             MainActivity.DEST_NOTIFICHE -> destinazione = Destinazione.NOTIFICHE
@@ -136,6 +141,7 @@ private fun GenitoreRoot(
         Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
             when (destinazione) {
                 Destinazione.FINESTRA -> FinestraScreen()
+                Destinazione.TEMPO -> TempoScreen()
                 Destinazione.PROPOSTE -> ProposteScreen()
                 Destinazione.VERDETTI -> VerdettiScreen()
                 Destinazione.NOTIFICHE -> NotificheScreen()

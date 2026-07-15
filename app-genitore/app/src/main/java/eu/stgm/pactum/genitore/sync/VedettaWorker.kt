@@ -22,12 +22,19 @@ import androidx.work.WorkerParameters
 import eu.stgm.pactum.genitore.MainActivity
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.aggiornamento.Aggiornatore
+import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
+import eu.stgm.pactum.genitore.dati.UsoGiorno
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import eu.stgm.pactum.genitore.ui.istanteServer
 import eu.stgm.pactum.genitore.ui.oraOppureDataOra
+import eu.stgm.pactum.genitore.ui.testoDurata
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
 /**
@@ -57,7 +64,13 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         impostazioni.registraVerificaRiuscita()
 
         avvisaNovitaDelPatto(context, impostazioni, notifiche)
-        sorvegliaSilenzio(context, impostazioni, postino)
+
+        // Una lettura sola della finestra per le due sorveglianze (silenzio e
+        // digest): meglio sforzo — se non arriva, si ritenta al giro dopo (le
+        // notifiche sono già state gestite, niente Result.retry per questo).
+        val finestra = postino.leggiFinestra()
+        sorvegliaSilenzio(context, impostazioni, finestra)
+        inviaDigest(context, impostazioni, finestra)
 
         // Auto-aggiornamento (tappa 6): best effort, non deve MAI far fallire il
         // giro della vedetta. Se il server ha una versione più nuova del binocolo,
@@ -101,11 +114,9 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
     private suspend fun sorvegliaSilenzio(
         context: Context,
         impostazioni: Impostazioni,
-        postino: PostinoClient,
+        finestra: Finestra?,
     ) {
-        // Meglio sforzo: se la finestra non arriva, si ritenta al giro dopo
-        // (le notifiche sono già state gestite, niente Result.retry per questo).
-        val finestra = postino.leggiFinestra() ?: return
+        if (finestra == null) return
         val attuale = finestra.statoSilenzio
         val noto = impostazioni.leggiSilenzioNoto()
 
@@ -145,6 +156,97 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             return
         }
         impostazioni.registraSilenzioNoto(attuale.silente, attuale.ultimoBattito)
+    }
+
+    /**
+     * Il digest giornaliero (contratto v2.2 — comportamento dell'app genitore,
+     * nessun endpoint nuovo): quando l'ora scelta dal genitore è passata e oggi
+     * il digest non è ancora partito, UNA notifica col totale di oggi e le prime
+     * app (col limite accanto dove esiste), costruita dall'`uso_recente` della
+     * finestra. Toccarla apre la sezione Tempo. Un oggi senza fotografia lo
+     * dice onestamente — MAI uno zero finto. Dedup per giorno locale: l'ultimo
+     * giorno inviato vive in DataStore.
+     */
+    private suspend fun inviaDigest(
+        context: Context,
+        impostazioni: Impostazioni,
+        finestra: Finestra?,
+    ) {
+        if (finestra == null) return // offline o server muto: si ritenta al giro dopo
+        val config = impostazioni.leggiConfigDigest()
+        if (!config.attivo) return
+
+        if (LocalTime.now().hour < config.ora) return // l'ora scelta (fuso del genitore) non è ancora arrivata
+
+        // "Oggi" del patto = l'ultima voce di uso_recente: il server la etichetta
+        // nel fuso del patto, così sia il digest sia il suo dedup restano allineati
+        // ai dati e non dipendono dal fuso del telefono del genitore.
+        val oggiPatto = finestra.usoRecente.lastOrNull()
+        val giornoChiave = oggiPatto?.giorno ?: LocalDate.now().toString()
+        if (impostazioni.leggiDigestUltimoGiorno() == giornoChiave) return // già mandato oggi
+
+        // Senza permesso non si manda E non si registra: appena il permesso
+        // arriva, il giro successivo recupera il digest di oggi.
+        if (!puoAvvisare(context)) return
+        creaCanale(context)
+
+        val (titolo, testo) = testiDigest(context, oggiPatto)
+        try {
+            NotificationManagerCompat.from(context).notify(
+                ID_DIGEST,
+                notificaBase(context, titolo, testo, MainActivity.DEST_TEMPO),
+            )
+        } catch (e: SecurityException) {
+            return // permesso revocato tra il controllo e la notify
+        }
+        impostazioni.registraDigestInviato(giornoChiave)
+    }
+
+    /** Titolo e testo del digest; [uso] null o senza totale = nessun dato di oggi. */
+    private fun testiDigest(context: Context, uso: UsoGiorno?): Pair<String, String> {
+        val totale = uso?.totaleMinuti
+            ?: return context.getString(R.string.digest_titolo_nessun_dato) to
+                context.getString(R.string.digest_testo_nessun_dato)
+
+        val titolo = context.getString(
+            R.string.digest_titolo,
+            testoDurata(context, totale.toLong()),
+        )
+        val prime = uso.app
+            .sortedByDescending { it.minuti }
+            .take(APP_NEL_DIGEST)
+            .joinToString(" · ") { app ->
+                val nome = app.nome ?: app.chiave
+                val durata = testoDurata(context, app.minuti.toLong())
+                val limite = app.limite
+                if (limite != null) {
+                    context.getString(
+                        R.string.digest_app_con_limite,
+                        nome,
+                        durata,
+                        testoDurata(context, limite.toLong()),
+                    )
+                } else {
+                    context.getString(R.string.digest_app, nome, durata)
+                }
+            }
+        val corpo = if (prime.isEmpty()) {
+            context.getString(R.string.digest_tocca)
+        } else {
+            context.getString(R.string.digest_testo, prime)
+        }
+        // Caveat di freschezza: se la fotografia è ferma da oltre 90 minuti, il
+        // totale è un parziale — dillo, non spacciarlo per il consuntivo di oggi
+        // (concept: il registro non mente, mai stantìo mostrato come corrente).
+        val istante = istanteServer(uso.aggiornatoTs)
+        val testo = if (istante != null &&
+            Duration.between(istante, Instant.now()).toMinutes() > SOGLIA_FRESCHEZZA_MIN
+        ) {
+            corpo + "\n" + context.getString(R.string.digest_freschezza, oraOppureDataOra(istante))
+        } else {
+            corpo
+        }
+        return titolo to testo
     }
 
     private fun notificaDiSistema(context: Context, notifica: Notifica): Notification =
@@ -210,6 +312,16 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
 
         /** Id fisso per l'avviso di silenzio/contatto, fuori dalla portata degli id del server. */
         private const val ID_AVVISO_SILENZIO = 2_000_000_000
+
+        /** Id fisso per il digest giornaliero: quello di oggi sostituisce quello di ieri. */
+        private const val ID_DIGEST = 2_000_000_001
+
+        /** Quante app entrano nel testo del digest (il dettaglio vive nella sezione Tempo). */
+        private const val APP_NEL_DIGEST = 3
+
+        // Oltre questi minuti dall'ultima fotografia, il totale del digest è un
+        // parziale e va etichettato come tale (il sync normale è ogni ~15 min).
+        private const val SOGLIA_FRESCHEZZA_MIN = 90L
 
         /**
          * UPDATE: mantiene il ciclo dei 15 minuti già in corsa (niente riparti

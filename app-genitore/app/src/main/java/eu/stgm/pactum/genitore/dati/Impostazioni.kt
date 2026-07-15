@@ -3,6 +3,7 @@ package eu.stgm.pactum.genitore.dati
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -21,6 +22,9 @@ data class ConfigurazionePostino(val serverUrl: String, val token: String) {
 /** L'ultimo stato di silenzio osservato dalla vedetta e il battito su cui si basava. */
 data class SilenzioNoto(val silente: Boolean, val ultimoBattito: String?)
 
+/** Il digest giornaliero: se è attivo e a che ora (0-23) va mandato. */
+data class ConfigDigest(val attivo: Boolean, val ora: Int)
+
 class Impostazioni(private val context: Context) {
 
     private object Chiavi {
@@ -31,6 +35,16 @@ class Impostazioni(private val context: Context) {
         val RICHIESTA_NOTIFICHE_FATTA = booleanPreferencesKey("richiesta_notifiche_fatta")
         val SILENZIO_NOTO = booleanPreferencesKey("silenzio_noto")
         val SILENZIO_BATTITO = stringPreferencesKey("silenzio_battito")
+
+        // L'ultimo versionCode per cui è già stato tentato l'auto-aggiornamento:
+        // evita di riscaricare l'APK e ripresentare il dialogo a ogni giro.
+        val VERSIONE_TENTATA = intPreferencesKey("versione_tentata")
+
+        // Digest giornaliero: attivo (default sì), ora scelta (default 21) e
+        // l'ultimo giorno locale in cui è stato mandato (dedup: uno al giorno).
+        val DIGEST_ATTIVO = booleanPreferencesKey("digest_attivo")
+        val DIGEST_ORA = intPreferencesKey("digest_ora")
+        val DIGEST_ULTIMO_GIORNO = stringPreferencesKey("digest_ultimo_giorno")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -111,6 +125,42 @@ class Impostazioni(private val context: Context) {
         }
     }
 
+    // --- Auto-aggiornamento (tappa 6) ----------------------------------------
+
+    /** L'ultimo versionCode per cui l'installazione è già stata tentata (0 = nessuno). */
+    suspend fun leggiVersioneTentata(): Int =
+        context.dataStore.data.first()[Chiavi.VERSIONE_TENTATA] ?: 0
+
+    suspend fun registraVersioneTentata(versioneCode: Int) {
+        context.dataStore.edit { p -> p[Chiavi.VERSIONE_TENTATA] = versioneCode }
+    }
+
+    // --- Digest giornaliero ---------------------------------------------------
+
+    val configDigest: Flow<ConfigDigest> = context.dataStore.data.map { p ->
+        ConfigDigest(
+            attivo = p[Chiavi.DIGEST_ATTIVO] ?: true,
+            ora = p[Chiavi.DIGEST_ORA] ?: ORA_DIGEST_DEFAULT,
+        )
+    }
+
+    suspend fun leggiConfigDigest(): ConfigDigest = configDigest.first()
+
+    suspend fun salvaConfigDigest(attivo: Boolean, ora: Int) {
+        context.dataStore.edit { p ->
+            p[Chiavi.DIGEST_ATTIVO] = attivo
+            p[Chiavi.DIGEST_ORA] = ora.coerceIn(0, 23)
+        }
+    }
+
+    /** L'ultimo giorno locale (ISO yyyy-MM-dd) col digest già mandato, null = mai. */
+    suspend fun leggiDigestUltimoGiorno(): String? =
+        context.dataStore.data.first()[Chiavi.DIGEST_ULTIMO_GIORNO]
+
+    suspend fun registraDigestInviato(giorno: String) {
+        context.dataStore.edit { p -> p[Chiavi.DIGEST_ULTIMO_GIORNO] = giorno }
+    }
+
     /** true = la richiesta del permesso notifiche è già stata mostrata una volta. */
     val richiestaNotificheFatta: Flow<Boolean> =
         context.dataStore.data.map { p -> p[Chiavi.RICHIESTA_NOTIFICHE_FATTA] ?: false }
@@ -121,5 +171,6 @@ class Impostazioni(private val context: Context) {
 
     private companion object {
         const val TETTO_ID_AVVISATI = 500
+        const val ORA_DIGEST_DEFAULT = 21
     }
 }

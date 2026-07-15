@@ -21,6 +21,12 @@ sealed interface EsitoAggiornamento {
     /** Trovata una versione più nuova: scaricata, installazione avviata. */
     data class Avviato(val versioneNome: String) : EsitoAggiornamento
 
+    /**
+     * L'installazione di questa versione è già stata avviata (il dialogo di
+     * sistema è in mano all'utente): niente ri-download né ri-prompt.
+     */
+    data object InstallazionePendente : EsitoAggiornamento
+
     /** Manca indirizzo del server o token: non c'è da dove controllare. */
     data object ConfigMancante : EsitoAggiornamento
 
@@ -43,8 +49,15 @@ sealed interface EsitoAggiornamento {
  */
 class Aggiornatore(private val context: Context) {
 
-    suspend fun controlla(): EsitoAggiornamento {
-        val configurazione = Impostazioni(context).leggiConfigurazione()
+    /**
+     * [forza] = true (il "Controlla aggiornamenti" delle Impostazioni) ritenta
+     * anche una versione già tentata: un gesto esplicito del genitore può
+     * recuperare un dialogo di sistema chiuso per sbaglio. La vedetta usa il
+     * default false e non martella.
+     */
+    suspend fun controlla(forza: Boolean = false): EsitoAggiornamento {
+        val impostazioni = Impostazioni(context)
+        val configurazione = impostazioni.leggiConfigurazione()
         if (!configurazione.completa) return EsitoAggiornamento.ConfigMancante
 
         val postino = PostinoClient(configurazione)
@@ -54,12 +67,23 @@ class Aggiornatore(private val context: Context) {
         val ultima = info.genitore ?: return EsitoAggiornamento.GiaAggiornato
 
         if (ultima.versioneCode <= BuildConfig.VERSION_CODE) return EsitoAggiornamento.GiaAggiornato
-        if (ultima.url.isBlank()) return EsitoAggiornamento.Fallito
+
+        // Anti-martellamento (come nell'app del figlio): il versionCode già
+        // tentato resta in DataStore, così la vedetta non riscarica ~10 MB né
+        // ripresenta il dialogo a ogni giro mentre un'installazione è in sospeso.
+        if (!forza && impostazioni.leggiVersioneTentata() >= ultima.versioneCode) {
+            return EsitoAggiornamento.InstallazionePendente
+        }
+
+        // Solo un percorso relativo al server del patto: l'update non segue mai
+        // un URL assoluto arrivato nel metadata (scaricaApk lo rifiuta comunque).
+        if (!ultima.url.startsWith("/")) return EsitoAggiornamento.Fallito
 
         val apk = preparaFile() ?: return EsitoAggiornamento.Fallito
         if (!postino.scaricaApk(ultima.url, apk)) return EsitoAggiornamento.Fallito
 
         return if (installa(apk)) {
+            impostazioni.registraVersioneTentata(ultima.versioneCode)
             EsitoAggiornamento.Avviato(ultima.versioneNome)
         } else {
             EsitoAggiornamento.Fallito
@@ -84,9 +108,12 @@ class Aggiornatore(private val context: Context) {
      */
     private suspend fun installa(apk: File): Boolean = withContext(Dispatchers.IO) {
         val installer = context.packageManager.packageInstaller
+        // setAppPackageName (come nell'app del figlio): la sessione dichiara il
+        // pacchetto che intende aggiornare — il sistema rifiuta un APK di un
+        // pacchetto diverso invece di installarlo come app nuova.
         val parametri = PackageInstaller.SessionParams(
             PackageInstaller.SessionParams.MODE_FULL_INSTALL,
-        )
+        ).apply { setAppPackageName(context.packageName) }
         var sessionId = -1
         try {
             sessionId = installer.createSession(parametri)

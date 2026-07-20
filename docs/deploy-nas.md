@@ -118,22 +118,68 @@ sopravvive agli aggiornamenti.
 
 ---
 
-## TODO — Fase 3 del piano: Tunnel Cloudflare (da definire con Andrea)
+## Fase 7 — Tunnel Cloudflare gratuito (raggiungere i telefoni fuori casa)
 
-> **Non ancora implementato.** Finora il postino e' raggiungibile solo dentro la
-> rete di casa (`http://IP-DEL-NAS:8000`). Per farlo arrivare ai telefoni fuori
-> casa serve un **Cloudflare Tunnel** (quick tunnel gratuito o named tunnel per un
-> URL stabile). Da decidere e documentare qui:
-> - se `cloudflared` gira come container accanto a `pactum` o come pacchetto sul NAS;
-> - hostname/URL pubblico del tunnel (named tunnel = URL fisso, consigliato);
-> - che il tunnel punti a `http://pactum:8000` (rete Docker) o `http://IP-NAS:8000`.
->
-> Non inventare qui i dettagli del tunnel finche' non e' scelto il metodo.
+Finora il postino e' raggiungibile solo dentro la rete di casa
+(`http://IP-DEL-NAS:8000`). Il **quick tunnel Cloudflare** lo espone su Internet
+via https **senza account, senza dominio, senza aprire porte sul router**. E' gia'
+nel `docker-compose.yml` come secondo container `tunnel`: se hai avviato il
+progetto, sta gia' girando.
 
-## TODO — Fase 4 del piano: indirizzo del server nelle app
+> **Il patto (scelto da Andrea):** e' gratis, ma l'URL pubblico
+> (`https://<parole-a-caso>.trycloudflare.com`) **cambia a ogni riavvio** del
+> container `tunnel` (quindi a ogni reboot del NAS o `compose up`). Vivibile per una
+> famiglia (il NAS sta quasi sempre acceso); quando vorrai un URL fisso baster un
+> dominio (named tunnel) — upgrade di ~15 minuti.
 
-> **Non ancora implementato.** Una volta fissato l'URL pubblico (Fase 3), va
-> "cablato" nelle due app Android (base URL delle chiamate) e vanno inseriti i due
-> token generati nella Fase 1 (figlio nell'app-figlio, genitore nell'app-genitore).
-> Documentare qui il punto di configurazione e la procedura di ri-configurazione se
-> l'URL cambia.
+### Leggere l'URL pubblico
+
+Container Manager -> Container -> **pactum-tunnel** -> **Dettagli -> Log**. Cerca
+una riga incorniciata tipo:
+
+```
++--------------------------------------------------------------------------------------------+
+|  Your quick Tunnel has been created! Visit it at:                                          |
+|  https://calm-forest-1234.trycloudflare.com                                                |
++--------------------------------------------------------------------------------------------+
+```
+
+Quello e' l'**indirizzo del server** da mettere nelle due app. Da SSH, in un colpo:
+
+```bash
+sudo docker logs pactum-tunnel 2>&1 | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1
+```
+
+### Verifica
+
+Apri da un telefono **in rete dati** (non WiFi di casa):
+`https://<il-tuo-url>.trycloudflare.com/api/salute` -> deve rispondere
+`{"stato":"ok",...,"db_ok":true}`. Se risponde, il tunnel e' vivo e i telefoni lo
+raggiungono da ovunque.
+
+### Ogni volta che l'URL cambia (dopo un riavvio)
+
+1. Rileggi l'URL dai log di `pactum-tunnel` (sopra).
+2. Nelle due app: **Impostazioni -> Indirizzo del server** -> incolla il nuovo URL
+   -> **Salva** -> **Prova adesso** (deve dire "il server risponde"). Fatto.
+
+Solo l'indirizzo cambia: **i token restano gli stessi** (non li rigeneri).
+
+## Fase 8 — Mettere l'indirizzo e i token nelle app
+
+1. Installa le app dai link della pagina **`/scarica`** (aprila dal browser del
+   telefono all'URL del tunnel): `pactum-figlio.apk` sul telefono del figlio,
+   `pactum-genitore.apk` su quello del genitore.
+2. In ciascuna app: **Impostazioni** -> **Indirizzo del server** = l'URL del tunnel;
+   **Token** = quello del **figlio** nell'app-figlio, del **genitore** in quella del
+   genitore (i due generati nella Fase 1). **Salva -> Prova adesso**.
+3. Nell'app del figlio completa l'onboarding (permessi + prima regola).
+
+Da qui il patto e' operativo: vedi la lista di collaudo in
+[collaudo-telefono.md](collaudo-telefono.md), stavolta **dai telefoni veri fuori
+casa** (Fase 7 del piano generale).
+
+> Nota sulla scelta "tunnel gratuito": l'indirizzo si configura a mano nelle app
+> (non e' cablato nell'APK) proprio perche' l'URL del quick tunnel cambia. Con un
+> dominio (URL fisso) si potrebbe un domani metterlo come default nell'app e far
+> digitare alla famiglia solo il token — miglioria rimandata all'upgrade dominio.

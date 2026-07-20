@@ -30,5 +30,19 @@ services:
       - pactum-data:/data        # volume Docker: il database persiste tra riavvii/update
       - ./server/apk:/apk        # cartella host: qui dentro gli APK firmati (pactum-figlio.apk, ...)
 
+  # Tunnel Cloudflare GRATUITO (quick tunnel): espone il postino fuori casa senza
+  # aprire porte sul router. NON serve account ne' dominio.
+  # ATTENZIONE: l'URL pubblico (https://qualcosa.trycloudflare.com) CAMBIA a ogni
+  # riavvio di questo container. Dopo ogni riavvio leggilo dai log (vedi
+  # docs/deploy-nas.md, sezione Tunnel) e aggiornalo nelle due app.
+  # Per un URL FISSO servira' un dominio (named tunnel): upgrade futuro.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: pactum-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://pactum:8000   # raggiunge il postino sulla rete Docker
+    depends_on:
+      - pactum
+
 volumes:
   pactum-data:                   # gestito da Docker; sopravvive alla ricreazione del container

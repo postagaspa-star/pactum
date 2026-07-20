@@ -13,7 +13,10 @@
 set -e
 
 CONTAINER="pactum"
-BACKDIR="${1:-/volume1/docker/pactum/server/backup}"
+# La cartella backup e' quella accanto allo script (server/backup), ricavata dalla
+# posizione dello script: cosi' funziona a prescindere da dove hai messo Pactum.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BACKDIR="${1:-$SCRIPT_DIR/../backup}"
 TIENI=30                                   # quante copie conservare
 STAMP="$(date +%Y%m%d-%H%M)"
 

@@ -183,3 +183,42 @@ casa** (Fase 7 del piano generale).
 > (non e' cablato nell'APK) proprio perche' l'URL del quick tunnel cambia. Con un
 > dominio (URL fisso) si potrebbe un domani metterlo come default nell'app e far
 > digitare alla famiglia solo il token — miglioria rimandata all'upgrade dominio.
+
+## Fase 9 — Backup del registro e resilienza
+
+**Il registro e' il prodotto:** se sparisce il database, sparisce la storia del
+patto. Due difese.
+
+### Backup automatico (una copia al giorno)
+
+Nel repo c'e' `server/scripts/backup-registro.sh`: fa una copia **consistente** del
+database (sicura anche mentre il postino gira) nella cartella `server/backup/`,
+tenendo le ultime 30. Schedulalo:
+
+1. **DSM -> Pannello di controllo -> Utilita' di pianificazione -> Crea -> Attivita'
+   pianificata -> Script definito dall'utente.**
+2. Utente: quello che ha accesso a Docker (di solito `root`); pianificazione:
+   ogni giorno, es. alle 03:00.
+3. Comando:
+   ```bash
+   sh /volume1/docker/pactum/server/scripts/backup-registro.sh
+   ```
+   (adatta il percorso se hai messo Pactum altrove).
+4. **Off-site (consigliato):** con **Hyper Backup** copia periodicamente la cartella
+   `server/backup/` su un altro NAS o un cloud, cosi' un guasto del NAS non porta via
+   anche i backup. (Come per NormaAI: backup off-site.)
+
+Per **ripristinare**: ferma il container, sostituisci il file nel volume
+`pactum-data` con una copia di `server/backup/pactum-*.db` rinominata `pactum.db`,
+riavvia. (In caso di bisogno chiedi: si fa in due comandi.)
+
+### Riavvio automatico
+
+- I container hanno `restart: unless-stopped`: se il postino o il tunnel si
+  piantano, Docker li **riavvia da solo**.
+- Perche' ripartano **dopo un reboot del NAS**, in Container Manager il progetto
+  `pactum` deve avere l'avvio automatico attivo: **Container Manager -> Progetto ->
+  pactum -> Impostazioni -> "Avvia il progetto all'avvio di Container Manager"**
+  (attivo di default per i progetti; verificalo).
+- Ricorda: dopo un reboot il **tunnel cambia URL** (vedi Fase 7) -> rileggilo dai
+  log e aggiornalo nelle app.

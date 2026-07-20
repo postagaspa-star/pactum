@@ -29,6 +29,7 @@ services:
     volumes:
       - pactum-data:/data        # volume Docker: il database persiste tra riavvii/update
       - ./server/apk:/apk        # cartella host: qui dentro gli APK firmati (pactum-figlio.apk, ...)
+      - ./server/backup:/backup  # cartella host: qui lo script di backup scrive le copie del registro
 
   # Tunnel Cloudflare GRATUITO (quick tunnel): espone il postino fuori casa senza
   # aprire porte sul router. NON serve account ne' dominio.

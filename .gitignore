@@ -33,3 +33,6 @@ desktop.ini
 # Chiave di firma: MAI nel repo, in nessuna forma
 keystore.properties
 **/keystore.properties
+
+# Backup del registro: artefatti, non nel repo
+server/backup/*.db

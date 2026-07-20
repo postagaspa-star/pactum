@@ -45,6 +45,9 @@ def test_salute_senza_token(client):
     dati = risposta.json()
     assert dati["stato"] == "ok"
     assert "versione" in dati
+    # La salute segnala anche ambiente e stato del database (tappa deploy).
+    assert dati["env"] == "dev"
+    assert dati["db_ok"] is True
 
 
 @pytest.mark.parametrize("metodo,percorso,corpo", TUTTI)

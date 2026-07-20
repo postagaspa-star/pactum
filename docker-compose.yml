@@ -1,0 +1,34 @@
+# Pactum — postino sul NAS Synology (Container Manager = Docker Compose).
+#
+# Come si usa (dettagli in docs/deploy-nas.md):
+#   1. Copia server/.env.example in server/.env e metti i token VERI.
+#   2. Container Manager -> Progetto -> crea dal percorso di questa cartella,
+#      oppure:  docker compose up -d --build
+#   3. Verifica:  http://IP-DEL-NAS:8000/api/salute  -> {"stato":"ok",...,"db_ok":true}
+#
+# Il registro della famiglia vive nel volume "pactum-data" (NON si tocca a mano).
+# Gli APK firmati si mettono nella cartella host montata su /apk.
+
+services:
+  pactum:
+    build:
+      context: ./server          # il Dockerfile sta in server/Dockerfile
+      dockerfile: Dockerfile
+    image: pactum-postino:latest
+    container_name: pactum
+    restart: unless-stopped
+    ports:
+      - "8000:8000"              # esposto sul NAS; il Tunnel Cloudflare lo raggiunge qui (Fase 3)
+    env_file:
+      - ./server/.env            # token veri e opzioni (gitignorato)
+    environment:
+      # Fissati qui a prescindere dal .env: in produzione devono valere sempre.
+      PACTUM_ENV: prod           # con token deboli il postino RIFIUTA di partire
+      PACTUM_DB: /data/pactum.db # database sul volume persistente
+      PACTUM_APK_DIR: /apk       # APK serviti da /scarica
+    volumes:
+      - pactum-data:/data        # volume Docker: il database persiste tra riavvii/update
+      - ./server/apk:/apk        # cartella host: qui dentro gli APK firmati (pactum-figlio.apk, ...)
+
+volumes:
+  pactum-data:                   # gestito da Docker; sopravvive alla ricreazione del container

@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +26,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -64,6 +64,7 @@ import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.catalogo.AppInstallata
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.Regola
+import eu.stgm.pactum.figlio.ui.theme.Spazi
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -390,7 +391,7 @@ private fun DialogoRegola(
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(Spazi.m),
             ) {
                 if (regola == null) {
                     Column {
@@ -655,20 +656,24 @@ fun PrimaRegolaScreen(vm: RegoleViewModel, onApriImpostazioni: () -> Unit) {
 
 // --- Mattoni condivisi dalle schermate del patto -----------------------------
 
+/**
+ * Dati vecchi: è un'ETÀ, non un fallimento. Una riga su `surfaceVariant`, mai
+ * `errorContainer` — il rosso di sistema resta alla validazione dei form.
+ */
 @Composable
 internal fun BannerDatiVecchi() {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-        ),
-    ) {
-        Text(
-            text = stringResource(R.string.dati_vecchi),
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(16.dp),
-        )
-    }
+    Text(
+        text = stringResource(R.string.dati_vecchi),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.shapes.small,
+            )
+            .padding(horizontal = Spazi.m, vertical = Spazi.s),
+    )
 }
 
 @Composable

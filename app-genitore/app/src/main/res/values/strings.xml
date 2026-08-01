@@ -3,46 +3,54 @@
     <string name="nome_app">Pactum Genitore</string>
 
     <!-- Navigazione -->
-    <string name="scheda_finestra">Finestra</string>
+    <string name="scheda_finestra">Panoramica</string>
     <string name="scheda_notifiche">Notifiche</string>
     <string name="scheda_impostazioni">Impostazioni</string>
     <string name="azione_aggiorna">Aggiorna</string>
 
     <!-- Permesso notifiche (Android 13+) -->
     <string name="permesso_notifiche_titolo">Avvisi del patto</string>
-    <string name="permesso_notifiche_testo">Pactum ti avvisa quando succede qualcosa nel patto: uno sforamento, un bonus, una regola cambiata, un silenzio. Senza questo permesso vedrai le novità solo aprendo l\'app.</string>
+    <string name="permesso_notifiche_testo">Pactum ti avvisa quando succede qualcosa nel patto: un limite superato, un bonus, una regola modificata o un\'interruzione degli aggiornamenti. Senza questo permesso vedrai le novità solo aprendo l\'app.</string>
     <string name="permesso_notifiche_ok">Va bene</string>
     <string name="permesso_notifiche_non_ora">Non ora</string>
 
+    <!-- Cornice: cos\'è Pactum e ruolo del genitore (card in cima alla Panoramica) -->
+    <string name="intro_titolo">Come funziona Pactum</string>
+    <string name="intro_testo">In Pactum è tuo figlio a darsi le regole. Tu le vedi e puoi proporre modifiche, ma non le imponi. L\'app non blocca niente: è un testimone, non un controllore. Il tuo ruolo è verificare e proporre, con fiducia.</string>
+    <string name="intro_chiudi">Ho capito</string>
+
     <!-- Finestra -->
-    <string name="finestra_titolo">La finestra</string>
-    <string name="finestra_caricamento">Sto aprendo la finestra…</string>
-    <string name="finestra_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
-    <string name="finestra_config_mancante">Prima di aprire la finestra servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
-    <string name="silenzio_in_contatto">In contatto — ultimo battito alle %1$s</string>
-    <string name="silenzio_allarme">Silenzio dalle %1$s — l\'app del figlio non si fa sentire</string>
-    <string name="silenzio_mai">Silenzio — l\'app del figlio non si è mai fatta sentire</string>
-    <string name="finestra_aggiornata_alle">Finestra aggiornata alle %1$s</string>
+    <string name="finestra_titolo">Panoramica del patto</string>
+    <string name="finestra_caricamento">Sto caricando la panoramica…</string>
+    <string name="finestra_errore">Non riesco a raggiungere il server. Questi sono gli ultimi dati ricevuti.</string>
+    <string name="finestra_config_mancante">Per vedere la panoramica servono l\'indirizzo del server e il token: li trovi nelle Impostazioni.</string>
+    <string name="silenzio_in_contatto">In contatto — ultimo aggiornamento alle %1$s</string>
+    <string name="silenzio_allarme">Nessun aggiornamento dalle %1$s — l\'app del figlio non sta inviando dati</string>
+    <string name="silenzio_mai">Nessun aggiornamento — l\'app del figlio non ha ancora inviato dati</string>
+    <string name="finestra_aggiornata_alle">Aggiornato alle %1$s</string>
 
     <string name="sezione_regole">Le regole</string>
     <string name="regole_vuoto">Nessuna regola ancora: il patto nasce sul telefono del figlio.</string>
-    <string name="regola_eliminata">eliminata</string>
+    <string name="regola_eliminata">non più attiva</string>
     <string name="regola_limite_tempo">%1$s: al massimo %2$s al giorno</string>
     <string name="regola_fascia_oraria">Niente telefono dalle %1$s alle %2$s (%3$s)</string>
     <string name="regola_vita_reale">%1$s — arbitro: %2$s, %3$s</string>
     <string name="semaforo_oggi">oggi</string>
+    <string name="semaforo_legenda_verde">nella regola</string>
+    <string name="semaforo_legenda_rosso">fuori regola</string>
+    <string name="semaforo_legenda_vuoto">nessun dato</string>
 
     <string name="sezione_bonus">Bonus</string>
     <string name="bonus_residui_giorno">Oggi: %1$d min ancora disponibili su %2$d</string>
     <string name="bonus_residui_settimana">Questa settimana: %1$d min ancora disponibili su %2$d</string>
     <string name="bonus_striscia_titolo">Minuti bonus negli ultimi 8 giorni</string>
 
-    <string name="sezione_sforamenti">Sforamenti recenti</string>
-    <string name="sforamenti_vuoto">Nessuno sforamento recente.</string>
-    <string name="sforamento_su_regola">Sforamento su: %1$s</string>
-    <string name="sforamento_generico">Sforamento</string>
+    <string name="sezione_sforamenti">Giorni fuori regola</string>
+    <string name="sforamenti_vuoto">Nessun giorno fuori regola.</string>
+    <string name="sforamento_su_regola">%1$s — fuori regola</string>
+    <string name="sforamento_generico">Fuori regola</string>
 
-    <string name="sezione_storico">Storico modifiche</string>
+    <string name="sezione_storico">Storico del patto</string>
     <string name="storico_vuoto">Nessuna modifica registrata.</string>
     <string name="storico_creazione">Regola creata</string>
     <string name="storico_modifica_allenta">Regola allentata</string>
@@ -50,14 +58,14 @@
     <string name="storico_eliminazione">Regola eliminata</string>
     <string name="storico_concordata">concordata</string>
 
-    <string name="sezione_manomissioni">Manomissioni recenti</string>
-    <string name="manomissioni_vuoto">Nessuna manomissione: buon segno.</string>
+    <string name="sezione_manomissioni">Interruzioni nella registrazione</string>
+    <string name="manomissioni_vuoto">Nessuna interruzione: la registrazione è completa.</string>
     <string name="manomissione_cambio_ora">Cambio manuale dell\'ora</string>
-    <string name="manomissione_cambio_fuso">Cambio del fuso orario</string>
-    <string name="manomissione_silenzio">Silenzio dell\'app</string>
-    <string name="manomissione_permesso_revocato">Permesso di lettura uso revocato</string>
+    <string name="manomissione_cambio_fuso">Cambio di fuso orario del telefono</string>
+    <string name="manomissione_silenzio">Uso non registrato in questo periodo</string>
+    <string name="manomissione_permesso_revocato">Accesso ai dati di utilizzo revocato</string>
     <string name="manomissione_notifiche_disattivate">Notifiche di Pactum disattivate sul telefono del figlio</string>
-    <string name="manomissione_generica">Manomissione: %1$s</string>
+    <string name="manomissione_generica">Anomalia: %1$s</string>
 
     <string name="formato_minuti">%1$d min</string>
     <string name="formato_ore_minuti">%1$d h %2$d min</string>
@@ -65,32 +73,32 @@
     <!-- Notifiche -->
     <string name="notifiche_titolo">Notifiche</string>
     <string name="notifiche_caricamento">Sto leggendo le notifiche…</string>
-    <string name="notifiche_vuoto">Nessuna novità.</string>
-    <string name="notifiche_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
-    <string name="notifiche_dati_vecchi">Impossibile aggiornare — questi sono gli ultimi dati ricevuti.</string>
+    <string name="notifiche_vuoto">Niente di nuovo nel patto.</string>
+    <string name="notifiche_errore">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
+    <string name="notifiche_dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
     <string name="notifiche_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
     <string name="notifica_segna_letta">Segna come letta</string>
     <string name="notifica_letta_fallita">Non sono riuscito a segnarla come letta: riprova.</string>
-    <string name="tipo_sforamento">Sforamento</string>
-    <string name="tipo_manomissione">Manomissione</string>
+    <string name="tipo_sforamento">Fuori regola</string>
+    <string name="tipo_manomissione">Anomalia</string>
     <string name="tipo_bonus">Bonus</string>
     <string name="tipo_modifica_regola">Modifica del patto</string>
     <string name="tipo_novita">Novità dal patto</string>
 
     <!-- Canale notifiche di sistema -->
     <string name="canale_patto_nome">Avvisi del patto</string>
-    <string name="canale_patto_descrizione">Le novità del patto: sforamenti, bonus, modifiche, silenzi.</string>
+    <string name="canale_patto_descrizione">Le novità del patto: limiti superati, bonus, modifiche alle regole e interruzioni.</string>
 
     <!-- Avvisi di sistema sul silenzio (vedetta) -->
-    <string name="notifica_silenzio_titolo">Silenzio</string>
-    <string name="notifica_silenzio_testo">L\'app del figlio non si fa sentire dalle %1$s.</string>
-    <string name="notifica_silenzio_testo_mai">L\'app del figlio non si è mai fatta sentire.</string>
-    <string name="notifica_contatto_titolo">Di nuovo in contatto</string>
-    <string name="notifica_contatto_testo">L\'app del figlio si è rifatta sentire alle %1$s. Tutto a posto.</string>
+    <string name="notifica_silenzio_titolo">Nessun aggiornamento</string>
+    <string name="notifica_silenzio_testo">L\'app del figlio non invia aggiornamenti dalle %1$s.</string>
+    <string name="notifica_silenzio_testo_mai">L\'app del figlio non ha ancora inviato aggiornamenti.</string>
+    <string name="notifica_contatto_titolo">Aggiornamenti ripresi</string>
+    <string name="notifica_contatto_testo">L\'app del figlio ha ripreso a inviare aggiornamenti alle %1$s. Tutto a posto.</string>
 
     <!-- Impostazioni -->
     <string name="impostazioni_titolo">Impostazioni</string>
-    <string name="impostazioni_descrizione">Indirizzo del server postino e token del genitore. Te li dà chi ha preparato il server, insieme a te.</string>
+    <string name="impostazioni_descrizione">Indirizzo del server e token del genitore. Te li fornisce chi ha configurato il server.</string>
     <string name="impostazioni_server_url">Indirizzo del server</string>
     <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
     <string name="impostazioni_token">Token del genitore</string>
@@ -99,8 +107,9 @@
     <string name="impostazioni_ultima_verifica">Ultima verifica riuscita: %1$s</string>
     <string name="impostazioni_ultima_verifica_mai">mai</string>
     <string name="impostazioni_prova_adesso">Prova adesso</string>
-    <string name="impostazioni_prova_ok">Il server risponde: finestra ricevuta.</string>
+    <string name="impostazioni_prova_ok">Il server risponde correttamente.</string>
     <string name="impostazioni_prova_fallita">Verifica fallita: controlla indirizzo, token e connessione.</string>
+    <string name="impostazioni_prova_ruolo_sbagliato">Il server risponde, ma questo token è dell\'altro ruolo: incolla il token del genitore, non quello del figlio.</string>
     <string name="impostazioni_config_incompleta">Compila indirizzo del server e token del genitore prima di provare.</string>
     <string name="azione_salva">Salva</string>
     <string name="azione_annulla">Annulla</string>
@@ -111,21 +120,39 @@
     <string name="tempo_titolo">Tempo</string>
     <string name="tempo_caricamento">Sto leggendo i tempi…</string>
     <string name="tempo_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
-    <string name="tempo_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
-    <string name="tempo_dati_vecchi">Impossibile aggiornare — questi sono gli ultimi dati ricevuti.</string>
+    <string name="tempo_errore">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
+    <string name="tempo_dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
     <string name="tempo_aggiornato_alle">Dati aggiornati alle %1$s</string>
-    <string name="tempo_nessuna_fotografia">Il telefono del figlio non ha ancora mandato nessuna fotografia d\'uso.</string>
+    <string name="tempo_nessuna_fotografia">Il telefono del figlio non ha ancora inviato i dati di utilizzo.</string>
     <string name="tempo_chip_oggi">oggi</string>
     <string name="tempo_totale_oggi">Oggi: %1$s</string>
     <string name="tempo_totale_giorno">Il %1$s: %2$s</string>
     <string name="tempo_nessun_dato_oggi">Oggi: nessun dato ricevuto</string>
     <string name="tempo_nessun_dato_giorno">Il %1$s: nessun dato ricevuto</string>
-    <string name="tempo_nessun_dato_spiega">Il telefono del figlio non ha mandato la fotografia di questo giorno. Non è uno zero: è un\'assenza di notizie.</string>
-    <string name="tempo_fotografia_delle">Ultima fotografia: %1$s</string>
+    <string name="tempo_nessun_dato_spiega">Il telefono del figlio non ha inviato i dati di questo giorno. Non significa zero utilizzo: i dati semplicemente non sono arrivati.</string>
+    <string name="tempo_fotografia_delle">Ultimo aggiornamento: %1$s</string>
     <string name="tempo_sezione_app">Per app</string>
     <string name="tempo_app_vuoto">Nessuna app registrata in questo giorno.</string>
     <string name="tempo_limite">limite %1$s</string>
     <string name="tempo_sezione_categorie">Per categoria</string>
+    <string name="tempo_sezione_categorie_limite">Categorie con un limite</string>
+
+    <!-- Grafici (anello delle categorie, barre degli 8 giorni, barre per app) -->
+    <string name="grafico_eroe_titolo">COM\'È DIVISO IL TEMPO</string>
+    <string name="grafico_ultimi_giorni">ULTIMI 8 GIORNI</string>
+    <string name="grafico_nessun_dato">nessun dato</string>
+    <string name="grafico_categorie_vuoto">Nessuna categoria in questo giorno.</string>
+    <string name="grafico_tutto_il_tempo">Tutto il tempo</string>
+    <string name="grafico_oltre_limite">%1$s oltre il limite</string>
+    <string name="grafico_giorno_senza_dati">Giorno senza dati</string>
+    <string name="grafico_apri_giorno">Mostra il giorno %1$s</string>
+    <string name="grafico_non_categorizzato">Non in categoria</string>
+
+    <!-- Medie settimanale e mensile (dal campo `medie` del contratto) -->
+    <string name="media_settimana">MEDIA SETTIMANA</string>
+    <string name="media_mese">MEDIA MESE</string>
+    <string name="media_al_giorno">al giorno</string>
+    <string name="media_su_giorni">su %1$d giorni</string>
 
     <!-- Digest giornaliero -->
     <string name="impostazioni_digest_titolo">Digest giornaliero</string>
@@ -134,12 +161,12 @@
     <string name="impostazioni_digest_ora">Ora del digest</string>
     <string name="digest_titolo">Oggi: %1$s</string>
     <string name="digest_titolo_nessun_dato">Oggi: nessun dato ricevuto</string>
-    <string name="digest_testo_nessun_dato">Il telefono del figlio non ha ancora mandato la fotografia di oggi. Tocca per il dettaglio.</string>
+    <string name="digest_testo_nessun_dato">Il telefono del figlio non ha ancora inviato i dati di oggi. Tocca per il dettaglio.</string>
     <string name="digest_app">%1$s %2$s</string>
     <string name="digest_app_con_limite">%1$s %2$s (limite %3$s)</string>
     <string name="digest_testo">%1$s — tocca per il dettaglio</string>
     <string name="digest_tocca">Tocca per il dettaglio.</string>
-    <string name="digest_freschezza">Dati fermi alle %1$s — il telefono del figlio non manda aggiornamenti da un po\'.</string>
+    <string name="digest_freschezza">Ultimo aggiornamento alle %1$s — da allora il telefono del figlio non invia dati.</string>
 
     <!-- Aggiornamenti (tappa 6) -->
     <string name="impostazioni_aggiornamenti_titolo">Aggiornamenti</string>
@@ -154,13 +181,13 @@
 
     <!-- Navigazione (tappa 5) -->
     <string name="scheda_proposte">Proposte</string>
-    <string name="scheda_verdetti">Verdetti</string>
+    <string name="scheda_verdetti">Da confermare</string>
 
     <!-- Proposte -->
     <string name="proposte_titolo">Proposte</string>
     <string name="proposte_caricamento">Sto leggendo le proposte…</string>
     <string name="proposte_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
-    <string name="proposte_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
+    <string name="proposte_errore">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
     <string name="proposte_sezione_proponi">Proponi una modifica</string>
     <string name="proposte_nessuna_regola_attiva">Nessuna regola attiva su cui proporre: le regole nascono sul telefono del figlio.</string>
     <string name="proposte_bottone_proponi">Proponi una modifica</string>
@@ -189,6 +216,7 @@
     <string name="proposta_modalita_modifica">Modifica i parametri</string>
     <string name="proposta_modalita_elimina">Proponi di eliminare la regola</string>
     <string name="proposta_campo_app">App o categoria</string>
+    <string name="proposta_app_non_modificabile">Si propone un nuovo limite, non l\'app della regola.</string>
     <string name="proposta_campo_minuti">Minuti al giorno</string>
     <string name="proposta_minuti_range">Da 1 a 1440 minuti</string>
     <string name="proposta_campo_dalle">Dalle (HH:MM)</string>
@@ -212,11 +240,11 @@
     </string-array>
 
     <!-- Verdetti -->
-    <string name="verdetti_titolo">Verdetti</string>
+    <string name="verdetti_titolo">Da confermare</string>
     <string name="verdetti_caricamento">Sto leggendo le dichiarazioni…</string>
     <string name="verdetti_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni.</string>
-    <string name="verdetti_errore">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
-    <string name="verdetti_sezione_attesa">In attesa del tuo verdetto</string>
+    <string name="verdetti_errore">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
+    <string name="verdetti_sezione_attesa">In attesa della tua conferma</string>
     <string name="verdetti_attesa_vuoto">Nessuna dichiarazione in attesa.</string>
     <string name="verdetti_sezione_risolte">Dichiarazioni risolte</string>
     <string name="verdetti_risolte_vuoto">Nessuna dichiarazione ancora.</string>
@@ -228,14 +256,14 @@
     <string name="verdetto_conferma">Confermo</string>
     <string name="verdetto_conferma_per_conto">Confermo per conto di %1$s</string>
     <string name="verdetto_conferma_per_conto_arbitro">Confermo per conto dell\'arbitro</string>
-    <string name="verdetto_ribalta">Non è vero</string>
-    <string name="verdetto_inviato">Verdetto registrato.</string>
+    <string name="verdetto_ribalta">Non è andata così</string>
+    <string name="verdetto_inviato">Esito registrato.</string>
     <string name="verdetto_errore">Non sono riuscito a registrare il verdetto: riprova.</string>
     <string name="verdetto_errore_non_in_attesa">Questa dichiarazione non è più in attesa.</string>
-    <string name="dichiarazione_stato_registrata">Fallimento dichiarato — creduto sulla parola</string>
+    <string name="dichiarazione_stato_registrata">Non riuscito — creduto sulla parola</string>
     <string name="dichiarazione_stato_confermata">Successo confermato</string>
     <string name="dichiarazione_stato_confermata_per_conto">Confermato dal genitore per conto di %1$s</string>
-    <string name="dichiarazione_stato_ribaltata">Ribaltata — conta come fallimento</string>
+    <string name="dichiarazione_stato_ribaltata">Non confermata — conta come non riuscito</string>
     <string name="dichiarazione_verdetto_nota">Con nota: %1$s</string>
 
     <!-- Tipi di notifica aggiunti in tappa 5 -->

@@ -20,6 +20,30 @@ data class Finestra(
     @SerialName("bonus_giornalieri") val bonusGiornalieri: List<BonusGiorno> = emptyList(),
     @SerialName("stato_silenzio") val statoSilenzio: StatoSilenzio,
     @SerialName("uso_recente") val usoRecente: List<UsoGiorno> = emptyList(),
+    // Medie settimanale/mensile del tempo d'uso (contratto-api.md, GET /api/finestra).
+    // Nullable per tolleranza: un server più vecchio non manda il campo → l'app
+    // nasconde la riga invece di crashare.
+    val medie: Medie? = null,
+)
+
+// --- Medie (settimana / mese) ------------------------------------------------
+// Media di `totale_minuti` sui SOLI giorni con fotografia nella finestra (7 e 30
+// giorni, fuso del patto). Ogni sotto-oggetto è `null` se in quella finestra non
+// c'è nessun giorno con dati: MAI uno zero finto (contratto-api.md).
+
+@Serializable
+data class Medie(
+    val settimana: MediaPeriodo? = null,
+    val mese: MediaPeriodo? = null,
+)
+
+@Serializable
+data class MediaPeriodo(
+    // Media dei minuti, già arrotondata a intero dal server; `giorni` = quanti
+    // giorni della finestra avevano una fotografia (>= 1 quando il sotto-oggetto
+    // esiste). I default coprono un JSON parziale senza far saltare la decodifica.
+    val minuti: Int = 0,
+    val giorni: Int = 0,
 )
 
 // --- Uso recente (v2.2) ------------------------------------------------------

@@ -133,6 +133,50 @@ def _uso_recente(conn: sqlite3.Connection, giorni: list, limiti: dict) -> list:
     return voci
 
 
+def _medie(conn: sqlite3.Connection, oggi) -> dict:
+    """(S1) Media dei minuti d'uso sui SOLI giorni con una fotografia, su due
+    finestre: settimana (ultimi 7 giorni locali) e mese (ultimi 30). Ogni voce e'
+    {"minuti": intero, "giorni": quanti giorni avevano dati}, oppure None se nella
+    finestra non c'e' nessuna fotografia — MAI uno zero finto. `giorno` in
+    uso_giornaliero e' gia' il giorno LOCALE del patto (contratto-api.md), quindi
+    il confronto stringa e' corretto nel fuso senza conversioni; i giorni assenti
+    non sono righe, cosi' l'AVG non li conta (la regola "solo giorni con dati" e'
+    rispettata per costruzione). Un giorno con totale_minuti=0 e' una fotografia
+    reale (uso zero) e va contato: l'AVG lo include."""
+    def media(giorni_finestra: int) -> dict | None:
+        inizio = (oggi - timedelta(days=giorni_finestra - 1)).isoformat()
+        r = conn.execute(
+            "SELECT AVG(totale_minuti) AS m, COUNT(*) AS n FROM uso_giornaliero"
+            " WHERE giorno >= ? AND giorno <= ?",
+            (inizio, oggi.isoformat()),
+        ).fetchone()
+        n = r["n"]
+        if not n:
+            return None
+        return {"minuti": round(r["m"]), "giorni": n}
+
+    return {"settimana": media(7), "mese": media(30)}
+
+
+def _nomi_recenti(conn: sqlite3.Connection) -> dict:
+    """(S2) L'ultima etichetta leggibile vista per ciascun pacchetto nelle
+    fotografie uso_giornaliero (la piu' recente vince): serve a mostrare al
+    genitore "TikTok" invece di com.zhiliaoapp.musically sulle regole
+    limite_tempo. Le fotografie sono al piu' una per giorno (PRIMARY KEY giorno):
+    l'insieme e' piccolo. Fotografie senza `nomi` (pre-v2.2) si saltano."""
+    nomi: dict = {}
+    for riga in conn.execute(
+        "SELECT dettagli FROM uso_giornaliero ORDER BY ts_server DESC, giorno DESC"
+    ).fetchall():
+        mappa = json.loads(riga["dettagli"]).get("nomi")
+        if not isinstance(mappa, dict):
+            continue
+        for chiave, nome in mappa.items():
+            if chiave not in nomi and isinstance(nome, str) and nome:
+                nomi[chiave] = nome
+    return nomi
+
+
 @router.get("/finestra")
 def finestra(conn: sqlite3.Connection = Depends(get_conn)):
     ora = clock.now()
@@ -234,4 +278,5 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         "bonus_giornalieri": bonus_giornalieri,
         "stato_silenzio": _stato_silenzio(conn, ora),
         "uso_recente": _uso_recente(conn, giorni, limiti),
+        "medie": _medie(conn, oggi),
     }

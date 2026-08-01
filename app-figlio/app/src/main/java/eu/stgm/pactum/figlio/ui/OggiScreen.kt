@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.ui.theme.Spazi
 
 /** L'uso di oggi: totale in alto, elenco per app sotto. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -74,17 +75,21 @@ fun OggiScreen(
         ) {
             Card(
                 modifier = Modifier
-                    .padding(16.dp)
+                    .padding(Spazi.l)
                     .fillMaxWidth(),
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                // Etichetta e valore separati: l'eroe della schermata è il
+                // numero, non la frase che lo introduce.
+                Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
                     Text(
                         text = stringResource(R.string.oggi_totale),
                         style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
                         text = testoDurata(stato.minutiTotali),
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.displaySmall,
+                        modifier = Modifier.padding(top = 2.dp),
                     )
                 }
             }
@@ -96,7 +101,7 @@ fun OggiScreen(
                         Text(
                             text = stringResource(R.string.oggi_caricamento),
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp),
+                            modifier = Modifier.padding(top = Spazi.s),
                         )
                     }
                 }
@@ -107,13 +112,13 @@ fun OggiScreen(
 
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    contentPadding = PaddingValues(start = Spazi.l, end = Spazi.l, bottom = Spazi.l),
                 ) {
                     items(stato.righe, key = { it.pacchetto }) { riga ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 10.dp),
+                                .padding(vertical = Spazi.m),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

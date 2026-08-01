@@ -8,7 +8,7 @@
     <string name="passo_uso_titolo">1. Accesso ai dati di utilizzo</string>
     <string name="passo_uso_descrizione">Serve per misurare quanto tempo passi nelle app. Senza questo permesso Pactum non può fare da testimone.</string>
     <string name="passo_batteria_titolo">2. Esenzione dalla batteria</string>
-    <string name="passo_batteria_descrizione">Evita che Android addormenti Pactum e crei buchi nel registro.</string>
+    <string name="passo_batteria_descrizione">Evita che Android sospenda Pactum e interrompa la registrazione dell\'uso.</string>
     <string name="passo_notifiche_titolo">3. Notifiche</string>
     <string name="passo_notifiche_descrizione">Per la notifica fissa del testimone e gli avvisi del patto.</string>
     <string name="passo_apri_impostazioni">Apri impostazioni</string>
@@ -22,8 +22,8 @@
 
     <!-- Schermata Oggi -->
     <string name="oggi_titolo">Oggi</string>
-    <string name="oggi_totale">Tempo nelle app oggi</string>
-    <string name="oggi_vuoto">Nessun uso registrato per oggi.</string>
+    <string name="oggi_totale">Oggi hai usato il telefono</string>
+    <string name="oggi_vuoto">Nessun uso registrato finora. Oggi il registro è pulito.</string>
     <string name="oggi_caricamento">Sto leggendo l\'uso di oggi…</string>
     <string name="azione_aggiorna">Aggiorna</string>
     <string name="azione_impostazioni">Impostazioni</string>
@@ -32,17 +32,17 @@
 
     <!-- Impostazioni -->
     <string name="impostazioni_titolo">Impostazioni</string>
-    <string name="impostazioni_descrizione">Indirizzo del server postino e token del patto. Te li dà chi ha preparato il server, insieme a te.</string>
+    <string name="impostazioni_descrizione">Indirizzo del server e token del patto. Te li fornisce chi ha configurato il server.</string>
     <string name="impostazioni_server_url">Indirizzo del server</string>
     <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
     <string name="impostazioni_token">Token del patto</string>
     <string name="impostazioni_salvate">Impostazioni salvate</string>
     <string name="impostazioni_url_non_valido">Indirizzo del server non valido: controlla e riprova (es. https://pactum.esempio.it).</string>
-    <string name="impostazioni_ultimo_battito">Ultimo battito consegnato: %1$s</string>
+    <string name="impostazioni_ultimo_battito">Ultimo aggiornamento inviato: %1$s</string>
     <string name="impostazioni_ultimo_battito_mai">mai</string>
     <string name="impostazioni_prova_adesso">Prova adesso</string>
-    <string name="impostazioni_prova_ok">Battito consegnato: il server risponde.</string>
-    <string name="impostazioni_prova_fallita">Consegna fallita: controlla indirizzo, token e connessione.</string>
+    <string name="impostazioni_prova_ok">Aggiornamento inviato: il server risponde.</string>
+    <string name="impostazioni_prova_fallita">Invio fallito: controlla indirizzo, token e connessione.</string>
     <string name="impostazioni_config_incompleta">Prima salva indirizzo del server e token del patto.</string>
     <string name="azione_salva">Salva</string>
     <string name="azione_indietro">Indietro</string>
@@ -61,7 +61,7 @@
     <string name="scheda_diario">Diario</string>
     <string name="azione_annulla">Annulla</string>
     <string name="azione_conferma">Conferma</string>
-    <string name="dati_vecchi">Impossibile aggiornare — questi sono gli ultimi dati ricevuti.</string>
+    <string name="dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
 
     <!-- Descrizioni delle regole -->
     <string name="regola_limite_tempo">%1$s: al massimo %2$s al giorno</string>
@@ -139,14 +139,14 @@
     <string name="bonus_motivo">Motivo (facoltativo)</string>
     <string name="bonus_piu_minuti">+%1$d min</string>
     <string name="bonus_concesso">Fatto: +%1$d min per oggi su questa regola. Il genitore riceve una notifica.</string>
-    <string name="bonus_tetto_superato">Tetto superato: oggi restano %1$d min, questa settimana %2$d.</string>
+    <string name="bonus_tetto_superato">Ti sei già dato i minuti di oggi: ne restano %1$d, questa settimana %2$d.</string>
     <string name="bonus_regola_non_valida">Questa regola non è più valida per un bonus: aggiorna e riprova.</string>
     <string name="bonus_errore">Non sono riuscito a concedere il bonus: controlla la connessione e riprova.</string>
 
     <!-- Proposte -->
     <string name="proposte_titolo">Proposte</string>
     <string name="proposte_caricamento">Sto leggendo le proposte…</string>
-    <string name="proposte_errore_lettura">Non riesco a raggiungere il postino. Controlla la connessione o riprova.</string>
+    <string name="proposte_errore_lettura">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
     <string name="proposte_sezione_pendenti">Da decidere</string>
     <string name="proposte_pendenti_vuoto">Nessuna proposta in attesa della tua risposta.</string>
     <string name="proposte_sezione_storia">Storia</string>
@@ -186,32 +186,35 @@
     <string name="dichiarazione_conferma_fallimento_titolo">Dichiari che non è andata?</string>
     <string name="dichiarazione_conferma_fallimento_testo">Ti crediamo sulla parola: va a registro, senza conferme. Dirlo a viso aperto vale già qualcosa.</string>
     <string name="dichiarazione_nota_campo">Nota (facoltativa)</string>
-    <string name="dichiarazione_inviata_successo">Dichiarazione inviata: in attesa di conferma.</string>
+    <string name="dichiarazione_scegli_giorno">Per quale giorno?</string>
+    <string name="dichiarazione_giorno_oggi">Oggi</string>
+    <string name="dichiarazione_giorno_ieri">Ieri</string>
+    <string name="dichiarazione_inviata_successo">Segnato. Manca solo la firma dell\'arbitro.</string>
     <string name="dichiarazione_inviata_fallimento">Registrato, creduto sulla parola.</string>
     <string name="dichiarazione_gia_dichiarato">Per oggi hai già dichiarato su questa regola.</string>
     <string name="dichiarazione_errore">Non sono riuscito a inviare la dichiarazione: riprova.</string>
     <string name="dichiarazione_giorno">Giorno: %1$s</string>
-    <string name="dichiarazione_stato_in_attesa">In attesa di conferma</string>
-    <string name="dichiarazione_stato_registrata">Fallimento — creduto sulla parola</string>
+    <string name="dichiarazione_stato_in_attesa">L\'hai fatto. Manca la firma di %1$s.</string>
+    <string name="dichiarazione_stato_registrata">Non riuscito — creduto sulla parola</string>
     <string name="dichiarazione_stato_confermata">Successo confermato</string>
     <string name="dichiarazione_stato_confermata_per_conto">Confermato dal genitore per conto di %1$s</string>
-    <string name="dichiarazione_stato_ribaltata">Ribaltata — conta come fallimento</string>
+    <string name="dichiarazione_stato_ribaltata">Non confermata — conta come non riuscito</string>
     <string name="dichiarazione_tua_nota">La tua nota: %1$s</string>
     <string name="dichiarazione_verdetto_nota">Nota del verdetto: %1$s</string>
 
     <!-- Canale e notifiche locali del patto -->
     <string name="canale_patto_nome">Avvisi del patto</string>
     <string name="canale_patto_descrizione">Le novità del tuo patto: proposte, verdetti e promemoria sui limiti.</string>
-    <string name="notifica_sforamento_limite_titolo">Limite superato</string>
+    <string name="notifica_sforamento_limite_titolo">Oggi sei andato oltre</string>
     <string name="notifica_sforamento_limite_testo">%1$s: oggi sei andato %2$d min oltre il limite che ti sei dato (%3$d min). Nessun blocco: è il tuo patto.</string>
-    <string name="notifica_sforamento_fascia_titolo">Fascia non rispettata</string>
-    <string name="notifica_sforamento_fascia_testo">Hai usato il telefono %1$d min in una fascia che ti sei chiuso (%2$s–%3$s). Nessun blocco: è il tuo patto.</string>
+    <string name="notifica_sforamento_fascia_titolo">Hai usato il telefono in una fascia che ti sei imposto</string>
+    <string name="notifica_sforamento_fascia_testo">Hai usato il telefono %1$d min in una fascia che ti sei imposto (%2$s–%3$s). Nessun blocco: è il tuo patto.</string>
     <string name="tipo_nuova_proposta">Nuova proposta del genitore</string>
-    <string name="tipo_verdetto">Verdetto sulla tua dichiarazione</string>
+    <string name="tipo_verdetto">Esito della tua dichiarazione</string>
     <string name="tipo_novita">Novità dal patto</string>
 
     <!-- Manomissioni per revoca permessi (tappa 6) -->
-    <string name="notifica_permesso_revocato_titolo">Il testimone è cieco</string>
+    <string name="notifica_permesso_revocato_titolo">Pactum non può più misurare l\'uso</string>
     <string name="notifica_permesso_revocato_testo">L\'accesso ai dati di utilizzo è stato tolto: Pactum non può più misurare l\'uso delle app. Il genitore lo vede. Riattivalo dalle impostazioni per rimettere a posto il patto.</string>
 
     <!-- Auto-aggiornamento (tappa 6) -->

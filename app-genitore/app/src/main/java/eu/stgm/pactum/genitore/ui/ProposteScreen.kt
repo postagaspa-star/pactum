@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -563,20 +562,10 @@ private fun giorniTesto(parametri: JsonObject): String =
         ?.trim(',', ' ')
         ?: ""
 
+/** Dati vecchi: un'età, non un errore — riga `surfaceVariant`, mai una card rossa. */
 @Composable
 private fun BannerDatiVecchi() {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-        ),
-    ) {
-        Text(
-            text = stringResource(R.string.notifiche_dati_vecchi),
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(16.dp),
-        )
-    }
+    RigaDatiVecchi(stringResource(R.string.notifiche_dati_vecchi))
 }
 
 @Composable

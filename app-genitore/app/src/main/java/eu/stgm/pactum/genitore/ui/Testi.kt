@@ -66,7 +66,7 @@ fun parametroTesto(parametri: JsonObject, nome: String): String? = campo(paramet
 fun descrizioneRegola(tipo: String, parametri: JsonObject): String = when (tipo) {
     TipiRegola.LIMITE_TEMPO -> stringResource(
         R.string.regola_limite_tempo,
-        campo(parametri, "app_o_categoria") ?: "?",
+        etichettaAppOCategoria(campo(parametri, "app_o_categoria") ?: "?"),
         testoDurata(campo(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
     )
 
@@ -111,11 +111,33 @@ private val formatoGiornoBreve: DateTimeFormatter = DateTimeFormatter.ofPattern(
 
 /**
  * L'etichetta leggibile di una chiave di categoria del contratto
- * ("categoria:social" → "Social"). Una chiave fuori convenzione resta com'è:
- * meglio onesta che muta (tolleranza evolutiva).
+ * ("categoria:social" → "Social"). Le cinque chiavi di convenzione hanno un
+ * nome scritto per esteso — "altro" da solo, in una legenda, non si capisce:
+ * diventa "Altre app". Una chiave fuori convenzione resta com'è, solo con
+ * l'iniziale maiuscola: meglio onesta che muta (tolleranza evolutiva).
+ *
+ * Sta qui e non in strings.xml perché serve anche fuori da un Composable (la
+ * vedetta, il digest) dove non c'è un Context a portata di mano.
  */
 fun etichettaCategoria(chiave: String): String {
     val nome = chiave.removePrefix("categoria:")
     if (nome.isEmpty()) return chiave
-    return nome.replaceFirstChar { it.uppercaseChar() }
+    return when (nome.lowercase()) {
+        "social" -> "Social"
+        "video" -> "Video"
+        "giochi" -> "Giochi"
+        "musica" -> "Musica"
+        "altro" -> "Altre app"
+        else -> nome.replaceFirstChar { it.uppercaseChar() }
+    }
 }
+
+/**
+ * Il bersaglio di una regola limite_tempo reso leggibile: una `categoria:*`
+ * diventa l'etichetta italiana ("categoria:social" → "Social"); un pacchetto
+ * (es. `com.zhiliaoapp.musically`) resta com'è finché il server non allega un
+ * nome risolto (S2). Così regole, sforamenti e storico non mostrano più la
+ * chiave grezza `categoria:social` a un genitore che non l'ha mai vista.
+ */
+fun etichettaAppOCategoria(chiave: String): String =
+    if (chiave.startsWith("categoria:")) etichettaCategoria(chiave) else chiave

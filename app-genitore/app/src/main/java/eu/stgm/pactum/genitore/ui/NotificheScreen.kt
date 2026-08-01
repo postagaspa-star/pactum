@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -108,20 +107,7 @@ fun NotificheScreen(vm: NotificheViewModel = viewModel()) {
                     // nella finestra — si dice che i dati sono vecchi, invece di
                     // spacciarli per freschi in silenzio.
                     if (stato.errore) {
-                        item {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                ),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.notifiche_dati_vecchi),
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(16.dp),
-                                )
-                            }
-                        }
+                        item { RigaDatiVecchi(stringResource(R.string.notifiche_dati_vecchi)) }
                     }
                     items(stato.notifiche, key = { it.id }) { notifica ->
                         SchedaNotifica(notifica, onSegnaLetta = { vm.segnaLetta(notifica) })

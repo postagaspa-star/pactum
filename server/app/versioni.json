@@ -1,14 +1,14 @@
 {
   "figlio": {
-    "versione_code": 3,
-    "versione_nome": "0.3.0",
+    "versione_code": 5,
+    "versione_nome": "0.5.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.3.0: fotografia uso_giornaliero arricchita (nomi app e categorie) inviata al postino."
+    "note": "v0.5.0: testi piu chiari e allineamento del totale con la panoramica del genitore."
   },
   "genitore": {
-    "versione_code": 3,
-    "versione_nome": "0.3.0",
+    "versione_code": 5,
+    "versione_nome": "0.5.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.3.0: tempi d'uso di tutte le app nella finestra (uso_recente) + digest giornaliero."
+    "note": "v0.5.0: grafici interattivi, medie 7 e 30 giorni, testi piu chiari, nomi app leggibili."
   }
 }

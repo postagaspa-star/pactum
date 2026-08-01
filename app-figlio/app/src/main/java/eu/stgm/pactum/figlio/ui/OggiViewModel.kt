@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +30,12 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
         _stato.value = _stato.value.copy(caricamento = true)
         viewModelScope.launch(Dispatchers.Default) {
             val context = getApplication<Application>()
+            // Stesso filtro della fotografia inviata al server (BattitoWorker):
+            // fuori Home, sistema senza icona e le due app Pactum. Così il totale
+            // "Oggi" del figlio coincide con quello che il genitore vede nella
+            // finestra, invece di gonfiarsi di minuti che lì non compaiono.
             val uso = UsageStatsReader(context).usoDelGiorno()
+                .filter { CatalogoApp.contaNellUso(context, it.pacchetto) }
             val pm = context.packageManager
             val righe = uso
                 .filter { it.millisPrimoPiano >= 60_000 } // sotto il minuto: rumore

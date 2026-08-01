@@ -43,8 +43,8 @@ def test_versione_shape_e_default(client):
     for ruolo in ("figlio", "genitore"):
         blocco = dati[ruolo]
         assert set(blocco) >= {"versione_code", "versione_nome", "url"}
-        assert blocco["versione_code"] == 3
-        assert blocco["versione_nome"] == "0.3.0"
+        assert blocco["versione_code"] == 5
+        assert blocco["versione_nome"] == "0.5.0"
         assert blocco["url"] == f"/scarica/pactum-{ruolo}.apk"
 
 

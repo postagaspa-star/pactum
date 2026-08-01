@@ -22,6 +22,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -252,9 +253,21 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             val ripulito = grezzo.trim()
             if (ripulito.isEmpty()) return null
             val conSchema = if ("://" in ripulito) ripulito else "https://$ripulito"
-            // toString() di HttpUrl aggiunge la "/" del percorso radice:
-            // via, perché i percorsi ("/api/...") si concatenano dopo.
-            return conSchema.toHttpUrlOrNull()?.toString()?.trimEnd('/')
+            val analizzato = conSchema.toHttpUrlOrNull() ?: return null
+            // La base si ricostruisce da zero tenendo SOLO schema, host, porta e
+            // segmenti di percorso: query e frammento incollati prima di
+            // "/api/..." produrrebbero un endpoint rotto (il figlio non
+            // consegnerebbe mai senza un errore chiaro), e le credenziali
+            // nell'URL non hanno motivo di sopravvivere al salvataggio.
+            val base = HttpUrl.Builder()
+                .scheme(analizzato.scheme)
+                .host(analizzato.host)
+                .port(analizzato.port)
+                .apply { analizzato.pathSegments.forEach { addPathSegment(it) } }
+                .build()
+            // toString() aggiunge la "/" del percorso radice: via, perché i
+            // percorsi ("/api/...") si concatenano dopo.
+            return base.toString().trimEnd('/')
         }
     }
 }

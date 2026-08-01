@@ -6,18 +6,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -25,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -36,7 +35,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -49,11 +47,14 @@ import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.UsoApp
 import eu.stgm.pactum.genitore.dati.UsoCategoria
 import eu.stgm.pactum.genitore.dati.UsoGiorno
+import eu.stgm.pactum.genitore.ui.theme.Spazi
+import eu.stgm.pactum.genitore.ui.theme.coloreCategoria
 import kotlinx.coroutines.delay
 import java.time.Instant
 
-/** Rosso fisso (come il semaforo) per i minuti oltre il limite: uguale in chiaro e scuro. */
-private val RossoOltreLimite = Color(0xFFE53935)
+// Niente rosso qui dentro: il colore del patto vive SOLO nella striscia degli 8
+// giorni della finestra. La colpa, se c'è, è la differenza da una promessa che
+// il figlio si è dato — non il totale dei minuti, che resta `onSurface`.
 
 /** Ogni quanto si rileggono i tempi mentre la schermata è in primo piano. */
 private const val INTERVALLO_RILETTURA_MS = 60_000L
@@ -106,7 +107,7 @@ fun TempoScreen(vm: FinestraViewModel = viewModel()) {
                         Text(
                             text = stringResource(R.string.tempo_caricamento),
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp),
+                            modifier = Modifier.padding(top = Spazi.s),
                         )
                     }
                 }
@@ -144,24 +145,11 @@ private fun ContenutoTempo(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(Spazi.l),
+        verticalArrangement = Arrangement.spacedBy(Spazi.m),
     ) {
         if (mostraErrore) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                    ),
-                ) {
-                    Text(
-                        text = stringResource(R.string.tempo_dati_vecchi),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(16.dp),
-                    )
-                }
-            }
+            item { RigaDatiVecchi(stringResource(R.string.tempo_dati_vecchi)) }
         }
 
         if (ricevutaAlle != null) {
@@ -192,7 +180,17 @@ private fun ContenutoTempo(
             )
         }
 
-        item { TotaleGiorno(giorno = selezionato, oggi = selezionato == usoRecente.last()) }
+        // L'anello del giorno scelto: il totale al centro, le categorie intorno.
+        item { SchedaGiorno(giorno = selezionato, oggi = selezionato == usoRecente.last()) }
+
+        // Gli otto giorni: si guardano, e si toccano per cambiare giorno.
+        item {
+            SchedaOttoGiorni(
+                giorni = usoRecente,
+                selezionato = selezionato.giorno,
+                onScelta = { giornoScelto = it },
+            )
+        }
 
         if (selezionato.totaleMinuti != null) {
             item { TitoloSezioneTempo(stringResource(R.string.tempo_sezione_app)) }
@@ -200,18 +198,27 @@ private fun ContenutoTempo(
             if (perMinuti.isEmpty()) {
                 item { TestoVuotoTempo(stringResource(R.string.tempo_app_vuoto)) }
             } else {
+                // Senza un limite la barra si misura sull'app più usata del
+                // giorno: è un confronto tra pari, non un giudizio.
+                val riferimento = perMinuti.first().minuti
                 items(perMinuti, key = { "app-${selezionato.giorno}-${it.chiave}" }) {
-                    RigaUsoApp(it)
+                    SchedaBarraApp(app = it, riferimento = riferimento)
                 }
             }
 
-            if (selezionato.categorie.isNotEmpty()) {
-                item { TitoloSezioneTempo(stringResource(R.string.tempo_sezione_categorie)) }
-                items(
-                    selezionato.categorie.sortedByDescending { it.minuti },
-                    key = { "cat-${selezionato.giorno}-${it.chiave}" },
-                ) {
-                    RigaUsoCategoria(it)
+            // Le categorie con un limite hanno una barra propria: la legenda
+            // dell'anello dice quanto, la barra dice quanto MANCA.
+            val conLimite = selezionato.categorie
+                .filter { it.limite != null && it.minuti > 0 }
+                .sortedByDescending { it.minuti }
+            if (conLimite.isNotEmpty()) {
+                item {
+                    TitoloSezioneTempo(
+                        stringResource(R.string.tempo_sezione_categorie_limite),
+                    )
+                }
+                items(conLimite, key = { "cat-${selezionato.giorno}-${it.chiave}" }) {
+                    SchedaBarraCategoria(it)
                 }
             }
         }
@@ -229,7 +236,7 @@ private fun SelettoreGiorni(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(Spazi.s),
     ) {
         giorni.forEachIndexed { indice, giorno ->
             val oggi = indice == giorni.lastIndex
@@ -250,11 +257,18 @@ private fun SelettoreGiorni(
     }
 }
 
-/** Il totale del giorno in evidenza; un giorno senza fotografia lo dice, mai zero. */
+/**
+ * Il giorno scelto come ANELLO: il totale al centro, le categorie tutt'intorno,
+ * la legenda sotto. Un giorno senza fotografia non ha anello e lo dice a parole:
+ * mai uno zero finto, mai una ciambella vuota che sembra "zero minuti".
+ */
 @Composable
-private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+private fun SchedaGiorno(giorno: UsoGiorno, oggi: Boolean) {
+    // Con la fetta "resto" (non categorizzato) la legenda somma sempre al totale
+    // al centro dell'anello: gli stessi conti, in Tempo come nella Panoramica.
+    val fette = fetteConResto(giorno.categorie, giorno.totaleMinuti)
+    Card(shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(Spazi.l)) {
             val totale = giorno.totaleMinuti
             if (totale == null) {
                 Text(
@@ -269,21 +283,30 @@ private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean) {
                     text = stringResource(R.string.tempo_nessun_dato_spiega),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = Spazi.xs),
                 )
             } else {
-                Text(
-                    text = if (oggi) {
-                        stringResource(R.string.tempo_totale_oggi, testoDurata(totale.toLong()))
-                    } else {
-                        stringResource(
-                            R.string.tempo_totale_giorno,
-                            giornoBreve(giorno.giorno),
-                            testoDurata(totale.toLong()),
-                        )
-                    },
-                    style = MaterialTheme.typography.headlineSmall,
-                )
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    AnelloCategorie(
+                        fette = fette,
+                        totaleMinuti = totale,
+                        etichettaCentro = if (oggi) {
+                            stringResource(R.string.tempo_chip_oggi)
+                        } else {
+                            giornoBreve(giorno.giorno)
+                        },
+                    )
+                }
+                Spacer(modifier = Modifier.height(Spazi.l))
+                if (fette.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.grafico_categorie_vuoto),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    LegendaCategorie(fette)
+                }
                 // Quando è arrivata la fotografia su cui poggia il totale: un
                 // "oggi 3 h" delle 14:00 non racconta la serata.
                 val fotografia = istanteServer(giorno.aggiornatoTs)
@@ -295,7 +318,7 @@ private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean) {
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(top = Spazi.m),
                     )
                 }
             }
@@ -303,68 +326,54 @@ private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean) {
     }
 }
 
+/** La striscia degli otto giorni: si guarda, e si tocca per cambiare giorno. */
 @Composable
-private fun RigaUsoApp(app: UsoApp) {
-    RigaUso(
-        nome = app.nome ?: app.chiave,
-        minuti = app.minuti,
-        limite = app.limite,
-    )
-}
-
-@Composable
-private fun RigaUsoCategoria(categoria: UsoCategoria) {
-    RigaUso(
-        nome = etichettaCategoria(categoria.chiave),
-        minuti = categoria.minuti,
-        limite = categoria.limite,
-    )
-}
-
-/** Una riga d'uso: nome, badge "limite" dove una regola esiste, minuti a destra. */
-@Composable
-private fun RigaUso(nome: String, minuti: Int, limite: Int?) {
+private fun SchedaOttoGiorni(
+    giorni: List<UsoGiorno>,
+    selezionato: String,
+    onScelta: (String) -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Column(modifier = Modifier.padding(Spazi.l)) {
             Text(
-                text = nome,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
+                text = stringResource(R.string.grafico_ultimi_giorni),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (limite != null) {
-                EtichettaLimite(
-                    stringResource(R.string.tempo_limite, testoDurata(limite.toLong())),
-                )
-            }
-            Text(
-                text = testoDurata(minuti.toLong()),
-                style = MaterialTheme.typography.bodyLarge,
-                // Oltre il limite: rosso, come il quadretto del semaforo.
-                color = if (limite != null && minuti > limite) {
-                    RossoOltreLimite
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                modifier = Modifier.padding(start = 8.dp),
+            Spacer(modifier = Modifier.height(Spazi.m))
+            BarreGiorni(
+                giorni = giorni,
+                selezionato = selezionato,
+                onScelta = onScelta,
             )
         }
     }
 }
 
 @Composable
-private fun EtichettaLimite(testo: String) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-    ) {
-        Text(
-            text = testo,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+private fun SchedaBarraApp(app: UsoApp, riferimento: Int) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        RigaBarraUso(
+            nome = app.nome ?: app.chiave,
+            minuti = app.minuti,
+            limite = app.limite,
+            riferimento = riferimento,
+            colore = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = Spazi.l, vertical = Spazi.m),
+        )
+    }
+}
+
+@Composable
+private fun SchedaBarraCategoria(categoria: UsoCategoria) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        RigaBarraUso(
+            nome = etichettaCategoria(categoria.chiave),
+            minuti = categoria.minuti,
+            limite = categoria.limite,
+            riferimento = maxOf(categoria.minuti, categoria.limite ?: 0),
+            colore = coloreCategoria(categoria.chiave),
+            modifier = Modifier.padding(horizontal = Spazi.l, vertical = Spazi.m),
         )
     }
 }
@@ -374,7 +383,7 @@ private fun TitoloSezioneTempo(testo: String) {
     Text(
         text = testo,
         style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(top = 8.dp),
+        modifier = Modifier.padding(top = Spazi.s),
     )
 }
 
@@ -400,6 +409,6 @@ private fun TestoCentratoTempo(testo: String) {
         text = testo,
         style = MaterialTheme.typography.bodyMedium,
         textAlign = TextAlign.Center,
-        modifier = Modifier.padding(horizontal = 32.dp),
+        modifier = Modifier.padding(horizontal = Spazi.xxl),
     )
 }

@@ -1,6 +1,7 @@
 package eu.stgm.pactum.figlio.catalogo
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
@@ -64,6 +65,42 @@ object CatalogoApp {
             .sortedBy { it.etichetta.lowercase() }
             .toList()
     }
+
+    /**
+     * Vero se il tempo passato su questo pacchetto va nella fotografia d'uso.
+     *
+     * Fuori restano tre cose che non sono "tempo su una app" e che nessun altro
+     * strumento (Family Link compreso) conta, e che gonfiavano il totale:
+     *  - la schermata Home: aprire il cassetto delle app non è usare una app;
+     *  - i pezzi di sistema senza icona propria (servizi, installer, permessi);
+     *  - **Pactum stessa**: un testimone che si mette a referto da solo è ridicolo,
+     *    e il genitore vedrebbe crescere i minuti solo perché il figlio consulta
+     *    il proprio patto.
+     * Il criterio non è una lista di nomi (cambia da telefono a telefono) ma due
+     * domande al sistema: sei tu il launcher? hai un'icona da cui ti si avvia?
+     */
+    fun contaNellUso(context: Context, pacchetto: String): Boolean {
+        if (pacchetto == context.packageName) return false
+        if (pacchetto in PACCHETTI_PACTUM) return false
+        if (pacchetto == launcherPredefinito(context)) return false
+        return context.packageManager.getLaunchIntentForPackage(pacchetto) != null
+    }
+
+    /** Il pacchetto della schermata Home in uso (varia per marca e per scelta). */
+    private fun launcherPredefinito(context: Context): String? {
+        val intento = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val pm = context.packageManager
+        val risolto = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.resolveActivity(intento, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.resolveActivity(intento, PackageManager.MATCH_DEFAULT_ONLY)
+        }
+        return risolto?.activityInfo?.packageName
+    }
+
+    /** Le due app del patto: nessuna delle due si conta da sola. */
+    private val PACCHETTI_PACTUM = setOf("eu.stgm.pactum.figlio", "eu.stgm.pactum.genitore")
 
     /**
      * L'etichetta leggibile di un valore `app_o_categoria`: il nome della

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -22,6 +23,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +40,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -53,6 +57,7 @@ import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.StatiDichiarazione
 import eu.stgm.pactum.figlio.dati.zonaPatto
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 /** Il diario: dichiara com'è andata sulle regole di vita reale, a viso aperto. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -139,12 +144,21 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
     }
 
     dichiarazioneInCorso?.let { (regola, esito) ->
+        val oggiIso = LocalDate.now(zonaPatto(stato.fuso)).toString()
+        // I giorni già dichiarati su QUESTA regola: restano non selezionabili nel
+        // dialogo (il server li rifiuterebbe con gia_dichiarato).
+        val giorniDichiarati = stato.dichiarazioni
+            .filter { it.regolaId == regola.id }
+            .map { it.giorno }
+            .toSet()
         DialogoDichiarazione(
             regola = regola,
             esito = esito,
+            oggiIso = oggiIso,
+            giorniDichiarati = giorniDichiarati,
             invioInCorso = stato.invioInCorso,
             onAnnulla = { dichiarazioneInCorso = null },
-            onConferma = { nota -> vm.dichiara(regola.id, esito, nota) },
+            onConferma = { nota, giorno -> vm.dichiara(regola.id, esito, nota, giorno) },
         )
     }
 }
@@ -239,6 +253,12 @@ private fun CardRegolaVitaReale(
 @Composable
 private fun CardDichiarazione(dichiarazione: Dichiarazione, regola: Regola?) {
     val arbitro = regola?.let { parametroTesto(it.parametri, "arbitro_nome") } ?: "?"
+    // (v2.1) La frase del verdetto la congela il server (cita l'arbitro di
+    // allora): si mostra QUELLA verbatim, non la si ricostruisce dai parametri
+    // attuali della regola — che nel frattempo può aver cambiato arbitro o
+    // essere stata eliminata. Se manca (fallimento registrato o successo ancora
+    // in attesa, che non passano da un verdetto) si ripiega sul racconto locale.
+    val registro = dichiarazione.verdetto?.registro?.takeIf { it.isNotBlank() }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             regola?.let {
@@ -255,7 +275,7 @@ private fun CardDichiarazione(dichiarazione: Dichiarazione, regola: Regola?) {
                 )
             }
             Text(
-                text = descrizioneStato(dichiarazione, arbitro),
+                text = registro ?: descrizioneStato(dichiarazione, arbitro),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 4.dp),
             )
@@ -283,7 +303,8 @@ private fun CardDichiarazione(dichiarazione: Dichiarazione, regola: Regola?) {
 @Composable
 private fun descrizioneStato(dichiarazione: Dichiarazione, arbitro: String): String =
     when (dichiarazione.stato) {
-        StatiDichiarazione.IN_ATTESA -> stringResource(R.string.dichiarazione_stato_in_attesa)
+        StatiDichiarazione.IN_ATTESA ->
+            stringResource(R.string.dichiarazione_stato_in_attesa, arbitro)
         StatiDichiarazione.REGISTRATA -> stringResource(R.string.dichiarazione_stato_registrata)
         StatiDichiarazione.CONFERMATA -> stringResource(R.string.dichiarazione_stato_confermata)
         StatiDichiarazione.CONFERMATA_PER_CONTO ->
@@ -296,11 +317,16 @@ private fun descrizioneStato(dichiarazione: Dichiarazione, arbitro: String): Str
 private fun DialogoDichiarazione(
     regola: Regola,
     esito: String,
+    oggiIso: String,
+    giorniDichiarati: Set<String>,
     invioInCorso: Boolean,
     onAnnulla: () -> Unit,
-    onConferma: (String?) -> Unit,
+    onConferma: (String?, String?) -> Unit,
 ) {
     var nota by remember(regola.id, esito) { mutableStateOf("") }
+    // Giorno per cui si dichiara: default oggi. Il contratto permette oggi ↔ −7gg
+    // (fuso del patto): "ieri ho camminato ma ho scordato di segnarlo" si può.
+    var giornoScelto by rememberSaveable(regola.id, esito) { mutableStateOf(oggiIso) }
 
     AlertDialog(
         onDismissRequest = onAnnulla,
@@ -332,6 +358,12 @@ private fun DialogoDichiarazione(
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                SelettoreGiorno(
+                    oggiIso = oggiIso,
+                    giorniDichiarati = giorniDichiarati,
+                    giornoScelto = giornoScelto,
+                    onGiorno = { giornoScelto = it },
+                )
                 OutlinedTextField(
                     value = nota,
                     onValueChange = { nota = it },
@@ -344,7 +376,14 @@ private fun DialogoDichiarazione(
         confirmButton = {
             Button(
                 enabled = !invioInCorso,
-                onClick = { onConferma(nota.trim().ifBlank { null }) },
+                // Oggi è il default del server: si passa null per non forzare il
+                // campo quando non serve; un giorno passato viaggia esplicito.
+                onClick = {
+                    onConferma(
+                        nota.trim().ifBlank { null },
+                        giornoScelto.takeIf { it != oggiIso },
+                    )
+                },
             ) {
                 Text(stringResource(R.string.azione_conferma))
             }
@@ -353,4 +392,54 @@ private fun DialogoDichiarazione(
             TextButton(onClick = onAnnulla) { Text(stringResource(R.string.azione_annulla)) }
         },
     )
+}
+
+/**
+ * La striscia di giorni per cui dichiarare: oggi e i 7 precedenti (finestra del
+ * contratto), scorribile. I giorni già dichiarati su questa regola sono spenti
+ * — il server li rifiuterebbe con `gia_dichiarato`. Oggi è sempre selezionabile
+ * (la card apre il dialogo solo se oggi è ancora libero).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelettoreGiorno(
+    oggiIso: String,
+    giorniDichiarati: Set<String>,
+    giornoScelto: String,
+    onGiorno: (String) -> Unit,
+) {
+    val oggi = remember(oggiIso) {
+        runCatching { LocalDate.parse(oggiIso) }.getOrDefault(LocalDate.now())
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = stringResource(R.string.dichiarazione_scegli_giorno),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (indietro in 0..7) {
+                val giorno = oggi.minusDays(indietro.toLong())
+                val iso = giorno.toString()
+                FilterChip(
+                    selected = iso == giornoScelto,
+                    onClick = { onGiorno(iso) },
+                    enabled = iso !in giorniDichiarati,
+                    label = { Text(etichettaGiorno(indietro, giorno)) },
+                )
+            }
+        }
+    }
+}
+
+private val FORMATO_GIORNO_BREVE: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM")
+
+@Composable
+private fun etichettaGiorno(indietro: Int, giorno: LocalDate): String = when (indietro) {
+    0 -> stringResource(R.string.dichiarazione_giorno_oggi)
+    1 -> stringResource(R.string.dichiarazione_giorno_ieri)
+    else -> giorno.format(FORMATO_GIORNO_BREVE)
 }

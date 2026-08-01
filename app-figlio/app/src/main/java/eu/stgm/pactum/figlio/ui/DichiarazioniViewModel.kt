@@ -84,7 +84,13 @@ class DichiarazioniViewModel(application: Application) : AndroidViewModel(applic
         }
     }
 
-    fun dichiara(regolaId: Long, esito: String, nota: String?) {
+    /**
+     * [giorno] è il giorno del patto per cui si dichiara (ISO YYYY-MM-DD): null
+     * = oggi (default del server). La UI lo vincola alla finestra oggi ↔ −7gg
+     * del contratto, così il 409 `giorno_non_valido` non scatta; un giorno già
+     * dichiarato torna come `gia_dichiarato`, gestito come per "oggi".
+     */
+    fun dichiara(regolaId: Long, esito: String, nota: String?, giorno: String? = null) {
         _stato.value = _stato.value.copy(invioInCorso = true)
         viewModelScope.launch {
             val configurazione = Impostazioni(getApplication()).leggiConfigurazione()
@@ -93,6 +99,7 @@ class DichiarazioniViewModel(application: Application) : AndroidViewModel(applic
                     regolaId = regolaId,
                     esito = esito,
                     nota = nota?.ifBlank { null },
+                    giorno = giorno,
                 ),
             )
             val evento = if (risposta.ok) {

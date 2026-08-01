@@ -117,7 +117,8 @@ La finestra: tutto ciò che riguarda il patto in una risposta sola. Risposta `20
   "regole": [
     { "id": 1,
       "tipo": "limite_tempo",
-      "parametri": { "app_o_categoria": "TikTok", "minuti_al_giorno": 60 },
+      "parametri": { "app_o_categoria": "com.zhiliaoapp.musically", "minuti_al_giorno": 60 },
+      "nome": "TikTok",
       "attiva": true,
       "creata_ts": "2026-07-14T09:00:00+00:00",
       "ultima_modifica_ts": "2026-07-14T09:00:00+00:00",
@@ -143,16 +144,19 @@ La finestra: tutto ciò che riguarda il patto in una risposta sola. Risposta `20
     "settimana": { "usati": 15, "tetto": 90, "residui": 75 }
   },
   "bonus_giornalieri": [ { "giorno": "2026-07-07", "minuti": 0 } ],
-  "stato_silenzio": { "ultimo_battito": "2026-07-14T10:00:00+00:00", "silente": false }
+  "stato_silenzio": { "ultimo_battito": "2026-07-14T10:00:00+00:00", "silente": false },
+  "medie": { "settimana": { "minuti": 131, "giorni": 7 }, "mese": { "minuti": 118, "giorni": 30 } }
 }
 ```
 - **`regole`**: TUTTE le regole, anche le eliminate (`attiva=false`) — la finestra mostra la storia, mentre `GET /api/regole` (il patto vigente) mostra solo le attive. Ordinate per `id` crescente. `allentabile_dal` = `ultima_modifica_ts` + 4 giorni (il lock asimmetrico, informativo per il genitore).
+- **`nome`** (S2, solo nella finestra): per le regole `limite_tempo` il cui `app_o_categoria` è un pacchetto Android, il server allega un `nome` leggibile — l'etichetta più recente vista per quel pacchetto nelle fotografie `uso_giornaliero` (fallback: il pacchetto stesso) — così il genitore legge "TikTok" e non `com.zhiliaoapp.musically`. Il campo è **assente** per le regole di categoria (`app_o_categoria` = `categoria:*`): la traduce l'app. Assente anche in `GET /api/regole` (solo la finestra lo aggiunge).
 - **`semaforo`**: 8 voci per regola (oggi + i 7 giorni precedenti), dal più vecchio a oggi (oggi in coda). `stato` ∈ **solo `verde` / `rosso` / `grigio`** (niente `giallo`). Per `limite_tempo` e `fascia_oraria`: `rosso` = almeno uno sforamento della regola nel giorno; `grigio` = giorno prima della creazione oppure giorno **strettamente** successivo all'eliminazione (il giorno stesso dell'eliminazione non è grigio); `verde` = il resto. (v2.1) Per le regole **`vita_reale`**: `verde` = dichiarazione **confermata** (anche per conto) nel giorno; `rosso` = **fallimento dichiarato** o successo **ribaltato**; `grigio` = nessuna dichiarazione o verdetto ancora in attesa. Il rosso di un fallimento dichiarato fotografa il fatto, non punisce l'onestà: l'onestà è visibile perché la dichiarazione l'ha fatta il figlio.
 - **`sforamenti_recenti` / `manomissioni_recenti`**: eventi del registro (stessa forma di POST /api/eventi + `ts_server`), max 20 ciascuno, dal più recente. `ts_device` può essere `null`.
 - **`storico_modifiche`**: max 50, dal più recente. `azione` ∈ `creazione · modifica · eliminazione`; `direzione` ∈ `allenta · stringe` per le modifiche, `allenta` per le eliminazioni, `null` per le creazioni; `prima`/`dopo` = i parametri della regola (`prima=null` su creazione, `dopo=null` su eliminazione); `concordata=true` solo se nata da proposta accettata.
 - **`bonus`**: contatori del giorno e della settimana ISO (lun–dom) nel fuso del patto, dalla tabella bonus autoritativa.
 - **`bonus_giornalieri`**: riepilogo globale (non per regola) dei minuti bonus concessi in ciascun giorno della stessa finestra di 8 giorni, dal più vecchio a oggi, `minuti: 0` esplicito nei giorni senza bonus — dalla tabella bonus autoritativa (`POST /api/bonus`), non dagli eventi.
 - **`stato_silenzio`**: `silente` = nessun battito da > 45 minuti (calcolato in lettura sull'orologio del server); `ultimo_battito` è il `ts_server` dell'ultimo battito, `null` se non è mai arrivato niente (⇒ `silente=true`).
+- **`medie`** (S2.3): media dei minuti d'uso (`totale_minuti`) sui **SOLI** giorni con una fotografia, in due finestre — `settimana` = ultimi 7 giorni locali, `mese` = ultimi 30 — contate nel fuso del patto (come il resto della finestra). Ogni sotto-oggetto: `{ "minuti": <intero>, "giorni": <quanti giorni della finestra avevano dati> }`; `minuti` è la media **arrotondata all'intero**. Se nella finestra non c'è nessuna fotografia il sotto-oggetto è **`null`** (mai uno zero finto: "nessun dato" è un'informazione). Un giorno con `totale_minuti: 0` è una fotografia reale (uso zero minuti) e **conta** nella media. Le medie usano `AVG(totale_minuti)`: i giorni assenti non sono righe, quindi non abbassano la media. Retro-compatibile: se il campo manca (server vecchio) l'app nasconde la riga.
 - **`uso_recente`** (v2.2, deciso da Andrea il 15/07 su richiesta del padre: il genitore vede i tempi di TUTTE le app, non solo di quelle coi limiti): 8 voci dal più vecchio a oggi, dalla fotografia `uso_giornaliero` vigente —
 ```json
 { "giorno": "2026-07-15", "totale_minuti": 192, "aggiornato_ts": "…",

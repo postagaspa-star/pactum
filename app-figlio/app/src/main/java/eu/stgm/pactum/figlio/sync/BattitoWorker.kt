@@ -211,7 +211,10 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
      * finestra e nel valutatore contano le stesse app).
      */
     private fun eventoUsoGiornaliero(context: Context, giorno: LocalDate): Evento {
+        // Filtrata una volta sola, prima di costruire il JSON: così totale,
+        // per-app, nomi e categorie raccontano tutti la stessa storia.
         val uso = UsageStatsReader(context).usoDelGiorno(giorno)
+            .filter { CatalogoApp.contaNellUso(context, it.pacchetto) }
         return Evento(
             tipo = TipiEvento.USO_GIORNALIERO,
             tsDevice = System.currentTimeMillis(),

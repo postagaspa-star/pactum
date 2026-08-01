@@ -11,6 +11,7 @@ CHIAVI_ATTESE = {
     "bonus_oggi_per_regola",
     "proposte_pendenti",
     "dichiarazioni_in_attesa",
+    "siti_recenti",
     "fuso",
 }
 

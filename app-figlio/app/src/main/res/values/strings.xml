@@ -217,6 +217,44 @@
     <string name="notifica_permesso_revocato_titolo">Pactum non può più misurare l\'uso</string>
     <string name="notifica_permesso_revocato_testo">L\'accesso ai dati di utilizzo è stato tolto: Pactum non può più misurare l\'uso delle app. Il genitore lo vede. Riattivalo dalle impostazioni per rimettere a posto il patto.</string>
 
+    <!-- Siti visitati (v2.3) -->
+    <string name="siti_titolo">Siti visitati</string>
+    <string name="siti_scorciatoia_titolo">Siti visitati</string>
+    <string name="siti_scorciatoia_testo">Solo i nomi dei siti, la stessa lista che vede il genitore.</string>
+    <string name="siti_tavola_rotonda">Questa è esattamente la lista che vede il genitore: niente esiste nella sua finestra che tu non veda qui. Solo i nomi dei siti, mai le pagine, i contenuti o le ricerche.</string>
+    <string name="siti_stato_attiva">Osservazione attiva</string>
+    <string name="siti_stato_attiva_testo">Pactum annota il nome dei siti che il telefono chiede. Non blocca niente e non legge niente altro.</string>
+    <string name="siti_stato_spenta">Osservazione spenta</string>
+    <string name="siti_stato_spenta_testo">I siti non vengono annotati. Nella finestra del genitore restano giorni senza fotografia: assenza di dati, non \"zero siti\".</string>
+    <string name="siti_oggi_locale">Oggi sul telefono: %1$d domini osservati, in attesa del prossimo invio.</string>
+    <string name="siti_attiva">Attiva l\'osservazione</string>
+    <string name="siti_disattiva">Spegni l\'osservazione</string>
+    <string name="siti_caricamento">Sto leggendo la lista dei siti…</string>
+    <string name="siti_vuoto">Nessuna fotografia dei siti è ancora arrivata al patto.</string>
+    <string name="siti_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
+    <string name="siti_giorno_vuoto">Nessuna fotografia per questo giorno.</string>
+    <string name="siti_giorno_totale">%1$d domini distinti</string>
+    <string name="siti_giorno_tagliato">%1$d domini distinti (qui i primi %2$d)</string>
+    <string name="siti_dns_cifrato">DNS cifrato: per un pezzo di giornata non ho potuto vedere.</string>
+    <string name="siti_visite">%1$d richieste</string>
+    <string name="siti_attivata">Osservazione attiva. Da adesso i domini vanno nel registro — e li vedi qui.</string>
+    <string name="siti_disattivata">Osservazione spenta. L\'interruzione va a registro: il genitore la vede.</string>
+    <string name="siti_consenso_negato">Consenso non dato: l\'osservazione resta spenta.</string>
+
+    <!-- Attivazione: cosa stai accettando (il consenso è parte del patto) -->
+    <string name="siti_consenso_titolo">Cosa stai accettando</string>
+    <string name="siti_consenso_intro">Leggi prima di attivare: è il tuo patto, non deve esserci nessuna sorpresa.</string>
+    <string name="siti_consenso_si_titolo">Cosa viene registrato</string>
+    <string name="siti_consenso_si">• Il NOME dei siti: instagram.com, youtube.com.\n• Quante volte in un giorno il telefono li ha chiesti.\n• Nient\'altro: un elenco di nomi con un numero accanto.</string>
+    <string name="siti_consenso_no_titolo">Cosa NON viene registrato</string>
+    <string name="siti_consenso_no">• Nessun indirizzo completo: si vede youtube.com, mai QUALE video.\n• Nessun contenuto: pagine, chat e messaggi restano illeggibili.\n• Nessuna ricerca.\n• Nessun orario: solo il totale del giorno.</string>
+    <string name="siti_consenso_come_titolo">Come funziona</string>
+    <string name="siti_consenso_come">Android ti chiederà il permesso per una VPN. È una VPN locale, che resta dentro il telefono: legge solo le richieste dei nomi dei siti e le lascia passare intatte. Il traffico non viene deviato altrove, né rallentato, né bloccato. Se qualcosa non funziona, l\'osservazione si spegne da sola: la tua connessione viene prima.</string>
+    <string name="siti_consenso_patto_titolo">Il patto</string>
+    <string name="siti_consenso_patto">Il genitore VEDE, non blocca: da qui nessun sito può essere bloccato, né ora né dopo. Tu vedi la stessa identica lista in questa schermata. Puoi spegnere l\'osservazione quando vuoi — lo spegnimento va a registro, come ogni altra interruzione.</string>
+    <string name="siti_consenso_attiva">Ho capito, attiva</string>
+    <string name="siti_consenso_rifiuta">Non adesso</string>
+
     <!-- Auto-aggiornamento (tappa 6) -->
     <string name="notifica_aggiornamento_titolo">Aggiornamento pronto</string>
     <string name="notifica_aggiornamento_testo">C\'è una versione nuova di Pactum. Tocca per installarla.</string>

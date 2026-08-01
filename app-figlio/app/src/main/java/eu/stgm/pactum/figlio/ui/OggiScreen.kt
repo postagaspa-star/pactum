@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -41,6 +42,7 @@ import eu.stgm.pactum.figlio.ui.theme.Spazi
 @Composable
 fun OggiScreen(
     onApriImpostazioni: () -> Unit,
+    onApriSiti: () -> Unit,
     vm: OggiViewModel = viewModel(),
 ) {
     val stato by vm.stato.collectAsStateWithLifecycle()
@@ -90,6 +92,32 @@ fun OggiScreen(
                         text = testoDurata(stato.minutiTotali),
                         style = MaterialTheme.typography.displaySmall,
                         modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+
+            // I siti visitati (v2.3): sta qui, in chiaro, nell'app del figlio.
+            // È il SUO registro, che lui condivide — non una registrazione
+            // fatta su di lui (contratto-api.md, "Siti visitati").
+            Card(
+                onClick = onApriSiti,
+                modifier = Modifier
+                    .padding(start = Spazi.l, end = Spazi.l, bottom = Spazi.l)
+                    .fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+            ) {
+                Column(modifier = Modifier.padding(Spazi.l)) {
+                    Text(
+                        text = stringResource(R.string.siti_scorciatoia_titolo),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.siti_scorciatoia_testo),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = Spazi.xs),
                     )
                 }
             }

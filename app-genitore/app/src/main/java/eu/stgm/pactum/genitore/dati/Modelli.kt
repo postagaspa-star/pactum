@@ -24,6 +24,45 @@ data class Finestra(
     // Nullable per tolleranza: un server più vecchio non manda il campo → l'app
     // nasconde la riga invece di crashare.
     val medie: Medie? = null,
+    // I siti visitati, 8 giorni (contratto v2.3). Nullable per lo STESSO motivo
+    // delle medie, ma qui la distinzione pesa di più: `null` = "il server non sa
+    // niente di siti" (versione vecchia) → la sezione si nasconde del tutto,
+    // mentre una lista con `totale_domini: null` dentro = "il server sa, ma per
+    // quel giorno non è arrivata nessuna fotografia". Due silenzi diversi.
+    @SerialName("siti_recenti") val sitiRecenti: List<SitiGiorno>? = null,
+)
+
+// --- Siti visitati (v2.3) ----------------------------------------------------
+// Il genitore VEDE quali siti, mai cosa ci fa dentro: solo il dominio
+// registrabile e quante volte è stato richiesto nel giorno. Nessun URL, nessun
+// contenuto, nessuna ricerca, nessun orario — e nessun blocco: non esiste (e non
+// esisterà) un endpoint per bloccare un sito (contratto-api.md, sezione "Siti
+// visitati — limiti e patto etico").
+//
+// Le stesse 8 voci arrivano IDENTICHE al figlio da GET /api/patto: è il
+// principio della tavola rotonda, niente esiste solo dalla parte del genitore.
+
+@Serializable
+data class SitiGiorno(
+    val giorno: String,
+    // `null` = nessuna fotografia per quel giorno. MAI uno zero finto: "non lo
+    // so" e "zero siti" sono due notizie diverse. Può essere MAGGIORE della
+    // lunghezza di `domini` se la fotografia era tagliata ai primi 200: in quel
+    // caso la differenza si mostra, non si finge.
+    @SerialName("totale_domini") val totaleDomini: Int? = null,
+    // `true` quando il telefono usava DNS cifrato (DoH/DoT) e i domini non erano
+    // visibili. È un DATO, non un errore: il registro dichiara di non aver visto
+    // invece di raccontare una giornata a zero traffico. Quindi niente rosso.
+    @SerialName("dns_cifrato") val dnsCifrato: Boolean = false,
+    @SerialName("aggiornato_ts") val aggiornatoTs: String? = null,
+    val domini: List<SitoVisitato> = emptyList(),
+)
+
+/** Un sito del giorno: il dominio registrabile e quante volte è stato richiesto. */
+@Serializable
+data class SitoVisitato(
+    val dominio: String,
+    val visite: Int = 0,
 )
 
 // --- Medie (settimana / mese) ------------------------------------------------

@@ -12,6 +12,7 @@ senza toccare il codice; gli APK in una cartella (config.apk_dir) dove la build
 copia i release firmati (mai nel repo)."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -62,21 +63,35 @@ def versione(request: Request):
     return carica_versioni(request.app.state.settings.versioni_path)
 
 
+# Il browser NON deve mai servire una copia in cache di questa pagina o di un
+# APK: chi torna qui dopo un aggiornamento vedrebbe la versione vecchia e
+# scaricherebbe il file vecchio, senza capire perche' "non cambia niente".
+SENZA_CACHE = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
 @scarica_router.get("/scarica", response_class=HTMLResponse)
 def pagina_scarica(request: Request):
     versioni = carica_versioni(request.app.state.settings.versioni_path)
-    return HTMLResponse(_pagina_html(versioni))
+    return HTMLResponse(
+        _pagina_html(versioni, request.app.state.settings.apk_dir), headers=SENZA_CACHE
+    )
 
 
 @scarica_router.get("/scarica/{nome_file}")
 def scarica_apk(nome_file: str, request: Request):
     ruolo = APK.get(nome_file)
     if ruolo is None:
-        return HTMLResponse(_non_trovato_html(nome_file), status_code=404)
+        return HTMLResponse(_non_trovato_html(nome_file), status_code=404, headers=SENZA_CACHE)
     percorso = Path(request.app.state.settings.apk_dir) / nome_file
     if not percorso.is_file():
-        return HTMLResponse(_non_trovato_html(nome_file), status_code=404)
-    return FileResponse(percorso, media_type=MEDIA_TYPE_APK, filename=nome_file)
+        return HTMLResponse(_non_trovato_html(nome_file), status_code=404, headers=SENZA_CACHE)
+    return FileResponse(
+        percorso, media_type=MEDIA_TYPE_APK, filename=nome_file, headers=SENZA_CACHE
+    )
 
 
 def _versione_nome(versioni: dict, ruolo: str) -> str:
@@ -86,9 +101,21 @@ def _versione_nome(versioni: dict, ruolo: str) -> str:
     return VERSIONI_DEFAULT[ruolo]["versione_nome"]
 
 
-def _pagina_html(versioni: dict) -> str:
+def _data_apk(apk_dir: str, nome_file: str) -> str:
+    """Quando e' stato pubblicato quel file: un riscontro visivo immediato che
+    la pagina non e' una copia vecchia rimasta nel browser."""
+    try:
+        ts = (Path(apk_dir) / nome_file).stat().st_mtime
+        return datetime.fromtimestamp(ts).strftime("%d/%m alle %H:%M")
+    except OSError:
+        return "—"
+
+
+def _pagina_html(versioni: dict, apk_dir: str = "") -> str:
     v_figlio = _versione_nome(versioni, "figlio")
     v_genitore = _versione_nome(versioni, "genitore")
+    d_figlio = _data_apk(apk_dir, "pactum-figlio.apk")
+    d_genitore = _data_apk(apk_dir, "pactum-genitore.apk")
     return f"""<!DOCTYPE html>
 <html lang="it">
 <head>
@@ -124,6 +151,7 @@ def _pagina_html(versioni: dict) -> str:
   }}
   .btn:active {{ opacity: .85; }}
   .ver {{ color: #888; font-size: .85rem; margin-left: .6rem; }}
+  .pubbl {{ color: #888; font-size: .85rem; margin: .55rem 0 0; }}
   .box {{
     border: 1px solid #e6e6e6; background: #f4f4f6; border-radius: 10px;
     padding: .9rem 1.1rem; margin: 1rem 0;
@@ -144,6 +172,7 @@ def _pagina_html(versioni: dict) -> str:
     <p class="chi">Va installata sul telefono del <strong>ragazzo</strong>. Misura l'uso,
        custodisce le regole del patto e registra sforamenti e bonus.</p>
     <a class="btn" href="/scarica/pactum-figlio.apk">Scarica app figlio<span class="ver">v{v_figlio}</span></a>
+    <p class="pubbl">Pubblicata il {d_figlio}</p>
   </div>
 
   <div class="card">
@@ -151,6 +180,7 @@ def _pagina_html(versioni: dict) -> str:
     <p class="chi">Va installata sul telefono del <strong>genitore</strong>. Mostra la finestra
        (regole, semaforo, sforamenti, silenzi) e permette proposte e conferme.</p>
     <a class="btn" href="/scarica/pactum-genitore.apk">Scarica app genitore<span class="ver">v{v_genitore}</span></a>
+    <p class="pubbl">Pubblicata il {d_genitore}</p>
   </div>
 
   <div class="box">

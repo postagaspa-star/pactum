@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends
 
-from .. import clock
+from .. import clock, siti
 from ..auth import richiede_genitore
 from ..config import SOGLIA_SILENZIO_MINUTI, fuso_patto
 from ..db import get_conn, stato_bonus
@@ -16,7 +16,8 @@ from .regole import _riga_regola
 
 router = APIRouter(dependencies=[Depends(richiede_genitore)])
 
-GIORNI_SEMAFORO = 7  # oggi + gli ultimi 7
+# La finestra e' lunga 8 giorni (oggi + i 7 precedenti): la misura sta in
+# siti.GIORNI_FINESTRA, unica per tutte le sezioni.
 RECENTI = 20
 STORICO_MASSIMO = 50
 
@@ -184,7 +185,10 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
     # I giorni della finestra sono giorni LOCALI del patto (contratto-api.md):
     # in UTC il confine cadrebbe alle 02:00 locali italiane.
     oggi = ora.astimezone(tz).date()
-    giorni = [oggi - timedelta(days=n) for n in range(GIORNI_SEMAFORO, -1, -1)]
+    # Una sola definizione degli 8 giorni (siti.giorni_finestra) per semaforo,
+    # bonus_giornalieri, uso_recente e siti_recenti: cosi' le sezioni della
+    # finestra non possono raccontare finestre temporali diverse.
+    giorni = siti.giorni_finestra(ora)
 
     eventi = conn.execute(
         "SELECT * FROM eventi WHERE tipo IN ('sforamento', 'manomissione')"
@@ -278,5 +282,9 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         "bonus_giornalieri": bonus_giornalieri,
         "stato_silenzio": _stato_silenzio(conn, ora),
         "uso_recente": _uso_recente(conn, giorni, limiti),
+        # (v2.3) I siti visitati: il genitore vede QUALI siti, mai cosa ci fa
+        # dentro. Stessa funzione di GET /api/patto — il figlio vede la stessa
+        # identica lista (tavola rotonda). Non entra nel semaforo: non e' un'infrazione.
+        "siti_recenti": siti.siti_recenti(conn, ora),
         "medie": _medie(conn, oggi),
     }

@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -55,7 +56,9 @@ import eu.stgm.pactum.genitore.ui.theme.coloreFuoriRegola
  * Tre forme sole, riusate ovunque:
  *  1. [AnelloCategorie]  — come è diviso il tempo di un giorno;
  *  2. [BarreGiorni]      — gli ultimi otto giorni, uno accanto all'altro;
- *  3. [BarraOrizzontale] — quanto di un limite è stato consumato.
+ *  3. [BarraOrizzontale] — quanto di un limite è stato consumato (o, senza
+ *     limite, quanto vale un numero rispetto al più grande del giorno: la usano
+ *     sia i minuti delle app sia le visite dei siti).
  *
  * Due leggi che valgono per tutti e tre:
  *  - un giorno SENZA fotografia non è uno zero: è un tratteggio vuoto, perché
@@ -396,14 +399,20 @@ fun BarreGiorni(
 /**
  * Quanto è stato consumato, su un binario grigio.
  *
- * Con un limite: la scala è `max(minuti, limite)`, così la tacca del limite sta
+ * Con un limite: la scala è `max(quantità, limite)`, così la tacca del limite sta
  * sempre dentro la barra e l'eccesso si vede per quello che è — la parte oltre
- * la tacca passa al terracotta del patto. Senza limite: la scala è l'app più
- * usata del giorno, e il colore resta quello della categoria.
+ * la tacca passa al terracotta del patto. Senza limite: la scala è il
+ * `riferimento` (l'app più usata del giorno, o il sito più richiesto), e il
+ * colore resta quello di chi chiama.
+ *
+ * La `quantita` è un numero puro, non per forza minuti: la stessa barra misura i
+ * minuti di un'app e le visite di un sito. Senza `limite` non compare MAI il
+ * terracotta — ed è per questo che i siti non ne hanno uno: un sito visitato non
+ * è un'infrazione (contratto-api.md, "Siti visitati — limiti e patto etico").
  */
 @Composable
 fun BarraOrizzontale(
-    minuti: Int,
+    quantita: Int,
     limite: Int?,
     riferimento: Int,
     colore: Color,
@@ -429,12 +438,12 @@ fun BarraOrizzontale(
         )
 
         val scala = when {
-            limite != null -> maxOf(minuti, limite)
+            limite != null -> maxOf(quantita, limite)
             riferimento > 0 -> riferimento
-            else -> minuti
+            else -> quantita
         }.coerceAtLeast(1)
 
-        val eccesso = if (limite != null) minuti - limite else 0
+        val eccesso = if (limite != null) quantita - limite else 0
         if (eccesso > 0) {
             // Prima tutto terracotta, poi il pieno "entro il limite" sopra:
             // due rettangoli tondi annidati, nessun angolo che stona.
@@ -446,7 +455,7 @@ fun BarraOrizzontale(
             )
         }
 
-        val entro = if (limite != null) minOf(minuti, limite) else minuti
+        val entro = if (limite != null) minOf(quantita, limite) else quantita
         if (entro > 0) {
             val pieno = (larga * entro / scala.toFloat()).coerceIn(alta, larga)
             drawRoundRect(
@@ -497,7 +506,7 @@ fun RigaBarraUso(
             )
         }
         BarraOrizzontale(
-            minuti = minuti,
+            quantita = minuti,
             limite = limite,
             riferimento = riferimento,
             colore = colore,
@@ -521,6 +530,52 @@ fun RigaBarraUso(
                 },
             )
         }
+    }
+}
+
+/**
+ * Una riga "sito visitato": il dominio a sinistra, quante volte è stato chiesto
+ * a destra, la barra proporzionale sotto — la stessa forma delle app, così il
+ * genitore legge le due liste con lo stesso occhio.
+ *
+ * Tre differenze, tutte volute:
+ *  - nessun `limite`, quindi il terracotta non compare MAI: un sito visitato non
+ *    è uno sforamento e non viene trattato come tale (contratto-api.md, "Siti
+ *    visitati — limiti e patto etico");
+ *  - il `riferimento` è il sito più richiesto del giorno: è un confronto tra
+ *    pari dentro la stessa giornata, non un giudizio su una soglia;
+ *  - il nome è un DOMINIO e basta (`instagram.com`), mai una pagina: quello che
+ *    sta dopo il nome del sito non lo vede nemmeno il telefono del figlio.
+ */
+@Composable
+fun RigaBarraSito(
+    dominio: String,
+    visite: Int,
+    riferimento: Int,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = dominio,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = pluralStringResource(R.plurals.siti_visite, visite, visite),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = Spazi.s),
+            )
+        }
+        BarraOrizzontale(
+            quantita = visite,
+            limite = null,
+            riferimento = riferimento,
+            colore = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 

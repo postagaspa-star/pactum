@@ -30,9 +30,13 @@ Batch di eventi del registro.
 ] }
 ```
 - `id`: UUID generato dall'app alla creazione dell'evento — **chiave di idempotenza**: un id già visto non viene reinserito.
-- `tipo` ∈ `uso_giornaliero · riavvio · manomissione · sforamento · bonus_usato · dichiarazione`.
+- `tipo` ∈ `uso_giornaliero · siti_giornalieri · riavvio · manomissione · sforamento · bonus_usato · dichiarazione`.
 - `dettagli` per tipo:
   - **uso_giornaliero** — fotografia cumulativa del giorno: `{ "giorno": "YYYY-MM-DD", "uso_minuti": {package: minuti}, "totale_minuti": n, "nomi": {package: "TikTok"}, "uso_categorie": {"categoria:social": n} }`. (v2.2) `nomi` = etichette leggibili risolte sul telefono del figlio (il genitore non può risolvere i pacchetti); `uso_categorie` = totali per categoria calcolati dall'app col suo mapping interno — entrambi opzionali per tolleranza evolutiva. Il `giorno` è il giorno locale del telefono e deve essere una data reale `YYYY-MM-DD` (altrimenti la fotografia resta solo nel registro, senza indicizzare la vigente). La fotografia **vigente** per un `giorno` è **monotona su `totale_minuti`**: una fotografia con `totale_minuti` inferiore a quella vigente non la sovrascrive (protegge da consegne fuori ordine; `totale_minuti` mancante o non valido vale 0). Il registro eventi conserva comunque ogni fotografia ricevuta.
+  - **siti_giornalieri** (v2.3) — fotografia cumulativa del giorno per i **siti visitati**, stessa filosofia di `uso_giornaliero`: `{ "giorno": "YYYY-MM-DD", "domini": {"instagram.com": 12, "youtube.com": 5}, "totale_domini": 2, "dns_cifrato": false }`. Il numero è **quante volte quel dominio è stato richiesto** nel giorno (richieste osservate, non minuti e non "sessioni"). Il `giorno` è il giorno locale del telefono e deve essere una data reale `YYYY-MM-DD` (altrimenti la fotografia resta solo nel registro, senza indicizzare la vigente). Le chiavi di `domini` sono **domini registrabili in minuscolo** (`scontent.cdninstagram.com` → `instagram.com`, v. la sezione "Siti visitati"); le voci con valore non intero o negativo si scartano (una fotografia sporca non deve far crollare la finestra). L'app manda al massimo i **200 domini più richiesti** del giorno, ma `totale_domini` resta il conteggio VERO dei domini distinti: se la lista è tagliata la differenza si vede (`totale_domini` > lunghezza della lista), non si finge. `totale_domini` mancante o non valido = numero di chiavi valide in `domini` (0 se manca anche `domini`).
+    La fotografia **vigente** per un `giorno` è **monotona** sulla coppia `(totale_domini, somma delle richieste)`: una fotografia con valori inferiori a quella vigente non la sovrascrive (protegge da consegne fuori ordine); a parità di entrambi vince la più recente. Il registro eventi conserva comunque ogni fotografia ricevuta.
+    **`dns_cifrato`**: `true` quando l'app ha rilevato che il DNS cifrato (DoH/DoT) le ha impedito di vedere i domini in quel periodo. È un **DATO, non un errore**: il registro dichiara di non aver potuto vedere invece di fingere zero traffico. È **appiccicoso sul giorno**: se una qualsiasi fotografia del giorno lo dichiara `true`, il giorno resta `dns_cifrato: true` anche quando la fotografia vigente è un'altra — la monotonia impedisce ai numeri di andare indietro, l'appiccicosità impedisce alla confessione di sparire.
+    **Nessuna notifica e nessun semaforo**: un sito visitato non è uno sforamento e non viene mai trattato come tale.
   - **riavvio** — `{ }`. Marca l'azzeramento di `elapsed_realtime`; NON è una manomissione.
   - **manomissione** — `{ "sotto_tipo": "cambio_ora" | "cambio_fuso" | "silenzio" | altro, "drift_secondi": n? , "regola_id": n? }`.
   - **sforamento** — `{ "regola_id": n, "limite_efficace"?: n, "minuti_oltre"?: n, ... }` (dettagli liberi in più). Generato **sul telefono** dal valutatore locale (tappa 5): massimo UN sforamento per regola per giorno (fuso del telefono); per le `limite_tempo` il limite efficace del giorno = `minuti_al_giorno` + bonus concessi oggi su quella regola. (v2.1) Per le `fascia_oraria` che scavalcano la mezzanotte l'unità di dedup è **l'occorrenza**, identificata dal giorno di **ancoraggio** (quando la fascia parte): la coda mattutina e la testa serale della stessa notte sono un solo sforamento, non due.
@@ -60,12 +64,14 @@ Lo stato completo del patto per il sync dell'app del figlio, in una risposta sol
   "bonus_oggi_per_regola": { "1": 15 },
   "proposte_pendenti": [ ],
   "dichiarazioni_in_attesa": [ ],
+  "siti_recenti": [ ],
   "fuso": "Europe/Rome"
 }
 ```
 - `regole`: solo le **attive** (il patto vigente), stessa forma della finestra ma senza semaforo.
 - `bonus_oggi_per_regola`: minuti bonus concessi OGGI per regola (chiave = regola_id come stringa) — serve al valutatore locale per il limite efficace.
 - `proposte_pendenti` / `dichiarazioni_in_attesa`: stesse forme delle sezioni sotto.
+- **`siti_recenti`** (v2.3): **identico**, campo per campo, al `siti_recenti` di `GET /api/finestra` — stessi 8 giorni, stessa forma, stesso ordinamento, calcolato dalla stessa funzione del server. È il principio della tavola rotonda: **niente esiste nella finestra del genitore che il figlio non veda identico**. Se i due campi divergono è un bug del contratto, non una scelta di prodotto.
 
 ### POST /api/dichiarazioni
 Le dichiarazioni del figlio sulle regole di vita reale.
@@ -164,6 +170,13 @@ La finestra: tutto ciò che riguarda il patto in una risposta sola. Risposta `20
   "categorie": [ { "chiave": "categoria:social", "minuti": 130, "limite": 120, "regola_id": 4 } ] }
 ```
   `app` ordinate per minuti decrescenti; `nome` = etichetta dai `nomi` della fotografia (fallback: il pacchetto); `limite`/`regola_id` presenti SOLO dove una regola `limite_tempo` **attiva** combacia esattamente con la `chiave` (limite base: gli eventuali bonus del giorno sono già visibili in `bonus_giornalieri`); `categorie` dai totali `uso_categorie`. Un giorno senza fotografia ha `totale_minuti: null` e liste vuote — MAI uno zero finto: "nessun dato ricevuto" è un'informazione.
+- **`siti_recenti`** (v2.3, deciso da Andrea col padre il 01/08: il genitore vede QUALI siti, mai cosa ci fa dentro): 8 voci — gli stessi 8 giorni del semaforo e di `uso_recente` — dal più vecchio a oggi, dalla fotografia `siti_giornalieri` vigente di ciascun giorno —
+```json
+{ "giorno": "2026-08-01", "totale_domini": 37, "dns_cifrato": false, "aggiornato_ts": "…",
+  "domini": [ { "dominio": "instagram.com", "visite": 128 },
+              { "dominio": "youtube.com", "visite": 54 } ] }
+```
+  `domini` ordinati per `visite` **decrescenti** (a parità, per dominio in ordine alfabetico: l'ordine è deterministico, le due app mostrano la stessa lista); `visite` = quante volte quel dominio è stato richiesto nel giorno; `totale_domini` = quanti domini distinti in tutto (può essere maggiore della lunghezza della lista se la fotografia era tagliata ai primi 200); `aggiornato_ts` = `ts_server` della fotografia vigente. Un giorno senza fotografia ha `domini: []`, **`totale_domini: null`**, `dns_cifrato: false`, `aggiornato_ts: null` — MAI uno zero finto: `null` dice "nessuna fotografia arrivata", non "zero siti". `dns_cifrato: true` con dei domini elencati significa "questi li ho visti, ma per un pezzo di giornata ero cieco". Nessun URL, nessun contenuto, nessuna ricerca, nessun orario: v. **Siti visitati — limiti e patto etico**. Retro-compatibile: se il campo manca (server vecchio) l'app nasconde la sezione.
 - I giorni della finestra (semaforo e `bonus_giornalieri`) si contano nel fuso del patto (`PACTUM_TIMEZONE`, default `Europe/Rome`).
 
 ### POST /api/proposte
@@ -228,8 +241,31 @@ Marcatura come letta (gesto del genitore nell'app, NON del polling automatico).
 - `200`: `{ "id": 7, "letta": true }`.
 - `404` se l'id non esiste: `{ "detail": "notifica non trovata" }`. Rimarcare una notifica già letta risponde `200` (idempotente).
 
+## Siti visitati — limiti e patto etico (v2.3)
+
+Questa sezione è parte del contratto quanto gli endpoint: descrive **cosa il protocollo può dire e cosa non dirà mai** sui siti. Chi implementa non può allargarla senza passare da qui.
+
+### Cosa si vede (e solo quello)
+Il **dominio registrabile** e quante volte è stato richiesto in un giorno. Punto: `instagram.com: 128 il 01/08`.
+
+### I limiti (fanno parte del contratto, non sono scuse)
+1. **Solo domini, mai il resto.** Con HTTPS tutto ciò che sta dopo il nome del sito — percorso, parametri, contenuto, ricerche — viaggia cifrato: non lo vede nemmeno chi osserva il traffico dal telefono con una VPN locale. Si vede che è stato chiesto `youtube.com`, **non quale video**. Non è una scelta di prodotto reversibile: è come funziona la rete.
+2. **Il DNS cifrato può rendere ciechi.** Se il telefono o il browser risolvono i nomi via DoH/DoT, le richieste sono cifrate e l'app smette di vedere i domini. In quel caso la fotografia porta `dns_cifrato: true` e il registro **dichiara di non aver visto** invece di raccontare una giornata a zero traffico. Un buco dichiarato vale più di un numero comodo.
+3. **I domini tecnici non entrano.** CDN, analytics, telemetria, pubblicità, aggiornamenti di sistema e simili vengono **filtrati sul telefono del figlio**, prima dell'invio: nel registro finisce ciò che una persona riconoscerebbe come "un sito che ho visitato", non il rumore di rete. Il filtro vive nell'app del figlio, quindi il figlio può vederlo e discuterlo.
+4. **Aggregazione sul dominio registrabile.** `scontent.cdninstagram.com` → `instagram.com`, `m.youtube.com` → `youtube.com` (regola: dominio registrabile secondo la Public Suffix List, in minuscolo). Un sottodominio non diventa mai una riga a sé: elencare i sottodomini direbbe cose sul contenuto, e il contenuto è fuori dal patto.
+5. **Granularità: il giorno.** Nessun orario, nessuna sequenza, nessuna durata. "128 richieste il 1 agosto", mai "alle 23:14".
+6. **Se manca, manca.** Un giorno senza fotografia resta con `totale_domini: null`: telefono spento, app ferma o osservazione non attiva si vedono tutti come **assenza**, mai come zero. La cecità dichiarata (`dns_cifrato`) e l'assenza di dati sono due informazioni diverse e restano distinte.
+
+### Il patto etico
+- **Il genitore vede, non blocca.** Non esiste — e non esisterà — nessun endpoint per bloccare, filtrare o limitare un sito. Pactum non blocca niente: se un sito è un problema, il problema si affronta parlando (concept.md, *"testimone, non carceriere"*).
+- **Il figlio vede la stessa lista.** `GET /api/patto` restituisce `siti_recenti` **identico** a `GET /api/finestra`: nessuna riga esiste solo dalla parte del genitore. È il principio della tavola rotonda applicato alla lettera.
+- **Nessun URL completo, nessun contenuto, nessuna ricerca.** Mai, per contratto. Aggiungerli non sarebbe una v2.4: sarebbe un'altra app.
+- **Niente di nascosto.** L'osservazione dei domini vive nell'app del figlio e si vede nell'app del figlio: è il **suo** registro, che lui condivide, non una registrazione fatta su di lui.
+- **I siti non sono infrazioni.** `siti_giornalieri` non genera notifiche, non entra nel semaforo, non produce sforamenti. È materiale per una conversazione, non per un verdetto.
+
 ---
-**Versione: v2.2 — 15/07/2026** (richieste di Andrea + feedback del padre): fotografia uso_giornaliero con `nomi` e `uso_categorie`; finestra con `uso_recente` (tempi di TUTTE le app, 8 giorni, limiti accanto dove esistono, mai zeri finti). Il digest giornaliero del genitore (notifica all'ora scelta con totale + prime app) è comportamento dell'app genitore, nessun endpoint nuovo.
+**Versione: v2.3 — 01/08/2026** (decisione di Andrea col padre): il genitore **vede** i siti visitati dal figlio, senza poterli bloccare — nuovo evento `siti_giornalieri` (fotografia cumulativa del giorno, monotona, `dns_cifrato` appiccicoso come dichiarazione di cecità), `siti_recenti` in `GET /api/finestra` **e identico** in `GET /api/patto` (tavola rotonda), limiti del dato e patto etico messi per iscritto nella sezione "Siti visitati". Solo domini, mai URL, contenuti o ricerche.
+**v2.2 — 15/07/2026** (richieste di Andrea + feedback del padre): fotografia uso_giornaliero con `nomi` e `uso_categorie`; finestra con `uso_recente` (tempi di TUTTE le app, 8 giorni, limiti accanto dove esistono, mai zeri finti). Il digest giornaliero del genitore (notifica all'ora scelta con totale + prime app) è comportamento dell'app genitore, nessun endpoint nuovo.
 **v2.1 — 15/07/2026** (dopo revisione adversariale tappa 5): atomicità garantita su risposta-proposta/regole/dichiarazioni concorrenti; proposte `annullata` all'eliminazione della regola; confronto ricalcolato in lettura per le pendenti; `giorno` dichiarazioni vincolato (oggi ↔ −7gg); arbitro congelato sulla dichiarazione; campo `verdetto.registro`; semaforo per le `vita_reale`; convenzione `app_o_categoria` (pacchetto o `categoria:*`).
 **v2 — 15/07/2026.** Novità v2 (tappa 5): proposte (creazione col confronto calcolato dal server, risposta del figlio con auto-applicazione delle accettate), dichiarazioni vita reale con verdetto (conferma / per conto di / ribalta), bonus agganciato a una regola limite_tempo (`regola_id` obbligatorio), `GET /api/patto` per il sync del figlio, notifiche con `destinatario` e nuovi tipi, sforamenti generati dal valutatore locale (max 1 per regola per giorno, limite efficace = limite + bonus della regola).
 **v1 — 14/07/2026.** Cambi al contratto: prima qui, poi nel codice di entrambi i lati.

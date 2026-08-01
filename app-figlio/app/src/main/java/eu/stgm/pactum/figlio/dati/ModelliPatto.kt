@@ -22,6 +22,11 @@ data class Patto(
     @SerialName("bonus_oggi_per_regola") val bonusOggiPerRegola: Map<String, Int> = emptyMap(),
     @SerialName("proposte_pendenti") val propostePendenti: List<Proposta> = emptyList(),
     @SerialName("dichiarazioni_in_attesa") val dichiarazioniInAttesa: List<Dichiarazione> = emptyList(),
+    // (v2.3) La stessa identica lista che il genitore vede in GET /api/finestra:
+    // è il principio della tavola rotonda: niente esiste nella finestra del
+    // genitore che il figlio non veda identico. Vuota = server vecchio senza
+    // la sezione (l'app la nasconde) oppure nessuna fotografia ancora arrivata.
+    @SerialName("siti_recenti") val sitiRecenti: List<SitiGiorno> = emptyList(),
     val fuso: String? = null,
     // App-interno (NON dal server): il giorno del patto in cui `bonusOggiPerRegola`
     // è valido, stampato da PattoLocale al salvataggio. Se al momento della
@@ -89,6 +94,25 @@ object TipiNotifica {
     const val NUOVA_PROPOSTA = "nuova_proposta"
     const val VERDETTO = "verdetto"
 }
+
+/**
+ * (v2.3) Un giorno della lista dei siti, come lo calcola il server per
+ * ENTRAMBE le app. `totaleDomini` **null** = nessuna fotografia per quel
+ * giorno: "non è arrivato niente", che è diverso da "zero siti" — mai uno
+ * zero finto. `dnsCifrato` = per un pezzo di giornata l'app non ha potuto
+ * vedere (DoH/DoT): è un dato dichiarato, non un errore.
+ */
+@Serializable
+data class SitiGiorno(
+    val giorno: String = "",
+    @SerialName("totale_domini") val totaleDomini: Int? = null,
+    @SerialName("dns_cifrato") val dnsCifrato: Boolean = false,
+    @SerialName("aggiornato_ts") val aggiornatoTs: String? = null,
+    val domini: List<DominioVisite> = emptyList(),
+)
+
+@Serializable
+data class DominioVisite(val dominio: String = "", val visite: Int = 0)
 
 @Serializable
 data class ContatoreBonus(val usati: Int = 0, val tetto: Int = 0, val residui: Int = 0)

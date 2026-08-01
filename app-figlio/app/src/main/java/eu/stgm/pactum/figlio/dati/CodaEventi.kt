@@ -33,19 +33,28 @@ class CodaEventi(context: Context) {
      * comunque l'ultima per giorno, ma senza sostituzione la coda si
      * riempirebbe di fotografie quasi identiche a ogni battito.
      */
-    suspend fun sostituisciUsoGiornaliero(evento: Evento) = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            val giorno = evento.dettagli["giorno"]
-            val altri = if (giorno == null) {
-                leggi()
-            } else {
-                leggi().filterNot {
-                    it.tipo == TipiEvento.USO_GIORNALIERO && it.dettagli["giorno"] == giorno
+    suspend fun sostituisciUsoGiornaliero(evento: Evento) =
+        sostituisciFotografia(TipiEvento.USO_GIORNALIERO, evento)
+
+    /**
+     * (v2.3) Stessa cosa per la fotografia dei siti del giorno: cumulativa e
+     * idempotente lato server, quindi in coda ne basta l'ultima per giorno.
+     */
+    suspend fun sostituisciSitiGiornalieri(evento: Evento) =
+        sostituisciFotografia(TipiEvento.SITI_GIORNALIERI, evento)
+
+    private suspend fun sostituisciFotografia(tipo: String, evento: Evento) =
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                val giorno = evento.dettagli["giorno"]
+                val altri = if (giorno == null) {
+                    leggi()
+                } else {
+                    leggi().filterNot { it.tipo == tipo && it.dettagli["giorno"] == giorno }
                 }
+                scrivi((altri + evento).takeLast(MAX_EVENTI))
             }
-            scrivi((altri + evento).takeLast(MAX_EVENTI))
         }
-    }
 
     suspend fun inAttesa(): List<Evento> = withContext(Dispatchers.IO) {
         mutex.withLock { leggi() }

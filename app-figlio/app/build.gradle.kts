@@ -27,8 +27,10 @@ android {
         applicationId = "eu.stgm.pactum.figlio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.5.0"
+        // v2.3: osservazione dei siti visitati (solo domini). Nuova funzione =
+        // nuovo versionCode, altrimenti l'auto-aggiornamento non la propone.
+        versionCode = 6
+        versionName = "0.6.0"
     }
 
     signingConfigs {
@@ -84,4 +86,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    // Test JVM (nessun Android): la lettura dei pacchetti DNS e il filtro dei
+    // domini sono logica pura, ed è la parte dove un errore si vedrebbe come
+    // "internet rotto" o "registro sempre vuoto". Va provata.
+    testImplementation(libs.junit)
 }

@@ -5,7 +5,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import clock
+from .. import clock, siti
 from ..auth import richiede_figlio
 from ..config import nome_fuso
 from ..db import (
@@ -88,6 +88,12 @@ def registra_eventi(corpo: EventiIn, conn: sqlite3.Connection = Depends(get_conn
             nuovi += 1
             if evento.tipo == "uso_giornaliero":
                 _aggiorna_uso_giornaliero(conn, evento, ts)
+            if evento.tipo == "siti_giornalieri":
+                # (v2.3) Stessa filosofia di uso_giornaliero: il registro conserva
+                # ogni fotografia, la vigente del giorno vive in siti_giornalieri
+                # ed e' monotona. Nessuna notifica: un sito visitato non e' uno
+                # sforamento e non viene mai trattato come tale.
+                siti.aggiorna_vigente(conn, evento.id, evento.dettagli, ts)
             if evento.tipo in TIPI_EVENTO_DA_NOTIFICARE:
                 accoda_notifica(
                     conn,
@@ -167,7 +173,11 @@ def patto(conn: sqlite3.Connection = Depends(get_conn)):
     """Lo stato completo del patto per il sync dell'app del figlio, in una risposta
     sola: regole attive (senza semaforo), residui bonus, bonus di oggi per regola
     (per il limite efficace del valutatore locale), proposte pendenti, dichiarazioni
-    in attesa, fuso del patto."""
+    in attesa, siti recenti, fuso del patto.
+
+    `siti_recenti` (v2.3) esce dalla STESSA funzione che alimenta GET /api/finestra:
+    il figlio vede la lista identica a quella del genitore, riga per riga. Tavola
+    rotonda: niente esiste nella finestra del genitore che il figlio non veda."""
     ora = clock.now()
     regole = [
         _riga_regola(r)
@@ -191,5 +201,6 @@ def patto(conn: sqlite3.Connection = Depends(get_conn)):
         "bonus_oggi_per_regola": bonus_oggi_per_regola(conn, ora),
         "proposte_pendenti": proposte_pendenti,
         "dichiarazioni_in_attesa": dichiarazioni_in_attesa,
+        "siti_recenti": siti.siti_recenti(conn, ora),
         "fuso": nome_fuso(),
     }

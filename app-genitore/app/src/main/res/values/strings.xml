@@ -137,6 +137,26 @@
     <string name="tempo_sezione_categorie">Per categoria</string>
     <string name="tempo_sezione_categorie_limite">Categorie con un limite</string>
 
+    <!-- Siti visitati (contratto v2.3, siti_recenti): solo i domini, mai le pagine.
+         Il genitore vede, non blocca; la stessa lista compare identica al figlio. -->
+    <string name="siti_sezione_titolo">Siti visitati</string>
+    <string name="siti_contesto">Si vedono solo i nomi dei siti (instagram.com), mai le pagine aperte, i contenuti o le ricerche. Pactum non blocca nessun sito: questa lista serve per parlarne.</string>
+    <string name="siti_contesto_numeri">Il numero dice quante volte il telefono ha chiesto quel sito, non quanto tempo ci è stato passato.</string>
+    <string name="siti_stessa_lista">Il figlio vede questa stessa lista, identica, sul suo telefono.</string>
+    <string name="siti_dns_cifrato">In questo periodo il telefono usava il DNS cifrato: i siti non erano visibili.</string>
+    <string name="siti_nessun_dato_oggi">Oggi: nessun dato ricevuto</string>
+    <string name="siti_nessun_dato_giorno">Il %1$s: nessun dato ricevuto</string>
+    <string name="siti_nessun_dato_spiega">Il telefono del figlio non ha inviato i siti di questo giorno. Non significa zero siti visitati: i dati semplicemente non sono arrivati.</string>
+    <string name="siti_vuoto">Nessun sito registrato in questo giorno.</string>
+    <plurals name="siti_visite">
+        <item quantity="one">%1$d visita</item>
+        <item quantity="other">%1$d visite</item>
+    </plurals>
+    <plurals name="siti_altri">
+        <item quantity="one">…e %1$d altro sito non elencato: la fotografia porta i più richiesti.</item>
+        <item quantity="other">…e altri %1$d siti non elencati: la fotografia porta i più richiesti.</item>
+    </plurals>
+
     <!-- Grafici (anello delle categorie, barre degli 8 giorni, barre per app) -->
     <string name="grafico_eroe_titolo">COM\'È DIVISO IL TEMPO</string>
     <string name="grafico_ultimi_giorni">ULTIMI 8 GIORNI</string>

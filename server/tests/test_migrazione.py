@@ -184,6 +184,77 @@ def _db_v2_pre21(path):
     conn.close()
 
 
+def test_migrazione_siti_giornalieri_su_db_esistente(tmp_path):
+    """v2.2 -> v2.3: un database esistente (senza i siti) guadagna la tabella
+    siti_giornalieri completa, senza toccare i dati che c'erano gia'."""
+    path = str(tmp_path / "senza-siti.db")
+    _db_v1(path)
+    conn = sqlite3.connect(path)
+    nomi = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "siti_giornalieri" not in nomi  # il vecchio non ne sapeva niente
+    conn.close()
+
+    db.init_db(path, 30, 90)
+
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    assert _colonne(conn, "siti_giornalieri") == {
+        "giorno", "dettagli", "evento_id", "ts_server",
+        "totale_domini", "totale_visite", "dns_cifrato",
+    }
+    # nessun dato inventato: i siti non esistevano prima, la tabella nasce vuota
+    assert conn.execute("SELECT COUNT(*) FROM siti_giornalieri").fetchone()[0] == 0
+    # e la regola v1 e' ancora li'
+    assert conn.execute("SELECT COUNT(*) FROM regole").fetchone()[0] == 1
+    conn.close()
+
+
+def test_migrazione_siti_giornalieri_da_tabella_magra(tmp_path):
+    """Un DB che avesse la tabella dei siti in forma ridotta guadagna le colonne
+    di servizio (monotonia + cecita' dichiarata) senza perdere le fotografie."""
+    path = str(tmp_path / "siti-magri.db")
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE eventi (
+            id TEXT PRIMARY KEY,
+            tipo TEXT NOT NULL,
+            dettagli TEXT NOT NULL DEFAULT '{}',
+            ts_device INTEGER,
+            ts_server TEXT NOT NULL
+        );
+        CREATE TABLE siti_giornalieri (
+            giorno TEXT PRIMARY KEY,
+            dettagli TEXT NOT NULL,
+            evento_id TEXT NOT NULL REFERENCES eventi(id),
+            ts_server TEXT NOT NULL,
+            totale_domini INTEGER NOT NULL DEFAULT 0
+        );
+        """
+    )
+    conn.execute(
+        "INSERT INTO eventi (id, tipo, dettagli, ts_server) VALUES ('e1', 'siti_giornalieri', '{}', ?)",
+        (TS,),
+    )
+    conn.execute(
+        "INSERT INTO siti_giornalieri (giorno, dettagli, evento_id, ts_server, totale_domini)"
+        " VALUES ('2026-07-14', '{\"domini\": {\"instagram.com\": 3}}', 'e1', ?, 1)",
+        (TS,),
+    )
+    conn.commit()
+    conn.close()
+
+    db.init_db(path, 30, 90)
+
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    assert {"totale_visite", "dns_cifrato"} <= _colonne(conn, "siti_giornalieri")
+    riga = conn.execute("SELECT * FROM siti_giornalieri").fetchone()
+    assert riga["totale_domini"] == 1  # la fotografia sopravvive
+    assert riga["dns_cifrato"] == 0
+    conn.close()
+
+
 def test_migrazione_da_v2_a_v21(tmp_path):
     path = str(tmp_path / "v2.db")
     _db_v2_pre21(path)

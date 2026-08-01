@@ -18,6 +18,7 @@ import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.rete.PostinoClient
+import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -89,6 +90,14 @@ class PactumService : Service() {
                     SentinellaPatto(applicationContext).valuta()
                 } catch (e: Exception) {
                     // meglio un giro senza valutazione che un testimone morto
+                }
+                // (v2.3) L'osservazione dei siti si rimette in piedi da qui se
+                // il figlio l'aveva accesa: il loop del testimone è il canale
+                // affidabile, Doze può rinviare il worker per ore.
+                try {
+                    OsservazioneSiti.riprendiSeConsentita(applicationContext)
+                } catch (e: Exception) {
+                    // idem: un tunnel che non riparte non deve fermare il battito
                 }
                 delay(INTERVALLO_BATTITO_MS)
             }

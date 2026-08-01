@@ -24,6 +24,10 @@ import eu.stgm.pactum.figlio.misura.UsageStatsReader
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.rete.PostinoClient
+import eu.stgm.pactum.figlio.siti.Domini
+import eu.stgm.pactum.figlio.siti.OsservazioneSiti
+import eu.stgm.pactum.figlio.siti.RegistroSiti
+import eu.stgm.pactum.figlio.siti.ReteDns
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -69,8 +73,9 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         // gli eventi da consegnare, così l'eventuale evento parte in questo giro.
         rilevaManomissioniPermessi(context, impostazioni, coda)
 
+        val oggi = LocalDate.now()
+
         if (PermessiHelper.haAccessoUso(context)) {
-            val oggi = LocalDate.now()
             // Oggi + IERI: l'uso dopo l'ultima run del giorno andrebbe perso
             // per sempre (di notte il telefono dorme e la run di mezzanotte
             // non arriva). Il server tiene l'ultima fotografia per giorno,
@@ -78,6 +83,22 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
             // evita di riempire la coda di fotografie quasi identiche.
             coda.sostituisciUsoGiornaliero(eventoUsoGiornaliero(context, oggi))
             coda.sostituisciUsoGiornaliero(eventoUsoGiornaliero(context, oggi.minusDays(1)))
+        }
+
+        // Siti visitati (v2.3): stessa filosofia dell'uso — fotografia
+        // cumulativa di oggi e di ieri, sostituita in coda a ogni giro.
+        // Prima però si guarda se l'osservazione è ancora in piedi (una VPN
+        // spenta è un fatto da registrare) e si prova a riaccenderla.
+        OsservazioneSiti.rilevaInterruzione(context)
+        OsservazioneSiti.riprendiSeConsentita(context)
+        if (ReteDns.dnsPrivatoAttivo(context)) {
+            // DNS privato cifrato acceso: i nomi non passano più in chiaro.
+            // Si dichiara la cecità invece di raccontare una giornata vuota.
+            RegistroSiti.dichiaraCieco(context)
+        }
+        eventoSitiGiornalieri(context, oggi)?.let { coda.sostituisciSitiGiornalieri(it) }
+        eventoSitiGiornalieri(context, oggi.minusDays(1))?.let {
+            coda.sostituisciSitiGiornalieri(it)
         }
 
         val postino = PostinoClient(configurazione)
@@ -244,6 +265,37 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
                             put(categoria, JsonPrimitive(usi.sumOf { it.millisPrimoPiano / 60_000 }))
                         }
                 })
+            },
+        )
+    }
+
+    /**
+     * (v2.3) Fotografia cumulativa dei SITI di [giorno]: solo domini e quante
+     * volte sono stati chiesti. **null** quando non c'è niente da dire — mai
+     * una fotografia vuota: un giorno senza dati deve restare "assenza"
+     * (`totale_domini: null` lato server), non uno zero finto.
+     *
+     * `totale_domini` è il conteggio VERO dei domini distinti anche quando la
+     * lista è tagliata ai primi 200: se è tagliata si vede, non si finge.
+     */
+    private fun eventoSitiGiornalieri(context: Context, giorno: LocalDate): Evento? {
+        val fotografia = RegistroSiti.fotografia(context, giorno.toString()) ?: return null
+        if (fotografia.domini.isEmpty() && !fotografia.dnsCifrato) return null
+        // Ordine deterministico (visite decrescenti, poi alfabetico): il taglio
+        // ai primi 200 deve cadere sempre sugli stessi, non a caso.
+        val ordinati = fotografia.domini.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .take(Domini.LIMITE_DOMINI_FOTOGRAFIA)
+        return Evento(
+            tipo = TipiEvento.SITI_GIORNALIERI,
+            tsDevice = System.currentTimeMillis(),
+            dettagli = buildJsonObject {
+                put("giorno", giorno.toString())
+                put("domini", buildJsonObject {
+                    ordinati.forEach { put(it.key, JsonPrimitive(it.value)) }
+                })
+                put("totale_domini", fotografia.domini.size)
+                put("dns_cifrato", fotografia.dnsCifrato)
             },
         )
     }

@@ -110,6 +110,26 @@ CREATE TABLE IF NOT EXISTS uso_giornaliero (
     totale_minuti INTEGER NOT NULL DEFAULT 0
 );
 
+-- siti_giornalieri (v2.3) e' la gemella di uso_giornaliero per i SITI VISITATI:
+-- fotografia cumulativa del giorno, il registro eventi conserva tutto, qui vive
+-- la VIGENTE. Monotona sulla coppia (totale_domini, totale_visite): una
+-- fotografia con valori inferiori non sovrascrive quella vigente (consegne fuori
+-- ordine). totale_domini e' il conteggio VERO dei domini distinti e puo' essere
+-- maggiore delle voci elencate (l'app taglia ai 200 piu' richiesti): la
+-- differenza si vede, non si finge. totale_visite (somma delle richieste) serve
+-- solo alla monotonia. dns_cifrato e' la dichiarazione di cecita' (DoH/DoT) ed e'
+-- APPICCICOSA sul giorno: una volta dichiarata non sparisce, anche se la
+-- fotografia vigente diventa un'altra. SOLO domini: mai URL, contenuti, ricerche.
+CREATE TABLE IF NOT EXISTS siti_giornalieri (
+    giorno TEXT PRIMARY KEY,
+    dettagli TEXT NOT NULL,
+    evento_id TEXT NOT NULL REFERENCES eventi(id),
+    ts_server TEXT NOT NULL,
+    totale_domini INTEGER NOT NULL DEFAULT 0,
+    totale_visite INTEGER NOT NULL DEFAULT 0,
+    dns_cifrato INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS battiti (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batteria INTEGER,
@@ -165,6 +185,21 @@ def _migra(conn: sqlite3.Connection) -> None:
     if "totale_minuti" not in _colonne(conn, "uso_giornaliero"):
         conn.execute(
             "ALTER TABLE uso_giornaliero ADD COLUMN totale_minuti INTEGER NOT NULL DEFAULT 0"
+        )
+
+    # siti_giornalieri (v2.3): sui database esistenti la tabella nasce da SCHEMA
+    # (CREATE TABLE IF NOT EXISTS gira prima di qui), quindi non serve backfill —
+    # nessun dato sui siti esisteva prima. Questi ALTER coprono il caso di un DB
+    # che avesse gia' la tabella in una forma piu' magra (colonne di servizio
+    # aggiunte dopo): idempotenti, no-op su un DB fresco.
+    colonne_siti = _colonne(conn, "siti_giornalieri")
+    if colonne_siti and "totale_visite" not in colonne_siti:
+        conn.execute(
+            "ALTER TABLE siti_giornalieri ADD COLUMN totale_visite INTEGER NOT NULL DEFAULT 0"
+        )
+    if colonne_siti and "dns_cifrato" not in colonne_siti:
+        conn.execute(
+            "ALTER TABLE siti_giornalieri ADD COLUMN dns_cifrato INTEGER NOT NULL DEFAULT 0"
         )
 
     # bonus: aggancio a una regola (v2). Le righe v1 restano senza regola_id.

@@ -47,6 +47,7 @@ import eu.stgm.pactum.figlio.ui.PrimaRegolaScreen
 import eu.stgm.pactum.figlio.ui.ProposteScreen
 import eu.stgm.pactum.figlio.ui.RegoleScreen
 import eu.stgm.pactum.figlio.ui.RegoleViewModel
+import eu.stgm.pactum.figlio.ui.SitiScreen
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
 
 class MainActivity : ComponentActivity() {
@@ -122,6 +123,7 @@ private fun PactumRoot(
 
     var scheda by rememberSaveable { mutableStateOf(Scheda.OGGI) }
     var mostraImpostazioni by rememberSaveable { mutableStateOf(false) }
+    var mostraSiti by rememberSaveable { mutableStateOf(false) }
 
     // Gate della prima regola (concept.md: almeno una regola obbligatoria). Lo
     // stesso RegoleViewModel dell'Activity serve il gate e la scheda Regole.
@@ -137,6 +139,15 @@ private fun PactumRoot(
     if (mostraImpostazioni) {
         BackHandler { mostraImpostazioni = false }
         ImpostazioniScreen(onChiudi = { mostraImpostazioni = false; regoleVm.aggiorna() })
+        return
+    }
+
+    // I siti visitati (v2.3): schermata piena, raggiunta dalla scheda Oggi.
+    // Fuori dalla barra in basso di proposito — è una sezione da leggere,
+    // non un posto dove si sta.
+    if (mostraSiti) {
+        BackHandler { mostraSiti = false }
+        SitiScreen(onChiudi = { mostraSiti = false })
         return
     }
 
@@ -190,7 +201,10 @@ private fun PactumRoot(
         // riapplicherebbero l'inset della status bar (doppio spazio).
         Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
             when (scheda) {
-                Scheda.OGGI -> OggiScreen(onApriImpostazioni = { mostraImpostazioni = true })
+                Scheda.OGGI -> OggiScreen(
+                    onApriImpostazioni = { mostraImpostazioni = true },
+                    onApriSiti = { mostraSiti = true },
+                )
                 Scheda.REGOLE -> RegoleScreen()
                 Scheda.BONUS -> BonusScreen()
                 Scheda.PROPOSTE -> ProposteScreen()

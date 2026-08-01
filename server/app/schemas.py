@@ -63,7 +63,15 @@ class BattitoIn(BaseModel):
 
 
 TipoEvento = Literal[
-    "uso_giornaliero", "riavvio", "manomissione", "sforamento", "bonus_usato", "dichiarazione"
+    "uso_giornaliero",
+    # siti_giornalieri (v2.3): la fotografia dei SITI visitati, gemella di
+    # uso_giornaliero. Non e' un'infrazione: non notifica e non tinge il semaforo.
+    "siti_giornalieri",
+    "riavvio",
+    "manomissione",
+    "sforamento",
+    "bonus_usato",
+    "dichiarazione",
 ]
 
 

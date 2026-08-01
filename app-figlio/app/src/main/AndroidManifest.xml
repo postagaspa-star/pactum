@@ -51,6 +51,19 @@
                 android:value="Registro trasparente uso app per patto familiare figlio-genitore" />
         </service>
 
+        <!-- Osservazione dei siti visitati (v2.3). VPN LOCALE che instrada SOLO
+             il DNS: nessun altro traffico entra nel tunnel, niente viene mai
+             bloccato. exported="true" con BIND_VPN_SERVICE e' la forma
+             richiesta da Android: il permesso ce l'ha solo il sistema. -->
+        <service
+            android:name=".siti.OsservatoreSitiService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".avvio.BootReceiver"
             android:enabled="true"

@@ -50,6 +50,14 @@ class Impostazioni(private val context: Context) {
         // L'ultimo versionCode per cui è già stato tentato l'auto-aggiornamento:
         // evita di riscaricare l'APK e ripresentare il dialogo a ogni giro.
         val VERSIONE_TENTATA = intPreferencesKey("versione_tentata")
+
+        // v2.3 — osservazione dei siti visitati.
+        // RICHIESTA: il figlio l'ha accesa nell'app (la sua decisione, che
+        // sopravvive ai riavvii). NOTA: l'ultimo stato osservato di
+        // "richiesta + consenso VPN vivo", per rilevare l'interruzione come
+        // transizione e non come stato istantaneo.
+        val SITI_RICHIESTA = booleanPreferencesKey("siti_osservazione_richiesta")
+        val SITI_NOTA = booleanPreferencesKey("siti_osservazione_nota")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -72,6 +80,9 @@ class Impostazioni(private val context: Context) {
                 // già in corso verrebbe rimandata come manomissione al server nuovo.
                 p.remove(Chiavi.ACCESSO_USO_NOTO)
                 p.remove(Chiavi.NOTIFICHE_NOTE)
+                // Idem per l'osservazione dei siti (la SCELTA del figlio resta:
+                // è un consenso dato al telefono, non al server).
+                p.remove(Chiavi.SITI_NOTA)
             }
             p[Chiavi.SERVER_URL] = urlNuovo
             p[Chiavi.TOKEN] = tokenNuovo
@@ -186,6 +197,27 @@ class Impostazioni(private val context: Context) {
 
     suspend fun registraNotificheNote(attive: Boolean) {
         context.dataStore.edit { p -> p[Chiavi.NOTIFICHE_NOTE] = attive }
+    }
+
+    // --- Osservazione dei siti visitati (v2.3) ------------------------------
+    // La scelta del figlio (l'ha accesa lui) e l'ultimo stato noto
+    // dell'osservazione viva, per rilevarne l'interruzione come transizione.
+
+    val osservazioneSitiRichiesta: Flow<Boolean> =
+        context.dataStore.data.map { p -> p[Chiavi.SITI_RICHIESTA] ?: false }
+
+    suspend fun leggiOsservazioneSitiRichiesta(): Boolean =
+        context.dataStore.data.first()[Chiavi.SITI_RICHIESTA] ?: false
+
+    suspend fun registraOsservazioneSitiRichiesta(richiesta: Boolean) {
+        context.dataStore.edit { p -> p[Chiavi.SITI_RICHIESTA] = richiesta }
+    }
+
+    suspend fun leggiOsservazioneSitiNota(): Boolean? =
+        context.dataStore.data.first()[Chiavi.SITI_NOTA]
+
+    suspend fun registraOsservazioneSitiNota(attiva: Boolean) {
+        context.dataStore.edit { p -> p[Chiavi.SITI_NOTA] = attiva }
     }
 
     // --- Auto-aggiornamento (tappa 6) ---------------------------------------

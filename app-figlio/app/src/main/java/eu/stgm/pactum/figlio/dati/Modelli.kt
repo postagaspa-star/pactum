@@ -33,6 +33,13 @@ object TipiEvento {
     /** Fotografia cumulativa dell'uso del giorno (il server deduplica per giorno). */
     const val USO_GIORNALIERO = "uso_giornaliero"
 
+    /**
+     * (v2.3) Fotografia cumulativa dei SITI del giorno: solo domini e quante
+     * volte sono stati chiesti. Mai URL, mai contenuti, mai ricerche
+     * (docs/contratto-api.md, "Siti visitati").
+     */
+    const val SITI_GIORNALIERI = "siti_giornalieri"
+
     /** Riavvio del telefono: marca l'azzeramento di elapsedRealtime, NON è una manomissione. */
     const val RIAVVIO = "riavvio"
 
@@ -41,6 +48,15 @@ object TipiEvento {
 
     /** Sforamento rilevato dal valutatore locale (max uno per regola per giorno). */
     const val SFORAMENTO = "sforamento"
+}
+
+/** I `sotto_tipo` delle manomissioni che l'app del figlio sa dichiarare. */
+object SottoTipiManomissione {
+    const val PERMESSO_REVOCATO = "permesso_revocato"
+    const val NOTIFICHE_DISATTIVATE = "notifiche_disattivate"
+
+    /** (v2.3) L'osservazione dei siti si è fermata: VPN locale spenta o revocata. */
+    const val OSSERVAZIONE_SITI_INTERROTTA = "osservazione_siti_interrotta"
 }
 
 /** Il battito "sono viva" inviato ogni ~15 minuti. */

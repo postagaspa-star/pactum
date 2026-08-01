@@ -11,6 +11,7 @@ import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.TipiEvento
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.servizio.PactumService
+import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.sync.BattitoWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,11 @@ class BootReceiver : BroadcastReceiver() {
                 val elapsed = SystemClock.elapsedRealtime()
                 // Nuova ancora subito: l'orologio post-riavvio è la nuova base.
                 Impostazioni(context).salvaAncoraTempo(AncoraTempo(adesso, elapsed))
+                // L'osservazione dei siti (v2.3) non sopravvive da sola al
+                // riavvio: se il figlio l'aveva accesa e il consenso VPN c'è
+                // ancora, riparte qui. Senza, il registro dei siti si
+                // interromperebbe in silenzio a ogni spegnimento.
+                OsservazioneSiti.riprendiSeConsentita(context)
                 CodaEventi(context).accoda(
                     Evento(
                         tipo = TipiEvento.RIAVVIO,

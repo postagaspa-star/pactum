@@ -1,13 +1,14 @@
-# Pactum — postino sul NAS Synology (Container Manager = Docker Compose).
+# Pactum — il postino sul NAS (Docker Compose).
 #
-# Come si usa (dettagli in docs/deploy-nas.md):
-#   1. Copia server/.env.example in server/.env e metti i token VERI.
-#   2. Container Manager -> Progetto -> crea dal percorso di questa cartella,
-#      oppure:  docker compose up -d --build
-#   3. Verifica:  http://IP-DEL-NAS:8000/api/salute  -> {"stato":"ok",...,"db_ok":true}
+# Due container:
+#   pactum    -> il server (il "postino")
+#   tailscale -> gli da un indirizzo pubblico https FISSO, senza aprire porte
+#                sul router e senza comprare domini
 #
-# Il registro della famiglia vive nel volume "pactum-data" (NON si tocca a mano).
-# Gli APK firmati si mettono nella cartella host montata su /apk.
+# Guida passo-passo: docs/deploy-nas-ugreen.md
+#
+# Il registro della famiglia vive nel volume "pactum-data": NON si tocca a mano
+# e sopravvive a riavvii e aggiornamenti. Gli APK firmati stanno in server/apk.
 
 services:
   pactum:
@@ -17,8 +18,10 @@ services:
     image: pactum-postino:latest
     container_name: pactum
     restart: unless-stopped
+    expose:
+      - "8000"                   # visibile a tailscale sulla rete interna di Docker
     ports:
-      - "8000:8000"              # esposto sul NAS; il Tunnel Cloudflare lo raggiunge qui (Fase 3)
+      - "8000:8000"              # e anche sulla LAN di casa, per le verifiche
     env_file:
       - ./server/.env            # token veri e opzioni (gitignorato)
     environment:
@@ -27,23 +30,35 @@ services:
       PACTUM_DB: /data/pactum.db # database sul volume persistente
       PACTUM_APK_DIR: /apk       # APK serviti da /scarica
     volumes:
-      - pactum-data:/data        # volume Docker: il database persiste tra riavvii/update
-      - ./server/apk:/apk        # cartella host: qui dentro gli APK firmati (pactum-figlio.apk, ...)
-      - ./server/backup:/backup  # cartella host: qui lo script di backup scrive le copie del registro
+      - pactum-data:/data        # volume Docker: il registro persiste
+      - ./server/apk:/apk        # cartella host: gli APK firmati
+      - ./server/backup:/backup  # cartella host: le copie del registro
 
-  # Tunnel Cloudflare GRATUITO (quick tunnel): espone il postino fuori casa senza
-  # aprire porte sul router. NON serve account ne' dominio.
-  # ATTENZIONE: l'URL pubblico (https://qualcosa.trycloudflare.com) CAMBIA a ogni
-  # riavvio di questo container. Dopo ogni riavvio leggilo dai log (vedi
-  # docs/deploy-nas.md, sezione Tunnel) e aggiornalo nelle due app.
-  # Per un URL FISSO servira' un dominio (named tunnel): upgrade futuro.
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    container_name: pactum-tunnel
+  # Tailscale Funnel: indirizzo pubblico https STABILE (es.
+  # https://pactum.tuo-nome.ts.net), gratuito, senza aprire porte sul router.
+  # A differenza del vecchio tunnel Cloudflare "veloce", questo indirizzo NON
+  # cambia mai: si configura una volta nelle app e non ci si pensa piu'.
+  #
+  # Serve una chiave d'accesso (TS_AUTHKEY) in server/.env — v. la guida.
+  # userspace-networking: niente /dev/net/tun, niente privilegi speciali, cosi'
+  # gira anche dove il NAS non concede capacita' di rete estese.
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: pactum-tailscale
+    hostname: pactum             # -> diventa il nome nell'indirizzo pubblico
     restart: unless-stopped
-    command: tunnel --no-autoupdate --url http://pactum:8000   # raggiunge il postino sulla rete Docker
+    env_file:
+      - ./server/.env            # qui dentro TS_AUTHKEY
+    environment:
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/funnel.json   # espone pactum:8000 al pubblico
+    volumes:
+      - tailscale-state:/var/lib/tailscale   # l'identita' del nodo: va persistita
+      - ./tailscale:/config                  # funnel.json (in questo repo)
     depends_on:
       - pactum
 
 volumes:
-  pactum-data:                   # gestito da Docker; sopravvive alla ricreazione del container
+  pactum-data:                   # il registro del patto
+  tailscale-state:               # l'identita' Tailscale del NAS

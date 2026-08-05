@@ -259,7 +259,7 @@ Test di collaudo: qualunque cosa stia nella finestra del genitore, il figlio dev
 
 # Pactum — Documento di redesign
 **Esito della tavola rotonda Giulia (visual) · Marco (prodotto famiglia) · Sara (UX comportamentale) — decisioni operative**
-Design lead: sintesi e arbitrato. Data: 31/07/2026. Base di codice verificata: `C:\Users\andre\OneDrive\Desktop\Pactum`
+Design lead: sintesi e arbitrato. Data: 31/07/2026. Base di codice verificata: `<cartella del progetto>`
 
 ---
 
@@ -348,7 +348,7 @@ android {
     sourceSets["main"].kotlin.srcDir("../../core-design/src/main/kotlin")
 }
 ```
-Nuova cartella: `C:\Users\andre\OneDrive\Desktop\Pactum\core-design\src\main\kotlin\eu\stgm\pactum\design\`
+Nuova cartella: `core-design\src\main\kotlin\eu\stgm\pactum\design\`
 **Regola dura:** in `core-design` non si entra mai in `R` né in `stringResource`. Le stringhe si passano come parametri (`StrisciaGiorni(giorni, etichettaOggi = stringResource(...))`), altrimenti il codice condiviso si lega alle risorse di una delle due app e smette di essere condiviso.
 Sul tono vince Sara nella sostanza e Giulia nel metodo: stessi mattoni, respiro diverso — padding card 16.dp e spacing 12.dp dal genitore, 20.dp e 16.dp dal figlio, tono delle parole diverso, componenti identici.
 
@@ -641,7 +641,7 @@ Icone: `ic_notifica_binocolo.xml` (già disegnato, diventa l'icona della Finestr
 ---
 
 ### GENITORE — `FinestraScreen.kt`
-`C:\Users\andre\OneDrive\Desktop\Pactum\app-genitore\app\src\main\java\eu\stgm\pactum\genitore\ui\FinestraScreen.kt`
+`app-genitore\app\src\main\java\eu\stgm\pactum\genitore\ui\FinestraScreen.kt`
 
 **Oggi:** `BannerSilenzio` rosso a piena larghezza in cima, poi sei sezioni piatte (`regole`, `bonus`, `sforamenti`, `manomissioni`, `storico`) tutte in `titleMedium`, tutte fatte di `Card` identiche, 4-5 schermate di scroll.
 
@@ -698,7 +698,7 @@ Struttura invariata nella sostanza (proponi / le tue proposte), ma:
 ---
 
 ### FIGLIO — `OggiScreen.kt`
-`C:\Users\andre\OneDrive\Desktop\Pactum\app-figlio\app\src\main\java\eu\stgm\pactum\figlio\ui\OggiScreen.kt`
+`app-figlio\app\src\main\java\eu\stgm\pactum\figlio\ui\OggiScreen.kt`
 
 **Oggi:** una `Card` "Tempo nelle app oggi" + `headlineMedium` coi minuti, poi una lista di app con sotto il **nome del pacchetto** (`riga.pacchetto`, riga 123: `com.instagram.android` mostrato al proprietario del telefono). `StatoOggi` ha tre campi — `caricamento`, `righe`, `minutiTotali` — e **non sa nemmeno che le regole esistono**. Il figlio apre il suo patto e trova un Digital Wellbeing più brutto.
 

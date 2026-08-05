@@ -360,14 +360,14 @@ Ho esaminato server (`server/app/*`), app figlio e app genitore per intero. Nel 
 **Priorità per la demo:** #1 (nomi grezzi) è quella che più intacca la chiarezza davanti a un genitore esterno — la parte categorie si sistema in poche righe lato client. Poi #5 e #4 (i totali che "non tornano" tra i due telefoni), quindi #2 e #3 (coerenza proposte/verdetti).
 
 File principali citati (percorsi assoluti):
-- `C:\Users\andre\OneDrive\Desktop\Pactum\app-genitore\app\src\main\java\eu\stgm\pactum\genitore\ui\Testi.kt`
-- `C:\Users\andre\OneDrive\Desktop\Pactum\app-genitore\app\src\main\java\eu\stgm\pactum\genitore\ui\ProposteScreen.kt`
-- `C:\Users\andre\OneDrive\Desktop\Pactum\app-figlio\app\src\main\java\eu\stgm\pactum\figlio\ui\DichiarazioniScreen.kt`
-- `C:\Users\andre\OneDrive\Desktop\Pactum\app-figlio\app\src\main\java\eu\stgm\pactum\figlio\valutatore\SentinellaPatto.kt`
-- `C:\Users\andre\OneDrive\Desktop\Pactum\app-figlio\app\src\main\java\eu\stgm\pactum\figlio\sync\BattitoWorker.kt`
-- `C:\Users\andre\OneDrive\Desktop\Pactum\app-figlio\app\src\main\java\eu\stgm\pactum\figlio\ui\OggiViewModel.kt`
-- `C:\Users\andre\OneDrive\Desktop\Pactum\server\app\routes\genitore.py`
-- `C:\Users\andre\OneDrive\Desktop\Pactum\server\app\routes\distribuzione.py`
+- `app-genitore\app\src\main\java\eu\stgm\pactum\genitore\ui\Testi.kt`
+- `app-genitore\app\src\main\java\eu\stgm\pactum\genitore\ui\ProposteScreen.kt`
+- `app-figlio\app\src\main\java\eu\stgm\pactum\figlio\ui\DichiarazioniScreen.kt`
+- `app-figlio\app\src\main\java\eu\stgm\pactum\figlio\valutatore\SentinellaPatto.kt`
+- `app-figlio\app\src\main\java\eu\stgm\pactum\figlio\sync\BattitoWorker.kt`
+- `app-figlio\app\src\main\java\eu\stgm\pactum\figlio\ui\OggiViewModel.kt`
+- `server\app\routes\genitore.py`
+- `server\app\routes\distribuzione.py`
 
 ---
 
@@ -455,7 +455,7 @@ Tono nettamente più caldo e curato del genitore. 5 schede: `Oggi · Regole · B
 
 ---
 
-File esaminati (tutti in `C:\Users\andre\OneDrive\Desktop\Pactum`):
+File esaminati (tutti in `<cartella del progetto>`):
 - Genitore: `app-genitore\app\src\main\java\eu\stgm\pactum\genitore\MainActivity.kt` e `ui\{FinestraScreen,TempoScreen,ProposteScreen,VerdettiScreen,NotificheScreen,ImpostazioniScreen,Testi}.kt`; `app-genitore\app\src\main\res\values\strings.xml`
 - Figlio: `app-figlio\app\src\main\java\eu\stgm\pactum\figlio\MainActivity.kt` e `ui\{OggiScreen,RegoleScreen,BonusScreen,ProposteScreen,DichiarazioniScreen,OnboardingScreen,Testi}.kt`; `app-figlio\app\src\main\res\values\strings.xml`
 

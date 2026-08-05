@@ -21,5 +21,5 @@ artefatti di build, pesano, e vanno consegnati fuori dal repo. In questa cartell
 resta versionato solo questo README e `.gitkeep`. Finche' un APK non e' stato
 copiato qui, `GET /scarica/pactum-*.apk` risponde con una pagina 404 gentile.
 
-La chiave di firma vive fuori dal repo e da OneDrive (`C:\Users\andre\pactum-keys\`,
+La chiave di firma vive fuori dal repo e da OneDrive (`<cartella delle chiavi, fuori dal repo>/`,
 vedi piano tappa 6): custodirla per sempre, `versionCode` sempre crescente.

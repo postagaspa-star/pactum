@@ -8,9 +8,9 @@ percorso più corto e senza scelte.
 
 | Cosa | Dove sta ORA | Dove va |
 |---|---|---|
-| **Cartella pronta per il NAS** | `C:\Users\andre\OneDrive\Desktop\Pactum-NAS` | sul NAS, in `docker/Pactum-NAS` |
+| **Cartella pronta per il NAS** | `<cartella Pactum-NAS>` | sul NAS, in `docker/Pactum-NAS` |
 | I 2 APK firmati | già dentro `Pactum-NAS\server\apk\` (viaggiano con la cartella) | — |
-| **La chiave di firma** | `C:\Users\andre\pactum-keys` | **NON sul NAS** — su chiavetta/cloud tuo |
+| **La chiave di firma** | `<cartella delle chiavi, fuori dal repo>` | **NON sul NAS** — su chiavetta/cloud tuo |
 
 Tutto ciò che serve al NAS è già dentro **`Pactum-NAS`** (16 MB, senza zavorra).
 
@@ -18,7 +18,7 @@ Tutto ciò che serve al NAS è già dentro **`Pactum-NAS`** (16 MB, senza zavorr
 
 ## PASSO 0 — Metti la chiave al sicuro (2 minuti)
 
-Copia l'intera cartella `C:\Users\andre\pactum-keys` su una **chiavetta USB** o nel
+Copia l'intera cartella `<cartella delle chiavi, fuori dal repo>` su una **chiavetta USB** o nel
 tuo **cloud personale**. È la chiave che firma gli aggiornamenti di Pactum per
 sempre: se la perdi, non potrai più aggiornare le app. Non va sul NAS, non va nel
 repo. Fatto questo, dimenticatene (ma tienila).

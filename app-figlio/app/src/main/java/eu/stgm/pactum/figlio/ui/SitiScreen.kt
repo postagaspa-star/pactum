@@ -50,10 +50,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.SitiGiorno
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
-import eu.stgm.pactum.figlio.ui.theme.Spazi
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale

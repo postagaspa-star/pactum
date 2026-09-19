@@ -53,6 +53,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.ColoriPatto
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.BonusGiorno
 import eu.stgm.pactum.genitore.dati.EventoFinestra
@@ -63,19 +65,12 @@ import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.StatiSemaforo
 import eu.stgm.pactum.genitore.dati.StatoBonus
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
-import eu.stgm.pactum.genitore.ui.theme.Spazi
-import eu.stgm.pactum.genitore.ui.theme.coloreFuoriRegola
-import eu.stgm.pactum.genitore.ui.theme.coloreMantenuta
-import eu.stgm.pactum.genitore.ui.theme.coloreSilenzio
-import eu.stgm.pactum.genitore.ui.theme.inchiostroSuFuoriRegola
-import eu.stgm.pactum.genitore.ui.theme.inchiostroSuMantenuta
-import eu.stgm.pactum.genitore.ui.theme.inchiostroSuSilenzio
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
 
-// I colori del patto vivono in ui/theme (token `Patto`): un solo rosso, in un
+// I colori del patto vivono in core-design (`ColoriPatto`): un solo rosso, in un
 // solo posto — dentro la striscia degli 8 giorni. Il silenzio del canale NON è
 // rosso: è un grigio-blu, perché nove volte su dieci è batteria o rete.
 
@@ -331,9 +326,9 @@ private fun RigaStato(statoSilenzio: StatoSilenzio, ricevutaAlle: Instant?) {
     }
 
     if (statoSilenzio.silente) {
-        val inchiostro = inchiostroSuSilenzio()
+        val inchiostro = ColoriPatto.InchiostroSuSilenzio
         Card(
-            colors = CardDefaults.cardColors(containerColor = coloreSilenzio()),
+            colors = CardDefaults.cardColors(containerColor = ColoriPatto.Silenzio),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Row(
@@ -475,8 +470,8 @@ private fun Semaforo(semaforo: List<QuadrettoSemaforo>) {
                 val mantenuta = quadretto.stato == StatiSemaforo.VERDE
                 val sfondo = when {
                     !conDati -> MaterialTheme.colorScheme.surfaceVariant
-                    mantenuta -> coloreMantenuta()
-                    else -> coloreFuoriRegola()
+                    mantenuta -> ColoriPatto.Mantenuta
+                    else -> ColoriPatto.FuoriRegola
                 }
                 Box(
                     modifier = Modifier
@@ -517,9 +512,9 @@ private fun Semaforo(semaforo: List<QuadrettoSemaforo>) {
                                 text = quadretto.data.takeLast(2),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (mantenuta) {
-                                    inchiostroSuMantenuta()
+                                    ColoriPatto.InchiostroSuMantenuta
                                 } else {
-                                    inchiostroSuFuoriRegola()
+                                    ColoriPatto.InchiostroSuFuoriRegola
                                 },
                             )
                         }

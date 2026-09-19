@@ -34,8 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
-import eu.stgm.pactum.figlio.ui.theme.Spazi
 
 /** L'uso di oggi: totale in alto, elenco per app sotto. */
 @OptIn(ExperimentalMaterial3Api::class)

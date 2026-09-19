@@ -1,13 +1,12 @@
 package eu.stgm.pactum.genitore.ui.theme
 
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
+import eu.stgm.pactum.design.FormePactum
+import eu.stgm.pactum.design.TipografiaPactum
 
 // Blu del binocolo: l'app del genitore si distingue dal verde del figlio.
 // Lo schema è COMPLETO di proposito: con il solo `primary` tutto il resto
@@ -77,50 +76,9 @@ private val SchemaScuro = darkColorScheme(
     surfaceContainerHighest = Color(0xFF303539),
 )
 
-/**
- * Le spaziature del prodotto, al posto dei 6/10/14 sparsi a mano.
- * Regola: dentro una card solo `xs`/`s`/`m`; tra i blocchi solo `l`/`xl`;
- * `xxl` solo per staccare la sezione eroe dal resto.
- */
-object Spazi {
-    val xs = 4.dp
-    val s = 8.dp
-    val m = 12.dp
-    val l = 16.dp
-    val xl = 24.dp
-    val xxl = 32.dp
-}
-
-/** Forme: le Card passano da 12 a 14, la scheda eroe e i dialoghi a 20. */
-private val PactumShapes = Shapes(
-    extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp),
-)
-
-/**
- * I colori del PATTO: gli unici fuori da `colorScheme`, perché il loro
- * significato non dipende dal ruolo Material ma dal patto.
- *
- * Tre leggi:
- *  1. Mantenuta/FuoriRegola compaiono SOLO dentro la striscia degli 8 giorni.
- *  2. Il silenzio del canale non è mai rosso: nove volte su dieci è batteria.
- *  3. `error`/`errorContainer` restano solo per la validazione dei form.
- */
-object Patto {
-    val MantenutaChiaro = Color(0xFF1E6B33)
-    val MantenutaScuro = Color(0xFF6FBF73)
-    val FuoriRegolaChiaro = Color(0xFFC97C62)
-    val FuoriRegolaScuro = Color(0xFFB3543F)
-    val SilenzioChiaro = Color(0xFF4C5A69)
-    val SilenzioScuro = Color(0xFF9AA7B4)
-
-    /** L'inchiostro sopra i pieni del patto: bianco o quasi-nero, mai grigio. */
-    val InchiostroChiaro = Color(0xFFFFFFFF)
-    val InchiostroScuro = Color(0xFF10181C)
-}
+// Spazi, forme, tipografia e colori del patto (`ColoriPatto`) sono in
+// core-design, identici nelle due app. Qui resta solo ciò che è del genitore:
+// la palette blu e i colori delle categorie d'uso.
 
 /**
  * I colori delle CATEGORIE d'uso: servono solo a dire "questa fetta è quella",
@@ -128,9 +86,9 @@ object Patto {
  * condanna. Perciò sono desaturati e di famiglia coerente con l'app (blu,
  * verde, ocra, terracotta, grigio-blu): niente fluo, niente semaforo.
  *
- * Il rosso-terracotta del patto (`FuoriRegolaChiaro`) NON compare qui: resta
- * riservato all'eccesso oltre il limite, così una fetta grande non si confonde
- * mai con una regola infranta.
+ * Il rosso-terracotta del patto (`ColoriPatto.FuoriRegola`) NON compare qui:
+ * resta riservato all'eccesso oltre il limite, così una fetta grande non si
+ * confonde mai con una regola infranta.
  */
 object Categorie {
     // Cinque tinte tenute lontane a mano sulla ruota: blu 210°, terracotta 18°,
@@ -168,30 +126,6 @@ fun coloreCategoria(chiave: String): Color =
         else -> Categorie.Riserva[(chiave.hashCode() and Int.MAX_VALUE) % Categorie.Riserva.size]
     }
 
-// L'app va sempre su fondo chiaro (v. PactumTheme), quindi qui valgono sempre
-// le varianti "chiare" dei colori del patto.
-
-@Composable
-fun coloreMantenuta(): Color = Patto.MantenutaChiaro
-
-@Composable
-fun coloreFuoriRegola(): Color = Patto.FuoriRegolaChiaro
-
-@Composable
-fun coloreSilenzio(): Color = Patto.SilenzioChiaro
-
-/** Inchiostro leggibile sopra un pieno "mantenuta". */
-@Composable
-fun inchiostroSuMantenuta(): Color = Patto.InchiostroChiaro
-
-/** Inchiostro leggibile sopra un pieno "fuori regola". */
-@Composable
-fun inchiostroSuFuoriRegola(): Color = Patto.InchiostroScuro
-
-/** Inchiostro leggibile sopra il pieno del silenzio. */
-@Composable
-fun inchiostroSuSilenzio(): Color = Patto.InchiostroChiaro
-
 /** Pactum va sempre su fondo chiaro: la finestra è un referto, si legge su carta
  *  bianca. Su fondo nero i colori del patto perdono il loro significato e l'app
  *  sembra un pannello di diagnostica. Lo schema scuro resta definito ma non è
@@ -200,8 +134,8 @@ fun inchiostroSuSilenzio(): Color = Patto.InchiostroChiaro
 fun PactumTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = SchemaChiaro,
-        typography = PactumTypography,
-        shapes = PactumShapes,
+        typography = TipografiaPactum,
+        shapes = FormePactum,
         content = content,
     )
 }

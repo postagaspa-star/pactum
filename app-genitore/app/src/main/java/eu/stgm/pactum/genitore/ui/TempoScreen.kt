@@ -46,13 +46,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.SitiGiorno
 import eu.stgm.pactum.genitore.dati.SitoVisitato
 import eu.stgm.pactum.genitore.dati.UsoApp
 import eu.stgm.pactum.genitore.dati.UsoCategoria
 import eu.stgm.pactum.genitore.dati.UsoGiorno
-import eu.stgm.pactum.genitore.ui.theme.Spazi
 import eu.stgm.pactum.genitore.ui.theme.coloreCategoria
 import kotlinx.coroutines.delay
 import java.time.Instant

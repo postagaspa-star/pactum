@@ -60,11 +60,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.catalogo.AppInstallata
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.Regola
-import eu.stgm.pactum.figlio.ui.theme.Spazi
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -1,14 +1,14 @@
-package eu.stgm.pactum.genitore.ui.theme
+package eu.stgm.pactum.design
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 // Font di sistema: nessun file, nessun peso da scaricare. Si toccano quattro
-// stili soltanto — quelli che oggi rendono tutto uguale a tutto.
+// stili soltanto — quelli che rendevano tutto uguale a tutto. Il resto è M3.
 private val Base = Typography()
 
-val PactumTypography = Typography(
+val TipografiaPactum = Typography(
     // L'eroe della schermata, e mai due volte nella stessa: "6 su 7", "4 h 12 min".
     displaySmall = Base.displaySmall.copy(
         fontSize = 36.sp,
@@ -23,7 +23,7 @@ val PactumTypography = Typography(
         fontWeight = FontWeight.SemiBold,
         letterSpacing = (-0.25).sp,
     ),
-    // TitoloSezione: oggi (Medium) è indistinguibile dal bodyLarge delle card.
+    // TitoloSezione: in Medium era indistinguibile dal bodyLarge delle card.
     titleMedium = Base.titleMedium.copy(
         fontWeight = FontWeight.SemiBold,
     ),

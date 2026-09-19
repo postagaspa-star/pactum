@@ -70,6 +70,9 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+    // Il design system condiviso (redesign C5): una cartella sorgente comune
+    // alle due app, non un modulo — le due app sono build Gradle separate.
+    sourceSets["main"].kotlin.srcDir("../../core-design/src/main/kotlin")
 }
 
 dependencies {

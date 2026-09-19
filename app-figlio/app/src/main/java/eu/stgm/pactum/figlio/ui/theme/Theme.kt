@@ -1,13 +1,12 @@
 package eu.stgm.pactum.figlio.ui.theme
 
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
+import eu.stgm.pactum.design.FormePactum
+import eu.stgm.pactum.design.TipografiaPactum
 
 // Verde del patto: l'app del figlio si distingue dal blu del genitore.
 // Lo schema è COMPLETO di proposito: con il solo `primary` tutto il resto
@@ -77,35 +76,15 @@ private val SchemaScuro = darkColorScheme(
     surfaceContainerHighest = Color(0xFF2E3533),
 )
 
-/**
- * Le spaziature del prodotto, al posto dei 6/10/14 sparsi a mano.
- * Regola: dentro una card solo `xs`/`s`/`m`; tra i blocchi solo `l`/`xl`;
- * `xxl` solo per staccare la sezione eroe dal resto.
- */
-object Spazi {
-    val xs = 4.dp
-    val s = 8.dp
-    val m = 12.dp
-    val l = 16.dp
-    val xl = 24.dp
-    val xxl = 32.dp
-}
-
-/** Forme: le Card passano da 12 a 14, i dialoghi e le schede eroe a 20. */
-private val PactumShapes = Shapes(
-    extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp),
-)
+// Spazi, forme, tipografia e colori del patto sono in core-design, identici
+// nelle due app. Qui resta solo ciò che dice di chi è l'app: la palette.
 
 @Composable
 fun PactumTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = SchemaChiaro,  // sempre fondo chiaro (scelta di Andrea, 31/07)
-        typography = PactumTypography,
-        shapes = PactumShapes,
+        typography = TipografiaPactum,
+        shapes = FormePactum,
         content = content,
     )
 }

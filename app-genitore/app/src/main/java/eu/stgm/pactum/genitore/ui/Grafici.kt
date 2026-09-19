@@ -40,14 +40,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import eu.stgm.pactum.design.ColoriPatto
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.MediaPeriodo
 import eu.stgm.pactum.genitore.dati.Medie
 import eu.stgm.pactum.genitore.dati.UsoCategoria
 import eu.stgm.pactum.genitore.dati.UsoGiorno
-import eu.stgm.pactum.genitore.ui.theme.Spazi
 import eu.stgm.pactum.genitore.ui.theme.coloreCategoria
-import eu.stgm.pactum.genitore.ui.theme.coloreFuoriRegola
 
 /**
  * I grafici della finestra, disegnati a mano con Canvas: nessuna libreria,
@@ -420,7 +420,7 @@ fun BarraOrizzontale(
     spessore: Dp = 9.dp,
 ) {
     val binario = MaterialTheme.colorScheme.surfaceVariant
-    val oltre = coloreFuoriRegola()
+    val oltre = ColoriPatto.FuoriRegola
     val segno = MaterialTheme.colorScheme.onSurfaceVariant
 
     Canvas(modifier = modifier.fillMaxWidth().height(spessore + 8.dp)) {
@@ -489,7 +489,7 @@ fun RigaBarraUso(
     colore: Color,
     modifier: Modifier = Modifier,
 ) {
-    val terracotta = coloreFuoriRegola()
+    val terracotta = ColoriPatto.FuoriRegola
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(

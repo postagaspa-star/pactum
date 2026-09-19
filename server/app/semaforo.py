@@ -13,7 +13,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime
 
-from . import siti
+from . import clock, siti
 from .config import fuso_patto
 
 
@@ -49,9 +49,18 @@ def semafori(conn: sqlite3.Connection, ora: datetime) -> dict:
     for evento in conn.execute(
         "SELECT dettagli, ts_server FROM eventi WHERE tipo = 'sforamento'"
     ).fetchall():
-        regola_id = json.loads(evento["dettagli"]).get("regola_id")
-        if regola_id is not None:
-            sforamenti_per_regola[regola_id].add(data_locale(evento["ts_server"], tz))
+        dettagli = json.loads(evento["dettagli"])
+        regola_id = dettagli.get("regola_id")
+        if regola_id is None:
+            continue
+        # (v2.4) Lo sforamento cade nel giorno in cui e' successo (dettagli.giorno,
+        # giorno locale del telefono), non in quello in cui e' arrivato: un telefono
+        # offline fino al giorno dopo non deve lasciare verde il giorno sforato.
+        # Senza un giorno valido si ripiega sull'arrivo, come prima.
+        giorno = dettagli.get("giorno")
+        if not clock.giorno_valido(giorno):
+            giorno = data_locale(evento["ts_server"], tz)
+        sforamenti_per_regola[regola_id].add(giorno)
 
     # Dichiarazioni per le regole vita_reale: (regola_id, giorno locale) -> stato.
     # Max una per regola per giorno, quindi la mappa e' univoca.

@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -53,27 +54,31 @@ fun giorniTesto(parametri: JsonObject): String =
  * onesto che muto (tolleranza evolutiva).
  */
 @Composable
-fun descrizioneRegola(tipo: String, parametri: JsonObject): String = when (tipo) {
-    TipiRegola.LIMITE_TEMPO -> {
-        // app_o_categoria è un pacchetto o una chiave categoria:* (contratto
-        // v2.1): si mostra l'etichetta leggibile, non il valore grezzo.
-        val context = LocalContext.current
-        stringResource(
-            R.string.regola_limite_tempo,
-            parametroTesto(parametri, "app_o_categoria")
-                ?.let { CatalogoApp.etichettaValore(context, it) } ?: "?",
-            testoDurata(parametroTesto(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
-        )
-    }
+fun descrizioneRegola(tipo: String, parametri: JsonObject): String {
+    // Si rilegge a ogni cambio di configurazione (lingua), come stringResource.
+    LocalConfiguration.current
+    return descrizioneRegola(LocalContext.current, tipo, parametri)
+}
 
-    TipiRegola.FASCIA_ORARIA -> stringResource(
+/** La stessa descrizione fuori da Compose (notifiche, worker). */
+fun descrizioneRegola(context: Context, tipo: String, parametri: JsonObject): String = when (tipo) {
+    // app_o_categoria è un pacchetto o una chiave categoria:* (contratto
+    // v2.1): si mostra l'etichetta leggibile, non il valore grezzo.
+    TipiRegola.LIMITE_TEMPO -> context.getString(
+        R.string.regola_limite_tempo,
+        parametroTesto(parametri, "app_o_categoria")
+            ?.let { CatalogoApp.etichettaValore(context, it) } ?: "?",
+        testoDurata(context, parametroTesto(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
+    )
+
+    TipiRegola.FASCIA_ORARIA -> context.getString(
         R.string.regola_fascia_oraria,
         parametroTesto(parametri, "dalle") ?: "?",
         parametroTesto(parametri, "alle") ?: "?",
         giorniTesto(parametri).ifBlank { "?" },
     )
 
-    TipiRegola.VITA_REALE -> stringResource(
+    TipiRegola.VITA_REALE -> context.getString(
         R.string.regola_vita_reale,
         parametroTesto(parametri, "descrizione") ?: "?",
         parametroTesto(parametri, "arbitro_nome") ?: "?",
@@ -82,6 +87,22 @@ fun descrizioneRegola(tipo: String, parametri: JsonObject): String = when (tipo)
 
     else -> tipo
 }
+
+/** Le frasi della proposta (TestoProposta), da strings.xml. */
+fun paroleProposta(context: Context) = ParoleProposta(
+    senzaConfronto = context.getString(R.string.proposta_senza_confronto),
+    ora = context.getString(R.string.proposta_regola_ora),
+    seAccetti = context.getString(R.string.proposta_regola_se_accetti),
+    togliere = context.getString(R.string.proposta_regola_togliere),
+)
+
+/** "oggi", "ieri", "18/09" dentro una frase (minuscolo). */
+@Composable
+fun giornoBreve(iso: String, oggi: LocalDate): String = giornoBreve(
+    iso,
+    oggi,
+    ParoleGiorno(stringResource(R.string.giorno_oggi), stringResource(R.string.giorno_ieri)),
+)
 
 @Composable
 fun testoDurata(minuti: Long): String {

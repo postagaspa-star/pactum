@@ -13,6 +13,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -238,7 +239,15 @@ private fun PactumRoot(
                             val inAttesa = if (voce == Scheda.PROPOSTE) statoProposte.pendenti else 0
                             BadgedBox(
                                 badge = {
-                                    if (inAttesa > 0) Badge { Text(inAttesa.toString()) }
+                                    // Il Badge di default è `error`, rosso: fuori
+                                    // dalla striscia il rosso non esiste, ed
+                                    // `error` resta ai form (§3.1, le tre leggi).
+                                    if (inAttesa > 0) {
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ) { Text(inAttesa.toString()) }
+                                    }
                                 },
                             ) {
                                 Icon(painterResource(voce.icona), contentDescription = null)

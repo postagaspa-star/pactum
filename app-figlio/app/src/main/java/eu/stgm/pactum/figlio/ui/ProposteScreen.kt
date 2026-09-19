@@ -45,6 +45,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -55,6 +57,7 @@ import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.DirezioniProposta
 import eu.stgm.pactum.figlio.dati.EsitiRisposta
 import eu.stgm.pactum.figlio.dati.Proposta
+import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.StatiProposta
 
 /** Le proposte del genitore: il confronto in evidenza, la decisione è tua. */
@@ -122,6 +125,7 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
 
                 else -> ContenutoProposte(
                     proposte = stato.proposte,
+                    regole = stato.regole,
                     invioInCorso = stato.invioInCorso,
                     mostraErrore = stato.errore,
                     aggiornateIl = stato.aggiornateIl,
@@ -135,6 +139,7 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
 @Composable
 private fun ContenutoProposte(
     proposte: List<Proposta>,
+    regole: List<Regola>,
     invioInCorso: Boolean,
     mostraErrore: Boolean,
     aggiornateIl: Long?,
@@ -160,7 +165,7 @@ private fun ContenutoProposte(
             }
         } else {
             items(pendenti, key = { "pendente-${it.id}" }) { proposta ->
-                CardPropostaPendente(proposta, invioInCorso, onRispondi)
+                CardPropostaPendente(proposta, regole, invioInCorso, onRispondi)
             }
         }
 
@@ -168,7 +173,9 @@ private fun ContenutoProposte(
         if (storia.isEmpty()) {
             item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.proposte_storia_vuota)) }
         } else {
-            items(storia, key = { "storia-${it.id}" }) { CardPropostaStorica(it) }
+            items(storia, key = { "storia-${it.id}" }) { proposta ->
+                CardPropostaStorica(proposta, regole.firstOrNull { it.id == proposta.regolaId })
+            }
         }
     }
 }
@@ -176,6 +183,7 @@ private fun ContenutoProposte(
 @Composable
 private fun CardPropostaPendente(
     proposta: Proposta,
+    regole: List<Regola>,
     invioInCorso: Boolean,
     onRispondi: (Long, String, String?) -> Unit,
 ) {
@@ -184,6 +192,21 @@ private fun CardPropostaPendente(
     // giustificarsi per rispondere. Non serve.
     var motivazioneAperta by rememberSaveable(proposta.id) { mutableStateOf(false) }
     val motivazionePulita = { motivazione.trim().ifBlank { null } }
+
+    // Su QUALE regola: il ragazzo deve sapere cosa accetta. Regola non
+    // trovata (copia vecchia) = resta il solo confronto, com'era.
+    val context = LocalContext.current
+    LocalConfiguration.current
+    val racconto = TestoProposta.racconto(
+        confronto = proposta.confronto,
+        oggetto = TestoProposta.oggetto(
+            proposta.regolaId,
+            proposta.direzione,
+            proposta.parametriProposti,
+            regole,
+        ),
+        parole = paroleProposta(context),
+    ) { tipo, parametri -> descrizioneRegola(context, tipo, parametri) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
@@ -197,13 +220,21 @@ private fun CardPropostaPendente(
                 TagDirezione(proposta.direzione)
             }
             // Il confronto autoritativo del server, IN EVIDENZA: è la frase che
-            // dice cosa cambierebbe rispetto ad ora.
+            // dice cosa cambierebbe rispetto ad ora (per l'eliminazione, la
+            // stessa frase con dentro la regola che uscirebbe).
             Text(
-                text = proposta.confronto?.ifBlank { null }
-                    ?: stringResource(R.string.proposta_senza_confronto),
+                text = racconto.titolo,
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.padding(top = Spazi.s),
             )
+            // Sotto, la regola com'è ora e come diventa se accetti.
+            racconto.righe.forEachIndexed { indice, riga ->
+                Text(
+                    text = riga,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = if (indice == 0) Spazi.s else 0.dp),
+                )
+            }
             proposta.motivazione?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = stringResource(R.string.proposta_motivazione_genitore, it),
@@ -265,7 +296,7 @@ private fun CardPropostaPendente(
 }
 
 @Composable
-private fun CardPropostaStorica(proposta: Proposta) {
+private fun CardPropostaStorica(proposta: Proposta, regola: Regola?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -282,6 +313,17 @@ private fun CardPropostaStorica(proposta: Proposta) {
                     text = it,
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(top = Spazi.xs),
+                )
+            }
+            // Su quale regola era, com'è adesso. Una regola eliminata non c'è
+            // più nel patto: resta il solo confronto.
+            regola?.let {
+                Text(
+                    text = stringResource(
+                        R.string.proposta_regola,
+                        descrizioneRegola(it.tipo, it.parametri),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
             proposta.motivazione?.takeIf { it.isNotBlank() }?.let {

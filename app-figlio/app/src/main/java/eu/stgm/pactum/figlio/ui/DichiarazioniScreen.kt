@@ -26,7 +26,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -63,7 +62,6 @@ import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.StatiDichiarazione
 import eu.stgm.pactum.figlio.dati.zonaPatto
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 /** Il diario: dichiara com'è andata sulle regole di vita reale, a viso aperto. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -194,7 +192,8 @@ private fun ContenutoDiario(
     // "Oggi" nel fuso del patto, come lo assegna il server alle dichiarazioni:
     // col fuso del telefono, vicino a mezzanotte, il figlio vedrebbe libero un
     // giorno che il server considera già dichiarato (o viceversa).
-    val oggi = LocalDate.now(zonaPatto(fuso)).toString()
+    val oggiData = LocalDate.now(zonaPatto(fuso))
+    val oggi = oggiData.toString()
     val inAttesa = dichiarazioni.filter { it.stato == StatiDichiarazione.IN_ATTESA }
     val risolte = dichiarazioni.filter { it.stato != StatiDichiarazione.IN_ATTESA }
 
@@ -213,7 +212,7 @@ private fun ContenutoDiario(
         } else {
             items(regole, key = { "regola-${it.id}" }) { regola ->
                 val diOggi = dichiarazioni.firstOrNull { it.regolaId == regola.id && it.giorno == oggi }
-                CardRegolaVitaReale(regola, diOggi, onDichiara)
+                CardRegolaVitaReale(regola, diOggi, oggiData, onDichiara)
             }
         }
 
@@ -226,6 +225,7 @@ private fun ContenutoDiario(
                 CardFatto(
                     regola = regole.firstOrNull { it.id == dichiarazione.regolaId },
                     dichiarazione = dichiarazione,
+                    oggi = oggiData,
                 )
             }
             // Risolte: righe con divisore, non card. Nessun contatore.
@@ -239,6 +239,7 @@ private fun ContenutoDiario(
                             RigaDichiarazione(
                                 dichiarazione = dichiarazione,
                                 regola = regole.firstOrNull { it.id == dichiarazione.regolaId },
+                                oggi = oggiData,
                             )
                         }
                     }
@@ -256,10 +257,11 @@ private fun ContenutoDiario(
 private fun CardRegolaVitaReale(
     regola: Regola,
     diOggi: Dichiarazione?,
+    oggi: LocalDate,
     onDichiara: (Regola, String) -> Unit,
 ) {
     if (diOggi != null && diOggi.esito == EsitiDichiarazione.SUCCESSO && diOggi.stato in STATI_FATTO) {
-        CardFatto(regola = regola, dichiarazione = diOggi)
+        CardFatto(regola = regola, dichiarazione = diOggi, oggi = oggi)
         return
     }
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -278,7 +280,10 @@ private fun CardRegolaVitaReale(
             } else {
                 Spacer(modifier = Modifier.height(Spazi.s))
                 Row {
-                    FilledTonalButton(
+                    // "Ce l'ho fatta" è l'azione principale: pieno `primary`. Un
+                    // tonale chiaro sulla card grigia sembrava spento, e il bordo
+                    // di "Non ce l'ho fatta" pesava di più (§4, Diario).
+                    Button(
                         onClick = { onDichiara(regola, EsitiDichiarazione.SUCCESSO) },
                         modifier = Modifier.weight(1f),
                     ) {
@@ -303,7 +308,7 @@ private fun CardRegolaVitaReale(
  * il riconoscimento verso il figlio arriva adesso.
  */
 @Composable
-private fun CardFatto(regola: Regola?, dichiarazione: Dichiarazione) {
+private fun CardFatto(regola: Regola?, dichiarazione: Dichiarazione, oggi: LocalDate) {
     val registro = dichiarazione.verdetto?.registro?.takeIf { it.isNotBlank() }
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -334,7 +339,10 @@ private fun CardFatto(regola: Regola?, dichiarazione: Dichiarazione) {
             }
             if (dichiarazione.giorno.isNotBlank()) {
                 Text(
-                    text = stringResource(R.string.dichiarazione_giorno, dichiarazione.giorno),
+                    text = stringResource(
+                        R.string.dichiarazione_giorno,
+                        giornoBreve(dichiarazione.giorno, oggi),
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -350,7 +358,7 @@ private fun CardFatto(regola: Regola?, dichiarazione: Dichiarazione) {
 
 /** Una dichiarazione risolta: una riga, col fatto congelato dal server. */
 @Composable
-private fun RigaDichiarazione(dichiarazione: Dichiarazione, regola: Regola?) {
+private fun RigaDichiarazione(dichiarazione: Dichiarazione, regola: Regola?, oggi: LocalDate) {
     // (v2.1) La frase del verdetto la congela il server (cita l'arbitro di
     // allora): si mostra QUELLA verbatim, non la si ricostruisce dai parametri
     // attuali della regola — che nel frattempo può aver cambiato arbitro o
@@ -373,7 +381,10 @@ private fun RigaDichiarazione(dichiarazione: Dichiarazione, regola: Regola?) {
         )
         if (dichiarazione.giorno.isNotBlank()) {
             Text(
-                text = stringResource(R.string.dichiarazione_giorno, dichiarazione.giorno),
+                text = stringResource(
+                    R.string.dichiarazione_giorno,
+                    giornoBreve(dichiarazione.giorno, oggi),
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -517,6 +528,11 @@ private fun SelettoreGiorno(
     val oggi = remember(oggiIso) {
         runCatching { LocalDate.parse(oggiIso) }.getOrDefault(LocalDate.now())
     }
+    // Sui chip le parole stanno da sole: maiuscole.
+    val parole = ParoleGiorno(
+        oggi = stringResource(R.string.dichiarazione_giorno_oggi),
+        ieri = stringResource(R.string.dichiarazione_giorno_ieri),
+    )
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             text = stringResource(R.string.dichiarazione_scegli_giorno),
@@ -534,18 +550,9 @@ private fun SelettoreGiorno(
                     selected = iso == giornoScelto,
                     onClick = { onGiorno(iso) },
                     enabled = iso !in giorniDichiarati,
-                    label = { Text(etichettaGiorno(indietro, giorno)) },
+                    label = { Text(giornoBreve(giorno, oggi, parole)) },
                 )
             }
         }
     }
-}
-
-private val FORMATO_GIORNO_BREVE: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM")
-
-@Composable
-private fun etichettaGiorno(indietro: Int, giorno: LocalDate): String = when (indietro) {
-    0 -> stringResource(R.string.dichiarazione_giorno_oggi)
-    1 -> stringResource(R.string.dichiarazione_giorno_ieri)
-    else -> giorno.format(FORMATO_GIORNO_BREVE)
 }

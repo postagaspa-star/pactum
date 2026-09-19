@@ -7,6 +7,7 @@ import eu.stgm.pactum.figlio.dati.EsitiRisposta
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.Proposta
+import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.RispostaPropostaIn
 import eu.stgm.pactum.figlio.dati.StatiProposta
 import eu.stgm.pactum.figlio.dati.leggiDettaglioErrore
@@ -34,6 +35,11 @@ class ProposteViewModel(application: Application) : AndroidViewModel(application
     data class StatoProposte(
         val caricamento: Boolean = true,
         val proposte: List<Proposta> = emptyList(),
+        /**
+         * Le regole attive del patto: il confronto dice di quanto cambia, la
+         * regola dice COSA. Senza, la card non saprebbe dire "TikTok".
+         */
+        val regole: List<Regola> = emptyList(),
         val configurazioneMancante: Boolean = false,
         val errore: Boolean = false,
         /** Quando è arrivata la lista che si sta mostrando: l'età dei dati. */
@@ -56,17 +62,24 @@ class ProposteViewModel(application: Application) : AndroidViewModel(application
                 _stato.value = StatoProposte(caricamento = false, configurazioneMancante = true)
                 return@launch
             }
-            val proposte = PostinoClient(configurazione).leggiProposte()
+            val postino = PostinoClient(configurazione)
+            val proposte = postino.leggiProposte()
             if (proposte == null) {
                 _stato.value = _stato.value.copy(caricamento = false, errore = true)
                 return@launch
             }
+            // Le regole fresche dal server: il confronto delle pendenti è
+            // ricalcolato sulla regola di ADESSO, e "Ora: …" deve dire la
+            // stessa cosa. Senza rete, l'ultima copia locale.
+            val locale = PattoLocale(getApplication())
+            val patto = postino.leggiPatto()?.also { locale.salva(it) } ?: locale.leggi()
             _stato.value = _stato.value.copy(
                 caricamento = false,
                 configurazioneMancante = false,
                 errore = false,
                 aggiornateIl = System.currentTimeMillis(),
                 proposte = proposte,
+                regole = patto?.regole ?: _stato.value.regole,
             )
         }
     }

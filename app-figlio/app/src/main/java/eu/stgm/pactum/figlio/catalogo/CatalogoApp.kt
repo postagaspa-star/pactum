@@ -104,14 +104,43 @@ object CatalogoApp {
 
     /**
      * L'etichetta leggibile di un valore `app_o_categoria`: il nome della
-     * categoria, oppure l'etichetta dell'app dal pacchetto; ripiego sul valore
-     * grezzo se il pacchetto non è (più) installato o è un vecchio testo libero.
+     * categoria, oppure l'etichetta dell'app dal pacchetto. Se il pacchetto non
+     * è (più) installato, l'ultimo nome che l'app gli ha visto; solo se non
+     * l'ha mai visto, il valore grezzo (o un vecchio testo libero).
      */
     fun etichettaValore(context: Context, valore: String): String {
         if (valore.startsWith(PREFISSO_CATEGORIA)) return nomeCategoria(context, valore)
-        val info = infoApplicazione(context, valore) ?: return valore
-        return context.packageManager.getApplicationLabel(info).toString()
+        val info = infoApplicazione(context, valore) ?: return ultimoNome(context, valore) ?: valore
+        val etichetta = context.packageManager.getApplicationLabel(info).toString()
+        ricordaNome(context, valore, etichetta)
+        return etichetta
     }
+
+    // --- L'ultimo nome visto per pacchetto ------------------------------------
+    // TikTok disinstallata dopo aver scritto la regola: PackageManager non la
+    // risolve più e la regola diventerebbe "com.zhiliaoapp.musically". Ogni
+    // etichetta risolta passa di qui (anche quelle dei `nomi` della fotografia
+    // d'uso, ogni 15 minuti) e resta sul telefono. SharedPreferences e non
+    // DataStore: la descrizione di una regola si scrive dentro la composizione,
+    // la lettura deve essere sincrona; dopo la prima, sta in memoria.
+
+    private const val PREFERENZE_NOMI = "nomi_app"
+
+    private fun ultimoNome(context: Context, pacchetto: String): String? =
+        preferenzeNomi(context).getString(pacchetto, null)
+
+    private fun ricordaNome(context: Context, pacchetto: String, etichetta: String) {
+        // Un'app senza etichetta restituisce il pacchetto stesso: non è un nome.
+        if (etichetta.isBlank() || etichetta == pacchetto) return
+        val preferenze = preferenzeNomi(context)
+        // Si scrive solo quando cambia: questa funzione gira a ogni composizione.
+        if (preferenze.getString(pacchetto, null) != etichetta) {
+            preferenze.edit().putString(pacchetto, etichetta).apply()
+        }
+    }
+
+    private fun preferenzeNomi(context: Context) =
+        context.applicationContext.getSharedPreferences(PREFERENZE_NOMI, Context.MODE_PRIVATE)
 
     /** Il nome leggibile di una chiave di categoria (da strings.xml). */
     fun nomeCategoria(context: Context, chiave: String): String = when (chiave) {

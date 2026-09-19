@@ -19,8 +19,11 @@ import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.CodaEventi
 import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.dati.Notifica
+import eu.stgm.pactum.figlio.dati.Patto
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.TipiEvento
+import eu.stgm.pactum.figlio.dati.TipiNotifica
 import eu.stgm.pactum.figlio.giornata.ChiusuraSerale
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
@@ -30,9 +33,14 @@ import eu.stgm.pactum.figlio.siti.Domini
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.siti.RegistroSiti
 import eu.stgm.pactum.figlio.siti.ReteDns
+import eu.stgm.pactum.figlio.ui.TestoProposta
+import eu.stgm.pactum.figlio.ui.descrizioneRegola
+import eu.stgm.pactum.figlio.ui.paroleProposta
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
@@ -212,6 +220,13 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
 
         val giaAvvisate = impostazioni.leggiIdAvvisati()
         val nuove = notifiche.filter { it.id !in giaAvvisate }
+        // La copia del patto appena sincronizzata in questo giro: serve a dire
+        // su quale regola verte una nuova proposta.
+        val patto = if (nuove.any { it.tipo == TipiNotifica.NUOVA_PROPOSTA }) {
+            PattoLocale(context).leggi()
+        } else {
+            null
+        }
         nuove.forEach { notifica ->
             AvvisiLocali.avvisa(
                 context,
@@ -219,7 +234,7 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
                 // fissa del testimone (FGS id 1), che verrebbe sostituita.
                 id = AvvisiLocali.idNotificaServer(notifica.id),
                 titolo = AvvisiLocali.titoloTipo(context, notifica.tipo),
-                testo = notifica.messaggio,
+                testo = testoNotifica(context, notifica, patto),
                 destinazione = AvvisiLocali.destinazioneTipo(notifica.tipo),
             )
         }
@@ -229,6 +244,35 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         // accumula le non lette all'infinito e, oltre il tetto locale di 500 id,
         // il figlio si ri-avviserebbe le vecchie. Il giro dopo riprova le fallite.
         notifiche.forEach { postino.marcaNotificaLetta(it.id) }
+    }
+
+    /**
+     * Il testo della notifica: quello del server, tranne per la nuova proposta.
+     * Lì il server dice "Nuova proposta del genitore: −15 min al giorno
+     * rispetto ad ora" (il titolo lo ripete già) e non dice su QUALE regola:
+     * si racconta come nella scheda Proposte, una riga per pezzo ("Ora:
+     * TikTok: al massimo 1 h al giorno", "Se accetti: …"). Regola non trovata
+     * = il testo del server.
+     */
+    private fun testoNotifica(context: Context, notifica: Notifica, patto: Patto?): String {
+        if (notifica.tipo != TipiNotifica.NUOVA_PROPOSTA || patto == null) return notifica.messaggio
+        val payload = notifica.payload
+        val regolaId = (payload["regola_id"] as? JsonPrimitive)?.longOrNull ?: return notifica.messaggio
+        val propostaId = (payload["proposta_id"] as? JsonPrimitive)?.longOrNull
+        // La pendente del patto ha i parametri proposti e il confronto ricalcolato
+        // sulla regola di adesso; il payload ha solo il confronto di allora.
+        val proposta = patto.propostePendenti.firstOrNull { it.id == propostaId }
+        val oggetto = TestoProposta.oggetto(
+            regolaId,
+            proposta?.direzione ?: (payload["direzione"] as? JsonPrimitive)?.contentOrNull,
+            proposta?.parametriProposti,
+            patto.regole,
+        ) ?: return notifica.messaggio
+        return TestoProposta.racconto(
+            confronto = proposta?.confronto ?: (payload["confronto"] as? JsonPrimitive)?.contentOrNull,
+            oggetto = oggetto,
+            parole = paroleProposta(context),
+        ) { tipo, parametri -> descrizioneRegola(context, tipo, parametri) }.testo
     }
 
     /**

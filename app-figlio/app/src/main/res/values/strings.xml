@@ -225,6 +225,11 @@
     <string name="proposte_storia_vuota">Nessuna proposta ancora.</string>
     <string name="proposta_dal_genitore">PROPOSTA DEL GENITORE</string>
     <string name="proposta_senza_confronto">Proposta di modifica</string>
+    <!-- Su quale regola verte la proposta (il confronto del server non lo dice) -->
+    <string name="proposta_regola_ora">Ora: %1$s</string>
+    <string name="proposta_regola_se_accetti">Se accetti: %1$s</string>
+    <string name="proposta_regola_togliere">Propone di togliere la regola: %1$s</string>
+    <string name="proposta_regola">Regola: %1$s</string>
     <string name="proposta_motivazione_genitore">Il genitore dice: %1$s</string>
     <string name="proposta_aggiungi_motivazione">aggiungi una motivazione</string>
     <string name="proposta_campo_motivazione">La tua motivazione (facoltativa)</string>
@@ -268,6 +273,9 @@
     <string name="dichiarazione_non_arrivata">Non sono riuscito a segnarlo: la dichiarazione non è arrivata. Riprova.</string>
     <string name="dichiarazione_errore">Non sono riuscito a inviare la dichiarazione: riprova.</string>
     <string name="dichiarazione_giorno">Giorno: %1$s</string>
+    <!-- Un giorno dentro una frase: "Giorno: ieri", altrimenti "18/09" -->
+    <string name="giorno_oggi">oggi</string>
+    <string name="giorno_ieri">ieri</string>
     <string name="dichiarazione_stato_in_attesa">L\'hai fatto. Manca la firma di %1$s.</string>
     <string name="dichiarazione_stato_registrata">Non riuscito — creduto sulla parola</string>
     <string name="dichiarazione_stato_confermata">Successo confermato</string>

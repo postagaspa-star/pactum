@@ -169,6 +169,16 @@ sh /volume1/docker/Pactum-NAS/server/scripts/backup-registro.sh
   sbagliata o scaduta: generane un'altra (PASSO 1).
 - **L'indirizzo `.ts.net` non risponde da fuori** → manca il PASSO 2 (Funnel non
   abilitato). Guarda il log del container `pactum-tailscale`: lo dice.
-- **Dentro casa funziona ma fuori no** → è sempre il PASSO 2.
+- **Dentro casa funziona ma fuori no** → di solito è il PASSO 2.
+- **Il container `pactum` non parte e l'indirizzo dà 502** → la porta dell'host è
+  già occupata da un'altra app del NAS (sul nostro la 8000 è di NormaAI: per
+  questo Pactum usa la **8100** per le verifiche in casa, `http://IP-NAS:8100`).
+- **Da fuori dà `ERR_CONNECTION_CLOSED` e nel log di `pactum-tailscale` non
+  arriva nulla** → succede dopo aver eliminato e ricreato la macchina con lo
+  stesso nome: la porta d'ingresso di Tailscale ricorda quella vecchia.
+  **Riavvia il container `pactum-tailscale`** (solo riavvio) e passa.
+- **Mai cancellare i volumi** quando elimini o ricrei il progetto: in
+  `pactum-data` c'è il registro del patto, in `tailscale-state` l'identità del
+  NAS (cancellarla = macchina nuova, a volte con un indirizzo diverso).
 
 Incollami il log del container che fa i capricci e lo sbroglio.

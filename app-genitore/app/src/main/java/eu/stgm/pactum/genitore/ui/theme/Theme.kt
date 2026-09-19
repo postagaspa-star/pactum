@@ -1,7 +1,6 @@
 package eu.stgm.pactum.genitore.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -44,37 +43,7 @@ private val SchemaChiaro = lightColorScheme(
     surfaceContainerHighest = Color(0xFFE3E8EE),
 )
 
-private val SchemaScuro = darkColorScheme(
-    primary = Color(0xFF9CC7F2),
-    onPrimary = Color(0xFF123A5E),
-    primaryContainer = Color(0xFF24486D),
-    onPrimaryContainer = Color(0xFFD5E3F5),
-    secondary = Color(0xFFB3C4D4),
-    onSecondary = Color(0xFF1E2C38),
-    secondaryContainer = Color(0xFF33414E),
-    onSecondaryContainer = Color(0xFFDDE4EC),
-    tertiary = Color(0xFFE7C77A),
-    onTertiary = Color(0xFF3E2E00),
-    tertiaryContainer = Color(0xFF4A3A00),
-    onTertiaryContainer = Color(0xFFF3E3C4),
-    background = Color(0xFF101418),
-    onBackground = Color(0xFFE2E7EC),
-    surface = Color(0xFF101418),
-    onSurface = Color(0xFFE2E7EC),
-    surfaceVariant = Color(0xFF42484E),
-    onSurfaceVariant = Color(0xFFC3C8CD),
-    outline = Color(0xFF8D9299),
-    outlineVariant = Color(0xFF42484E),
-    error = Color(0xFFF2B8B5),
-    onError = Color(0xFF601410),
-    errorContainer = Color(0xFF601410),
-    onErrorContainer = Color(0xFFF9DEDC),
-    surfaceContainerLowest = Color(0xFF0B0E11),
-    surfaceContainerLow = Color(0xFF171B1F),
-    surfaceContainer = Color(0xFF1B1F23),
-    surfaceContainerHigh = Color(0xFF252A2F),
-    surfaceContainerHighest = Color(0xFF303539),
-)
+// Nessuno schema scuro: Pactum va solo su fondo chiaro (scelta di Andrea).
 
 // Spazi, forme, tipografia e colori del patto (`ColoriPatto`) sono in
 // core-design, identici nelle due app. Qui resta solo ciò che è del genitore:
@@ -86,9 +55,9 @@ private val SchemaScuro = darkColorScheme(
  * condanna. Perciò sono desaturati e di famiglia coerente con l'app (blu,
  * verde, ocra, terracotta, grigio-blu): niente fluo, niente semaforo.
  *
- * Il rosso-terracotta del patto (`ColoriPatto.FuoriRegola`) NON compare qui:
- * resta riservato all'eccesso oltre il limite, così una fetta grande non si
- * confonde mai con una regola infranta.
+ * Il terracotta del patto (`ColoriPatto.FuoriRegola`) NON compare qui: vive
+ * solo nella striscia degli 8 giorni, così una fetta grande non si confonde mai
+ * con una regola infranta.
  */
 object Categorie {
     // Cinque tinte tenute lontane a mano sulla ruota: blu 210°, terracotta 18°,
@@ -128,8 +97,7 @@ fun coloreCategoria(chiave: String): Color =
 
 /** Pactum va sempre su fondo chiaro: la finestra è un referto, si legge su carta
  *  bianca. Su fondo nero i colori del patto perdono il loro significato e l'app
- *  sembra un pannello di diagnostica. Lo schema scuro resta definito ma non è
- *  in uso (scelta di Andrea, 31/07). */
+ *  sembra un pannello di diagnostica (scelta di Andrea: niente tema scuro). */
 @Composable
 fun PactumTheme(content: @Composable () -> Unit) {
     MaterialTheme(

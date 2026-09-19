@@ -90,4 +90,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    // Test JVM (nessun Android): cosa sale in cima alla finestra, in che ordine
+    // stanno le voci del Tempo e cosa dice la riga di riepilogo sono logica
+    // pura — ed è lì che un errore farebbe dire all'app una cosa falsa sul patto.
+    testImplementation(libs.junit)
 }

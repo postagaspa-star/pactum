@@ -17,15 +17,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -40,7 +34,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import eu.stgm.pactum.design.ColoriPatto
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.MediaPeriodo
@@ -50,21 +43,22 @@ import eu.stgm.pactum.genitore.dati.UsoGiorno
 import eu.stgm.pactum.genitore.ui.theme.coloreCategoria
 
 /**
- * I grafici della finestra, disegnati a mano con Canvas: nessuna libreria,
+ * I grafici della scheda Tempo, disegnati a mano con Canvas: nessuna libreria,
  * nessun colore fuori dalla palette dell'app.
  *
- * Tre forme sole, riusate ovunque:
+ * Tre forme sole:
  *  1. [AnelloCategorie]  — come è diviso il tempo di un giorno;
  *  2. [BarreGiorni]      — gli ultimi otto giorni, uno accanto all'altro;
- *  3. [BarraOrizzontale] — quanto di un limite è stato consumato (o, senza
- *     limite, quanto vale un numero rispetto al più grande del giorno: la usano
- *     sia i minuti delle app sia le visite dei siti).
+ *  3. [BarraOrizzontale] — quanto vale un numero rispetto al più grande del
+ *     giorno (le visite dei siti). Le barre delle app e delle categorie sono
+ *     `BarraUso` di core-design, identiche nelle due app.
  *
- * Due leggi che valgono per tutti e tre:
+ * Due leggi che valgono per tutti:
  *  - un giorno SENZA fotografia non è uno zero: è un tratteggio vuoto, perché
  *    "non lo so" e "zero minuti" sono due notizie diverse;
- *  - il rosso-terracotta compare SOLO oltre un limite dichiarato: mai per un
- *    totale alto, mai per un dato vecchio, mai per una rete assente.
+ *  - il terracotta del patto qui non compare MAI (tavola rotonda D2, legge 1):
+ *    vive solo nella striscia degli 8 giorni. Andare oltre un limite si dice a
+ *    parole, col chip "N min oltre", non col colore.
  */
 
 /** Una fetta dell'anello: la categoria già risolta in etichetta e colore. */
@@ -93,8 +87,8 @@ fun fetteCategorie(categorie: List<UsoCategoria>): List<FettaCategoria> =
 
 /**
  * Le fette del giorno con, in coda, la parte NON categorizzata: `totaleMinuti`
- * meno la somma delle categorie note. Serve a far tornare i conti tra il numero
- * al centro dell'anello (il totale del giorno) e le fette + la legenda: senza
+ * meno la somma delle categorie note. Serve a far tornare i conti tra il totale
+ * del giorno (il numero grande sopra l'anello) e le fette + la legenda: senza
  * questa fetta "resto" l'anello riempirebbe comunque i 360° mentre la somma
  * delle categorie sarebbe MINORE del totale (le categorie non coprono ogni app),
  * e un genitore che somma la legenda non ritroverebbe il numero grande.
@@ -122,7 +116,9 @@ fun fetteConResto(categorie: List<UsoCategoria>, totaleMinuti: Int?): List<Fetta
 // --- 1. L'anello --------------------------------------------------------------
 
 /**
- * L'anello delle categorie, col totale del giorno al centro.
+ * L'anello delle categorie. Il totale del giorno non sta più al centro: è
+ * l'eroe della scheda Tempo e sta sopra, in grande (un numero grande per
+ * schermata, tavola rotonda D1) — dentro l'anello sarebbe stato un doppione.
  *
  * Il cappuccio tondo (`StrokeCap.Round`) sporge di mezzo spessore oltre l'arco:
  * se non lo si scontasse in gradi, gli stacchi tra le fette sparirebbero e ogni
@@ -136,7 +132,6 @@ fun fetteConResto(categorie: List<UsoCategoria>, totaleMinuti: Int?): List<Fetta
 fun AnelloCategorie(
     fette: List<FettaCategoria>,
     totaleMinuti: Int?,
-    etichettaCentro: String,
     modifier: Modifier = Modifier,
     diametro: Dp = 184.dp,
     spessore: Dp = 18.dp,
@@ -144,7 +139,7 @@ fun AnelloCategorie(
     val binario = MaterialTheme.colorScheme.surfaceVariant
     val unica = MaterialTheme.colorScheme.primary
 
-    Box(modifier = modifier.size(diametro), contentAlignment = Alignment.Center) {
+    Box(modifier = modifier.size(diametro)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val penna = spessore.toPx()
             val lato = size.minDimension - penna
@@ -212,29 +207,6 @@ fun AnelloCategorie(
                     }
                 }
             }
-        }
-
-        // Il centro: il numero è l'eroe, l'etichetta lo introduce sottovoce.
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = spessore + Spazi.s),
-        ) {
-            val testo = if (totaleMinuti == null) "—" else testoDurata(totaleMinuti.toLong())
-            Text(
-                text = testo,
-                style = when {
-                    testo.length <= 6 -> MaterialTheme.typography.displaySmall
-                    testo.length <= 10 -> MaterialTheme.typography.headlineSmall
-                    else -> MaterialTheme.typography.titleLarge
-                },
-                maxLines = 1,
-            )
-            Text(
-                text = etichettaCentro,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
         }
     }
 }
@@ -397,31 +369,21 @@ fun BarreGiorni(
 // --- 3. Le barre orizzontali --------------------------------------------------
 
 /**
- * Quanto è stato consumato, su un binario grigio.
- *
- * Con un limite: la scala è `max(quantità, limite)`, così la tacca del limite sta
- * sempre dentro la barra e l'eccesso si vede per quello che è — la parte oltre
- * la tacca passa al terracotta del patto. Senza limite: la scala è il
- * `riferimento` (l'app più usata del giorno, o il sito più richiesto), e il
- * colore resta quello di chi chiama.
- *
- * La `quantita` è un numero puro, non per forza minuti: la stessa barra misura i
- * minuti di un'app e le visite di un sito. Senza `limite` non compare MAI il
- * terracotta — ed è per questo che i siti non ne hanno uno: un sito visitato non
- * è un'infrazione (contratto-api.md, "Siti visitati — limiti e patto etico").
+ * Quanto vale un numero rispetto al più grande del giorno, su un binario grigio.
+ * La usano le visite dei siti: il `riferimento` è il sito più richiesto, un
+ * confronto tra pari dentro la giornata, mai una soglia da rispettare — un sito
+ * visitato non è un'infrazione (contratto-api.md, "Siti visitati — limiti e
+ * patto etico"). Per questo non ha né limite né tacca, e mai il terracotta.
  */
 @Composable
 fun BarraOrizzontale(
     quantita: Int,
-    limite: Int?,
     riferimento: Int,
     colore: Color,
     modifier: Modifier = Modifier,
     spessore: Dp = 9.dp,
 ) {
     val binario = MaterialTheme.colorScheme.surfaceVariant
-    val oltre = ColoriPatto.FuoriRegola
-    val segno = MaterialTheme.colorScheme.onSurfaceVariant
 
     Canvas(modifier = modifier.fillMaxWidth().height(spessore + 8.dp)) {
         val alta = spessore.toPx()
@@ -437,27 +399,9 @@ fun BarraOrizzontale(
             cornerRadius = tondo,
         )
 
-        val scala = when {
-            limite != null -> maxOf(quantita, limite)
-            riferimento > 0 -> riferimento
-            else -> quantita
-        }.coerceAtLeast(1)
-
-        val eccesso = if (limite != null) quantita - limite else 0
-        if (eccesso > 0) {
-            // Prima tutto terracotta, poi il pieno "entro il limite" sopra:
-            // due rettangoli tondi annidati, nessun angolo che stona.
-            drawRoundRect(
-                color = oltre,
-                topLeft = Offset(0f, alto),
-                size = Size(larga, alta),
-                cornerRadius = tondo,
-            )
-        }
-
-        val entro = if (limite != null) minOf(quantita, limite) else quantita
-        if (entro > 0) {
-            val pieno = (larga * entro / scala.toFloat()).coerceIn(alta, larga)
+        val scala = (if (riferimento > 0) riferimento else quantita).coerceAtLeast(1)
+        if (quantita > 0) {
+            val pieno = (larga * quantita / scala.toFloat()).coerceIn(alta, larga)
             drawRoundRect(
                 color = colore,
                 topLeft = Offset(0f, alto),
@@ -465,87 +409,16 @@ fun BarraOrizzontale(
                 cornerRadius = tondo,
             )
         }
-
-        if (limite != null && larga > 8.dp.toPx()) {
-            val sottile = 2.dp.toPx()
-            val x = (larga * limite / scala.toFloat())
-                .coerceIn(sottile, larga - sottile)
-            drawRect(
-                color = segno,
-                topLeft = Offset(x - sottile / 2f, alto - 3.dp.toPx()),
-                size = Size(sottile, alta + 6.dp.toPx()),
-            )
-        }
-    }
-}
-
-/** Una riga d'uso col grafico: nome e tempo sopra, barra sotto, limite raccontato. */
-@Composable
-fun RigaBarraUso(
-    nome: String,
-    minuti: Int,
-    limite: Int?,
-    riferimento: Int,
-    colore: Color,
-    modifier: Modifier = Modifier,
-) {
-    val terracotta = ColoriPatto.FuoriRegola
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = nome,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = testoDurata(minuti.toLong()),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(start = Spazi.s),
-            )
-        }
-        BarraOrizzontale(
-            quantita = minuti,
-            limite = limite,
-            riferimento = riferimento,
-            colore = colore,
-        )
-        if (limite != null) {
-            val sforato = minuti - limite
-            Text(
-                text = if (sforato > 0) {
-                    stringResource(
-                        R.string.grafico_oltre_limite,
-                        testoDurata(sforato.toLong()),
-                    )
-                } else {
-                    stringResource(R.string.tempo_limite, testoDurata(limite.toLong()))
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = if (sforato > 0) {
-                    terracotta
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-        }
     }
 }
 
 /**
  * Una riga "sito visitato": il dominio a sinistra, quante volte è stato chiesto
- * a destra, la barra proporzionale sotto — la stessa forma delle app, così il
+ * a destra, la barra proporzionale sotto — la stessa lettura delle app, così il
  * genitore legge le due liste con lo stesso occhio.
  *
- * Tre differenze, tutte volute:
- *  - nessun `limite`, quindi il terracotta non compare MAI: un sito visitato non
- *    è uno sforamento e non viene trattato come tale (contratto-api.md, "Siti
- *    visitati — limiti e patto etico");
- *  - il `riferimento` è il sito più richiesto del giorno: è un confronto tra
- *    pari dentro la stessa giornata, non un giudizio su una soglia;
- *  - il nome è un DOMINIO e basta (`instagram.com`), mai una pagina: quello che
- *    sta dopo il nome del sito non lo vede nemmeno il telefono del figlio.
+ * Il nome è un DOMINIO e basta (`instagram.com`), mai una pagina: quello che sta
+ * dopo il nome del sito non lo vede nemmeno il telefono del figlio.
  */
 @Composable
 fun RigaBarraSito(
@@ -572,117 +445,34 @@ fun RigaBarraSito(
         }
         BarraOrizzontale(
             quantita = visite,
-            limite = null,
             riferimento = riferimento,
             colore = MaterialTheme.colorScheme.primary,
         )
     }
 }
 
-// --- La scheda eroe della finestra -------------------------------------------
+// --- Le medie -------------------------------------------------------------------
 
 /**
- * La scheda in cima alla finestra: l'anello del giorno con la sua legenda e,
- * sotto, gli otto giorni. È la prima cosa che il genitore vede — e in tre
- * secondi dice quanto, in cosa, e se quel giorno somiglia agli altri.
- *
- * Se la fotografia di OGGI non è ancora arrivata (capita: il telefono manda a
- * intervalli), l'anello mostra l'ULTIMO giorno che ha dati e lo dice col suo
- * nome — "14/07", non "oggi". Il ricorso a un anello grigio col trattino resta
- * solo per il caso in cui non ci sia proprio nulla: un "non lo so" non si
- * traveste da zero, ma neanche da schermata vuota.
+ * Le medie settimanale e mensile del tempo d'uso, una accanto all'altra. Ogni
+ * cella compare solo se il server ha dati per quel periodo: mai uno zero finto.
  */
 @Composable
-fun SchedaUsoOggi(
-    usoRecente: List<UsoGiorno>,
-    medie: Medie? = null,
-    modifier: Modifier = Modifier,
-) {
-    if (usoRecente.isEmpty()) return
-    // Il giorno mostrato segue la selezione (come già fa la sezione Tempo): se il
-    // giorno scelto sparisce al cambio di giornata si ricade sul predefinito
-    // (l'ultimo con dati), non su un fantasma. null = nessuna scelta.
-    val predefinito = usoRecente.lastOrNull { it.totaleMinuti != null } ?: usoRecente.last()
-    var giornoScelto by rememberSaveable { mutableStateOf<String?>(null) }
-    val mostrato = usoRecente.firstOrNull { it.giorno == giornoScelto } ?: predefinito
-    val eOggi = mostrato.giorno == usoRecente.last().giorno
-    val fette = fetteConResto(mostrato.categorie, mostrato.totaleMinuti)
-
-    Card(shape = MaterialTheme.shapes.large, modifier = modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(Spazi.l)) {
-            Text(
-                text = stringResource(R.string.grafico_eroe_titolo),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(Spazi.m))
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                AnelloCategorie(
-                    fette = fette,
-                    totaleMinuti = mostrato.totaleMinuti,
-                    etichettaCentro = when {
-                        mostrato.totaleMinuti == null ->
-                            stringResource(R.string.grafico_nessun_dato)
-                        eOggi -> stringResource(R.string.tempo_chip_oggi)
-                        else -> giornoBreve(mostrato.giorno)
-                    },
-                )
-            }
-            Spacer(modifier = Modifier.height(Spazi.l))
-            if (fette.isEmpty()) {
-                Text(
-                    text = if (mostrato.totaleMinuti == null) {
-                        stringResource(R.string.tempo_nessun_dato_spiega)
-                    } else {
-                        stringResource(R.string.grafico_categorie_vuoto)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                LegendaCategorie(fette)
-            }
-            Spacer(modifier = Modifier.height(Spazi.l))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(Spazi.l))
-            Text(
-                text = stringResource(R.string.grafico_ultimi_giorni),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(Spazi.m))
-            // Le barre ora si TOCCANO: la giornata scelta guida l'anello e la
-            // legenda qui sopra (stesso meccanismo già collaudato in Tempo).
-            BarreGiorni(
-                giorni = usoRecente,
-                selezionato = mostrato.giorno,
-                onScelta = { giornoScelto = it },
-            )
-
-            // Le medie settimanale/mensile: additive e nascoste per riga se il
-            // server non le manda (campo/sotto-oggetto null = niente da mostrare,
-            // mai uno zero finto).
-            if (medie != null && (medie.settimana != null || medie.mese != null)) {
-                Spacer(modifier = Modifier.height(Spazi.l))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(Spazi.l))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spazi.l),
-                ) {
-                    medie.settimana?.let {
-                        MediaCella(R.string.media_settimana, it, Modifier.weight(1f))
-                    }
-                    medie.mese?.let {
-                        MediaCella(R.string.media_mese, it, Modifier.weight(1f))
-                    }
-                }
-            }
+fun BloccoMedie(medie: Medie, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spazi.l),
+    ) {
+        medie.settimana?.let {
+            MediaCella(R.string.media_settimana, it, Modifier.weight(1f))
+        }
+        medie.mese?.let {
+            MediaCella(R.string.media_mese, it, Modifier.weight(1f))
         }
     }
 }
 
-/** Una cella "media": etichetta piccola, minuti grandi, e su quanti giorni poggia. */
+/** Una cella "media": etichetta piccola, minuti, e su quanti giorni poggia. */
 @Composable
 private fun MediaCella(etichetta: Int, media: MediaPeriodo, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {

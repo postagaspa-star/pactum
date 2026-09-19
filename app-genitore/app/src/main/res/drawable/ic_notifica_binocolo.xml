@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Binocolo: icona di stato per gli avvisi del patto. -->
+<!-- Binocolo: icona di stato per gli avvisi del patto e voce "Panoramica"
+     della barra in basso. Le altre voci (ic_scheda_*) seguono il suo tratto. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

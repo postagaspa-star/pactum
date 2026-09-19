@@ -5,13 +5,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.TipiRegola
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
 import java.time.LocalDate
-import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -22,15 +22,7 @@ import java.time.format.DateTimeParseException
  * mostrati nel fuso del telefono.
  */
 
-/** Il ts_server ISO 8601 UTC come istante, null se malformato. */
-fun istanteServer(tsServer: String?): Instant? {
-    if (tsServer.isNullOrBlank()) return null
-    return try {
-        OffsetDateTime.parse(tsServer).toInstant()
-    } catch (e: DateTimeParseException) {
-        null
-    }
-}
+// istanteServer() vive in LogicaPatto.kt: è logica pura, serve anche ai test.
 
 private val formatoOra: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val formatoDataOra: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM HH:mm")
@@ -57,16 +49,34 @@ private fun campo(parametri: JsonObject, nome: String): String? =
 /** Un campo testuale dei parametri di una regola (es. arbitro_nome), null se assente. */
 fun parametroTesto(parametri: JsonObject, nome: String): String? = campo(parametri, nome)
 
+/** La regola della finestra raccontata col suo nome leggibile, se il server l'ha allegato. */
+@Composable
+fun descrizioneRegola(regola: RegolaFinestra): String =
+    descrizioneRegola(regola.tipo, regola.parametri, regola.nome)
+
+/** Il tipo della regola come sopra-titolo della sua scheda ("LIMITE DI TEMPO"). */
+@Composable
+fun etichettaTipoRegola(tipo: String): String = when (tipo) {
+    TipiRegola.LIMITE_TEMPO -> stringResource(R.string.regola_tipo_limite_tempo)
+    TipiRegola.FASCIA_ORARIA -> stringResource(R.string.regola_tipo_fascia_oraria)
+    TipiRegola.VITA_REALE -> stringResource(R.string.regola_tipo_vita_reale)
+    else -> tipo.uppercase()
+}
+
 /**
  * La regola raccontata in italiano semplice, costruita da tipo+parametri
  * (contratto-api.md). Un tipo sconosciuto mostra il tipo grezzo: meglio
  * onesto che muto (tolleranza evolutiva).
+ *
+ * `nomeApp` è il nome leggibile che la finestra allega alle limite_tempo su un
+ * pacchetto ("TikTok"): se c'è, il genitore non legge mai com.zhiliaoapp.musically.
  */
 @Composable
-fun descrizioneRegola(tipo: String, parametri: JsonObject): String = when (tipo) {
+fun descrizioneRegola(tipo: String, parametri: JsonObject, nomeApp: String? = null): String = when (tipo) {
     TipiRegola.LIMITE_TEMPO -> stringResource(
         R.string.regola_limite_tempo,
-        etichettaAppOCategoria(campo(parametri, "app_o_categoria") ?: "?"),
+        nomeApp?.takeIf { it.isNotBlank() }
+            ?: etichettaAppOCategoria(campo(parametri, "app_o_categoria") ?: "?"),
         testoDurata(campo(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
     )
 

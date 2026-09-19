@@ -30,6 +30,21 @@ data class Finestra(
     // mentre una lista con `totale_domini: null` dentro = "il server sa, ma per
     // quel giorno non è arrivata nessuna fotografia". Due silenzi diversi.
     @SerialName("siti_recenti") val sitiRecenti: List<SitiGiorno>? = null,
+    // (v2.4) La striscia AGGREGATA degli 8 giorni, dal più vecchio a oggi: la
+    // calcola il server con la stessa funzione che la manda al figlio, quindi le
+    // due app mostrano la stessa striscia per costruzione. Vuota = server vecchio:
+    // la scheda del patto mostra solo quello che può, senza inventarla.
+    val striscia: List<QuadrettoSemaforo> = emptyList(),
+    // (v2.4) Il genitore ha già mandato il segno oggi (fuso del patto). Assente
+    // su un server vecchio: false, e sarà il server a dire di no se serve.
+    @SerialName("segno_oggi") val segnoOggi: Boolean = false,
+)
+
+/** Risposta di POST /api/segno (v2.4): il riconoscimento a testo fisso è partito. */
+@Serializable
+data class SegnoMandato(
+    val mandato: Boolean = true,
+    @SerialName("ts_server") val tsServer: String? = null,
 )
 
 // --- Siti visitati (v2.3) ----------------------------------------------------
@@ -125,6 +140,10 @@ data class RegolaFinestra(
     val id: Long,
     val tipo: String,
     val parametri: JsonObject = JsonObject(emptyMap()),
+    // Il nome leggibile dell'app per le limite_tempo su un pacchetto ("TikTok"
+    // invece di com.zhiliaoapp.musically). Assente per le categorie e sui server
+    // vecchi: allora si ripiega sulla chiave.
+    val nome: String? = null,
     val attiva: Boolean = true,
     @SerialName("creata_ts") val creataTs: String = "",
     @SerialName("ultima_modifica_ts") val ultimaModificaTs: String = "",
@@ -239,6 +258,7 @@ object StatiProposta {
     const val PENDENTE = "pendente"
     const val ACCETTATA = "accettata"
     const val RIFIUTATA = "rifiutata"
+    const val ANNULLATA = "annullata"
 }
 
 object DirezioniProposta {

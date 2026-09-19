@@ -264,7 +264,13 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         } else {
             context.getString(R.string.notifica_silenzio_testo_mai)
         }
-        return notificaBase(context, context.getString(R.string.notifica_silenzio_titolo), testo)
+        // Il silenzio si guarda sulla finestra: la riga di stato è in cima.
+        return notificaBase(
+            context,
+            titolo = context.getString(R.string.notifica_silenzio_titolo),
+            testo = testo,
+            destinazione = MainActivity.DEST_FINESTRA,
+        )
     }
 
     private fun avvisoContattoTornato(context: Context, stato: StatoSilenzio): Notification {
@@ -273,6 +279,7 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             context,
             titolo = context.getString(R.string.notifica_contatto_titolo),
             testo = context.getString(R.string.notifica_contatto_testo, quando),
+            destinazione = MainActivity.DEST_FINESTRA,
         )
     }
 
@@ -379,11 +386,15 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             else -> R.string.tipo_novita // tipo nuovo dal server: tolleranza evolutiva
         }
 
-        /** Su quale scheda aprire l'app toccando la notifica (hook di navigazione). */
-        private fun destinazionePerTipo(tipo: String): String? = when (tipo) {
-            "proposta_risposta" -> MainActivity.DEST_PROPOSTE
-            "dichiarazione" -> MainActivity.DEST_VERDETTI
-            else -> null // le altre aprono la finestra (default)
+        /**
+         * Dove aprire l'app toccando la notifica (hook di navigazione). Le
+         * risposte che toccano al genitore vanno su "Il tuo turno"; tutto il
+         * resto apre la lista delle notifiche sopra la finestra, dove quella
+         * stessa notifica si legge per intero e si segna come letta.
+         */
+        private fun destinazionePerTipo(tipo: String): String = when (tipo) {
+            "proposta_risposta", "dichiarazione" -> MainActivity.DEST_TURNO
+            else -> MainActivity.DEST_NOTIFICHE
         }
     }
 }

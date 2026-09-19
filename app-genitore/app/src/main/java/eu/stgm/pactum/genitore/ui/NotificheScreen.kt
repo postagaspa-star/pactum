@@ -9,12 +9,15 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,7 +26,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,20 +33,27 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.sync.VedettaWorker
 
-/** Le notifiche non lette del patto; "letta" è un gesto del genitore, qui. */
+/**
+ * Le notifiche non lette del patto. Non è più una scheda: si apre dalla
+ * campanella della finestra e si chiude col tasto indietro. "Letta" è un gesto
+ * del genitore, qui — la vedetta non segna mai niente da sola.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificheScreen(vm: NotificheViewModel = viewModel()) {
+fun NotificheScreen(onChiudi: () -> Unit, vm: NotificheViewModel = viewModel()) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val messaggioLettaFallita = stringResource(R.string.notifica_letta_fallita)
@@ -64,6 +73,14 @@ fun NotificheScreen(vm: NotificheViewModel = viewModel()) {
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.notifiche_titolo)) },
+                navigationIcon = {
+                    IconButton(onClick = onChiudi) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            stringResource(R.string.azione_indietro),
+                        )
+                    }
+                },
                 actions = {
                     IconButton(onClick = { vm.aggiorna() }) {
                         Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
@@ -75,33 +92,26 @@ fun NotificheScreen(vm: NotificheViewModel = viewModel()) {
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when {
-                stato.caricamento && stato.notifiche.isEmpty() -> Centro {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Text(
-                            text = stringResource(R.string.notifiche_caricamento),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                }
+                stato.caricamento && stato.notifiche.isEmpty() ->
+                    Caricamento(stringResource(R.string.notifiche_caricamento))
 
                 stato.configurazioneMancante -> Centro {
-                    TestoCentrato(stringResource(R.string.notifiche_config_mancante))
+                    StatoPrimaApertura(
+                        titolo = stringResource(R.string.config_mancante_titolo),
+                        testo = stringResource(R.string.notifiche_config_mancante),
+                        centrato = true,
+                        modifier = Modifier.padding(horizontal = Spazi.xxl),
+                    )
                 }
 
                 stato.errore && stato.notifiche.isEmpty() -> Centro {
                     TestoCentrato(stringResource(R.string.notifiche_errore))
                 }
 
-                stato.notifiche.isEmpty() -> Centro {
-                    TestoCentrato(stringResource(R.string.notifiche_vuoto))
-                }
-
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(Spazi.l),
+                    verticalArrangement = Arrangement.spacedBy(Spazi.m),
                 ) {
                     // Aggiornamento fallito con una lista già in mano: onestà come
                     // nella finestra — si dice che i dati sono vecchi, invece di
@@ -109,8 +119,19 @@ fun NotificheScreen(vm: NotificheViewModel = viewModel()) {
                     if (stato.errore) {
                         item { RigaDatiVecchi(stringResource(R.string.notifiche_dati_vecchi)) }
                     }
-                    items(stato.notifiche, key = { it.id }) { notifica ->
-                        SchedaNotifica(notifica, onSegnaLetta = { vm.segnaLetta(notifica) })
+                    if (stato.notifiche.isEmpty()) {
+                        item {
+                            RigaVuota(
+                                stringResource(R.string.notifiche_vuoto),
+                                buonaNotizia = true,
+                            )
+                        }
+                    } else {
+                        item {
+                            ListaRighe(stato.notifiche) { notifica ->
+                                RigaNotifica(notifica, onSegnaLetta = { vm.segnaLetta(notifica) })
+                            }
+                        }
                     }
                 }
             }
@@ -118,10 +139,24 @@ fun NotificheScreen(vm: NotificheViewModel = viewModel()) {
     }
 }
 
+/** Una notifica: icona del tipo, cosa è successo, quando — e il segno di "letta". */
 @Composable
-private fun SchedaNotifica(notifica: Notifica, onSegnaLetta: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp)) {
+private fun RigaNotifica(notifica: Notifica, onSegnaLetta: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            painter = iconaTipo(notifica.tipo),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = Spazi.xs).size(24.dp),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = Spazi.m),
+        ) {
             Text(
                 text = stringResource(VedettaWorker.etichettaTipo(notifica.tipo)),
                 style = MaterialTheme.typography.labelMedium,
@@ -130,38 +165,23 @@ private fun SchedaNotifica(notifica: Notifica, onSegnaLetta: () -> Unit) {
             Text(
                 text = notifica.messaggio,
                 style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = Spazi.xs),
             )
-            istanteServer(notifica.tsServer)?.let {
-                Text(
-                    text = dataOraLocale(it),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onSegnaLetta) {
-                    Text(stringResource(R.string.notifica_segna_letta))
-                }
-            }
+            TestoOrario(notifica.tsServer, Modifier.padding(top = Spazi.xs))
+        }
+        IconButton(onClick = onSegnaLetta) {
+            Icon(Icons.Outlined.Done, stringResource(R.string.notifica_segna_letta))
         }
     }
 }
 
+/** L'icona per tipo: mai un colore d'allarme, solo una forma che si riconosce. */
 @Composable
-private fun Centro(contenuto: @Composable () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        contenuto()
-    }
-}
-
-@Composable
-private fun TestoCentrato(testo: String) {
-    Text(
-        text = testo,
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.padding(horizontal = 32.dp),
-    )
+private fun iconaTipo(tipo: String): Painter = when (tipo) {
+    "sforamento" -> painterResource(R.drawable.ic_scheda_tempo)
+    "manomissione" -> rememberVectorPainter(Icons.Outlined.Info)
+    "bonus" -> rememberVectorPainter(Icons.Outlined.AddCircle)
+    "modifica_regola" -> rememberVectorPainter(Icons.Outlined.Edit)
+    "proposta_risposta", "dichiarazione" -> painterResource(R.drawable.ic_scheda_turno)
+    else -> painterResource(R.drawable.ic_notifica_binocolo)
 }

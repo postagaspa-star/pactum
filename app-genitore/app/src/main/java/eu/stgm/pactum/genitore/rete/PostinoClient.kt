@@ -11,6 +11,7 @@ import eu.stgm.pactum.genitore.dati.PaccoDichiarazioni
 import eu.stgm.pactum.genitore.dati.PaccoNotifiche
 import eu.stgm.pactum.genitore.dati.PaccoProposte
 import eu.stgm.pactum.genitore.dati.Proposta
+import eu.stgm.pactum.genitore.dati.SegnoMandato
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
@@ -22,6 +23,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.io.IOException
@@ -46,6 +48,7 @@ sealed interface EsitoScrittura<out T> {
  *   GET  {base}/api/finestra                 → Finestra
  *   GET  {base}/api/notifiche                → {"notifiche": [...]} (solo non lette)
  *   POST {base}/api/notifiche/{id}/letta     → 2xx = segnata
+ *   POST {base}/api/segno                    → il riconoscimento al figlio (v2.4)
  *   header: Authorization: Bearer <token del genitore>
  *
  * Tollerante all'offline: qualunque fallimento (rete, HTTP non-2xx, JSON
@@ -131,6 +134,16 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         return interpreta(risposta, Dichiarazione.serializer())
     }
 
+    /**
+     * POST /api/segno (v2.4): il riconoscimento al figlio, a testo fisso, max uno
+     * al giorno. Nessun corpo: il testo lo decide il server, non il genitore.
+     * `Rifiutato` = 409 `segno_gia_mandato` (oggi è già partito).
+     */
+    suspend fun mandaSegno(): EsitoScrittura<SegnoMandato> {
+        val risposta = invia("/api/segno", CORPO_VUOTO) ?: return EsitoScrittura.Fallito
+        return interpreta(risposta, SegnoMandato.serializer())
+    }
+
     suspend fun segnaLetta(notificaId: Long): Boolean = withContext(Dispatchers.IO) {
         if (!configurazione.completa) return@withContext false
         try {
@@ -146,12 +159,16 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     }
 
     /** Una POST con corpo JSON: codice HTTP + corpo (letto sempre), null se la rete cade. */
-    private suspend fun scrivi(percorso: String, corpo: String): RispostaHttp? {
+    private suspend fun scrivi(percorso: String, corpo: String): RispostaHttp? =
+        invia(percorso, corpo.toRequestBody(JSON_MEDIA_TYPE))
+
+    /** Una POST qualunque (anche senza corpo): codice HTTP + corpo, null se la rete cade. */
+    private suspend fun invia(percorso: String, corpo: RequestBody): RispostaHttp? {
         if (!configurazione.completa) return null
         return withContext(Dispatchers.IO) {
             try {
                 val richiesta = richiesta(percorso)
-                    .post(corpo.toRequestBody(JSON_MEDIA_TYPE))
+                    .post(corpo)
                     .build()
                 http.newCall(richiesta).execute().use { risposta ->
                     RispostaHttp(risposta.code, risposta.body?.string())

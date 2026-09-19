@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.BuildConfig
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.aggiornamento.Aggiornatore
@@ -48,7 +49,11 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.Locale
 
-/** Impostazioni minime del binocolo: indirizzo del server e token del genitore. */
+/**
+ * Impostazioni del binocolo, in tre blocchi: la connessione (indirizzo del
+ * server e codice d'accesso del genitore), il digest giornaliero, gli
+ * aggiornamenti dell'app.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImpostazioniScreen() {
@@ -90,10 +95,13 @@ fun ImpostazioniScreen() {
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(Spazi.l),
+            verticalArrangement = Arrangement.spacedBy(Spazi.m),
         ) {
+            // Tre blocchi: connessione, digest, aggiornamenti. È l'unica
+            // schermata densa dell'app, e va bene: è configurazione.
+            TitoloSezione(stringResource(R.string.impostazioni_connessione_titolo))
             Text(
                 text = stringResource(R.string.impostazioni_descrizione),
                 style = MaterialTheme.typography.bodyMedium,
@@ -202,17 +210,20 @@ fun ImpostazioniScreen() {
 
             // Digest giornaliero: l'ora scelta e l'interruttore. Si salva al
             // gesto, senza pulsante: è una preferenza, non una configurazione.
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            HorizontalDivider(
+                modifier = Modifier.padding(top = Spazi.s),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
             SezioneDigest(impostazioni)
 
             // Aggiornamenti (tappa 6): la versione installata e un controllo
             // manuale. La vedetta lo fa anche da sola a ogni giro; questo è per
             // chi non vuole aspettare.
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            Text(
-                text = stringResource(R.string.impostazioni_aggiornamenti_titolo),
-                style = MaterialTheme.typography.titleMedium,
+            HorizontalDivider(
+                modifier = Modifier.padding(top = Spazi.s),
+                color = MaterialTheme.colorScheme.outlineVariant,
             )
+            TitoloSezione(stringResource(R.string.impostazioni_aggiornamenti_titolo))
             Text(
                 text = stringResource(
                     R.string.impostazioni_versione_attuale,
@@ -276,10 +287,7 @@ private fun SezioneDigest(impostazioni: Impostazioni) {
     val digest by impostazioni.configDigest.collectAsState(initial = null)
     val config = digest ?: return
 
-    Text(
-        text = stringResource(R.string.impostazioni_digest_titolo),
-        style = MaterialTheme.typography.titleMedium,
-    )
+    TitoloSezione(stringResource(R.string.impostazioni_digest_titolo))
     Text(
         text = stringResource(R.string.impostazioni_digest_descrizione),
         style = MaterialTheme.typography.bodyMedium,

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Impostazioni: tre cursori di regolazione, tratto tondo come il binocolo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M4,6.5 L20,6.5 M4,12 L20,12 M4,17.5 L20,17.5" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9,4.1 a2.4,2.4 0 1,0 0.001,0 z M15,9.6 a2.4,2.4 0 1,0 0.001,0 z M8,15.1 a2.4,2.4 0 1,0 0.001,0 z" />
+</vector>

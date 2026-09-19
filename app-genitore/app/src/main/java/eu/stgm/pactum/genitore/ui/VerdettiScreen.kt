@@ -1,172 +1,81 @@
 package eu.stgm.pactum.genitore.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleResumeEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Dichiarazione
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.StatiDichiarazione
 import eu.stgm.pactum.genitore.dati.TipiVerdetto
 
-/** I verdetti: dai il tuo sui successi in attesa, e rivedi quelli già dati. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun VerdettiScreen(vm: VerdettiViewModel = viewModel()) {
-    val stato by vm.stato.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
+// Le dichiarazioni del figlio: la seconda metà di "Il tuo turno". Il genitore
+// non emette verdetti, risponde — conferma, conferma per conto dell'arbitro, o
+// dice che non è andata così.
 
-    LifecycleResumeEffect(Unit) {
-        vm.aggiorna()
-        onPauseOrDispose { }
-    }
-
-    val messaggioInviato = stringResource(R.string.verdetto_inviato)
-    val messaggioErrore = stringResource(R.string.verdetto_errore)
-    val messaggioNonInAttesa = stringResource(R.string.verdetto_errore_non_in_attesa)
-    LaunchedEffect(stato.evento) {
-        when (val evento = stato.evento) {
-            is VerdettiViewModel.Evento.Inviato -> snackbarHostState.showSnackbar(messaggioInviato)
-            is VerdettiViewModel.Evento.Errore -> {
-                val messaggio = if (evento.codice == "dichiarazione_non_in_attesa") {
-                    messaggioNonInAttesa
-                } else {
-                    messaggioErrore
-                }
-                snackbarHostState.showSnackbar(messaggio)
-            }
-            null -> Unit
-        }
-        if (stato.evento != null) vm.consumaEvento()
-    }
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.verdetti_titolo)) },
-                actions = {
-                    IconButton(onClick = { vm.aggiorna() }) {
-                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
-                    }
-                },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                stato.caricamento && stato.dichiarazioni.isEmpty() -> Centro {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Text(
-                            text = stringResource(R.string.verdetti_caricamento),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                }
-
-                stato.configurazioneMancante -> Centro {
-                    TestoCentrato(stringResource(R.string.verdetti_config_mancante))
-                }
-
-                stato.errore && stato.dichiarazioni.isEmpty() -> Centro {
-                    TestoCentrato(stringResource(R.string.verdetti_errore))
-                }
-
-                else -> ContenutoVerdetti(
-                    dichiarazioni = stato.dichiarazioni,
-                    regolePerId = stato.regolePerId,
-                    invioInCorso = stato.invioInCorso,
-                    mostraErrore = stato.errore,
-                    onVerdetto = { id, verdetto, nota -> vm.emettiVerdetto(id, verdetto, nota) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ContenutoVerdetti(
+/**
+ * La sezione delle dichiarazioni dentro "Il tuo turno": prima quelle DA
+ * CONFERMARE, poi quelle già NEL REGISTRO come righe di storia. Quando non c'è
+ * niente da confermare lo si scrive in grande: è una buona notizia.
+ */
+internal fun LazyListScope.sezioneDichiarazioni(
     dichiarazioni: List<Dichiarazione>,
     regolePerId: Map<Long, RegolaFinestra>,
     invioInCorso: Boolean,
-    mostraErrore: Boolean,
     onVerdetto: (Long, String, String?) -> Unit,
 ) {
     val inAttesa = dichiarazioni.filter { it.stato == StatiDichiarazione.IN_ATTESA }
     val risolte = dichiarazioni.filter { it.stato != StatiDichiarazione.IN_ATTESA }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        if (mostraErrore) {
-            item { BannerDatiVecchi() }
-        }
+    item {
+        TitoloSezione(
+            stringResource(R.string.turno_sezione_dichiarazioni),
+            modifier = Modifier.padding(top = Spazi.l),
+        )
+    }
 
-        item { TitoloSezione(stringResource(R.string.verdetti_sezione_attesa)) }
-        if (inAttesa.isEmpty()) {
-            item { TestoVuoto(stringResource(R.string.verdetti_attesa_vuoto)) }
-        } else {
-            items(inAttesa, key = { "attesa-${it.id}" }) { dichiarazione ->
-                CardInAttesa(
-                    dichiarazione = dichiarazione,
-                    regola = regolePerId[dichiarazione.regolaId],
-                    invioInCorso = invioInCorso,
-                    onVerdetto = onVerdetto,
-                )
-            }
+    item { SopraTitolo(stringResource(R.string.verdetti_da_confermare)) }
+    if (inAttesa.isEmpty()) {
+        item {
+            Text(
+                text = stringResource(R.string.turno_niente_in_attesa),
+                style = MaterialTheme.typography.headlineSmall,
+            )
         }
+    } else {
+        items(inAttesa, key = { "attesa-${it.id}" }) { dichiarazione ->
+            CardInAttesa(
+                dichiarazione = dichiarazione,
+                regola = regolePerId[dichiarazione.regolaId],
+                invioInCorso = invioInCorso,
+                onVerdetto = onVerdetto,
+            )
+        }
+    }
 
-        item { TitoloSezione(stringResource(R.string.verdetti_sezione_risolte)) }
-        if (risolte.isEmpty()) {
-            item { TestoVuoto(stringResource(R.string.verdetti_risolte_vuoto)) }
-        } else {
-            items(risolte, key = { "risolta-${it.id}" }) { dichiarazione ->
-                CardRisolta(dichiarazione, regolePerId[dichiarazione.regolaId])
+    if (risolte.isNotEmpty()) {
+        item {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = Spazi.s)) {
+                SopraTitolo(stringResource(R.string.verdetti_nel_registro))
+                ListaRighe(risolte) { RigaRisolta(it, regolePerId[it.regolaId]) }
             }
         }
     }
@@ -183,24 +92,24 @@ private fun CardInAttesa(
     val notaPulita = { nota.trim().ifBlank { null } }
     val arbitro = regola?.let { parametroTesto(it.parametri, "arbitro_nome") }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    CardContenuto {
+        Column(modifier = Modifier.padding(Spazi.l)) {
             IntestazioneDichiarazione(dichiarazione, regola)
             Text(
                 text = stringResource(R.string.dichiarazione_successo_dichiarato),
                 style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = Spazi.xs),
             )
             dichiarazione.nota?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = stringResource(R.string.dichiarazione_nota, it),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(Spazi.s))
             OutlinedTextField(
                 value = nota,
                 onValueChange = { nota = it },
@@ -208,7 +117,7 @@ private fun CardInAttesa(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(Spazi.s))
 
             Button(
                 enabled = !invioInCorso,
@@ -217,7 +126,7 @@ private fun CardInAttesa(
             ) {
                 Text(stringResource(R.string.verdetto_conferma))
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(Spazi.xs))
             OutlinedButton(
                 enabled = !invioInCorso,
                 onClick = {
@@ -233,8 +142,9 @@ private fun CardInAttesa(
                     },
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            OutlinedButton(
+            // L'azione rara e pesante: non merita il peso di un bordo pieno
+            // accanto alla conferma.
+            TextButton(
                 enabled = !invioInCorso,
                 onClick = { onVerdetto(dichiarazione.id, TipiVerdetto.RIBALTA, notaPulita()) },
                 modifier = Modifier.fillMaxWidth(),
@@ -246,42 +156,40 @@ private fun CardInAttesa(
 }
 
 @Composable
-private fun CardRisolta(dichiarazione: Dichiarazione, regola: RegolaFinestra?) {
+private fun RigaRisolta(dichiarazione: Dichiarazione, regola: RegolaFinestra?) {
     val arbitro = regola?.let { parametroTesto(it.parametri, "arbitro_nome") } ?: "?"
     // (v2.1) La frase del registro la congela il server sul verdetto (cita
     // l'arbitro di allora): si mostra QUELLA verbatim, non la si ricostruisce
     // dai parametri attuali della regola. Se manca (es. fallimento dichiarato,
     // che non passa da un verdetto) si ripiega sulla descrizione locale.
     val registro = dichiarazione.verdetto?.registro?.takeIf { it.isNotBlank() }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            IntestazioneDichiarazione(dichiarazione, regola)
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
+        IntestazioneDichiarazione(dichiarazione, regola)
+        Text(
+            text = registro ?: descrizioneStato(dichiarazione, arbitro),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(top = Spazi.xs),
+        )
+        dichiarazione.verdetto?.nota?.takeIf { it.isNotBlank() }?.let {
             Text(
-                text = registro ?: descrizioneStato(dichiarazione, arbitro),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 4.dp),
+                text = stringResource(R.string.dichiarazione_verdetto_nota, it),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Spazi.xs),
             )
-            dichiarazione.verdetto?.nota?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    text = stringResource(R.string.dichiarazione_verdetto_nota, it),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
         }
     }
 }
 
 @Composable
 private fun IntestazioneDichiarazione(dichiarazione: Dichiarazione, regola: RegolaFinestra?) {
-    val titolo = regola?.let { descrizioneRegola(it.tipo, it.parametri) }
+    val titolo = regola?.let { descrizioneRegola(it) }
         ?: stringResource(R.string.dichiarazione_regola_sconosciuta)
     Text(text = titolo, style = MaterialTheme.typography.titleSmall)
     if (dichiarazione.giorno.isNotBlank()) {
         Text(
-            text = stringResource(R.string.dichiarazione_giorno, dichiarazione.giorno),
-            style = MaterialTheme.typography.bodySmall,
+            text = stringResource(R.string.dichiarazione_giorno, giornoBreve(dichiarazione.giorno)),
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -297,44 +205,3 @@ private fun descrizioneStato(dichiarazione: Dichiarazione, arbitro: String): Str
         StatiDichiarazione.RIBALTATA -> stringResource(R.string.dichiarazione_stato_ribaltata)
         else -> dichiarazione.stato
     }
-
-/** Dati vecchi: un'età, non un errore — riga `surfaceVariant`, mai una card rossa. */
-@Composable
-private fun BannerDatiVecchi() {
-    RigaDatiVecchi(stringResource(R.string.notifiche_dati_vecchi))
-}
-
-@Composable
-private fun TitoloSezione(testo: String) {
-    Text(
-        text = testo,
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(top = 8.dp),
-    )
-}
-
-@Composable
-private fun TestoVuoto(testo: String) {
-    Text(
-        text = testo,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
-
-@Composable
-private fun Centro(contenuto: @Composable () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        contenuto()
-    }
-}
-
-@Composable
-private fun TestoCentrato(testo: String) {
-    Text(
-        text = testo,
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.padding(horizontal = 32.dp),
-    )
-}

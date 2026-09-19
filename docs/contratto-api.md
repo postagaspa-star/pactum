@@ -65,10 +65,12 @@ Lo stato completo del patto per il sync dell'app del figlio, in una risposta sol
   "proposte_pendenti": [ ],
   "dichiarazioni_in_attesa": [ ],
   "siti_recenti": [ ],
+  "striscia": [ { "data": "2026-07-07", "stato": "verde" } ],
   "fuso": "Europe/Rome"
 }
 ```
 - `regole`: solo le **attive** (il patto vigente), stessa forma della finestra ma senza semaforo.
+- **`striscia`** (v2.4, redesign C2): **identica**, voce per voce, alla `striscia` di `GET /api/finestra`, calcolata dalla stessa funzione del server. È la striscia grande degli 8 giorni che le due app mostrano in cima. Il figlio ci calcola **in locale** la serie di giorni di fila e il record, che non hanno campo nel contratto e non arrivano mai al genitore (tavola rotonda D3/C3).
 - `bonus_oggi_per_regola`: minuti bonus concessi OGGI per regola (chiave = regola_id come stringa) — serve al valutatore locale per il limite efficace.
 - `proposte_pendenti` / `dichiarazioni_in_attesa`: stesse forme delle sezioni sotto.
 - **`siti_recenti`** (v2.3): **identico**, campo per campo, al `siti_recenti` di `GET /api/finestra` — stessi 8 giorni, stessa forma, stesso ordinamento, calcolato dalla stessa funzione del server. È il principio della tavola rotonda: **niente esiste nella finestra del genitore che il figlio non veda identico**. Se i due campi divergono è un bug del contratto, non una scelta di prodotto.
@@ -151,12 +153,17 @@ La finestra: tutto ciò che riguarda il patto in una risposta sola. Risposta `20
   },
   "bonus_giornalieri": [ { "giorno": "2026-07-07", "minuti": 0 } ],
   "stato_silenzio": { "ultimo_battito": "2026-07-14T10:00:00+00:00", "silente": false },
-  "medie": { "settimana": { "minuti": 131, "giorni": 7 }, "mese": { "minuti": 118, "giorni": 30 } }
+  "medie": { "settimana": { "minuti": 131, "giorni": 7 }, "mese": { "minuti": 118, "giorni": 30 } },
+  "striscia": [ { "data": "2026-07-07", "stato": "verde" } ],
+  "segno_oggi": false
 }
 ```
+- **`striscia`** (v2.4, redesign B1/C2): la striscia **aggregata** del patto, 8 voci (gli stessi 8 giorni del semaforo), dal più vecchio a oggi. `stato` ∈ `verde · rosso · grigio` e si ricava dai `semaforo` di **tutte** le regole (anche le eliminate, per i giorni in cui erano in vita): `rosso` se almeno una regola è `rosso` quel giorno; altrimenti `verde` se almeno una è `verde`; altrimenti `grigio` (nessuna regola in vita o nessun dato). Esce dalla **stessa funzione** che alimenta la `striscia` di `GET /api/patto`: le due app mostrano la stessa striscia per costruzione. La frase "6 su 7" è una funzione pura della striscia, calcolata nelle app (i `grigio` escono dal denominatore).
+- **`segno_oggi`** (v2.4, redesign C7): `true` se il genitore ha già mandato il segno di riconoscimento oggi (fuso del patto). Serve all'app per spegnere il pulsante.
 - **`regole`**: TUTTE le regole, anche le eliminate (`attiva=false`) — la finestra mostra la storia, mentre `GET /api/regole` (il patto vigente) mostra solo le attive. Ordinate per `id` crescente. `allentabile_dal` = `ultima_modifica_ts` + 4 giorni (il lock asimmetrico, informativo per il genitore).
 - **`nome`** (S2, solo nella finestra): per le regole `limite_tempo` il cui `app_o_categoria` è un pacchetto Android, il server allega un `nome` leggibile — l'etichetta più recente vista per quel pacchetto nelle fotografie `uso_giornaliero` (fallback: il pacchetto stesso) — così il genitore legge "TikTok" e non `com.zhiliaoapp.musically`. Il campo è **assente** per le regole di categoria (`app_o_categoria` = `categoria:*`): la traduce l'app. Assente anche in `GET /api/regole` (solo la finestra lo aggiunge).
 - **`semaforo`**: 8 voci per regola (oggi + i 7 giorni precedenti), dal più vecchio a oggi (oggi in coda). `stato` ∈ **solo `verde` / `rosso` / `grigio`** (niente `giallo`). Per `limite_tempo` e `fascia_oraria`: `rosso` = almeno uno sforamento della regola nel giorno; `grigio` = giorno prima della creazione oppure giorno **strettamente** successivo all'eliminazione (il giorno stesso dell'eliminazione non è grigio); `verde` = il resto. (v2.1) Per le regole **`vita_reale`**: `verde` = dichiarazione **confermata** (anche per conto) nel giorno; `rosso` = **fallimento dichiarato** o successo **ribaltato**; `grigio` = nessuna dichiarazione o verdetto ancora in attesa. Il rosso di un fallimento dichiarato fotografa il fatto, non punisce l'onestà: l'onestà è visibile perché la dichiarazione l'ha fatta il figlio.
+  (v2.4) **Niente verde senza dati.** Per `limite_tempo` e `fascia_oraria` un giorno senza sforamenti è `verde` solo se per quel giorno è arrivata almeno una fotografia `uso_giornaliero`. Senza fotografia è `grigio`: il telefono non ha raccontato niente, e un giorno di cui non si sa nulla non può figurare come mantenuto (tavola rotonda §3.4: "vuoto se non c'erano dati"). Il `rosso` resta `rosso` anche senza fotografia, perché lo sforamento è già un dato.
 - **`sforamenti_recenti` / `manomissioni_recenti`**: eventi del registro (stessa forma di POST /api/eventi + `ts_server`), max 20 ciascuno, dal più recente. `ts_device` può essere `null`.
 - **`storico_modifiche`**: max 50, dal più recente. `azione` ∈ `creazione · modifica · eliminazione`; `direzione` ∈ `allenta · stringe` per le modifiche, `allenta` per le eliminazioni, `null` per le creazioni; `prima`/`dopo` = i parametri della regola (`prima=null` su creazione, `dopo=null` su eliminazione); `concordata=true` solo se nata da proposta accettata.
 - **`bonus`**: contatori del giorno e della settimana ISO (lun–dom) nel fuso del patto, dalla tabella bonus autoritativa.
@@ -207,6 +214,13 @@ Il verdetto del genitore su una dichiarazione di successo `in_attesa` (`409 {"er
 - `verdetto` ∈ `conferma` (l'arbitro è il genitore o ha confermato nell'app) · `conferma_per_conto` (il genitore garantisce di aver sentito l'arbitro fuori dall'app — nel registro resta *"confermato dal genitore per conto di [arbitro_nome]"*) · `ribalta` (il successo dichiarato non regge; la dichiarazione conta come fallimento).
 - Notifica al figlio (`tipo: verdetto`). Risposta `200` con la dichiarazione aggiornata.
 
+### POST /api/segno (v2.4, redesign C7)
+Il gesto non poliziesco del genitore: un riconoscimento al figlio a **testo fisso**, al massimo **uno al giorno**.
+- Nessun corpo. Il testo NON lo sceglie il genitore: un canale libero dal genitore al figlio dentro un'app basata sulla fiducia diventa in fretta un canale di pressione, e la conversazione vera sta fuori dall'app (tavola rotonda, FinestraScreen).
+- Il server crea una notifica per il **figlio** con `tipo: segno`, `messaggio: "Ho visto la settimana. Bene così."`, `payload: {}`.
+- `200 { "mandato": true, "ts_server": "…" }`. `409 {"errore": "segno_gia_mandato"}` se oggi (fuso del patto) ne è già partito uno, garantito anche sotto richieste concorrenti.
+- Non va nel registro degli eventi: è un gesto del genitore, non un fatto del patto.
+
 ### GET /api/versione (nessun auth) — tappa 6
 Per l'auto-aggiornamento: l'ultima versione disponibile di ciascuna app.
 ```json
@@ -232,7 +246,7 @@ Le notifiche **non lette** (polling; ogni notifica ha un `tipo` macchina-leggibi
 ```
 - `id`: intero autoincrementale del server — chiave per la marcatura come letta e per non ri-avvisare due volte lato app.
 - `destinatario` (v2): ogni notifica nasce per un destinatario — `figlio` o `genitore` — e ciascuno riceve SOLO le proprie (il GET filtra sul ruolo del token; anche l'app del figlio ora legge le notifiche, es. nuove proposte e verdetti).
-- `tipo` ∈ `sforamento · manomissione · bonus · modifica_regola · nuova_proposta · proposta_risposta · dichiarazione · verdetto` (le app tollerano tipi nuovi).
+- `tipo` ∈ `sforamento · manomissione · bonus · modifica_regola · nuova_proposta · proposta_risposta · dichiarazione · verdetto · segno` (le app tollerano tipi nuovi). `segno` (v2.4) è destinato al figlio, con `payload: {}`.
 - `payload` per tipo: **sforamento/manomissione** `{evento_id, dettagli}` (l'evento del registro che l'ha generata); **bonus** `{minuti, regola_id, motivo, residuo_giorno, residuo_settimana}`; **modifica_regola** `{regola_id, azione, …}` con `parametri` su creazione, `direzione/concordata/prima/dopo` su modifica, `concordata/prima` su eliminazione; **nuova_proposta** `{proposta_id, regola_id, confronto, direzione}`; **proposta_risposta** `{proposta_id, regola_id, esito}`; **dichiarazione** `{dichiarazione_id, regola_id, esito, giorno}`; **verdetto** `{dichiarazione_id, regola_id, verdetto}`.
 - POST /api/notifiche/{id}/letta funziona per il proprio ruolo: ciascuno può marcare come lette solo le notifiche a lui destinate (`404` sulle altrui).
 

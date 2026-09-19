@@ -188,16 +188,22 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
     # ogni regola letta qui ha il suo semaforo anche se intanto ne nasce una.
     righe_regole = conn.execute("SELECT * FROM regole ORDER BY id").fetchall()
     semafori = semaforo.semafori(conn, ora)
+    nomi = _nomi_recenti(conn)
     regole = []
     limiti = {}  # app_o_categoria -> {"limite", "regola_id"} delle limite_tempo ATTIVE
     for riga in righe_regole:
-        if riga["attiva"] and riga["tipo"] == "limite_tempo":
+        voce = {**_riga_regola(riga), "semaforo": semafori[riga["id"]]}
+        if riga["tipo"] == "limite_tempo":
             parametri = json.loads(riga["parametri"])
-            limiti.setdefault(
-                parametri["app_o_categoria"],
-                {"limite": parametri["minuti_al_giorno"], "regola_id": riga["id"]},
-            )
-        regole.append({**_riga_regola(riga), "semaforo": semafori[riga["id"]]})
+            chiave = parametri["app_o_categoria"]
+            if riga["attiva"]:
+                limiti.setdefault(
+                    chiave, {"limite": parametri["minuti_al_giorno"], "regola_id": riga["id"]}
+                )
+            # (S2) Le categorie le traduce l'app: il nome si allega solo ai pacchetti.
+            if not chiave.startswith("categoria:"):
+                voce["nome"] = nomi.get(chiave) or chiave
+        regole.append(voce)
 
     # Riepilogo bonus per giorno (globale, stessa finestra di 8 giorni):
     # dalla tabella bonus autoritativa, coi giorni nel fuso del patto.

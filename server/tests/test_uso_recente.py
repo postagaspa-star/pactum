@@ -286,3 +286,26 @@ def test_fotografia_sporca_non_fa_crollare_la_finestra(client):
     oggi = _voce(_uso_recente(client), "2026-07-14")
     assert oggi["app"] == [{"chiave": PACCHETTO_IG, "nome": PACCHETTO_IG, "minuti": 42}]
     assert oggi["categorie"] == []
+
+
+def _regole_finestra(client):
+    return {r["id"]: r for r in client.get("/api/finestra", headers=GENITORE).json()["regole"]}
+
+
+def test_regola_su_pacchetto_porta_il_nome_leggibile(client):
+    """(S2) Il genitore legge "TikTok", non com.zhiliaoapp.musically: il nome
+    arriva dall'ultima fotografia che lo conosce, anche per le regole eliminate."""
+    tiktok = crea_regola(client, parametri={"app_o_categoria": "com.zhiliaoapp.musically", "minuti_al_giorno": 60})["id"]
+    social = crea_regola(client, parametri={"app_o_categoria": "categoria:social", "minuti_al_giorno": 120})["id"]
+    _posta_foto(client, "foto-nomi", {
+        "giorno": "2026-07-14", "uso_minuti": {"com.zhiliaoapp.musically": 40},
+        "totale_minuti": 40, "nomi": {"com.zhiliaoapp.musically": "TikTok"},
+    })
+    regole = _regole_finestra(client)
+    assert regole[tiktok]["nome"] == "TikTok"
+    assert "nome" not in regole[social]  # le categorie le traduce l'app
+
+
+def test_regola_senza_nome_noto_ricade_sul_pacchetto(client):
+    regola = crea_regola(client, parametri={"app_o_categoria": "com.esempio.app", "minuti_al_giorno": 30})["id"]
+    assert _regole_finestra(client)[regola]["nome"] == "com.esempio.app"

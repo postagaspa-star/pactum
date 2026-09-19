@@ -21,6 +21,7 @@ CHIAVI_ATTESE = {
     "siti_recenti",
     "medie",
     "striscia",
+    "riepilogo",
     "segno_oggi",
 }
 

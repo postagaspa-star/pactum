@@ -295,3 +295,57 @@ def test_sforamento_in_ritardo_di_una_regola_poi_eliminata(client, orologio):
     striscia = _striscia(client)
     assert striscia["2026-07-15"] == "rosso"
     assert striscia["2026-07-19"] == "verde"
+
+
+# --- riepilogo e semaforo per regola in /api/patto (v2.4, D3) ---
+
+
+def _manomissione(client, evento_id):
+    risposta = client.post(
+        "/api/eventi",
+        json={"eventi": [{"id": evento_id, "tipo": "manomissione", "dettagli": {"sotto_tipo": "silenzio"}}]},
+        headers=FIGLIO,
+    )
+    assert risposta.status_code == 200
+
+
+def test_riepilogo_conta_giorni_rossi_e_interruzioni_della_finestra(client, orologio):
+    """Le interruzioni vecchie di piu' di 8 giorni non entrano: la riga parla degli
+    stessi giorni della striscia che sta sopra."""
+    regola = crea_regola(client)["id"]
+    _manomissione(client, "vecchia")  # 14/07
+    orologio.avanza(days=9)  # 23/07: il 14 e' fuori dalla finestra (16-23)
+    fotografia_uso(client, "2026-07-22", "2026-07-23")
+    _sforamento(client, "sf-22", regola, giorno="2026-07-22")
+    _manomissione(client, "oggi-1")
+    _manomissione(client, "oggi-2")
+    assert _finestra(client)["riepilogo"] == {"giorni_fuori_regola": 1, "interruzioni": 2}
+
+
+def test_riepilogo_identico_tra_finestra_e_patto(client, orologio):
+    regola = crea_regola(client)["id"]
+    fotografia_uso(client, "2026-07-14")
+    _sforamento(client, "sf", regola)
+    _manomissione(client, "m")
+    assert _finestra(client)["riepilogo"] == _patto(client)["riepilogo"]
+
+
+def test_riepilogo_interruzioni_nel_fuso_del_patto(client, orologio):
+    """Evento arrivato alle 23:30 UTC del 15 = 01:30 del 16 a Roma: con la finestra
+    che finisce il 23 conta; spostata in avanti di un giorno, il 16 resta dentro e
+    un evento del 15 locale no."""
+    crea_regola(client)
+    orologio.vai_a(datetime(2026, 7, 15, 23, 30, tzinfo=timezone.utc))
+    _manomissione(client, "notte")
+    orologio.vai_a(datetime(2026, 7, 23, 10, 0, tzinfo=timezone.utc))  # finestra 16-23
+    assert _finestra(client)["riepilogo"]["interruzioni"] == 1
+
+
+def test_patto_porta_il_semaforo_di_ogni_regola_attiva_uguale_alla_finestra(client):
+    regola = crea_regola(client)["id"]
+    fotografia_uso(client, "2026-07-14")
+    _sforamento(client, "sf", regola)
+    in_patto = [r for r in _patto(client)["regole"] if r["id"] == regola][0]["semaforo"]
+    in_finestra = [r for r in _finestra(client)["regole"] if r["id"] == regola][0]["semaforo"]
+    assert in_patto == in_finestra
+    assert in_patto[-1] == {"data": "2026-07-14", "stato": "rosso"}

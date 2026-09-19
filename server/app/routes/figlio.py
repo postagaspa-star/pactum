@@ -171,7 +171,7 @@ def concedi_bonus(corpo: BonusIn, conn: sqlite3.Connection = Depends(get_conn)):
 @router.get("/patto")
 def patto(conn: sqlite3.Connection = Depends(get_conn)):
     """Lo stato completo del patto per il sync dell'app del figlio, in una risposta
-    sola: regole attive (senza semaforo), residui bonus, bonus di oggi per regola
+    sola: regole attive (col semaforo, v2.4), residui bonus, bonus di oggi per regola
     (per il limite efficace del valutatore locale), proposte pendenti, dichiarazioni
     in attesa, siti recenti, striscia, fuso del patto.
 
@@ -180,8 +180,11 @@ def patto(conn: sqlite3.Connection = Depends(get_conn)):
     per voce. Tavola rotonda: niente esiste nella finestra del genitore che il
     figlio non veda."""
     ora = clock.now()
+    # (v2.4) Ogni regola porta il suo semaforo, lo stesso della finestra: il
+    # genitore vede la striscia regola per regola, quindi la vede anche il figlio.
+    semafori = semaforo.semafori(conn, ora)
     regole = [
-        _riga_regola(r)
+        {**_riga_regola(r), "semaforo": semafori[r["id"]]}
         for r in conn.execute("SELECT * FROM regole WHERE attiva = 1 ORDER BY id").fetchall()
     ]
     proposte_pendenti = [
@@ -204,5 +207,6 @@ def patto(conn: sqlite3.Connection = Depends(get_conn)):
         "dichiarazioni_in_attesa": dichiarazioni_in_attesa,
         "siti_recenti": siti.siti_recenti(conn, ora),
         "striscia": semaforo.striscia(conn, ora),
+        "riepilogo": semaforo.riepilogo(conn, ora),
         "fuso": nome_fuso(),
     }

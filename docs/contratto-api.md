@@ -66,10 +66,12 @@ Lo stato completo del patto per il sync dell'app del figlio, in una risposta sol
   "dichiarazioni_in_attesa": [ ],
   "siti_recenti": [ ],
   "striscia": [ { "data": "2026-07-07", "stato": "verde" } ],
+  "riepilogo": { "giorni_fuori_regola": 1, "interruzioni": 0 },
   "fuso": "Europe/Rome"
 }
 ```
-- `regole`: solo le **attive** (il patto vigente), stessa forma della finestra ma senza semaforo.
+- `regole`: solo le **attive** (il patto vigente), stessa forma della finestra. (v2.4) Ciascuna porta il suo **`semaforo`**, identico a quello della stessa regola in `GET /api/finestra`: il genitore vede la striscia regola per regola, quindi la vede anche il figlio (tavola rotonda D3).
+- **`riepilogo`** (v2.4): identico al `riepilogo` di `GET /api/finestra` (v. lì).
 - **`striscia`** (v2.4, redesign C2): **identica**, voce per voce, alla `striscia` di `GET /api/finestra`, calcolata dalla stessa funzione del server. È la striscia grande degli 8 giorni che le due app mostrano in cima. Il figlio ci calcola **in locale** la serie di giorni di fila e il record, che non hanno campo nel contratto e non arrivano mai al genitore (tavola rotonda D3/C3).
 - `bonus_oggi_per_regola`: minuti bonus concessi OGGI per regola (chiave = regola_id come stringa) — serve al valutatore locale per il limite efficace.
 - `proposte_pendenti` / `dichiarazioni_in_attesa`: stesse forme delle sezioni sotto.
@@ -155,10 +157,12 @@ La finestra: tutto ciò che riguarda il patto in una risposta sola. Risposta `20
   "stato_silenzio": { "ultimo_battito": "2026-07-14T10:00:00+00:00", "silente": false },
   "medie": { "settimana": { "minuti": 131, "giorni": 7 }, "mese": { "minuti": 118, "giorni": 30 } },
   "striscia": [ { "data": "2026-07-07", "stato": "verde" } ],
+  "riepilogo": { "giorni_fuori_regola": 1, "interruzioni": 0 },
   "segno_oggi": false
 }
 ```
 - **`striscia`** (v2.4, redesign B1/C2): la striscia **aggregata** del patto, 8 voci (gli stessi 8 giorni del semaforo), dal più vecchio a oggi. `stato` ∈ `verde · rosso · grigio` e si ricava dai `semaforo` di **tutte** le regole (anche le eliminate, per i giorni in cui erano in vita): `rosso` se almeno una regola è `rosso` quel giorno; altrimenti `verde` se almeno una è `verde`; altrimenti `grigio` (nessuna regola in vita o nessun dato). Esce dalla **stessa funzione** che alimenta la `striscia` di `GET /api/patto`: le due app mostrano la stessa striscia per costruzione. La frase "6 su 7" è una funzione pura della striscia, calcolata nelle app (i `grigio` escono dal denominatore).
+- **`riepilogo`** (v2.4): `{ "giorni_fuori_regola": n, "interruzioni": n }`, cioè la riga sotto la striscia, uguale nelle due app. `giorni_fuori_regola` = voci `rosso` della `striscia`. `interruzioni` = eventi `manomissione` il cui `ts_server`, nel fuso del patto, cade negli stessi 8 giorni. Lo calcola il server, dalla stessa funzione per `GET /api/finestra` e `GET /api/patto`. Le app ricevono al massimo 20 eventi e il giorno va preso nel fuso del patto, non in quello del telefono che legge.
 - **`segno_oggi`** (v2.4, redesign C7): `true` se il genitore ha già mandato il segno di riconoscimento oggi (fuso del patto). Serve all'app per spegnere il pulsante.
 - **`regole`**: TUTTE le regole, anche le eliminate (`attiva=false`) — la finestra mostra la storia, mentre `GET /api/regole` (il patto vigente) mostra solo le attive. Ordinate per `id` crescente. `allentabile_dal` = `ultima_modifica_ts` + 4 giorni (il lock asimmetrico, informativo per il genitore).
 - **`nome`** (S2, solo nella finestra): per le regole `limite_tempo` il cui `app_o_categoria` è un pacchetto Android, il server allega un `nome` leggibile — l'etichetta più recente vista per quel pacchetto nelle fotografie `uso_giornaliero` (fallback: il pacchetto stesso) — così il genitore legge "TikTok" e non `com.zhiliaoapp.musically`. Il campo è **assente** per le regole di categoria (`app_o_categoria` = `categoria:*`): la traduce l'app. Assente anche in `GET /api/regole` (solo la finestra lo aggiunge).
@@ -278,7 +282,7 @@ Il **dominio registrabile** e quante volte è stato richiesto in un giorno. Punt
 - **I siti non sono infrazioni.** `siti_giornalieri` non genera notifiche, non entra nel semaforo, non produce sforamenti. È materiale per una conversazione, non per un verdetto.
 
 ---
-**Versione: v2.4 — 19/09/2026** (redesign Fascia B/C della tavola rotonda, deciso da Andrea): `striscia` aggregata degli 8 giorni in `GET /api/finestra` **e identica** in `GET /api/patto`, uscita da una sola funzione del server; semaforo senza verde nei giorni senza fotografia (un giorno di cui non si sa niente non è un giorno mantenuto); `giorno` opzionale nei dettagli di `sforamento`, così gli sforamenti consegnati in ritardo cadono nel giorno giusto; `POST /api/segno` (riconoscimento del genitore a testo fisso, max 1 al giorno) + `segno_oggi` nella finestra + notifica di tipo `segno` al figlio.
+**Versione: v2.4 — 19/09/2026** (redesign Fascia B/C della tavola rotonda, deciso da Andrea): `striscia` aggregata degli 8 giorni in `GET /api/finestra` **e identica** in `GET /api/patto`, uscita da una sola funzione del server; semaforo senza verde nei giorni senza fotografia (un giorno di cui non si sa niente non è un giorno mantenuto); `giorno` opzionale nei dettagli di `sforamento`, così gli sforamenti consegnati in ritardo cadono nel giorno giusto; `riepilogo` (giorni fuori regola + interruzioni negli 8 giorni) e `semaforo` per regola anche in `GET /api/patto`, cosi' il figlio vede gli stessi fatti del genitore; `POST /api/segno` (riconoscimento del genitore a testo fisso, max 1 al giorno) + `segno_oggi` nella finestra + notifica di tipo `segno` al figlio.
 **v2.3 — 01/08/2026** (decisione di Andrea col padre): il genitore **vede** i siti visitati dal figlio, senza poterli bloccare — nuovo evento `siti_giornalieri` (fotografia cumulativa del giorno, monotona, `dns_cifrato` appiccicoso come dichiarazione di cecità), `siti_recenti` in `GET /api/finestra` **e identico** in `GET /api/patto` (tavola rotonda), limiti del dato e patto etico messi per iscritto nella sezione "Siti visitati". Solo domini, mai URL, contenuti o ricerche.
 **v2.2 — 15/07/2026** (richieste di Andrea + feedback del padre): fotografia uso_giornaliero con `nomi` e `uso_categorie`; finestra con `uso_recente` (tempi di TUTTE le app, 8 giorni, limiti accanto dove esistono, mai zeri finti). Il digest giornaliero del genitore (notifica all'ora scelta con totale + prime app) è comportamento dell'app genitore, nessun endpoint nuovo.
 **v2.1 — 15/07/2026** (dopo revisione adversariale tappa 5): atomicità garantita su risposta-proposta/regole/dichiarazioni concorrenti; proposte `annullata` all'eliminazione della regola; confronto ricalcolato in lettura per le pendenti; `giorno` dichiarazioni vincolato (oggi ↔ −7gg); arbitro congelato sulla dichiarazione; campo `verdetto.registro`; semaforo per le `vita_reale`; convenzione `app_o_categoria` (pacchetto o `categoria:*`).

@@ -251,6 +251,7 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         # (v2.4) Stessa funzione di GET /api/patto: le due app mostrano la stessa
         # striscia per costruzione.
         "striscia": semaforo.striscia(conn, ora),
+        "riepilogo": semaforo.riepilogo(conn, ora),
         "segno_oggi": segno_mandato_oggi(conn, ora),
     }
 

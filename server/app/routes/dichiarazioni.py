@@ -67,7 +67,7 @@ def _frase_registro(verdetto: str, arbitro_nome: str) -> str:
         return f"confermato dal genitore per conto di {arbitro_nome}"
     if verdetto == "conferma":
         return f"confermato da {arbitro_nome}"
-    return "ribaltato dal genitore: il successo dichiarato non regge"
+    return "non confermato dal genitore: conta come non riuscito"
 
 
 @router.post("/dichiarazioni")
@@ -182,7 +182,7 @@ def emetti_verdetto(
     accoda_notifica(
         conn,
         "verdetto",
-        f"Verdetto del genitore: {registro}",
+        f"Esito della tua dichiarazione: {registro}",
         {
             "dichiarazione_id": dichiarazione_id,
             "regola_id": dichiarazione["regola_id"],

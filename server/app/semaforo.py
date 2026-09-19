@@ -132,3 +132,23 @@ def striscia(conn: sqlite3.Connection, ora: datetime) -> list:
             stato = "grigio"  # nessuna regola in vita o nessun dato
         risultato.append({"data": data, "stato": stato})
     return risultato
+
+
+def riepilogo(conn: sqlite3.Connection, ora: datetime) -> dict:
+    """(v2.4) La riga sotto la striscia, uguale nelle due app: quanti giorni della
+    striscia sono fuori regola e quante interruzioni della registrazione (eventi
+    manomissione) cadono negli stessi 8 giorni, contati nel fuso del patto.
+
+    Si calcola qui, e non nelle app, per due motivi: le app ricevono al massimo
+    gli ultimi 20 eventi, e il giorno di un evento va preso nel fuso del patto,
+    non in quello del telefono che legge. Unica fonte per /api/finestra e
+    /api/patto."""
+    tz = fuso_patto()
+    giorni = {g.isoformat() for g in siti.giorni_finestra(ora)}
+    interruzioni = sum(
+        1
+        for e in conn.execute("SELECT ts_server FROM eventi WHERE tipo = 'manomissione'")
+        if data_locale(e["ts_server"], tz) in giorni
+    )
+    fuori_regola = sum(1 for voce in striscia(conn, ora) if voce["stato"] == "rosso")
+    return {"giorni_fuori_regola": fuori_regola, "interruzioni": interruzioni}

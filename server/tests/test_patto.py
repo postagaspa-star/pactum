@@ -1,5 +1,5 @@
 """GET /api/patto: lo stato completo del patto per il sync dell'app del figlio in
-una risposta sola — regole attive (senza semaforo), residui bonus, bonus di oggi
+una risposta sola — regole attive (col semaforo, v2.4), residui bonus, bonus di oggi
 per regola (per il limite efficace del valutatore locale), proposte pendenti,
 dichiarazioni in attesa, fuso."""
 
@@ -13,6 +13,7 @@ CHIAVI_ATTESE = {
     "dichiarazioni_in_attesa",
     "siti_recenti",
     "striscia",
+    "riepilogo",
     "fuso",
 }
 
@@ -36,8 +37,8 @@ def test_forma_del_patto(client):
     assert patto["bonus_oggi_per_regola"] == {}
     assert patto["proposte_pendenti"] == []
     assert patto["dichiarazioni_in_attesa"] == []
-    # le regole non hanno il semaforo (quello e' roba della finestra del genitore)
-    assert "semaforo" not in patto["regole"][0]
+    # (v2.4) le regole portano il semaforo, lo stesso della finestra del genitore (D3)
+    assert len(patto["regole"][0]["semaforo"]) == 8
 
 
 def test_patto_solo_regole_attive(client, orologio):

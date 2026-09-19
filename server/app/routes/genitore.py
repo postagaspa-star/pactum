@@ -60,7 +60,15 @@ def _minuti_validi(mappa) -> dict:
     }
 
 
-def _uso_recente(conn: sqlite3.Connection, giorni: list, limiti: dict) -> list:
+def _con_limite(voce: dict, limite: dict | None, bonus_regola: dict, giorno: str) -> None:
+    if limite:
+        voce.update(limite)
+        voce["bonus"] = bonus_regola.get((giorno, limite["regola_id"]), 0)
+
+
+def _uso_recente(
+    conn: sqlite3.Connection, giorni: list, limiti: dict, bonus_regola: dict | None = None
+) -> list:
     """(v2.2) I tempi d'uso di TUTTE le app negli 8 giorni della finestra, dalla
     fotografia uso_giornaliero VIGENTE di ciascun giorno. Un giorno senza
     fotografia ha totale_minuti null e liste vuote — MAI uno zero finto:
@@ -68,7 +76,11 @@ def _uso_recente(conn: sqlite3.Connection, giorni: list, limiti: dict) -> list:
     `limiti` = {app_o_categoria: {"limite", "regola_id"}} delle regole
     limite_tempo ATTIVE: il limite compare SOLO dove la chiave combacia
     esattamente. E' il limite BASE (minuti_al_giorno): gli eventuali bonus del
-    giorno sono gia' visibili in bonus_giornalieri."""
+    giorno sono gia' visibili in bonus_giornalieri. (v2.4) Accanto al limite va
+    anche `bonus`, i minuti concessi QUEL giorno su QUELLA regola: senza, il
+    genitore vedrebbe "10 min oltre" in un giorno che per il figlio (limite + bonus)
+    e' dentro la regola."""
+    bonus_regola = bonus_regola or {}
     date_iso = [g.isoformat() for g in giorni]
     segnaposto = ",".join("?" * len(date_iso))
     vigenti = {
@@ -99,7 +111,7 @@ def _uso_recente(conn: sqlite3.Connection, giorni: list, limiti: dict) -> list:
             key=lambda voce: (-voce[1], voce[0]),  # minuti decrescenti, poi chiave
         ):
             voce = {"chiave": chiave, "nome": nomi.get(chiave) or chiave, "minuti": minuti}
-            voce.update(limiti.get(chiave, {}))
+            _con_limite(voce, limiti.get(chiave), bonus_regola, data)
             app.append(voce)
         categorie = []
         for chiave, minuti in sorted(
@@ -107,7 +119,7 @@ def _uso_recente(conn: sqlite3.Connection, giorni: list, limiti: dict) -> list:
             key=lambda voce: (-voce[1], voce[0]),
         ):
             voce = {"chiave": chiave, "minuti": minuti}
-            voce.update(limiti.get(chiave, {}))
+            _con_limite(voce, limiti.get(chiave), bonus_regola, data)
             categorie.append(voce)
         voci.append(
             {
@@ -208,8 +220,12 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
     # Riepilogo bonus per giorno (globale, stessa finestra di 8 giorni):
     # dalla tabella bonus autoritativa, coi giorni nel fuso del patto.
     minuti_per_giorno = defaultdict(int)
-    for riga in conn.execute("SELECT minuti, ts_server FROM bonus").fetchall():
-        minuti_per_giorno[semaforo.data_locale(riga["ts_server"], tz)] += riga["minuti"]
+    bonus_regola = defaultdict(int)  # (giorno locale, regola_id) -> minuti
+    for riga in conn.execute("SELECT minuti, regola_id, ts_server FROM bonus").fetchall():
+        giorno = semaforo.data_locale(riga["ts_server"], tz)
+        minuti_per_giorno[giorno] += riga["minuti"]
+        if riga["regola_id"] is not None:
+            bonus_regola[(giorno, riga["regola_id"])] += riga["minuti"]
     bonus_giornalieri = [
         {"giorno": g.isoformat(), "minuti": minuti_per_giorno[g.isoformat()]} for g in giorni
     ]
@@ -242,7 +258,7 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         "bonus": stato_bonus(conn, ora),
         "bonus_giornalieri": bonus_giornalieri,
         "stato_silenzio": _stato_silenzio(conn, ora),
-        "uso_recente": _uso_recente(conn, giorni, limiti),
+        "uso_recente": _uso_recente(conn, giorni, limiti, bonus_regola),
         # (v2.3) I siti visitati: il genitore vede QUALI siti, mai cosa ci fa
         # dentro. Stessa funzione di GET /api/patto — il figlio vede la stessa
         # identica lista (tavola rotonda). Non entra nel semaforo: non e' un'infrazione.

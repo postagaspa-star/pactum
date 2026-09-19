@@ -65,12 +65,12 @@ def test_voce_completa_con_nomi_e_categorie(client):
     assert oggi["aggiornato_ts"] == "2026-07-14T10:00:00+00:00"
     assert oggi["app"] == [
         {"chiave": PACCHETTO_TIKTOK, "nome": "TikTok", "minuti": 65,
-         "limite": 60, "regola_id": regola_app["id"]},
+         "limite": 60, "regola_id": regola_app["id"], "bonus": 0},
         {"chiave": PACCHETTO_IG, "nome": "Instagram", "minuti": 40},
     ]
     assert oggi["categorie"] == [
         {"chiave": "categoria:social", "minuti": 130,
-         "limite": 120, "regola_id": regola_cat["id"]},
+         "limite": 120, "regola_id": regola_cat["id"], "bonus": 0},
         {"chiave": "categoria:giochi", "minuti": 20},
     ]
 
@@ -309,3 +309,22 @@ def test_regola_su_pacchetto_porta_il_nome_leggibile(client):
 def test_regola_senza_nome_noto_ricade_sul_pacchetto(client):
     regola = crea_regola(client, parametri={"app_o_categoria": "com.esempio.app", "minuti_al_giorno": 30})["id"]
     assert _regole_finestra(client)[regola]["nome"] == "com.esempio.app"
+
+
+def test_voce_con_limite_porta_il_bonus_del_giorno_su_quella_regola(client):
+    """(v2.4) +15 su TikTok oggi: accanto al limite il genitore riceve bonus=15,
+    cosi' 70 minuti su 60+15 non diventano "10 min oltre" da una parte sola."""
+    regola = crea_regola(client, parametri={"app_o_categoria": "com.zhiliaoapp.musically", "minuti_al_giorno": 60})["id"]
+    altra = crea_regola(client, parametri={"app_o_categoria": "categoria:social", "minuti_al_giorno": 120})["id"]
+    assert client.post("/api/bonus", json={"minuti": 15, "regola_id": regola}, headers=FIGLIO).status_code == 200
+    _posta_foto(client, "foto-bonus", {
+        "giorno": "2026-07-14", "uso_minuti": {"com.zhiliaoapp.musically": 70, "com.whatsapp": 5},
+        "totale_minuti": 75, "uso_categorie": {"categoria:social": 75},
+    })
+    oggi = _voce(_uso_recente(client), "2026-07-14")
+    tiktok = [a for a in oggi["app"] if a["chiave"] == "com.zhiliaoapp.musically"][0]
+    assert (tiktok["limite"], tiktok["regola_id"], tiktok["bonus"]) == (60, regola, 15)
+    social = oggi["categorie"][0]
+    assert (social["regola_id"], social["bonus"]) == (altra, 0)
+    whatsapp = [a for a in oggi["app"] if a["chiave"] == "com.whatsapp"][0]
+    assert "bonus" not in whatsapp  # niente limite, niente bonus

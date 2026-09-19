@@ -8,6 +8,7 @@ import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.Proposta
 import eu.stgm.pactum.figlio.dati.RispostaPropostaIn
+import eu.stgm.pactum.figlio.dati.StatiProposta
 import eu.stgm.pactum.figlio.dati.leggiDettaglioErrore
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,9 +36,14 @@ class ProposteViewModel(application: Application) : AndroidViewModel(application
         val proposte: List<Proposta> = emptyList(),
         val configurazioneMancante: Boolean = false,
         val errore: Boolean = false,
+        /** Quando è arrivata la lista che si sta mostrando: l'età dei dati. */
+        val aggiornateIl: Long? = null,
         val invioInCorso: Boolean = false,
         val evento: Evento? = null,
-    )
+    ) {
+        /** Quante aspettano una risposta: il badge sulla scheda. */
+        val pendenti: Int get() = proposte.count { it.stato == StatiProposta.PENDENTE }
+    }
 
     private val _stato = MutableStateFlow(StatoProposte())
     val stato: StateFlow<StatoProposte> = _stato.asStateFlow()
@@ -59,6 +65,7 @@ class ProposteViewModel(application: Application) : AndroidViewModel(application
                 caricamento = false,
                 configurazioneMancante = false,
                 errore = false,
+                aggiornateIl = System.currentTimeMillis(),
                 proposte = proposte,
             )
         }

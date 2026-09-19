@@ -45,6 +45,11 @@ class PattoLocale(context: Context) {
         }
     }
 
+    /** Quando è arrivata l'ultima copia dal server (epoch ms), null = mai: l'età dei dati. */
+    suspend fun aggiornatoIl(): Long? = withContext(Dispatchers.IO) {
+        mutex.withLock { file.takeIf { it.exists() }?.lastModified()?.takeIf { it > 0 } }
+    }
+
     private companion object {
         val mutex = Mutex()
         val json = Json { ignoreUnknownKeys = true }

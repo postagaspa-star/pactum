@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -52,6 +54,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -157,7 +160,7 @@ fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
                         Text(
                             text = stringResource(R.string.regole_caricamento),
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp),
+                            modifier = Modifier.padding(top = Spazi.s),
                         )
                     }
                 }
@@ -168,19 +171,26 @@ fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
 
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    // Densità del figlio: 20 attorno, 16 tra i blocchi; in fondo
+                    // lo spazio del pulsante + perché non copra l'ultima regola.
                     contentPadding = PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp,
+                        start = Spazi.l + Spazi.xs,
+                        end = Spazi.l + Spazi.xs,
+                        top = Spazi.l + Spazi.xs,
+                        bottom = 88.dp,
                     ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(Spazi.l),
                 ) {
                     if (stato.errore) {
-                        item { BannerDatiVecchi() }
+                        item { BannerDatiVecchi(stato.datiFermiAlle) }
                     }
                     if (stato.regole.isEmpty()) {
-                        item { TestoVuoto(stringResource(R.string.regole_vuoto)) }
+                        item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.regole_vuoto)) }
                     } else {
                         if (stato.regole.size == 1) {
-                            item { TestoVuoto(stringResource(R.string.regole_unica_regola)) }
+                            item {
+                                RigaVuota(Icons.Outlined.Info, stringResource(R.string.regole_unica_regola))
+                            }
                         }
                         items(stato.regole, key = { it.id }) { regola ->
                             CardRegola(
@@ -248,7 +258,7 @@ private fun CardRegola(
     onElimina: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = etichettaTipoRegola(regola.tipo),
@@ -261,7 +271,7 @@ private fun CardRegola(
             Text(
                 text = descrizioneRegola(regola.tipo, regola.parametri),
                 style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = Spazi.xs),
             )
             // Il lock asimmetrico, in chiaro: quando la regola tornerà allentabile.
             istanteServer(regola.allentabileDal)
@@ -271,14 +281,14 @@ private fun CardRegola(
                         text = stringResource(R.string.regola_allentabile_dal, dataOraLocale(it)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(top = Spazi.xs),
                     )
                 }
-            Row(modifier = Modifier.padding(top = 4.dp)) {
+            Row(modifier = Modifier.padding(top = Spazi.xs)) {
                 TextButton(onClick = onModifica) {
                     Text(stringResource(R.string.azione_modifica))
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(Spazi.s))
                 TextButton(onClick = onElimina) {
                     Text(stringResource(R.string.azione_elimina))
                 }
@@ -428,14 +438,14 @@ private fun DialogoRegola(
                             text = stringResource(R.string.regola_campo_giorni),
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spazi.xs)) {
                             GIORNI.take(4).forEach { giorno ->
                                 ChipGiorno(giorno, giorno in giorni) {
                                     giorni = if (giorno in giorni) giorni - giorno else giorni + giorno
                                 }
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spazi.xs)) {
                             GIORNI.drop(4).forEach { giorno ->
                                 ChipGiorno(giorno, giorno in giorni) {
                                     giorni = if (giorno in giorni) giorni - giorno else giorni + giorno
@@ -550,7 +560,7 @@ private fun DialogoSceltaApp(onScegli: (String) -> Unit, onAnnulla: () -> Unit) 
                 when (val lista = app) {
                     null -> item {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
                             horizontalArrangement = Arrangement.Center,
                         ) { CircularProgressIndicator() }
                     }
@@ -575,7 +585,7 @@ private fun RigaScelta(testo: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = Spazi.m),
     )
 }
 
@@ -603,22 +613,25 @@ fun PrimaRegolaScreen(vm: RegoleViewModel, onApriImpostazioni: () -> Unit) {
         if (stato.evento != null) vm.consumaEvento()
     }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.prima_regola_titolo)) }) },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
+    // La prima impressione dell'app: il titolo È l'eroe della schermata, quindi
+    // niente barra in alto che lo ripeta.
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = Spazi.xl, vertical = Spazi.xxl),
+            verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
+            Text(
+                text = stringResource(R.string.prima_regola_titolo),
+                style = MaterialTheme.typography.displaySmall,
+            )
             if (stato.configurazioneMancante) {
                 Text(
                     text = stringResource(R.string.prima_regola_config_intro),
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 Button(onClick = onApriImpostazioni, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.prima_regola_apri_impostazioni))
@@ -626,7 +639,7 @@ fun PrimaRegolaScreen(vm: RegoleViewModel, onApriImpostazioni: () -> Unit) {
             } else {
                 Text(
                     text = stringResource(R.string.prima_regola_intro),
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
                     text = stringResource(R.string.prima_regola_spiegazione),
@@ -657,17 +670,21 @@ fun PrimaRegolaScreen(vm: RegoleViewModel, onApriImpostazioni: () -> Unit) {
 // --- Mattoni condivisi dalle schermate del patto -----------------------------
 
 /**
- * Dati vecchi: è un'ETÀ, non un fallimento. Una riga su `surfaceVariant`, mai
- * `errorContainer` — il rosso di sistema resta alla validazione dei form.
+ * Dati vecchi: è un'ETÀ, non un fallimento (§3.5 "Dati fermi alle 14:32").
+ * Una riga su `surfaceVariant`, mai `errorContainer` — il rosso di sistema
+ * resta alla validazione dei form. [aggiornatiIl] null = età sconosciuta.
  */
 @Composable
-internal fun BannerDatiVecchi() {
+internal fun BannerDatiVecchi(aggiornatiIl: Long?) {
     Text(
-        text = stringResource(R.string.dati_vecchi),
+        text = aggiornatiIl?.let {
+            stringResource(R.string.dati_fermi_alle, quandoLocale(Instant.ofEpochMilli(it)))
+        } ?: stringResource(R.string.dati_fermi),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 40.dp)
             .background(
                 MaterialTheme.colorScheme.surfaceVariant,
                 MaterialTheme.shapes.small,
@@ -681,17 +698,44 @@ internal fun TitoloSezione(testo: String) {
     Text(
         text = testo,
         style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(top = 8.dp),
+        modifier = Modifier.padding(top = Spazi.s),
     )
 }
 
+/** Il sopra-titolo di una sezione: `labelMedium`, scritto MAIUSCOLO nella stringa. */
 @Composable
-internal fun TestoVuoto(testo: String) {
+internal fun Sopratitolo(testo: String, modifier: Modifier = Modifier) {
     Text(
         text = testo,
-        style = MaterialTheme.typography.bodyMedium,
+        style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
     )
+}
+
+/**
+ * Lo stato vuoto (§3.4): una riga asciutta, icona 20.dp + testo, allineati a
+ * sinistra dentro il flusso. Quando va bene si scrive; ma senza un banner
+ * verde speculare al rosso.
+ */
+@Composable
+internal fun RigaVuota(icona: ImageVector, testo: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spazi.s),
+    ) {
+        Icon(
+            imageVector = icona,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = testo,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @Composable
@@ -704,7 +748,7 @@ internal fun Etichetta(testo: String) {
             text = testo,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            modifier = Modifier.padding(horizontal = Spazi.s, vertical = 3.dp),
         )
     }
 }
@@ -722,6 +766,6 @@ internal fun TestoCentrato(testo: String) {
         text = testo,
         style = MaterialTheme.typography.bodyMedium,
         textAlign = TextAlign.Center,
-        modifier = Modifier.padding(horizontal = 32.dp),
+        modifier = Modifier.padding(horizontal = Spazi.xxl),
     )
 }

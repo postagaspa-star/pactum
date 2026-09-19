@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,8 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,13 +32,16 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.DirezioniProposta
 import eu.stgm.pactum.figlio.dati.EsitiRisposta
@@ -99,7 +107,7 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
                         Text(
                             text = stringResource(R.string.proposte_caricamento),
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp),
+                            modifier = Modifier.padding(top = Spazi.s),
                         )
                     }
                 }
@@ -116,6 +124,7 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
                     proposte = stato.proposte,
                     invioInCorso = stato.invioInCorso,
                     mostraErrore = stato.errore,
+                    aggiornateIl = stato.aggiornateIl,
                     onRispondi = { id, esito, motivazione -> vm.rispondi(id, esito, motivazione) },
                 )
             }
@@ -128,6 +137,7 @@ private fun ContenutoProposte(
     proposte: List<Proposta>,
     invioInCorso: Boolean,
     mostraErrore: Boolean,
+    aggiornateIl: Long?,
     onRispondi: (Long, String, String?) -> Unit,
 ) {
     val pendenti = proposte.filter { it.stato == StatiProposta.PENDENTE }
@@ -135,16 +145,19 @@ private fun ContenutoProposte(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(Spazi.l + Spazi.xs),
+        verticalArrangement = Arrangement.spacedBy(Spazi.l),
     ) {
         if (mostraErrore) {
-            item { BannerDatiVecchi() }
+            item { BannerDatiVecchi(aggiornateIl) }
         }
 
         item { TitoloSezione(stringResource(R.string.proposte_sezione_pendenti)) }
         if (pendenti.isEmpty()) {
-            item { TestoVuoto(stringResource(R.string.proposte_pendenti_vuoto)) }
+            // Nessuna proposta in attesa è una buona notizia: si scrive.
+            item {
+                RigaVuota(Icons.Outlined.CheckCircle, stringResource(R.string.proposte_pendenti_vuoto))
+            }
         } else {
             items(pendenti, key = { "pendente-${it.id}" }) { proposta ->
                 CardPropostaPendente(proposta, invioInCorso, onRispondi)
@@ -153,7 +166,7 @@ private fun ContenutoProposte(
 
         item { TitoloSezione(stringResource(R.string.proposte_sezione_storia)) }
         if (storia.isEmpty()) {
-            item { TestoVuoto(stringResource(R.string.proposte_storia_vuota)) }
+            item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.proposte_storia_vuota)) }
         } else {
             items(storia, key = { "storia-${it.id}" }) { CardPropostaStorica(it) }
         }
@@ -166,11 +179,14 @@ private fun CardPropostaPendente(
     invioInCorso: Boolean,
     onRispondi: (Long, String, String?) -> Unit,
 ) {
-    var motivazione by remember(proposta.id) { mutableStateOf("") }
+    var motivazione by rememberSaveable(proposta.id) { mutableStateOf("") }
+    // Chiusa di default: un campo sempre aperto suggerisce che serva
+    // giustificarsi per rispondere. Non serve.
+    var motivazioneAperta by rememberSaveable(proposta.id) { mutableStateOf(false) }
     val motivazionePulita = { motivazione.trim().ifBlank { null } }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.proposta_dal_genitore),
@@ -186,34 +202,43 @@ private fun CardPropostaPendente(
                 text = proposta.confronto?.ifBlank { null }
                     ?: stringResource(R.string.proposta_senza_confronto),
                 style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = Spazi.s),
             )
             proposta.motivazione?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = stringResource(R.string.proposta_motivazione_genitore, it),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
             istanteServer(proposta.tsServer)?.let {
                 Text(
                     text = dataOraLocale(it),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = motivazione,
-                onValueChange = { motivazione = it },
-                label = { Text(stringResource(R.string.proposta_campo_motivazione)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(Spazi.s))
+            if (motivazioneAperta) {
+                OutlinedTextField(
+                    value = motivazione,
+                    onValueChange = { motivazione = it },
+                    label = { Text(stringResource(R.string.proposta_campo_motivazione)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(Spazi.s))
+            } else {
+                TextButton(
+                    onClick = { motivazioneAperta = true },
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    Text(stringResource(R.string.proposta_aggiungi_motivazione))
+                }
+            }
             Row {
                 Button(
                     enabled = !invioInCorso,
@@ -224,7 +249,7 @@ private fun CardPropostaPendente(
                 ) {
                     Text(stringResource(R.string.proposta_accetta))
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(Spazi.s))
                 OutlinedButton(
                     enabled = !invioInCorso,
                     onClick = {
@@ -242,7 +267,7 @@ private fun CardPropostaPendente(
 @Composable
 private fun CardPropostaStorica(proposta: Proposta) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = etichettaStatoProposta(proposta.stato),
@@ -256,7 +281,7 @@ private fun CardPropostaStorica(proposta: Proposta) {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
             proposta.motivazione?.takeIf { it.isNotBlank() }?.let {
@@ -264,11 +289,11 @@ private fun CardPropostaStorica(proposta: Proposta) {
                     text = stringResource(R.string.proposta_motivazione_genitore, it),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
             proposta.risposta?.let { risposta ->
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(Spazi.s))
                 Text(
                     text = if (risposta.esito == EsitiRisposta.ACCETTA) {
                         stringResource(R.string.proposta_tua_risposta_accettata)
@@ -288,24 +313,53 @@ private fun CardPropostaStorica(proposta: Proposta) {
             istanteServer(proposta.tsServer)?.let {
                 Text(
                     text = dataOraLocale(it),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
         }
     }
 }
 
+/**
+ * La direzione della proposta: tre azioni diverse, tre vestiti diversi (B9).
+ * Stringe → ocra, allenta → verde del patto, eliminazione → neutro col bordo.
+ * Nessuno dei tre è un colore del patto: quelli vivono solo nella striscia.
+ */
 @Composable
 private fun TagDirezione(direzione: String?) {
-    val testo = when (direzione) {
-        DirezioniProposta.ALLENTA -> stringResource(R.string.proposta_tag_allenta)
-        DirezioniProposta.STRINGE -> stringResource(R.string.proposta_tag_stringe)
-        DirezioniProposta.ELIMINA -> stringResource(R.string.proposta_tag_elimina)
+    val schema = MaterialTheme.colorScheme
+    val (testo, fondo, inchiostro) = when (direzione) {
+        DirezioniProposta.STRINGE -> Triple(
+            stringResource(R.string.proposta_tag_stringe),
+            schema.tertiaryContainer,
+            schema.onTertiaryContainer,
+        )
+        DirezioniProposta.ALLENTA -> Triple(
+            stringResource(R.string.proposta_tag_allenta),
+            schema.primaryContainer,
+            schema.onPrimaryContainer,
+        )
+        DirezioniProposta.ELIMINA -> Triple(
+            stringResource(R.string.proposta_tag_elimina),
+            schema.surfaceVariant,
+            schema.onSurfaceVariant,
+        )
         else -> return
     }
-    Etichetta(testo)
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = fondo,
+        border = if (direzione == DirezioniProposta.ELIMINA) BorderStroke(1.dp, schema.outline) else null,
+    ) {
+        Text(
+            text = testo,
+            style = MaterialTheme.typography.labelSmall,
+            color = inchiostro,
+            modifier = Modifier.padding(horizontal = Spazi.s, vertical = 3.dp),
+        )
+    }
 }
 
 @Composable

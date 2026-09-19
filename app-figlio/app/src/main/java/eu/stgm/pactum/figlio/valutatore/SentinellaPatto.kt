@@ -7,18 +7,16 @@ import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.CodaEventi
 import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.dati.Patto
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiEvento
 import eu.stgm.pactum.figlio.dati.TipiRegola
-import eu.stgm.pactum.figlio.dati.zonaPatto
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import java.time.Instant
 import java.time.ZoneId
 
@@ -38,10 +36,51 @@ import java.time.ZoneId
  */
 class SentinellaPatto(private val context: Context) {
 
+    /** Quello che la sentinella vede adesso: il patto locale e gli sforamenti di oggi. */
+    data class Misura(
+        val patto: Patto,
+        val sforamenti: List<Sforamento>,
+        /** Il giorno locale del telefono della misura (YYYY-MM-DD). */
+        val giorno: String,
+    )
+
     suspend fun valuta(now: Long = System.currentTimeMillis()) = mutex.withLock {
-        if (!PermessiHelper.haAccessoUso(context)) return@withLock
-        val patto = PattoLocale(context).leggi() ?: return@withLock
-        if (patto.regole.isEmpty()) return@withLock
+        val misura = misura(now) ?: return@withLock
+        if (misura.sforamenti.isEmpty()) return@withLock
+
+        val impostazioni = Impostazioni(context)
+        val coda = CodaEventi(context)
+        val regolePerId = misura.patto.regole.associateBy { it.id }
+        for (sforamento in misura.sforamenti) {
+            // Le limite_tempo dedupano sul giorno (fuso telefono); le fasce sul
+            // giorno di ancoraggio dell'occorrenza, così le due parti di una
+            // fascia che scavalca la mezzanotte non diventano due sforamenti.
+            // Lo stesso giorno viaggia nei dettagli (v2.4): il semaforo lo mette lì.
+            val giornoDedup = Valutatore.giornoDelloSforamento(sforamento, misura.giorno)
+            if (impostazioni.sforamentoGiaSegnalato(sforamento.regolaId, giornoDedup)) continue
+            coda.accoda(
+                Evento(
+                    tipo = TipiEvento.SFORAMENTO,
+                    tsDevice = now,
+                    dettagli = Valutatore.dettagliSforamento(sforamento, misura.giorno),
+                ),
+            )
+            // Segnato subito dopo l'accodamento: la coda persiste e riconsegna
+            // da sola, quindi l'evento arriverà — ri-valutare non deve duplicarlo.
+            impostazioni.registraSforamentoSegnalato(sforamento.regolaId, giornoDedup)
+            avvisaGentile(sforamento, regolePerId[sforamento.regolaId])
+        }
+    }
+
+    /**
+     * Gli sforamenti di adesso contro la copia locale del patto, senza toccare
+     * registro né notifiche: la usano la sentinella e la chiusura della sera.
+     * Null se non c'è niente da valutare (niente permesso, niente patto).
+     */
+    suspend fun misura(now: Long = System.currentTimeMillis()): Misura? {
+        if (!PermessiHelper.haAccessoUso(context)) return null
+        val patto = PattoLocale(context).leggi() ?: return null
+        if (patto.regole.isEmpty()) return null
 
         val zona = ZoneId.systemDefault()
         val giorno = Instant.ofEpochMilli(now).atZone(zona).toLocalDate().toString()
@@ -50,39 +89,13 @@ class SentinellaPatto(private val context: Context) {
         // Uso di oggi indicizzato per pacchetto e per categoria: una regola
         // limite_tempo vale su un pacchetto esatto o su una chiave categoria:*
         // (contratto v2.1), e il match dev'essere esatto sull'uno o sull'altra.
-        val minutiPerPacchetto = HashMap<String, Long>()
-        val minutiPerCategoria = HashMap<String, Long>()
-        for (uso in reader.usoDelGiorno(zona = zona, adesso = now)) {
-            if (uso.pacchetto == context.packageName) continue // Pactum non testimonia contro sé stessa
-            val minuti = uso.millisPrimoPiano / 60_000
-            minutiPerPacchetto.merge(uso.pacchetto.lowercase(), minuti, Long::plus)
-            minutiPerCategoria.merge(
-                CatalogoApp.categoriaDiPacchetto(context, uso.pacchetto),
-                minuti,
-                Long::plus,
-            )
-        }
-
-        // I bonus di "oggi" valgono solo se la copia locale è stata sincronizzata
-        // OGGI nel fuso del patto: dopo una notte offline il bonus di ieri non
-        // deve allargare il limite di oggi (contratto: bonus del giorno). Se il
-        // giorno stampato al salvataggio non è più oggi, nessun bonus vale.
-        val giornoPatto = Instant.ofEpochMilli(now).atZone(zonaPatto(patto.fuso))
-            .toLocalDate().toString()
-        val bonusEffettivo =
-            if (patto.bonusGiornoLocale == giornoPatto) patto.bonusOggiPerRegola else emptyMap()
+        val indice = indiceUso(context, reader.usoDelGiorno(zona = zona, adesso = now))
 
         val sforamenti = Valutatore.valuta(
             regole = patto.regole,
-            bonusOggiPerRegola = bonusEffettivo,
-            usoMinutiEtichetta = { chiave ->
-                val k = chiave.trim().lowercase()
-                if (k.startsWith(CatalogoApp.PREFISSO_CATEGORIA)) {
-                    minutiPerCategoria[k] ?: 0L
-                } else {
-                    minutiPerPacchetto[k] ?: 0L
-                }
-            },
+            // I bonus di "oggi" valgono solo se la copia è di oggi (fuso del patto).
+            bonusOggiPerRegola = patto.bonusValidiOggi(now),
+            usoMinutiEtichetta = indice::minuti,
             usoMinutiIntervallo = { inizio, fine ->
                 reader.usoNellIntervallo(inizio, fine)
                     .filterNot { it.pacchetto == context.packageName }
@@ -91,34 +104,7 @@ class SentinellaPatto(private val context: Context) {
             now = now,
             zona = zona,
         )
-        if (sforamenti.isEmpty()) return@withLock
-
-        val impostazioni = Impostazioni(context)
-        val coda = CodaEventi(context)
-        val regolePerId = patto.regole.associateBy { it.id }
-        for (sforamento in sforamenti) {
-            // Le limite_tempo dedupano sul giorno (fuso telefono); le fasce sul
-            // giorno di ancoraggio dell'occorrenza, così le due parti di una
-            // fascia che scavalca la mezzanotte non diventano due sforamenti.
-            val giornoDedup = sforamento.giornoAncora ?: giorno
-            if (impostazioni.sforamentoGiaSegnalato(sforamento.regolaId, giornoDedup)) continue
-            coda.accoda(
-                Evento(
-                    tipo = TipiEvento.SFORAMENTO,
-                    tsDevice = now,
-                    dettagli = buildJsonObject {
-                        put("regola_id", sforamento.regolaId)
-                        sforamento.limiteEfficace?.let { put("limite_efficace", it) }
-                        put("minuti_oltre", sforamento.minutiOltre)
-                        put("giorno", giornoDedup)
-                    },
-                ),
-            )
-            // Segnato subito dopo l'accodamento: la coda persiste e riconsegna
-            // da sola, quindi l'evento arriverà — ri-valutare non deve duplicarlo.
-            impostazioni.registraSforamentoSegnalato(sforamento.regolaId, giornoDedup)
-            avvisaGentile(sforamento, regolePerId[sforamento.regolaId])
-        }
+        return Misura(patto, sforamenti, giorno)
     }
 
     /** Il promemoria al figlio: tono da patto, non da sirena. */
@@ -145,19 +131,31 @@ class SentinellaPatto(private val context: Context) {
                 sforamento.limiteEfficace ?: 0,
             )
         }
+        // Si apre su Oggi: lì la regola ha i suoi minuti, la barra e i bonus.
         AvvisiLocali.avvisa(
             context,
             id = AvvisiLocali.idSforamento(sforamento.regolaId),
             titolo = titolo,
             testo = testo,
-            destinazione = MainActivity.DEST_REGOLE,
+            destinazione = MainActivity.DEST_OGGI,
         )
     }
 
     private fun testoParametro(parametri: kotlinx.serialization.json.JsonObject, nome: String): String? =
         (parametri[nome] as? kotlinx.serialization.json.JsonPrimitive)?.content
 
-    private companion object {
-        val mutex = Mutex()
+    companion object {
+        private val mutex = Mutex()
+
+        /**
+         * L'uso di oggi come lo conta il valutatore: tutto tranne Pactum stessa
+         * (un testimone non testimonia contro sé stesso), per pacchetto e categoria.
+         */
+        fun indiceUso(context: Context, uso: List<eu.stgm.pactum.figlio.misura.UsoApp>): IndiceUso =
+            IndiceUso(
+                uso = uso.filter { it.pacchetto != context.packageName }
+                    .map { it.pacchetto to it.millisPrimoPiano },
+                categoriaDi = { CatalogoApp.categoriaDiPacchetto(context, it) },
+            )
     }
 }

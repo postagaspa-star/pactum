@@ -33,7 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.permessi.StatoPermessi
@@ -57,9 +57,9 @@ fun OnboardingScreen(statoPermessi: StatoPermessi, onAggiorna: () -> Unit) {
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(Spazi.l + Spazi.xs),
+            verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
             Text(
                 text = stringResource(R.string.onboarding_intro),
@@ -119,12 +119,12 @@ private fun PassoPermesso(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(Spazi.l + Spazi.xs),
+            verticalArrangement = Arrangement.spacedBy(Spazi.s),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(Spazi.s),
             ) {
                 Icon(
                     imageVector = if (fatto) Icons.Filled.CheckCircle else Icons.Filled.Warning,
@@ -158,7 +158,7 @@ private fun AiutoRestrizioni() {
         Text(stringResource(R.string.aiuto_restrizioni_titolo))
     }
     if (aperto) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
             Text(
                 text = stringResource(R.string.aiuto_restrizioni_testo),
                 style = MaterialTheme.typography.bodySmall,

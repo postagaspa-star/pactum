@@ -2,6 +2,7 @@ package eu.stgm.pactum.figlio.ui
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.figlio.R
@@ -83,12 +84,32 @@ fun descrizioneRegola(tipo: String, parametri: JsonObject): String = when (tipo)
 }
 
 @Composable
-fun testoDurata(minuti: Long): String =
-    if (minuti < 60) {
-        stringResource(R.string.formato_minuti, minuti)
+fun testoDurata(minuti: Long): String {
+    // Si rilegge a ogni cambio di configurazione (lingua), come stringResource.
+    LocalConfiguration.current
+    return testoDurata(LocalContext.current, minuti)
+}
+
+/** "48 min", "1 h", "1 h 20 min": le ore tonde senza " 0 min" in coda. */
+fun testoDurata(context: Context, minuti: Long): String = when {
+    minuti < 60 -> context.getString(R.string.formato_minuti, minuti)
+    minuti % 60 == 0L -> context.getString(R.string.formato_ore, minuti / 60)
+    else -> context.getString(R.string.formato_ore_minuti, minuti / 60, minuti % 60)
+}
+
+private val formatoOra: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+fun oraLocale(istante: Instant): String = formatoOra.format(istante.atZone(ZoneId.systemDefault()))
+
+/** "14:32" se è di oggi, "18/09 14:32" se è più vecchio: l'età dei dati. */
+fun quandoLocale(istante: Instant): String {
+    val zona = ZoneId.systemDefault()
+    return if (istante.atZone(zona).toLocalDate() == java.time.LocalDate.now(zona)) {
+        oraLocale(istante)
     } else {
-        stringResource(R.string.formato_ore_minuti, minuti / 60, minuti % 60)
+        dataOraLocale(istante)
     }
+}
 
 /**
  * Un'attesa in parole a partire dai secondi del 409 di lock: "3 giorni e

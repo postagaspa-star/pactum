@@ -8,10 +8,15 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import eu.stgm.pactum.design.GiornoPatto
+import eu.stgm.pactum.figlio.giornata.Serie
+import eu.stgm.pactum.figlio.giornata.SerieSalvata
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
+import java.time.LocalTime
 
 // Delegato a livello di file: una sola istanza di DataStore per processo.
 private val Context.dataStore by preferencesDataStore(name = "impostazioni")
@@ -26,6 +31,16 @@ data class ConfigurazionePostino(val serverUrl: String, val token: String) {
  * automatica (scarto piccolo) da un cambio d'ora manuale (scarto grande).
  */
 data class AncoraTempo(val wallClock: Long, val elapsedRealtime: Long)
+
+/** La chiusura della sera: accesa o no, e a che ora (minuti dalla mezzanotte). */
+data class ConfigSerale(val attiva: Boolean, val minuti: Int) {
+    val ora: LocalTime get() = LocalTime.of(minuti / 60, minuti % 60)
+
+    companion object {
+        /** 21:30: dopo cena, prima che la serata finisca. */
+        const val MINUTI_PREDEFINITI = 21 * 60 + 30
+    }
+}
 
 class Impostazioni(private val context: Context) {
 
@@ -58,6 +73,20 @@ class Impostazioni(private val context: Context) {
         // transizione e non come stato istantaneo.
         val SITI_RICHIESTA = booleanPreferencesKey("siti_osservazione_richiesta")
         val SITI_NOTA = booleanPreferencesKey("siti_osservazione_nota")
+
+        // v2.4 — redesign. Serie e record vivono SOLO qui: non partono mai.
+        val SERIE_FINE = stringPreferencesKey("serie_fine")
+        val SERIE_LUNGHEZZA = intPreferencesKey("serie_lunghezza")
+        val RECORD_SERIE = intPreferencesKey("record_serie")
+
+        // La chiusura della sera: attiva, a che ora (minuti dalla mezzanotte) e
+        // l'ultimo giorno in cui è partita (una volta sola, anche dopo un riavvio).
+        val SERALE_ATTIVA = booleanPreferencesKey("serale_attiva")
+        val SERALE_MINUTI = intPreferencesKey("serale_minuti")
+        val SERALE_ULTIMO_GIORNO = stringPreferencesKey("serale_ultimo_giorno")
+
+        // "Cosa vede tuo padre" mostrato almeno una volta dopo i permessi.
+        val COSA_VEDE_VISTA = booleanPreferencesKey("cosa_vede_vista")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -83,6 +112,10 @@ class Impostazioni(private val context: Context) {
                 // Idem per l'osservazione dei siti (la SCELTA del figlio resta:
                 // è un consenso dato al telefono, non al server).
                 p.remove(Chiavi.SITI_NOTA)
+                // La serie in corso appartiene al patto vecchio. Il record no:
+                // non scende mai.
+                p.remove(Chiavi.SERIE_FINE)
+                p.remove(Chiavi.SERIE_LUNGHEZZA)
             }
             p[Chiavi.SERVER_URL] = urlNuovo
             p[Chiavi.TOKEN] = tokenNuovo
@@ -218,6 +251,79 @@ class Impostazioni(private val context: Context) {
 
     suspend fun registraOsservazioneSitiNota(attiva: Boolean) {
         context.dataStore.edit { p -> p[Chiavi.SITI_NOTA] = attiva }
+    }
+
+    // --- Serie e record (redesign C2/C6) ------------------------------------
+    // Calcolati dalla striscia del server, ricordati qui. Mai al server.
+
+    suspend fun leggiSerieSalvata(): SerieSalvata? {
+        val p = context.dataStore.data.first()
+        val fine = p[Chiavi.SERIE_FINE] ?: return null
+        val lunghezza = p[Chiavi.SERIE_LUNGHEZZA] ?: return null
+        return SerieSalvata(fine, lunghezza)
+    }
+
+    /**
+     * Aggiorna serie e record con una striscia appena arrivata e li restituisce
+     * (serie, record). Una sola scrittura: il record non può restare indietro
+     * rispetto alla serie, e non scende mai.
+     */
+    suspend fun aggiornaSerie(giorni: List<GiornoPatto>): Pair<Int, Int> {
+        var esito = 0 to 0
+        context.dataStore.edit { p ->
+            val salvata = p[Chiavi.SERIE_FINE]?.let { fine ->
+                p[Chiavi.SERIE_LUNGHEZZA]?.let { SerieSalvata(fine, it) }
+            }
+            val nuova = if (giorni.isEmpty()) salvata else Serie.calcola(giorni, salvata)
+            if (nuova == null) {
+                p.remove(Chiavi.SERIE_FINE)
+                p.remove(Chiavi.SERIE_LUNGHEZZA)
+            } else {
+                p[Chiavi.SERIE_FINE] = nuova.fine
+                p[Chiavi.SERIE_LUNGHEZZA] = nuova.lunghezza
+            }
+            val serie = nuova?.lunghezza ?: 0
+            val record = Serie.record(p[Chiavi.RECORD_SERIE] ?: 0, serie)
+            p[Chiavi.RECORD_SERIE] = record
+            esito = serie to record
+        }
+        return esito
+    }
+
+    // --- Chiusura della sera (redesign C5) ----------------------------------
+
+    // distinctUntilChanged: il DataStore riemette a ogni scrittura (anche a ogni
+    // battito); chi ascolta questa configurazione deve svegliarsi solo se cambia.
+    val chiusuraSerale: Flow<ConfigSerale> = context.dataStore.data.map { p ->
+        ConfigSerale(
+            attiva = p[Chiavi.SERALE_ATTIVA] ?: true,
+            minuti = p[Chiavi.SERALE_MINUTI] ?: ConfigSerale.MINUTI_PREDEFINITI,
+        )
+    }.distinctUntilChanged()
+
+    suspend fun leggiChiusuraSerale(): ConfigSerale = chiusuraSerale.first()
+
+    suspend fun salvaChiusuraSerale(attiva: Boolean, minuti: Int) {
+        context.dataStore.edit { p ->
+            p[Chiavi.SERALE_ATTIVA] = attiva
+            p[Chiavi.SERALE_MINUTI] = minuti.coerceIn(0, 24 * 60 - 1)
+        }
+    }
+
+    suspend fun leggiUltimaChiusura(): String? =
+        context.dataStore.data.first()[Chiavi.SERALE_ULTIMO_GIORNO]
+
+    suspend fun registraUltimaChiusura(giorno: String) {
+        context.dataStore.edit { p -> p[Chiavi.SERALE_ULTIMO_GIORNO] = giorno }
+    }
+
+    // --- "Cosa vede tuo padre" (redesign C6) --------------------------------
+
+    val cosaVedeVista: Flow<Boolean> =
+        context.dataStore.data.map { p -> p[Chiavi.COSA_VEDE_VISTA] ?: false }.distinctUntilChanged()
+
+    suspend fun registraCosaVedeVista() {
+        context.dataStore.edit { p -> p[Chiavi.COSA_VEDE_VISTA] = true }
     }
 
     // --- Auto-aggiornamento (tappa 6) ---------------------------------------

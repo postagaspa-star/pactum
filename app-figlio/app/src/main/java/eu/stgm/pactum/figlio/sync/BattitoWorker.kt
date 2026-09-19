@@ -12,6 +12,7 @@ import androidx.core.app.NotificationManagerCompat
 import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.aggiornamento.Aggiornatore
+import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.AncoraTempo
 import eu.stgm.pactum.figlio.dati.Battito
@@ -20,6 +21,7 @@ import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.TipiEvento
+import eu.stgm.pactum.figlio.giornata.ChiusuraSerale
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
@@ -108,9 +110,17 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         // alla sentinella anche offline. In runCatching (come PactumService): un
         // errore qui NON deve saltare battito ed eventi di questo giro.
         runCatching {
-            postino.leggiPatto()?.let { PattoLocale(context).salva(it) }
+            postino.leggiPatto()?.let { patto ->
+                PattoLocale(context).salva(patto)
+                // Serie e record si aggiornano anche quando l'app resta chiusa:
+                // una serie di 12 giorni mai guardata è comunque un record.
+                impostazioni.aggiornaSerie(patto.giorniPatto())
+            }
             SentinellaPatto(context).valuta()
         }
+        // Riserve del servizio: il bonus rimasto a metà e la chiusura della sera.
+        runCatching { ConsegnaBonus.recupera(context) }
+        runCatching { ChiusuraSerale.controlla(context) }
 
         val battitoOk = postino.inviaBattito(
             Battito(
@@ -187,7 +197,7 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
     /**
      * Alza una notifica locale per ogni notifica del server mai avvisata prima
      * (il GET col token del figlio restituisce solo le sue: nuove proposte,
-     * verdetti) e poi le marca lette sul server. Senza permesso non si avvisa E
+     * verdetti, il segno del genitore) e poi le marca lette sul server. Senza permesso non si avvisa E
      * non si segna né marca: appena il permesso arriva, il giro successivo
      * recupera (marcare prima di avvisare perderebbe l'avviso).
      */

@@ -20,30 +20,117 @@
     <string name="onboarding_ricontrolla">Ho fatto, ricontrolla</string>
     <string name="onboarding_nota_avvio">Appena l\'accesso ai dati di utilizzo è attivo, Pactum parte da solo.</string>
 
+    <!-- Cosa vede tuo padre (redesign C6). Ricavato dai campi del contratto:
+         GET /api/finestra, più dichiarazioni, proposte e avvisi del genitore.
+         Se la finestra cambia, questo elenco cambia con lei. -->
+    <string name="cosa_vede_titolo">Cosa vede tuo padre</string>
+    <string name="cosa_vede_intro">Qui c\'è tutto quello che arriva nella sua app, detto per intero. Niente di più, niente di nascosto.</string>
+    <string name="cosa_vede_si_titolo">COSA VEDE</string>
+    <string-array name="cosa_vede_si">
+        <item>Le tue regole, anche quelle che hai tolto: come sono cambiate, se le avete concordate e da quando le potrai allentare.</item>
+        <item>La striscia degli ultimi 8 giorni, la stessa che vedi tu in Oggi, anche regola per regola.</item>
+        <item>I giorni fuori regola: su quale regola, di quanti minuti sei andato oltre e quando è stato registrato.</item>
+        <item>I buchi nel registro, e quando: i momenti in cui l\'app non ha potuto vedere. Per esempio telefono spento a lungo, permessi tolti, notifiche spente, osservazione dei siti spenta, ora del telefono cambiata a mano.</item>
+        <item>I bonus che ti dai: quanti minuti, su quale regola e il perché, se lo scrivi. E quanti minuti di bonus ti sei dato in ciascuno degli ultimi 8 giorni.</item>
+        <item>Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.</item>
+        <item>Le tue risposte alle sue proposte, con la tua motivazione se la scrivi.</item>
+        <item>Il tempo passato in TUTTE le app, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese.</item>
+        <item>I siti visitati, se hai acceso l\'osservazione: solo il nome del sito e quante volte al giorno. E se per un pezzo di giornata l\'app non ha potuto vederli.</item>
+        <item>Quando l\'app si è fatta sentire l\'ultima volta, e se è rimasta zitta per più di tre quarti d\'ora.</item>
+        <item>Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, o quando si apre un buco nel registro.</item>
+    </string-array>
+    <string name="cosa_vede_no_titolo">COSA RESTA FUORI</string>
+    <string-array name="cosa_vede_no">
+        <item>I messaggi e le chat.</item>
+        <item>Quello che guardi, leggi o ascolti dentro le app e i siti.</item>
+        <item>Le foto e i video.</item>
+        <item>Quello che scrivi o cerchi.</item>
+        <item>Gli indirizzi completi delle pagine: vede youtube.com, mai quale video.</item>
+        <item>Dove sei: la posizione non viene mai letta.</item>
+    </string-array>
+    <string name="cosa_vede_tuo_titolo">SOLO TUO</string>
+    <string-array name="cosa_vede_tuo">
+        <item>La serie di giorni di fila e il tuo record: si calcolano sul tuo telefono e non partono mai.</item>
+    </string-array>
+    <string name="cosa_vede_ho_capito">Ho capito</string>
+
     <!-- Schermata Oggi -->
     <string name="oggi_titolo">Oggi</string>
-    <string name="oggi_totale">Oggi hai usato il telefono</string>
+    <plurals name="oggi_serie">
+        <item quantity="one">%1$d giorno di fila</item>
+        <item quantity="other">%1$d giorni di fila</item>
+    </plurals>
+    <string name="oggi_serie_dentro">dentro le tue regole</string>
+    <string name="oggi_si_riparte">Si riparte da oggi</string>
+    <string name="oggi_si_comincia">Si comincia da oggi</string>
+    <string name="oggi_record">il tuo record: %1$d</string>
+    <!-- Il plurale segue i giorni con dati: "1 su 1 giorno", "6 su 7 giorni". -->
+    <plurals name="oggi_striscia_frase">
+        <item quantity="one">%1$d su %2$d giorno dentro tutte le regole</item>
+        <item quantity="other">%1$d su %2$d giorni dentro tutte le regole</item>
+    </plurals>
+    <string name="oggi_striscia_senza_dati">Negli ultimi 8 giorni non ci sono ancora dati</string>
+    <string name="oggi_sezione_regole">LE TUE REGOLE OGGI</string>
+    <string name="oggi_minuti_su_limite">%1$s su %2$s</string>
+    <string name="oggi_oltre">%1$s oltre</string>
+    <string name="oggi_fascia_prima">mancano %1$s alle %2$s</string>
+    <string name="oggi_fascia_in_corso">sei nella fascia fino alle %1$s</string>
+    <string name="oggi_fascia_finita">per oggi la fascia è finita</string>
+    <string name="oggi_fascia_non_oggi">oggi la fascia non c\'è</string>
+    <string name="oggi_vita_reale_diario">Segna nel Diario</string>
+    <string name="oggi_sezione_tempo">DOVE È FINITO IL TEMPO</string>
     <string name="oggi_vuoto">Nessun uso registrato finora. Oggi il registro è pulito.</string>
     <string name="oggi_caricamento">Sto leggendo l\'uso di oggi…</string>
     <string name="azione_aggiorna">Aggiorna</string>
     <string name="azione_impostazioni">Impostazioni</string>
     <string name="formato_minuti">%1$d min</string>
+    <string name="formato_ore">%1$d h</string>
     <string name="formato_ore_minuti">%1$d h %2$d min</string>
+
+    <!-- Bonus in due tocchi (redesign B5): sulla riga della regola, in Oggi -->
+    <string name="bonus_piu_minuti">+%1$d min</string>
+    <string name="oggi_bonus_gia_dato">oggi ti sei già dato %1$d min · restano %2$d</string>
+    <string name="oggi_bonus_gia_dato_solo">oggi ti sei già dato %1$d min</string>
+    <string name="oggi_bonus_restano">bonus di oggi: restano %1$d min</string>
+    <string name="oggi_bonus_in_partenza">+%1$d min in partenza</string>
+    <string name="oggi_bonus_tetti">Bonus: oggi ancora %1$d min su %2$d · questa settimana %3$d su %4$d</string>
+    <string name="oggi_bonus_dato">Ti sei dato %1$d minuti su %2$s</string>
+    <string name="oggi_bonus_aggiungi_perche">Aggiungi perché</string>
+    <string name="oggi_perche_titolo">Perché?</string>
+    <string name="oggi_perche_testo">Il perché arriva al genitore insieme al bonus. Puoi anche non scriverlo.</string>
+    <string name="oggi_perche_campo">Il tuo perché</string>
+    <string name="oggi_perche_manda">Manda</string>
+    <string name="oggi_perche_senza">Senza perché</string>
+    <string name="bonus_tetto_superato">Ti sei già dato i %1$d minuti di oggi.</string>
+    <string name="bonus_tetto_restano_oggi">Oggi ti restano %1$d minuti di bonus.</string>
+    <string name="bonus_tetto_settimana">Questa settimana ti restano %1$d minuti di bonus.</string>
+    <string name="bonus_regola_non_valida">Questa regola non vale più per un bonus: aggiorna e riprova.</string>
+    <string name="bonus_errore">Non sono riuscito a darti il bonus: riprova.</string>
+    <string name="bonus_senza_rete">Niente rete: il bonus parte appena torna.</string>
+    <string name="bonus_scaduto">Il bonus di ieri non è partito in tempo: un bonus vale solo per il giorno in cui te lo dai.</string>
+    <string name="bonus_gia_partito">Il bonus era già partito, senza perché.</string>
 
     <!-- Impostazioni -->
     <string name="impostazioni_titolo">Impostazioni</string>
-    <string name="impostazioni_descrizione">Indirizzo del server e token del patto. Te li fornisce chi ha configurato il server.</string>
+    <string name="impostazioni_sezione_collegamento">Collegamento al patto</string>
+    <string name="impostazioni_descrizione">Indirizzo del server e codice del patto. Te li dà chi ha preparato il server.</string>
     <string name="impostazioni_server_url">Indirizzo del server</string>
     <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
-    <string name="impostazioni_token">Token del patto</string>
+    <string name="impostazioni_token">Codice del patto</string>
     <string name="impostazioni_salvate">Impostazioni salvate</string>
     <string name="impostazioni_url_non_valido">Indirizzo del server non valido: controlla e riprova (es. https://pactum.esempio.it).</string>
     <string name="impostazioni_ultimo_battito">Ultimo aggiornamento inviato: %1$s</string>
     <string name="impostazioni_ultimo_battito_mai">mai</string>
     <string name="impostazioni_prova_adesso">Prova adesso</string>
     <string name="impostazioni_prova_ok">Aggiornamento inviato: il server risponde.</string>
-    <string name="impostazioni_prova_fallita">Invio fallito: controlla indirizzo, token e connessione.</string>
-    <string name="impostazioni_config_incompleta">Prima salva indirizzo del server e token del patto.</string>
+    <string name="impostazioni_prova_fallita">Invio fallito: controlla indirizzo, codice e connessione.</string>
+    <string name="impostazioni_config_incompleta">Prima salva indirizzo del server e codice del patto.</string>
+    <string name="impostazioni_sezione_serale">Com\'è andata oggi</string>
+    <string name="impostazioni_serale_attiva">Ogni sera, una notifica</string>
+    <string name="impostazioni_serale_ora">Ogni sera alle</string>
+    <string name="impostazioni_serale_spiegazione">Una notifica sola: se la giornata è stata dentro le tue regole, o dove è andata oltre. Si calcola sul telefono.</string>
+    <string name="impostazioni_cosa_vede_testo">Tutto quello che arriva nella sua app, e quello che resta fuori.</string>
+    <string name="impostazioni_cosa_vede_apri">Guarda l\'elenco</string>
     <string name="azione_salva">Salva</string>
     <string name="azione_indietro">Indietro</string>
 
@@ -53,15 +140,16 @@
     <string name="notifica_testimone_titolo">Pactum</string>
     <string name="notifica_testimone_testo">Pactum sta facendo da testimone</string>
 
-    <!-- Navigazione (tappa 5) -->
+    <!-- Navigazione (redesign C8): quattro schede -->
     <string name="scheda_oggi">Oggi</string>
-    <string name="scheda_regole">Regole</string>
-    <string name="scheda_bonus">Bonus</string>
+    <string name="scheda_regole">Le mie regole</string>
     <string name="scheda_proposte">Proposte</string>
     <string name="scheda_diario">Diario</string>
     <string name="azione_annulla">Annulla</string>
     <string name="azione_conferma">Conferma</string>
     <string name="dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
+    <string name="dati_fermi_alle">Dati fermi alle %1$s.</string>
+    <string name="dati_fermi">Dati fermi: non riesco ad aggiornarli.</string>
 
     <!-- Descrizioni delle regole -->
     <string name="regola_limite_tempo">%1$s: al massimo %2$s al giorno</string>
@@ -78,9 +166,9 @@
     <string name="durata_e">%1$s e %2$s</string>
 
     <!-- Regole -->
-    <string name="regole_titolo">Le tue regole</string>
+    <string name="regole_titolo">Le mie regole</string>
     <string name="regole_caricamento">Sto leggendo il patto…</string>
-    <string name="regole_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
+    <string name="regole_config_mancante">Prima servono indirizzo del server e codice del patto: li trovi nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
     <string name="regole_vuoto">Il patto vuole almeno una regola: creane una con il pulsante +.</string>
     <string name="regole_unica_regola">Questa è l\'unica regola del patto: puoi modificarla, ma non eliminarla.</string>
     <string name="regole_nuova">Nuova regola</string>
@@ -124,24 +212,8 @@
     <string name="prima_regola_intro">Pactum è il tuo patto: le regole le scrivi tu. Per iniziare, dattene almeno una.</string>
     <string name="prima_regola_spiegazione">Un limite di tempo su un\'app, una fascia senza telefono, o un impegno di vita reale. Potrai aggiungerne altre e modificarle quando vuoi — e allentarle dopo qualche giorno.</string>
     <string name="prima_regola_crea">Crea la prima regola</string>
-    <string name="prima_regola_config_intro">Prima servono l\'indirizzo del server e il token del patto: te li dà chi ha preparato il server. Inseriscili nelle Impostazioni, poi torna qui.</string>
+    <string name="prima_regola_config_intro">Prima servono l\'indirizzo del server e il codice del patto: te li dà chi ha preparato il server. Inseriscili nelle Impostazioni, poi torna qui.</string>
     <string name="prima_regola_apri_impostazioni">Apri impostazioni</string>
-
-    <!-- Bonus -->
-    <string name="bonus_titolo">Bonus</string>
-    <string name="bonus_caricamento">Sto leggendo i bonus…</string>
-    <string name="bonus_spiegazione">Puoi darti +5, +15 o +30 minuti su una regola di tempo, con un tetto al giorno e alla settimana. Il genitore lo vede: il patto resta trasparente.</string>
-    <string name="bonus_residui_giorno">Oggi: ancora %1$d min su %2$d</string>
-    <string name="bonus_residui_settimana">Questa settimana: ancora %1$d min su %2$d</string>
-    <string name="bonus_scegli_regola">Su quale limite?</string>
-    <string name="bonus_nessuna_regola">Il bonus allunga un limite di tempo, e non hai regole di questo tipo. Puoi crearne una nella scheda Regole.</string>
-    <string name="bonus_oggi_su_regola">Oggi già +%1$d min su questa regola</string>
-    <string name="bonus_motivo">Motivo (facoltativo)</string>
-    <string name="bonus_piu_minuti">+%1$d min</string>
-    <string name="bonus_concesso">Fatto: +%1$d min per oggi su questa regola. Il genitore riceve una notifica.</string>
-    <string name="bonus_tetto_superato">Ti sei già dato i minuti di oggi: ne restano %1$d, questa settimana %2$d.</string>
-    <string name="bonus_regola_non_valida">Questa regola non è più valida per un bonus: aggiorna e riprova.</string>
-    <string name="bonus_errore">Non sono riuscito a concedere il bonus: controlla la connessione e riprova.</string>
 
     <!-- Proposte -->
     <string name="proposte_titolo">Proposte</string>
@@ -151,9 +223,10 @@
     <string name="proposte_pendenti_vuoto">Nessuna proposta in attesa della tua risposta.</string>
     <string name="proposte_sezione_storia">Storia</string>
     <string name="proposte_storia_vuota">Nessuna proposta ancora.</string>
-    <string name="proposta_dal_genitore">Proposta del genitore</string>
+    <string name="proposta_dal_genitore">PROPOSTA DEL GENITORE</string>
     <string name="proposta_senza_confronto">Proposta di modifica</string>
     <string name="proposta_motivazione_genitore">Il genitore dice: %1$s</string>
+    <string name="proposta_aggiungi_motivazione">aggiungi una motivazione</string>
     <string name="proposta_campo_motivazione">La tua motivazione (facoltativa)</string>
     <string name="proposta_accetta">Accetto</string>
     <string name="proposta_rifiuta">Rifiuto</string>
@@ -175,7 +248,7 @@
     <string name="diario_titolo">Diario</string>
     <string name="diario_caricamento">Sto leggendo le dichiarazioni…</string>
     <string name="diario_sezione_regole">Le tue regole di vita reale</string>
-    <string name="diario_regole_vuoto">Nessuna regola di vita reale nel patto. Puoi crearne una nella scheda Regole.</string>
+    <string name="diario_regole_vuoto">Nessuna regola di vita reale nel patto. Puoi crearne una nella scheda Le mie regole.</string>
     <string name="diario_sezione_dichiarazioni">Le tue dichiarazioni</string>
     <string name="diario_dichiarazioni_vuoto">Nessuna dichiarazione ancora.</string>
     <string name="diario_gia_dichiarato_oggi">Per oggi hai già dichiarato: si torna domani.</string>
@@ -189,9 +262,10 @@
     <string name="dichiarazione_scegli_giorno">Per quale giorno?</string>
     <string name="dichiarazione_giorno_oggi">Oggi</string>
     <string name="dichiarazione_giorno_ieri">Ieri</string>
-    <string name="dichiarazione_inviata_successo">Segnato. Manca solo la firma dell\'arbitro.</string>
+    <string name="dichiarazione_inviata_successo">Segnato. Manca solo la firma di %1$s.</string>
     <string name="dichiarazione_inviata_fallimento">Registrato, creduto sulla parola.</string>
     <string name="dichiarazione_gia_dichiarato">Per oggi hai già dichiarato su questa regola.</string>
+    <string name="dichiarazione_non_arrivata">Non sono riuscito a segnarlo: la dichiarazione non è arrivata. Riprova.</string>
     <string name="dichiarazione_errore">Non sono riuscito a inviare la dichiarazione: riprova.</string>
     <string name="dichiarazione_giorno">Giorno: %1$s</string>
     <string name="dichiarazione_stato_in_attesa">L\'hai fatto. Manca la firma di %1$s.</string>
@@ -204,14 +278,39 @@
 
     <!-- Canale e notifiche locali del patto -->
     <string name="canale_patto_nome">Avvisi del patto</string>
-    <string name="canale_patto_descrizione">Le novità del tuo patto: proposte, verdetti e promemoria sui limiti.</string>
+    <string name="canale_patto_descrizione">Le novità del tuo patto: proposte, conferme, promemoria sui limiti e com\'è andata la giornata.</string>
     <string name="notifica_sforamento_limite_titolo">Oggi sei andato oltre</string>
     <string name="notifica_sforamento_limite_testo">%1$s: oggi sei andato %2$d min oltre il limite che ti sei dato (%3$d min). Nessun blocco: è il tuo patto.</string>
-    <string name="notifica_sforamento_fascia_titolo">Hai usato il telefono in una fascia che ti sei imposto</string>
-    <string name="notifica_sforamento_fascia_testo">Hai usato il telefono %1$d min in una fascia che ti sei imposto (%2$s–%3$s). Nessun blocco: è il tuo patto.</string>
+    <string name="notifica_sforamento_fascia_titolo">Hai usato il telefono nella fascia che ti sei chiuso</string>
+    <string name="notifica_sforamento_fascia_testo">Hai usato il telefono %1$d min nella fascia che ti sei chiuso (%2$s–%3$s). Nessun blocco: è il tuo patto.</string>
     <string name="tipo_nuova_proposta">Nuova proposta del genitore</string>
     <string name="tipo_verdetto">Esito della tua dichiarazione</string>
+    <string name="tipo_segno">Un segno dal genitore</string>
     <string name="tipo_novita">Novità dal patto</string>
+
+    <!-- Chiusura della sera (redesign C5) -->
+    <string name="serale_titolo">Com\'è andata oggi</string>
+    <string name="serale_dentro">Oggi dentro tutte le tue regole.</string>
+    <string name="serale_giorno_in_parole">%1$s giorno.</string>
+    <string-array name="serale_ordinali">
+        <item>Primo</item>
+        <item>Secondo</item>
+        <item>Terzo</item>
+        <item>Quarto</item>
+        <item>Quinto</item>
+        <item>Sesto</item>
+        <item>Settimo</item>
+        <item>Ottavo</item>
+        <item>Nono</item>
+        <item>Decimo</item>
+    </string-array>
+    <string name="serale_giorno_in_cifre">%1$d° giorno.</string>
+    <string name="serale_oltre">Oggi %1$s oltre su %2$s.</string>
+    <string name="serale_fascia">Oggi %1$s di telefono nella fascia che ti sei chiuso.</string>
+    <string name="serale_fuori">Oggi non tutte le regole hanno tenuto.</string>
+    <string name="serale_un_altra_regola">E un\'altra regola fuori.</string>
+    <string name="serale_altre_regole">E altre %1$d regole fuori.</string>
+    <string name="serale_domani">Domani riparte.</string>
 
     <!-- Manomissioni per revoca permessi (tappa 6) -->
     <string name="notifica_permesso_revocato_titolo">Pactum non può più misurare l\'uso</string>
@@ -231,7 +330,7 @@
     <string name="siti_disattiva">Spegni l\'osservazione</string>
     <string name="siti_caricamento">Sto leggendo la lista dei siti…</string>
     <string name="siti_vuoto">Nessuna fotografia dei siti è ancora arrivata al patto.</string>
-    <string name="siti_config_mancante">Prima servono indirizzo del server e token: li trovi nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
+    <string name="siti_config_mancante">Prima servono indirizzo del server e codice del patto: li trovi nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
     <string name="siti_giorno_vuoto">Nessuna fotografia per questo giorno.</string>
     <string name="siti_giorno_totale">%1$d domini distinti</string>
     <string name="siti_giorno_tagliato">%1$d domini distinti (qui i primi %2$d)</string>

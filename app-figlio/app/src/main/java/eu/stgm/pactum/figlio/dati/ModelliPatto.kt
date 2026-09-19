@@ -3,7 +3,10 @@ package eu.stgm.pactum.figlio.dati
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import eu.stgm.pactum.design.GiornoPatto
+import eu.stgm.pactum.design.segnaleDaStato
 import kotlinx.serialization.json.JsonObject
+import java.time.Instant
 import java.time.ZoneId
 
 /**
@@ -27,12 +30,39 @@ data class Patto(
     // genitore che il figlio non veda identico. Vuota = server vecchio senza
     // la sezione (l'app la nasconde) oppure nessuna fotografia ancora arrivata.
     @SerialName("siti_recenti") val sitiRecenti: List<SitiGiorno> = emptyList(),
+    // (v2.4) La striscia aggregata degli 8 giorni, IDENTICA a quella della
+    // finestra del genitore (stessa funzione del server). È un fatto: la si
+    // mostra così com'è. Serie e record si calcolano da qui, in locale, e non
+    // tornano mai indietro. Vuota = server vecchio senza il campo.
+    val striscia: List<GiornoStriscia> = emptyList(),
     val fuso: String? = null,
     // App-interno (NON dal server): il giorno del patto in cui `bonusOggiPerRegola`
     // è valido, stampato da PattoLocale al salvataggio. Se al momento della
     // valutazione non è più oggi (notte offline), i bonus di "oggi" non valgono.
     @SerialName("bonus_giorno_locale") val bonusGiornoLocale: String? = null,
-)
+) {
+    /** La striscia nel linguaggio del design system (core-design). */
+    fun giorniPatto(): List<GiornoPatto> =
+        striscia.map { GiornoPatto(it.data, segnaleDaStato(it.stato)) }
+
+    /**
+     * I bonus di oggi per regola, ma solo se la copia è stata sincronizzata OGGI
+     * nel fuso del patto: dopo una notte offline il bonus di ieri non deve
+     * allargare il limite di oggi (contratto: il bonus è del giorno).
+     */
+    fun bonusValidiOggi(now: Long = System.currentTimeMillis()): Map<String, Int> {
+        val giornoPatto = Instant.ofEpochMilli(now).atZone(zonaPatto(fuso)).toLocalDate().toString()
+        return if (bonusGiornoLocale == null || bonusGiornoLocale == giornoPatto) {
+            bonusOggiPerRegola
+        } else {
+            emptyMap()
+        }
+    }
+}
+
+/** (v2.4) Un giorno della striscia: `stato` ∈ verde · rosso · grigio. */
+@Serializable
+data class GiornoStriscia(val data: String = "", val stato: String = "")
 
 /**
  * Il fuso in cui contare i "giorni" del patto (bonus, dichiarazioni): quello
@@ -93,6 +123,9 @@ object EsitiDichiarazione {
 object TipiNotifica {
     const val NUOVA_PROPOSTA = "nuova_proposta"
     const val VERDETTO = "verdetto"
+
+    /** (v2.4) Il riconoscimento del genitore, a testo fisso. */
+    const val SEGNO = "segno"
 }
 
 /**

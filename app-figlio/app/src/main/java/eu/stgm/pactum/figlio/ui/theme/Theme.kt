@@ -1,7 +1,6 @@
 package eu.stgm.pactum.figlio.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -44,37 +43,9 @@ private val SchemaChiaro = lightColorScheme(
     surfaceContainerHighest = Color(0xFFE2E9E6),
 )
 
-private val SchemaScuro = darkColorScheme(
-    primary = Color(0xFF7FD3BD),
-    onPrimary = Color(0xFF00382C),
-    primaryContainer = Color(0xFF1C5245),
-    onPrimaryContainer = Color(0xFFCFE9E1),
-    secondary = Color(0xFFB1CCC3),
-    onSecondary = Color(0xFF1D3529),
-    secondaryContainer = Color(0xFF32493F),
-    onSecondaryContainer = Color(0xFFDCE9E4),
-    tertiary = Color(0xFFE7C77A),
-    onTertiary = Color(0xFF3E2E00),
-    tertiaryContainer = Color(0xFF4A3A00),
-    onTertiaryContainer = Color(0xFFF3E3C4),
-    background = Color(0xFF0F1513),
-    onBackground = Color(0xFFE1E7E4),
-    surface = Color(0xFF0F1513),
-    onSurface = Color(0xFFE1E7E4),
-    surfaceVariant = Color(0xFF414944),
-    onSurfaceVariant = Color(0xFFC1C9C4),
-    outline = Color(0xFF8B938D),
-    outlineVariant = Color(0xFF414944),
-    error = Color(0xFFF2B8B5),
-    onError = Color(0xFF601410),
-    errorContainer = Color(0xFF601410),
-    onErrorContainer = Color(0xFFF9DEDC),
-    surfaceContainerLowest = Color(0xFF0A0F0E),
-    surfaceContainerLow = Color(0xFF161B19),
-    surfaceContainer = Color(0xFF1A201E),
-    surfaceContainerHigh = Color(0xFF242A28),
-    surfaceContainerHighest = Color(0xFF2E3533),
-)
+// Niente schema scuro, di proposito: Pactum va sempre su fondo chiaro (scelta
+// di Andrea). Per lo stesso motivo non c'è values-night: il tema di piattaforma
+// resta chiaro anche col telefono in modalità scura, niente lampi neri all'avvio.
 
 // Spazi, forme, tipografia e colori del patto sono in core-design, identici
 // nelle due app. Qui resta solo ciò che dice di chi è l'app: la palette.

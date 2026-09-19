@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,18 +13,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,14 +47,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.Dichiarazione
 import eu.stgm.pactum.figlio.dati.EsitiDichiarazione
@@ -65,6 +71,7 @@ import java.time.format.DateTimeFormatter
 fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     // Il dialogo di dichiarazione: regola + esito già scelti dai due pulsanti.
     var dichiarazioneInCorso by remember { mutableStateOf<Pair<Regola, String>?>(null) }
@@ -74,9 +81,9 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
         onPauseOrDispose { }
     }
 
-    val messaggioSuccesso = stringResource(R.string.dichiarazione_inviata_successo)
     val messaggioFallimento = stringResource(R.string.dichiarazione_inviata_fallimento)
     val messaggioGia = stringResource(R.string.dichiarazione_gia_dichiarato)
+    val messaggioNonArrivato = stringResource(R.string.dichiarazione_non_arrivata)
     val messaggioErrore = stringResource(R.string.dichiarazione_errore)
     LaunchedEffect(stato.evento) {
         when (val evento = stato.evento) {
@@ -84,7 +91,10 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
                 dichiarazioneInCorso = null
                 snackbarHostState.showSnackbar(
                     if (evento.esito == EsitiDichiarazione.SUCCESSO) {
-                        messaggioSuccesso
+                        context.getString(
+                            R.string.dichiarazione_inviata_successo,
+                            arbitroDi(stato.regoleVitaReale.firstOrNull { it.id == evento.regolaId }),
+                        )
                     } else {
                         messaggioFallimento
                     },
@@ -94,6 +104,8 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
                 dichiarazioneInCorso = null
                 snackbarHostState.showSnackbar(messaggioGia)
             }
+            is DichiarazioniViewModel.Evento.SuccessoNonArrivato ->
+                snackbarHostState.showSnackbar(messaggioNonArrivato)
             is DichiarazioniViewModel.Evento.Errore -> snackbarHostState.showSnackbar(messaggioErrore)
             null -> Unit
         }
@@ -123,7 +135,7 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
                         Text(
                             text = stringResource(R.string.diario_caricamento),
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp),
+                            modifier = Modifier.padding(top = Spazi.s),
                         )
                     }
                 }
@@ -134,9 +146,10 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
 
                 else -> ContenutoDiario(
                     regole = stato.regoleVitaReale,
-                    dichiarazioni = stato.dichiarazioni,
+                    dichiarazioni = stato.tutte,
                     fuso = stato.fuso,
                     mostraErrore = stato.errore,
+                    datiFermiAlle = stato.datiFermiAlle,
                     onDichiara = { regola, esito -> dichiarazioneInCorso = regola to esito },
                 )
             }
@@ -147,7 +160,7 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
         val oggiIso = LocalDate.now(zonaPatto(stato.fuso)).toString()
         // I giorni già dichiarati su QUESTA regola: restano non selezionabili nel
         // dialogo (il server li rifiuterebbe con gia_dichiarato).
-        val giorniDichiarati = stato.dichiarazioni
+        val giorniDichiarati = stato.tutte
             .filter { it.regolaId == regola.id }
             .map { it.giorno }
             .toSet()
@@ -158,7 +171,13 @@ fun DichiarazioniScreen(vm: DichiarazioniViewModel = viewModel()) {
             giorniDichiarati = giorniDichiarati,
             invioInCorso = stato.invioInCorso,
             onAnnulla = { dichiarazioneInCorso = null },
-            onConferma = { nota, giorno -> vm.dichiara(regola.id, esito, nota, giorno) },
+            onConferma = { nota, giorno ->
+                vm.dichiara(regola.id, esito, nota, giorno)
+                // "Ce l'ho fatta": il riconoscimento è subito, il dialogo si
+                // chiude senza aspettare il server. "Non ce l'ho fatta" resta
+                // com'era: si chiude quando il server ha registrato.
+                if (esito == EsitiDichiarazione.SUCCESSO) dichiarazioneInCorso = null
+            },
         )
     }
 }
@@ -169,67 +188,95 @@ private fun ContenutoDiario(
     dichiarazioni: List<Dichiarazione>,
     fuso: String?,
     mostraErrore: Boolean,
+    datiFermiAlle: Long?,
     onDichiara: (Regola, String) -> Unit,
 ) {
     // "Oggi" nel fuso del patto, come lo assegna il server alle dichiarazioni:
     // col fuso del telefono, vicino a mezzanotte, il figlio vedrebbe libero un
     // giorno che il server considera già dichiarato (o viceversa).
     val oggi = LocalDate.now(zonaPatto(fuso)).toString()
+    val inAttesa = dichiarazioni.filter { it.stato == StatiDichiarazione.IN_ATTESA }
+    val risolte = dichiarazioni.filter { it.stato != StatiDichiarazione.IN_ATTESA }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(Spazi.l + Spazi.xs),
+        verticalArrangement = Arrangement.spacedBy(Spazi.l),
     ) {
         if (mostraErrore) {
-            item { BannerDatiVecchi() }
+            item { BannerDatiVecchi(datiFermiAlle) }
         }
 
         item { TitoloSezione(stringResource(R.string.diario_sezione_regole)) }
         if (regole.isEmpty()) {
-            item { TestoVuoto(stringResource(R.string.diario_regole_vuoto)) }
+            item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.diario_regole_vuoto)) }
         } else {
             items(regole, key = { "regola-${it.id}" }) { regola ->
-                val giaOggi = dichiarazioni.any { it.regolaId == regola.id && it.giorno == oggi }
-                CardRegolaVitaReale(regola, giaOggi, onDichiara)
+                val diOggi = dichiarazioni.firstOrNull { it.regolaId == regola.id && it.giorno == oggi }
+                CardRegolaVitaReale(regola, diOggi, onDichiara)
             }
         }
 
         item { TitoloSezione(stringResource(R.string.diario_sezione_dichiarazioni)) }
         if (dichiarazioni.isEmpty()) {
-            item { TestoVuoto(stringResource(R.string.diario_dichiarazioni_vuoto)) }
+            item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.diario_dichiarazioni_vuoto)) }
         } else {
-            items(dichiarazioni, key = { "dich-${it.id}" }) { dichiarazione ->
-                CardDichiarazione(
-                    dichiarazione = dichiarazione,
+            // In attesa della firma: già riconosciute, in evidenza.
+            items(inAttesa, key = { "attesa-${it.id}" }) { dichiarazione ->
+                CardFatto(
                     regola = regole.firstOrNull { it.id == dichiarazione.regolaId },
+                    dichiarazione = dichiarazione,
                 )
+            }
+            // Risolte: righe con divisore, non card. Nessun contatore.
+            if (risolte.isNotEmpty()) {
+                item {
+                    Column {
+                        risolte.forEachIndexed { indice, dichiarazione ->
+                            if (indice > 0) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            }
+                            RigaDichiarazione(
+                                dichiarazione = dichiarazione,
+                                regola = regole.firstOrNull { it.id == dichiarazione.regolaId },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
+/**
+ * La regola di vita reale com'è oggi: da dichiarare, già fatta (e allora si
+ * vede subito, piena), o già dichiarata in un altro modo.
+ */
 @Composable
 private fun CardRegolaVitaReale(
     regola: Regola,
-    giaDichiaratoOggi: Boolean,
+    diOggi: Dichiarazione?,
     onDichiara: (Regola, String) -> Unit,
 ) {
+    if (diOggi != null && diOggi.esito == EsitiDichiarazione.SUCCESSO && diOggi.stato in STATI_FATTO) {
+        CardFatto(regola = regola, dichiarazione = diOggi)
+        return
+    }
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
             Text(
                 text = descrizioneRegola(regola.tipo, regola.parametri),
                 style = MaterialTheme.typography.bodyLarge,
             )
-            if (giaDichiaratoOggi) {
+            if (diOggi != null) {
                 Text(
                     text = stringResource(R.string.diario_gia_dichiarato_oggi),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = Spazi.xs),
                 )
             } else {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(Spazi.s))
                 Row {
                     FilledTonalButton(
                         onClick = { onDichiara(regola, EsitiDichiarazione.SUCCESSO) },
@@ -237,7 +284,7 @@ private fun CardRegolaVitaReale(
                     ) {
                         Text(stringResource(R.string.dichiara_successo))
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(Spazi.s))
                     OutlinedButton(
                         onClick = { onDichiara(regola, EsitiDichiarazione.FALLIMENTO) },
                         modifier = Modifier.weight(1f),
@@ -250,54 +297,113 @@ private fun CardRegolaVitaReale(
     }
 }
 
+/**
+ * Il successo riconosciuto (B7): spunta, `primaryContainer` pieno e "L'hai
+ * fatto. Manca la firma di [arbitro]". La firma convalida verso il genitore;
+ * il riconoscimento verso il figlio arriva adesso.
+ */
 @Composable
-private fun CardDichiarazione(dichiarazione: Dichiarazione, regola: Regola?) {
-    val arbitro = regola?.let { parametroTesto(it.parametri, "arbitro_nome") } ?: "?"
-    // (v2.1) La frase del verdetto la congela il server (cita l'arbitro di
-    // allora): si mostra QUELLA verbatim, non la si ricostruisce dai parametri
-    // attuali della regola — che nel frattempo può aver cambiato arbitro o
-    // essere stata eliminata. Se manca (fallimento registrato o successo ancora
-    // in attesa, che non passano da un verdetto) si ripiega sul racconto locale.
+private fun CardFatto(regola: Regola?, dichiarazione: Dichiarazione) {
     val registro = dichiarazione.verdetto?.registro?.takeIf { it.isNotBlank() }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(Spazi.l + Spazi.xs),
+            verticalArrangement = Arrangement.spacedBy(Spazi.xs),
+        ) {
             regola?.let {
                 Text(
                     text = descrizioneRegola(it.tipo, it.parametri),
                     style = MaterialTheme.typography.titleSmall,
                 )
             }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spazi.s),
+            ) {
+                Icon(Icons.Filled.Check, contentDescription = null)
+                Text(
+                    text = registro ?: descrizioneStato(dichiarazione, arbitroDi(regola)),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
             if (dichiarazione.giorno.isNotBlank()) {
                 Text(
                     text = stringResource(R.string.dichiarazione_giorno, dichiarazione.giorno),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
-            Text(
-                text = registro ?: descrizioneStato(dichiarazione, arbitro),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 4.dp),
-            )
             dichiarazione.nota?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = stringResource(R.string.dichiarazione_tua_nota, it),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            dichiarazione.verdetto?.nota?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    text = stringResource(R.string.dichiarazione_verdetto_nota, it),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
         }
     }
 }
+
+/** Una dichiarazione risolta: una riga, col fatto congelato dal server. */
+@Composable
+private fun RigaDichiarazione(dichiarazione: Dichiarazione, regola: Regola?) {
+    // (v2.1) La frase del verdetto la congela il server (cita l'arbitro di
+    // allora): si mostra QUELLA verbatim, non la si ricostruisce dai parametri
+    // attuali della regola — che nel frattempo può aver cambiato arbitro o
+    // essere stata eliminata. Se manca (fallimento registrato, che non passa da
+    // un verdetto) si ripiega sul racconto locale.
+    val registro = dichiarazione.verdetto?.registro?.takeIf { it.isNotBlank() }
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
+        verticalArrangement = Arrangement.spacedBy(Spazi.xs),
+    ) {
+        regola?.let {
+            Text(
+                text = descrizioneRegola(it.tipo, it.parametri),
+                style = MaterialTheme.typography.titleSmall,
+            )
+        }
+        Text(
+            text = registro ?: descrizioneStato(dichiarazione, arbitroDi(regola)),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        if (dichiarazione.giorno.isNotBlank()) {
+            Text(
+                text = stringResource(R.string.dichiarazione_giorno, dichiarazione.giorno),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        dichiarazione.nota?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                text = stringResource(R.string.dichiarazione_tua_nota, it),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        dichiarazione.verdetto?.nota?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                text = stringResource(R.string.dichiarazione_verdetto_nota, it),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Gli stati in cui un successo è "fatto": in attesa della firma o già firmato. */
+private val STATI_FATTO = setOf(
+    StatiDichiarazione.IN_ATTESA,
+    StatiDichiarazione.CONFERMATA,
+    StatiDichiarazione.CONFERMATA_PER_CONTO,
+)
+
+private fun arbitroDi(regola: Regola?): String =
+    regola?.let { parametroTesto(it.parametri, "arbitro_nome") } ?: "?"
 
 /** Lo stato raccontato dal punto di vista del figlio. */
 @Composable

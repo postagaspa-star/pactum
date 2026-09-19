@@ -14,9 +14,14 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import eu.stgm.pactum.figlio.BuildConfig
+import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.giornata.ChiusuraSerale
+import eu.stgm.pactum.figlio.giornata.TestoSerale
+import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
@@ -26,8 +31,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.time.Duration
+import java.time.ZonedDateTime
 
 /**
  * FGS di tipo specialUse (v. manifest: PROPERTY_SPECIAL_USE_FGS_SUBTYPE).
@@ -48,6 +56,7 @@ class PactumService : Service() {
 
     private val ambito = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var loopBattito: Job? = null
+    private var loopSerale: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -66,6 +75,7 @@ class PactumService : Service() {
             },
         )
         avviaLoopBattito()
+        avviaLoopSerale()
         return START_STICKY
     }
 
@@ -99,7 +109,40 @@ class PactumService : Service() {
                 } catch (e: Exception) {
                     // idem: un tunnel che non riparte non deve fermare il battito
                 }
+                // Un bonus rimasto a metà (processo morto durante la snackbar,
+                // rete assente) riparte da qui. Idempotente: mai due volte.
+                try {
+                    ConsegnaBonus.recupera(applicationContext)
+                } catch (e: Exception) {
+                    // riprova al giro dopo
+                }
                 delay(INTERVALLO_BATTITO_MS)
+            }
+        }
+    }
+
+    /**
+     * La chiusura della sera all'ora esatta: il loop dorme fino all'ora scelta
+     * invece di aspettare il giro del battito (che arriverebbe fino a 15 minuti
+     * dopo). Riparte da capo se il figlio cambia ora o la spegne. Se l'ora è già
+     * passata e oggi non è partita (telefono riacceso alle 22), parte subito:
+     * ChiusuraSerale sa da sola se oggi l'ha già mandata.
+     */
+    private fun avviaLoopSerale() {
+        if (loopSerale?.isActive == true) return
+        loopSerale = ambito.launch {
+            Impostazioni(applicationContext).chiusuraSerale.collectLatest { config ->
+                if (!config.attiva) return@collectLatest
+                while (isActive) {
+                    try {
+                        ChiusuraSerale.controlla(applicationContext)
+                    } catch (e: Exception) {
+                        // la riserva è il worker
+                    }
+                    val adesso = ZonedDateTime.now()
+                    val prossimo = TestoSerale.prossimoControllo(adesso, config.ora)
+                    delay(Duration.between(adesso, prossimo).toMillis().coerceAtLeast(1_000))
+                }
             }
         }
     }
@@ -123,6 +166,8 @@ class PactumService : Service() {
             .setSmallIcon(R.drawable.ic_notifica_testimone)
             .setContentTitle(getString(R.string.notifica_testimone_titolo))
             .setContentText(getString(R.string.notifica_testimone_testo))
+            // Anche la notifica fissa porta da qualche parte: al patto di oggi.
+            .setContentIntent(AvvisiLocali.apriScheda(this, MainActivity.DEST_OGGI))
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)

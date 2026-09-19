@@ -44,6 +44,8 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
         val concordate: Set<Long> = emptySet(),
         val configurazioneMancante: Boolean = false,
         val errore: Boolean = false,
+        /** Con `errore`: quando è arrivata la copia che si sta mostrando. */
+        val datiFermiAlle: Long? = null,
         val invioInCorso: Boolean = false,
         val evento: Evento? = null,
     )
@@ -64,11 +66,13 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
             val patto = postino.leggiPatto()
             if (patto == null) {
                 // Offline o server muto: si mostra la copia locale sotto l'avviso.
-                val locale = PattoLocale(getApplication()).leggi()
+                val copia = PattoLocale(getApplication())
+                val locale = copia.leggi()
                 _stato.value = _stato.value.copy(
                     caricamento = false,
                     configurazioneMancante = false,
                     errore = true,
+                    datiFermiAlle = copia.aggiornatoIl(),
                     regole = locale?.regole ?: _stato.value.regole,
                 )
                 return@launch

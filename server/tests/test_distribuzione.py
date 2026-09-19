@@ -43,8 +43,8 @@ def test_versione_shape_e_default(client):
     for ruolo in ("figlio", "genitore"):
         blocco = dati[ruolo]
         assert set(blocco) >= {"versione_code", "versione_nome", "url"}
-        assert blocco["versione_code"] == 6
-        assert blocco["versione_nome"] == "0.6.0"
+        assert blocco["versione_code"] == 7
+        assert blocco["versione_nome"] == "0.7.0"
         assert blocco["url"] == f"/scarica/pactum-{ruolo}.apk"
     # Le due app viaggiano SEMPRE alla stessa versione: si rilasciano insieme e
     # la finestra del genitore deve mostrare quello che l'app del figlio manda.

@@ -21,7 +21,8 @@ services:
     expose:
       - "8000"                   # visibile a tailscale sulla rete interna di Docker
     ports:
-      - "8000:8000"              # e anche sulla LAN di casa, per le verifiche
+      - "8100:8000"              # e anche sulla LAN di casa (http://IP-NAS:8100), per le verifiche.
+                                 # Non la 8000: sul NAS e' gia' occupata da NormaAI (legal-rag).
     env_file:
       - ./server/.env            # token veri e opzioni (gitignorato)
     environment:

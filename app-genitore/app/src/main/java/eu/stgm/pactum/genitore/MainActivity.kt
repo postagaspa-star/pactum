@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -93,7 +94,7 @@ class MainActivity : ComponentActivity() {
 
         // Le destinazioni di prima (6 schede): le notifiche già nella tendina le
         // portano ancora nel loro PendingIntent. Restano riconosciute e finiscono
-        // su "Il tuo turno", così nessun tocco cade nel vuoto dopo l'aggiornamento.
+        // su "Proposte e conferme", così nessun tocco cade nel vuoto dopo l'aggiornamento.
         const val DEST_PROPOSTE = "proposte"
         const val DEST_VERDETTI = "verdetti"
     }
@@ -111,7 +112,7 @@ private enum class Destinazione(@DrawableRes val icona: Int, @StringRes val etic
 private const val INTERVALLO_NON_LETTE_MS = 60_000L
 
 /**
- * Quattro voci: guarda · misura · il tuo turno · impostazioni (tavola rotonda
+ * Quattro voci: guarda · misura · proposte e conferme · impostazioni (tavola rotonda
  * C4). La finestra è la casa; le notifiche non sono una scheda, sono la lista
  * che si apre dalla campanella della finestra, col conto delle non lette come
  * badge sulla campanella (e solo lì).
@@ -187,7 +188,17 @@ private fun GenitoreRoot(
                             // solo sulla campanella, da dove si aprono.
                             Icon(painterResource(voce.icona), contentDescription = null)
                         },
-                        label = { Text(stringResource(voce.etichetta)) },
+                        // "Proposte e conferme" non sta in una riga (4 voci su
+                        // 360-411dp): va a capo, centrata, mai troncata. Tutte
+                        // le etichette tengono due righe, così le icone restano
+                        // allineate (la voce centra icona+etichetta in verticale).
+                        label = {
+                            Text(
+                                text = stringResource(voce.etichetta),
+                                textAlign = TextAlign.Center,
+                                minLines = 2,
+                            )
+                        },
                     )
                 }
             }

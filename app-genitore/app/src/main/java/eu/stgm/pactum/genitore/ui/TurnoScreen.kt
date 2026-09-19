@@ -36,7 +36,7 @@ import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 
 /**
- * "Il tuo turno": le risposte che il genitore deve dare, in una schermata sola
+ * "Proposte e conferme": le risposte che il genitore deve dare, in una schermata sola
  * (tavola rotonda C3/C4). Prima le proposte (da mandare, in attesa, come sono
  * andate), sotto le dichiarazioni del figlio da confermare.
  *

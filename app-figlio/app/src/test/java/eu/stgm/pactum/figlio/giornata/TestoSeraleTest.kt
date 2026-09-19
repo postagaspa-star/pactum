@@ -21,7 +21,7 @@ class TestoSeraleTest {
         ),
         giornoInCifre = "%1\$d° giorno.",
         oltre = "Oggi %1\$s oltre su %2\$s.",
-        fascia = "Oggi %1\$s di telefono nella fascia che ti sei chiuso.",
+        fascia = "Oggi %1\$s di telefono in una fascia che ti sei imposto.",
         fuori = "Oggi non tutte le regole hanno tenuto.",
         unAltraRegola = "E un'altra regola fuori.",
         altreRegole = "E altre %1\$d regole fuori.",
@@ -71,7 +71,7 @@ class TestoSeraleTest {
     fun `la fascia usata si dice senza nomi`() {
         val fuori = listOf(FuoriOggi(TipoFuori.FASCIA, null, 25))
         assertEquals(
-            "Oggi 25 min di telefono nella fascia che ti sei chiuso. Domani riparte.",
+            "Oggi 25 min di telefono in una fascia che ti sei imposto. Domani riparte.",
             frase(fuori),
         )
     }

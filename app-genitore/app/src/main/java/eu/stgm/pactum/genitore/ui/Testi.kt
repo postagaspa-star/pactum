@@ -302,7 +302,7 @@ private fun fraseNotifica(
         // "Fuori regola" / "TikTok: al massimo 1 h al giorno".
         "sforamento" -> regola?.let { TestoNotifica(titolo, descrizioneRegola(parole, it)) }
 
-        // "Buco nel registro" / "L'app non ha potuto vedere per un po'".
+        // "Anomalia" / "Uso non registrato in questo periodo".
         "manomissione" -> {
             val dettagli = payload["dettagli"] as? JsonObject ?: return null
             val sottoTipo = campo(dettagli, "sotto_tipo") ?: return null

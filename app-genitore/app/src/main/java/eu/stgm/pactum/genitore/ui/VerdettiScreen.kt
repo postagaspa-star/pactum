@@ -27,12 +27,12 @@ import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.StatiDichiarazione
 import eu.stgm.pactum.genitore.dati.TipiVerdetto
 
-// Le dichiarazioni del figlio: la seconda metà di "Il tuo turno". Il genitore
+// Le dichiarazioni del figlio: la seconda metà di "Proposte e conferme". Il genitore
 // non emette verdetti, risponde — conferma, conferma per conto dell'arbitro, o
 // dice che non è andata così.
 
 /**
- * La sezione delle dichiarazioni dentro "Il tuo turno": prima quelle DA
+ * La sezione delle dichiarazioni dentro "Proposte e conferme": prima quelle DA
  * CONFERMARE, poi quelle già NEL REGISTRO come righe di storia. Quando non c'è
  * niente da confermare lo si scrive in grande: è una buona notizia.
  */

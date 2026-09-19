@@ -670,7 +670,8 @@ fun PrimaRegolaScreen(vm: RegoleViewModel, onApriImpostazioni: () -> Unit) {
 // --- Mattoni condivisi dalle schermate del patto -----------------------------
 
 /**
- * Dati vecchi: è un'ETÀ, non un fallimento (§3.5 "Dati fermi alle 14:32").
+ * Dati vecchi: è un'ETÀ, non un fallimento ("Dati non aggiornati: ultimo
+ * aggiornamento alle 14:32.", terminologia dell'audit).
  * Una riga su `surfaceVariant`, mai `errorContainer` — il rosso di sistema
  * resta alla validazione dei form. [aggiornatiIl] null = età sconosciuta.
  */

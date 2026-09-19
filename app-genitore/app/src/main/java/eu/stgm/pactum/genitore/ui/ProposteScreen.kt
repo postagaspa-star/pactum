@@ -51,12 +51,12 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
-// Le proposte: la prima metà di "Il tuo turno" (TurnoScreen). Proporre, mai
+// Le proposte: la prima metà di "Proposte e conferme" (TurnoScreen). Proporre, mai
 // imporre: il confronto lo calcola il server ed è la stessa frase che vede il
 // figlio. Tre blocchi — da mandare, in attesa di risposta, come sono andate.
 
 /**
- * La sezione delle proposte dentro "Il tuo turno".
+ * La sezione delle proposte dentro "Proposte e conferme".
  * - DA MANDARE: le regole attive, ciascuna col suo "Proponi una modifica";
  * - IN ATTESA DI RISPOSTA: le proposte pendenti, il confronto in grande;
  * - COME SONO ANDATE: le chiuse, come righe di storia.

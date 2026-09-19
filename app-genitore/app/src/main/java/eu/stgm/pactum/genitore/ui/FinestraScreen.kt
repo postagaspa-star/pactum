@@ -592,7 +592,7 @@ private fun descrizioneStriscia(giorni: List<GiornoPatto>): String {
     }
 }
 
-/** "Nessun giorno fuori regola · registro completo", oppure i conti. */
+/** "Nessun giorno fuori regola · registrazione completa", oppure i conti. */
 @Composable
 private fun testoRiepilogo(riepilogo: RiepilogoPatto): String {
     val fuori = riepilogo.giorniFuoriRegola

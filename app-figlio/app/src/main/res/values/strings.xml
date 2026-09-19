@@ -30,14 +30,14 @@
         <item>Le tue regole, anche quelle che hai tolto: come sono cambiate, se le avete concordate e da quando le potrai allentare.</item>
         <item>La striscia degli ultimi 8 giorni, la stessa che vedi tu in Oggi, anche regola per regola.</item>
         <item>I giorni fuori regola: su quale regola, di quanti minuti sei andato oltre e quando è stato registrato.</item>
-        <item>I buchi nel registro, e quando: i momenti in cui l\'app non ha potuto vedere. Per esempio telefono spento a lungo, permessi tolti, notifiche spente, osservazione dei siti spenta, ora del telefono cambiata a mano.</item>
+        <item>Le interruzioni nella registrazione, e quando. Per esempio telefono spento a lungo, permessi tolti, notifiche spente, osservazione dei siti spenta, ora del telefono cambiata a mano.</item>
         <item>I bonus che ti dai: quanti minuti, su quale regola e il perché, se lo scrivi. E quanti minuti di bonus ti sei dato in ciascuno degli ultimi 8 giorni.</item>
         <item>Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.</item>
         <item>Le tue risposte alle sue proposte, con la tua motivazione se la scrivi.</item>
         <item>Il tempo passato in TUTTE le app, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese.</item>
-        <item>I siti visitati, se hai acceso l\'osservazione: solo il nome del sito e quante volte al giorno. E se per un pezzo di giornata l\'app non ha potuto vederli.</item>
-        <item>Quando l\'app si è fatta sentire l\'ultima volta, e se è rimasta zitta per più di tre quarti d\'ora.</item>
-        <item>Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, o quando si apre un buco nel registro.</item>
+        <item>I siti visitati, se hai acceso l\'osservazione: solo il nome del sito e quante volte al giorno. E se per una parte della giornata il telefono ha tenuto nascosti i nomi dei siti.</item>
+        <item>Quando l\'app ha inviato l\'ultimo aggiornamento, e se non ne invia da più di tre quarti d\'ora.</item>
+        <item>Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, o quando c\'è un\'interruzione nella registrazione.</item>
     </string-array>
     <string name="cosa_vede_no_titolo">COSA RESTA FUORI</string>
     <string-array name="cosa_vede_no">
@@ -113,7 +113,7 @@
     <!-- Impostazioni -->
     <string name="impostazioni_titolo">Impostazioni</string>
     <string name="impostazioni_sezione_collegamento">Collegamento al patto</string>
-    <string name="impostazioni_descrizione">Indirizzo del server e codice del patto. Te li dà chi ha preparato il server.</string>
+    <string name="impostazioni_descrizione">Indirizzo del server e codice del patto. Te li fornisce chi ha configurato il server.</string>
     <string name="impostazioni_server_url">Indirizzo del server</string>
     <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
     <string name="impostazioni_token">Codice del patto</string>
@@ -148,8 +148,8 @@
     <string name="azione_annulla">Annulla</string>
     <string name="azione_conferma">Conferma</string>
     <string name="dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
-    <string name="dati_fermi_alle">Dati fermi alle %1$s.</string>
-    <string name="dati_fermi">Dati fermi: non riesco ad aggiornarli.</string>
+    <string name="dati_fermi_alle">Dati non aggiornati: ultimo aggiornamento alle %1$s.</string>
+    <string name="dati_fermi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
 
     <!-- Descrizioni delle regole -->
     <string name="regola_limite_tempo">%1$s: al massimo %2$s al giorno</string>
@@ -282,15 +282,15 @@
     <string name="dichiarazione_stato_confermata_per_conto">Confermato dal genitore per conto di %1$s</string>
     <string name="dichiarazione_stato_ribaltata">Non confermata — conta come non riuscito</string>
     <string name="dichiarazione_tua_nota">La tua nota: %1$s</string>
-    <string name="dichiarazione_verdetto_nota">Nota del verdetto: %1$s</string>
+    <string name="dichiarazione_verdetto_nota">Nota sull\'esito: %1$s</string>
 
     <!-- Canale e notifiche locali del patto -->
     <string name="canale_patto_nome">Avvisi del patto</string>
     <string name="canale_patto_descrizione">Le novità del tuo patto: proposte, conferme, promemoria sui limiti e com\'è andata la giornata.</string>
     <string name="notifica_sforamento_limite_titolo">Oggi sei andato oltre</string>
     <string name="notifica_sforamento_limite_testo">%1$s: oggi sei andato %2$d min oltre il limite che ti sei dato (%3$d min). Nessun blocco: è il tuo patto.</string>
-    <string name="notifica_sforamento_fascia_titolo">Hai usato il telefono nella fascia che ti sei chiuso</string>
-    <string name="notifica_sforamento_fascia_testo">Hai usato il telefono %1$d min nella fascia che ti sei chiuso (%2$s–%3$s). Nessun blocco: è il tuo patto.</string>
+    <string name="notifica_sforamento_fascia_titolo">Hai usato il telefono in una fascia che ti sei imposto</string>
+    <string name="notifica_sforamento_fascia_testo">Hai usato il telefono %1$d min in una fascia che ti sei imposto (%2$s–%3$s). Nessun blocco: è il tuo patto.</string>
     <string name="tipo_nuova_proposta">Nuova proposta del genitore</string>
     <string name="tipo_verdetto">Esito della tua dichiarazione</string>
     <string name="tipo_segno">Un segno dal genitore</string>
@@ -314,7 +314,7 @@
     </string-array>
     <string name="serale_giorno_in_cifre">%1$d° giorno.</string>
     <string name="serale_oltre">Oggi %1$s oltre su %2$s.</string>
-    <string name="serale_fascia">Oggi %1$s di telefono nella fascia che ti sei chiuso.</string>
+    <string name="serale_fascia">Oggi %1$s di telefono in una fascia che ti sei imposto.</string>
     <string name="serale_fuori">Oggi non tutte le regole hanno tenuto.</string>
     <string name="serale_un_altra_regola">E un\'altra regola fuori.</string>
     <string name="serale_altre_regole">E altre %1$d regole fuori.</string>
@@ -328,21 +328,21 @@
     <string name="siti_titolo">Siti visitati</string>
     <string name="siti_scorciatoia_titolo">Siti visitati</string>
     <string name="siti_scorciatoia_testo">Solo i nomi dei siti, la stessa lista che vede il genitore.</string>
-    <string name="siti_tavola_rotonda">Questa è esattamente la lista che vede il genitore: niente esiste nella sua finestra che tu non veda qui. Solo i nomi dei siti, mai le pagine, i contenuti o le ricerche.</string>
+    <string name="siti_tavola_rotonda">Questa è esattamente la lista che vede il genitore: nella sua app non c\'è nessun sito che tu non veda qui. Solo i nomi dei siti, mai le pagine, i contenuti o le ricerche.</string>
     <string name="siti_stato_attiva">Osservazione attiva</string>
     <string name="siti_stato_attiva_testo">Pactum annota il nome dei siti che il telefono chiede. Non blocca niente e non legge niente altro.</string>
     <string name="siti_stato_spenta">Osservazione spenta</string>
-    <string name="siti_stato_spenta_testo">I siti non vengono annotati. Nella finestra del genitore restano giorni senza fotografia: assenza di dati, non \"zero siti\".</string>
+    <string name="siti_stato_spenta_testo">I siti non vengono annotati. Nell\'app del genitore quei giorni restano senza dati: assenza di dati, non \"zero siti\".</string>
     <string name="siti_oggi_locale">Oggi sul telefono: %1$d domini osservati, in attesa del prossimo invio.</string>
     <string name="siti_attiva">Attiva l\'osservazione</string>
     <string name="siti_disattiva">Spegni l\'osservazione</string>
     <string name="siti_caricamento">Sto leggendo la lista dei siti…</string>
-    <string name="siti_vuoto">Nessuna fotografia dei siti è ancora arrivata al patto.</string>
+    <string name="siti_vuoto">Nessun dato sui siti è ancora arrivato al patto.</string>
     <string name="siti_config_mancante">Prima servono indirizzo del server e codice del patto: li trovi nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
-    <string name="siti_giorno_vuoto">Nessuna fotografia per questo giorno.</string>
+    <string name="siti_giorno_vuoto">Nessun dato ricevuto per questo giorno.</string>
     <string name="siti_giorno_totale">%1$d domini distinti</string>
     <string name="siti_giorno_tagliato">%1$d domini distinti (qui i primi %2$d)</string>
-    <string name="siti_dns_cifrato">DNS cifrato: per un pezzo di giornata non ho potuto vedere.</string>
+    <string name="siti_dns_cifrato">Per una parte di questo giorno il telefono ha tenuto nascosti i nomi dei siti: quelli di quel periodo non si vedono.</string>
     <string name="siti_visite">%1$d richieste</string>
     <string name="siti_attivata">Osservazione attiva. Da adesso i domini vanno nel registro — e li vedi qui.</string>
     <string name="siti_disattivata">Osservazione spenta. L\'interruzione va a registro: il genitore la vede.</string>

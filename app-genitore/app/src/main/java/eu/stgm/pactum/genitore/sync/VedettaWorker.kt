@@ -394,7 +394,7 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
 
         /**
          * Dove aprire l'app toccando la notifica (hook di navigazione). Le
-         * risposte che toccano al genitore vanno su "Il tuo turno"; tutto il
+         * risposte che toccano al genitore vanno su "Proposte e conferme"; tutto il
          * resto apre la lista delle notifiche sopra la finestra, dove quella
          * stessa notifica si legge per intero e si segna come letta.
          */

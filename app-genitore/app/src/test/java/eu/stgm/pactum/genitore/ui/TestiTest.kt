@@ -183,7 +183,7 @@ class TestiTest {
     }
 
     @Test
-    fun `un buco nel registro non e un'anomalia`() {
+    fun `un'interruzione nella registrazione si dice per quello che e`() {
         fun buco(sottoTipo: String) = testo(
             notifica(
                 "manomissione",
@@ -194,7 +194,7 @@ class TestiTest {
             ),
         )
         assertEquals(
-            TestoNotifica("Buco nel registro", "L'app non ha potuto vedere per un po'"),
+            TestoNotifica("Anomalia", "Uso non registrato in questo periodo"),
             buco("silenzio"),
         )
         assertEquals("Cambio manuale dell'ora", buco("cambio_ora").testo)
@@ -260,7 +260,7 @@ class TestiTest {
         assertEquals(
             TestoNotifica(
                 "Proposta annullata",
-                "La tua proposta su «Camminare un'ora» non vale più: la regola è uscita dal patto",
+                "La tua proposta su «Camminare un'ora» non vale più: la regola non è più attiva",
             ),
             t,
         )

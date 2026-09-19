@@ -6,7 +6,7 @@
          scheda: si aprono dalla campanella della Panoramica. -->
     <string name="scheda_finestra">Panoramica</string>
     <string name="scheda_tempo">Tempo</string>
-    <string name="scheda_turno">Il tuo turno</string>
+    <string name="scheda_turno">Proposte e conferme</string>
     <string name="scheda_impostazioni">Impostazioni</string>
     <string name="azione_aggiorna">Aggiorna</string>
     <string name="azione_indietro">Indietro</string>
@@ -31,11 +31,11 @@
     <string name="finestra_errore">Non riesco a raggiungere il server. Questi sono gli ultimi dati ricevuti.</string>
     <string name="finestra_errore_nessun_dato">Non riesco a raggiungere il server. Controlla la connessione o riprova tra poco.</string>
     <string name="finestra_config_mancante">Per vedere la panoramica servono l\'indirizzo del server e il codice d\'accesso: li trovi nelle Impostazioni.</string>
-    <string name="dati_fermi_alle">Dati fermi alle %1$s.</string>
+    <string name="dati_fermi_alle">Dati non aggiornati: ultimo aggiornamento alle %1$s.</string>
     <string name="silenzio_in_contatto">In contatto — ultimo aggiornamento alle %1$s</string>
     <string name="silenzio_allarme">Nessun aggiornamento dalle %1$s — l\'app del figlio non sta inviando dati</string>
     <string name="silenzio_mai">Nessun aggiornamento — l\'app del figlio non ha ancora inviato dati</string>
-    <string name="silenzio_spiega">Può essere la batteria, la rete o l\'app chiusa. Il registro ha un buco.</string>
+    <string name="silenzio_spiega">Può essere la batteria, la rete o l\'app chiusa. C\'è un\'interruzione nella registrazione.</string>
     <string name="finestra_aggiornata_alle">Aggiornato alle %1$s</string>
 
     <!-- La scheda del patto (l\'eroe della Panoramica) -->
@@ -56,14 +56,14 @@
         <item quantity="other">%1$d giorni su %2$d dentro tutte le regole</item>
     </plurals>
     <string name="riepilogo_nessun_fuori_regola">Nessun giorno fuori regola</string>
-    <string name="riepilogo_registro_completo">registro completo</string>
+    <string name="riepilogo_registro_completo">registrazione completa</string>
     <plurals name="riepilogo_giorni_fuori_regola">
         <item quantity="one">%1$d giorno fuori regola</item>
         <item quantity="other">%1$d giorni fuori regola</item>
     </plurals>
     <plurals name="riepilogo_buchi">
-        <item quantity="one">%1$d buco nel registro</item>
-        <item quantity="other">%1$d buchi nel registro</item>
+        <item quantity="one">%1$d interruzione nella registrazione</item>
+        <item quantity="other">%1$d interruzioni nella registrazione</item>
     </plurals>
 
     <!-- Il segno: riconoscimento a testo fisso, uno al giorno (contratto v2.4) -->
@@ -77,7 +77,7 @@
     <string name="sezione_regole">Le regole</string>
     <string name="regole_vuoto_titolo">Ancora nessuna regola</string>
     <string name="regole_vuoto">Il patto nasce sul telefono del figlio: appena si dà la prima regola, la vedi qui.</string>
-    <string name="regola_eliminata">non più nel patto</string>
+    <string name="regola_eliminata">non più attiva</string>
     <string name="regola_tipo_limite_tempo">LIMITE DI TEMPO</string>
     <string name="regola_tipo_fascia_oraria">FASCIA ORARIA</string>
     <string name="regola_tipo_vita_reale">VITA REALE</string>
@@ -100,7 +100,7 @@
     <string name="sforamento_su_regola">%1$s — fuori regola</string>
     <string name="sforamento_generico">Fuori regola</string>
 
-    <string name="sezione_storico">Come è cambiato il patto</string>
+    <string name="sezione_storico">Storico del patto</string>
     <string name="storico_creazione">Regola creata</string>
     <string name="storico_modifica_allenta">Regola allentata</string>
     <string name="storico_modifica_stringe">Regola stretta</string>
@@ -109,10 +109,10 @@
 
     <string name="manomissione_cambio_ora">Cambio manuale dell\'ora</string>
     <string name="manomissione_cambio_fuso">Cambio di fuso orario del telefono</string>
-    <string name="manomissione_silenzio">L\'app non ha potuto vedere per un po\'</string>
+    <string name="manomissione_silenzio">Uso non registrato in questo periodo</string>
     <string name="manomissione_permesso_revocato">Accesso ai dati di utilizzo revocato</string>
     <string name="manomissione_notifiche_disattivate">Notifiche di Pactum disattivate sul telefono del figlio</string>
-    <string name="manomissione_generica">Buco nel registro: %1$s</string>
+    <string name="manomissione_generica">Anomalia: %1$s</string>
 
     <!-- Durate: "45 min", "1 h", "2 h 30 min" (mai "1 h 0 min") -->
     <string name="formato_minuti">%1$d min</string>
@@ -138,7 +138,7 @@
     <string name="notifica_segna_letta">Segna come letta</string>
     <string name="notifica_letta_fallita">Non sono riuscito a segnarla come letta: riprova.</string>
     <string name="tipo_sforamento">Fuori regola</string>
-    <string name="tipo_manomissione">Buco nel registro</string>
+    <string name="tipo_manomissione">Anomalia</string>
     <string name="tipo_bonus">Bonus</string>
     <string name="tipo_modifica_regola">Modifica del patto</string>
     <string name="tipo_novita">Novità dal patto</string>
@@ -153,7 +153,7 @@
     <string name="notifica_bonus_motivo">%1$s. Motivo: %2$s</string>
     <string name="notifica_proposta_accettata">Ha accettato la tua proposta %1$s</string>
     <string name="notifica_proposta_rifiutata">Ha rifiutato la tua proposta %1$s</string>
-    <string name="notifica_proposta_annullata">La tua proposta %1$s non vale più: la regola è uscita dal patto</string>
+    <string name="notifica_proposta_annullata">La tua proposta %1$s non vale più: la regola non è più attiva</string>
     <string name="notifica_dichiarazione_successo">Dice di aver fatto: %1$s (%2$s)</string>
     <string name="notifica_dichiarazione_fallimento">Dice di non aver fatto: %1$s (%2$s)</string>
 
@@ -264,8 +264,8 @@
     <string name="aggiornamento_fallito">Aggiornamento non riuscito: riprova.</string>
     <string name="aggiornamento_installazione_pendente">Installazione già avviata: conferma la richiesta di sistema quando compare.</string>
 
-    <!-- Il tuo turno: proposte + dichiarazioni in una schermata sola -->
-    <string name="turno_titolo">Il tuo turno</string>
+    <!-- Proposte e conferme: proposte + dichiarazioni in una schermata sola -->
+    <string name="turno_titolo">Proposte e conferme</string>
     <string name="turno_caricamento">Sto leggendo proposte e dichiarazioni…</string>
     <string name="turno_config_mancante">Per rispondere servono l\'indirizzo del server e il codice d\'accesso: li trovi nelle Impostazioni.</string>
     <string name="turno_errore">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
@@ -284,7 +284,7 @@
     <string name="proposta_stato_pendente">In attesa di risposta</string>
     <string name="proposta_stato_accettata">Accettata</string>
     <string name="proposta_stato_rifiutata">Rifiutata</string>
-    <string name="proposta_stato_annullata">Annullata: la regola è uscita dal patto</string>
+    <string name="proposta_stato_annullata">Annullata: la regola non è più attiva</string>
     <string name="proposta_tag_allenta">allenta</string>
     <string name="proposta_tag_stringe">stringe</string>
     <string name="proposta_tag_elimina">eliminazione</string>

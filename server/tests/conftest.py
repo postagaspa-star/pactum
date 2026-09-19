@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import sys
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -63,6 +64,22 @@ def crea_regola(client, tipo="limite_tempo", parametri=None):
     )
     assert risposta.status_code == 201, risposta.text
     return risposta.json()
+
+
+def fotografia_uso(client, *giorni, totale_minuti=30):
+    """(v2.4) Una fotografia uso_giornaliero per ciascun giorno. Serve al semaforo:
+    un giorno senza sforamenti e' verde SOLO se il telefono ha raccontato qualcosa
+    (niente verde senza dati), altrimenti e' grigio."""
+    eventi = [
+        {
+            "id": f"uso-{giorno}-{uuid.uuid4().hex[:8]}",
+            "tipo": "uso_giornaliero",
+            "dettagli": {"giorno": giorno, "uso_minuti": {}, "totale_minuti": totale_minuti},
+        }
+        for giorno in giorni
+    ]
+    risposta = client.post("/api/eventi", json={"eventi": eventi}, headers=FIGLIO)
+    assert risposta.status_code == 200, risposta.text
 
 
 def inserisci_proposta(db_path, regola_id, stato="accettata", parametri=None, usata=0):

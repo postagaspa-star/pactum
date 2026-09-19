@@ -5,7 +5,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import clock, siti
+from .. import clock, semaforo, siti
 from ..auth import richiede_figlio
 from ..config import nome_fuso
 from ..db import (
@@ -173,11 +173,12 @@ def patto(conn: sqlite3.Connection = Depends(get_conn)):
     """Lo stato completo del patto per il sync dell'app del figlio, in una risposta
     sola: regole attive (senza semaforo), residui bonus, bonus di oggi per regola
     (per il limite efficace del valutatore locale), proposte pendenti, dichiarazioni
-    in attesa, siti recenti, fuso del patto.
+    in attesa, siti recenti, striscia, fuso del patto.
 
-    `siti_recenti` (v2.3) esce dalla STESSA funzione che alimenta GET /api/finestra:
-    il figlio vede la lista identica a quella del genitore, riga per riga. Tavola
-    rotonda: niente esiste nella finestra del genitore che il figlio non veda."""
+    `siti_recenti` (v2.3) e `striscia` (v2.4) escono dalle STESSE funzioni che
+    alimentano GET /api/finestra: il figlio vede quello che vede il genitore, voce
+    per voce. Tavola rotonda: niente esiste nella finestra del genitore che il
+    figlio non veda."""
     ora = clock.now()
     regole = [
         _riga_regola(r)
@@ -202,5 +203,6 @@ def patto(conn: sqlite3.Connection = Depends(get_conn)):
         "proposte_pendenti": proposte_pendenti,
         "dichiarazioni_in_attesa": dichiarazioni_in_attesa,
         "siti_recenti": siti.siti_recenti(conn, ora),
+        "striscia": semaforo.striscia(conn, ora),
         "fuso": nome_fuso(),
     }

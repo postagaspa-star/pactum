@@ -1,17 +1,18 @@
-"""Endpoint del genitore: la finestra (non vetrata) e le notifiche a polling.
-Il silenzio si calcola in lettura: nessun job in background nella v1."""
+"""Endpoint del genitore: la finestra (non vetrata), il segno di riconoscimento
+e le notifiche a polling. Il silenzio si calcola in lettura: nessun job in
+background nella v1."""
 
 import json
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
-from .. import clock, siti
+from .. import clock, semaforo, siti
 from ..auth import richiede_genitore
 from ..config import SOGLIA_SILENZIO_MINUTI, fuso_patto
-from ..db import get_conn, stato_bonus
+from ..db import accoda_notifica, get_conn, segno_mandato_oggi, stato_bonus
 from .regole import _riga_regola
 
 router = APIRouter(dependencies=[Depends(richiede_genitore)])
@@ -20,6 +21,9 @@ router = APIRouter(dependencies=[Depends(richiede_genitore)])
 # siti.GIORNI_FINESTRA, unica per tutte le sezioni.
 RECENTI = 20
 STORICO_MASSIMO = 50
+
+# (v2.4) Il testo del segno e' fisso: non lo sceglie il genitore (contratto-api.md).
+MESSAGGIO_SEGNO = "Ho visto la settimana. Bene così."
 
 
 def _evento_out(riga: sqlite3.Row) -> dict:
@@ -42,23 +46,6 @@ def _stato_silenzio(conn: sqlite3.Connection, ora: datetime) -> dict:
         "ultimo_battito": ultimo,
         "silente": trascorso > timedelta(minutes=SOGLIA_SILENZIO_MINUTI),
     }
-
-
-def _data_locale(ts_server: str, tz) -> str:
-    """Il giorno LOCALE (fuso del patto) di un ts_server UTC ISO."""
-    return datetime.fromisoformat(ts_server).astimezone(tz).date().isoformat()
-
-
-def _semaforo_vita(stato_dich: str | None) -> str:
-    """(v2.1) Colore di una regola vita_reale in un giorno, dalla dichiarazione:
-    verde = confermata (anche per conto), rosso = fallimento dichiarato o successo
-    ribaltato, grigio = nessuna dichiarazione o verdetto ancora in attesa. Il rosso
-    di un fallimento dichiarato fotografa il fatto, non punisce l'onesta'."""
-    if stato_dich in ("confermata", "confermata_per_conto"):
-        return "verde"
-    if stato_dich in ("registrata", "ribaltata"):
-        return "rosso"
-    return "grigio"  # in_attesa o nessuna dichiarazione
 
 
 def _minuti_validi(mappa) -> dict:
@@ -195,60 +182,28 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         " ORDER BY ts_server DESC, id DESC"
     ).fetchall()
 
-    sforamenti_per_regola = defaultdict(set)  # regola_id -> {data ISO locale}
-    for evento in eventi:
-        dettagli = json.loads(evento["dettagli"])
-        regola_id = dettagli.get("regola_id")
-        if regola_id is None:
-            continue
-        if evento["tipo"] == "sforamento":
-            sforamenti_per_regola[regola_id].add(_data_locale(evento["ts_server"], tz))
-
-    # Dichiarazioni per le regole vita_reale: (regola_id, giorno locale) -> stato.
-    # Max una per regola per giorno, quindi la mappa e' univoca.
-    dich_per_regola = defaultdict(dict)  # regola_id -> {giorno ISO: stato dichiarazione}
-    for d in conn.execute("SELECT regola_id, giorno, stato FROM dichiarazioni").fetchall():
-        dich_per_regola[d["regola_id"]][d["giorno"]] = d["stato"]
-
-    # Semaforo a tre colori: verde/rosso/grigio. Il giallo non esiste piu':
-    # il bonus autoritativo vive nella tabella bonus (senza regola_id) e viene
-    # riassunto per giorno in bonus_giornalieri, non appeso a una regola.
-    # Per limite_tempo/fascia_oraria il rosso viene dagli sforamenti; per le
-    # vita_reale (v2.1) dalle dichiarazioni e dai verdetti.
+    # Il semaforo per regola si calcola in semaforo.py: da li' esce anche la
+    # striscia aggregata, condivisa con GET /api/patto. Le regole si leggono
+    # PRIMA dei semafori: le righe non si cancellano mai (soft-delete), quindi
+    # ogni regola letta qui ha il suo semaforo anche se intanto ne nasce una.
+    righe_regole = conn.execute("SELECT * FROM regole ORDER BY id").fetchall()
+    semafori = semaforo.semafori(conn, ora)
     regole = []
     limiti = {}  # app_o_categoria -> {"limite", "regola_id"} delle limite_tempo ATTIVE
-    for riga in conn.execute("SELECT * FROM regole ORDER BY id").fetchall():
+    for riga in righe_regole:
         if riga["attiva"] and riga["tipo"] == "limite_tempo":
             parametri = json.loads(riga["parametri"])
             limiti.setdefault(
                 parametri["app_o_categoria"],
                 {"limite": parametri["minuti_al_giorno"], "regola_id": riga["id"]},
             )
-        creata = _data_locale(riga["creata_ts"], tz)
-        eliminata = None
-        if not riga["attiva"]:
-            # Soft-delete: i giorni STRETTAMENTE successivi all'eliminazione
-            # sono fuori dalla vita della regola -> grigio, non verde.
-            eliminata = _data_locale(riga["ultima_modifica_ts"], tz)
-        semaforo = []
-        for giorno in giorni:
-            data = giorno.isoformat()
-            if data < creata or (eliminata is not None and data > eliminata):
-                stato = "grigio"
-            elif riga["tipo"] == "vita_reale":
-                stato = _semaforo_vita(dich_per_regola[riga["id"]].get(data))
-            elif data in sforamenti_per_regola[riga["id"]]:
-                stato = "rosso"
-            else:
-                stato = "verde"
-            semaforo.append({"data": data, "stato": stato})
-        regole.append({**_riga_regola(riga), "semaforo": semaforo})
+        regole.append({**_riga_regola(riga), "semaforo": semafori[riga["id"]]})
 
     # Riepilogo bonus per giorno (globale, stessa finestra di 8 giorni):
     # dalla tabella bonus autoritativa, coi giorni nel fuso del patto.
     minuti_per_giorno = defaultdict(int)
     for riga in conn.execute("SELECT minuti, ts_server FROM bonus").fetchall():
-        minuti_per_giorno[_data_locale(riga["ts_server"], tz)] += riga["minuti"]
+        minuti_per_giorno[semaforo.data_locale(riga["ts_server"], tz)] += riga["minuti"]
     bonus_giornalieri = [
         {"giorno": g.isoformat(), "minuti": minuti_per_giorno[g.isoformat()]} for g in giorni
     ]
@@ -287,4 +242,30 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
         # identica lista (tavola rotonda). Non entra nel semaforo: non e' un'infrazione.
         "siti_recenti": siti.siti_recenti(conn, ora),
         "medie": _medie(conn, oggi),
+        # (v2.4) Stessa funzione di GET /api/patto: le due app mostrano la stessa
+        # striscia per costruzione.
+        "striscia": semaforo.striscia(conn, ora),
+        "segno_oggi": segno_mandato_oggi(conn, ora),
     }
+
+
+@router.post("/segno")
+def manda_segno(conn: sqlite3.Connection = Depends(get_conn)):
+    """(v2.4) Il segno di riconoscimento al figlio: testo fisso, al massimo uno al
+    giorno nel fuso del patto. Nessun corpo e nessuna traccia nel registro eventi:
+    e' un gesto del genitore, non un fatto del patto."""
+    # BEGIN IMMEDIATE: il controllo "gia' mandato oggi" e l'invio devono essere un
+    # unico atto, altrimenti due tocchi simultanei leggono entrambi "non ancora" e
+    # partono due segni. Chi arriva secondo rilegge dentro il lock e viene respinto.
+    ora = clock.now()
+    ts = clock.iso(ora)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if segno_mandato_oggi(conn, ora):
+            raise HTTPException(status_code=409, detail={"errore": "segno_gia_mandato"})
+        accoda_notifica(conn, "segno", MESSAGGIO_SEGNO, {}, ts, destinatario="figlio")
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    return {"mandato": True, "ts_server": ts}

@@ -402,6 +402,20 @@ def bonus_oggi_per_regola(conn: sqlite3.Connection, ora: datetime) -> dict:
     return {str(r["regola_id"]): r["totale"] for r in righe}
 
 
+def segno_mandato_oggi(conn: sqlite3.Connection, ora: datetime) -> bool:
+    """(v2.4) True se il genitore ha gia' mandato il segno OGGI (fuso del patto).
+    La traccia del segno e' la sua notifica al figlio (nel registro eventi non
+    entra): le notifiche non si cancellano, al massimo si marcano lette, quindi
+    anche un segno gia' letto conta."""
+    inizio_giorno, _ = _inizio_giorno_settimana(ora)
+    riga = conn.execute(
+        "SELECT 1 FROM notifiche"
+        " WHERE tipo = 'segno' AND destinatario = 'figlio' AND ts_server >= ?",
+        (clock.iso(inizio_giorno),),
+    ).fetchone()
+    return riga is not None
+
+
 def stato_bonus(conn: sqlite3.Connection, ora: datetime) -> dict:
     """Contatori bonus del giorno e della settimana ISO (lunedi'-domenica).
     I confini dei bucket sono nel fuso del patto (config.fuso_patto);

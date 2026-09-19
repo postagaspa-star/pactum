@@ -9,7 +9,7 @@ I siti non sono infrazioni: niente notifiche, niente semaforo."""
 import json
 import sqlite3
 
-from conftest import FIGLIO, GENITORE, crea_regola
+from conftest import FIGLIO, GENITORE, crea_regola, fotografia_uso
 
 
 def _posta(client, eventi):
@@ -109,6 +109,7 @@ def test_siti_non_notificano(client):
 
 def test_siti_non_tingono_il_semaforo(client):
     regola = crea_regola(client)
+    fotografia_uso(client, "2026-07-14")  # (v2.4) il verde vuole i dati d'uso
     _posta_foto(client, "foto-semaforo", domini={"instagram.com": 999})
     finestra = client.get("/api/finestra", headers=GENITORE).json()
     semaforo = [r for r in finestra["regole"] if r["id"] == regola["id"]][0]["semaforo"]

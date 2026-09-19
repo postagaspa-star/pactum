@@ -1,10 +1,13 @@
 """La finestra del genitore: semaforo per regola (oggi + 7 giorni, giorni nel
 fuso del patto, verde/rosso/grigio), sforamenti e manomissioni recenti, storico,
-bonus residui + riepilogo bonus per giorno, stato silenzio."""
+bonus residui + riepilogo bonus per giorno, stato silenzio.
+
+(v2.4) Niente verde senza dati: dove un test si aspetta verde su limite_tempo o
+fascia_oraria, il giorno ha la sua fotografia uso_giornaliero."""
 
 from datetime import datetime, timezone
 
-from conftest import FIGLIO, GENITORE, crea_regola
+from conftest import FIGLIO, GENITORE, crea_regola, fotografia_uso
 
 CHIAVI_ATTESE = {
     "regole",
@@ -17,6 +20,8 @@ CHIAVI_ATTESE = {
     "uso_recente",
     "siti_recenti",
     "medie",
+    "striscia",
+    "segno_oggi",
 }
 
 
@@ -39,6 +44,8 @@ def test_forma_della_finestra(client):
 
 def test_semaforo_colori(client, orologio):
     regola = crea_regola(client)  # creata il 14/07
+    # Fotografie anche il 13: li' il grigio deve venire dalla creazione, non dai dati.
+    fotografia_uso(client, "2026-07-13", "2026-07-14", "2026-07-16")
     orologio.avanza(days=1)  # 15/07
     client.post(
         "/api/eventi",
@@ -50,7 +57,7 @@ def test_semaforo_colori(client, orologio):
     assert semaforo["2026-07-13"] == "grigio"  # prima della creazione
     assert semaforo["2026-07-14"] == "verde"
     assert semaforo["2026-07-15"] == "rosso"  # sforamento
-    assert semaforo["2026-07-16"] == "verde"  # oggi, nessun evento
+    assert semaforo["2026-07-16"] == "verde"  # oggi, nessuno sforamento
     assert set(v["stato"] for v in _finestra(client)["regole"][0]["semaforo"]) <= {
         "verde", "rosso", "grigio",
     }  # il giallo non esiste piu'
@@ -61,6 +68,7 @@ def test_evento_bonus_usato_non_colora_il_semaforo(client):
     (POST /api/bonus, senza regola_id) e si legge in bonus_giornalieri; un evento
     bonus_usato del registro non tocca i quadretti della regola."""
     regola = crea_regola(client)
+    fotografia_uso(client, "2026-07-14")
     client.post(
         "/api/eventi",
         json={"eventi": [{"id": "b1", "tipo": "bonus_usato", "dettagli": {"regola_id": regola["id"]}}]},
@@ -125,6 +133,9 @@ def test_bonus_residui_nella_finestra(client):
 def test_giorni_dopo_eliminazione_grigi(client, orologio):
     crea_regola(client)  # la regola che resta (l'ultima non si elimina)
     regola = crea_regola(client, parametri={"app_o_categoria": "YouTube", "minuti_al_giorno": 120})
+    # Fotografie su tutti i giorni asseriti: i grigi devono venire dalla vita della
+    # regola (creazione/eliminazione), non dalla mancanza di dati.
+    fotografia_uso(client, "2026-07-13", "2026-07-14", "2026-07-18", "2026-07-19", "2026-07-20")
     orologio.avanza(days=4)  # 18/07: lock scaduto
     assert client.delete(f"/api/regole/{regola['id']}", headers=FIGLIO).status_code == 200
     orologio.avanza(days=2)  # oggi = 20/07
@@ -168,6 +179,7 @@ def test_bonus_giornalieri_ignora_gli_eventi_bonus_usato(client):
 
 def test_finestra_conta_i_giorni_nel_fuso_del_patto(client, orologio):
     regola = crea_regola(client)
+    fotografia_uso(client, "2026-07-14")  # il 14 resta verde solo se ha dati
     # 23:30 UTC del 14/07 = 01:30 locali del 15/07: per il patto e' gia' il 15
     orologio.vai_a(datetime(2026, 7, 14, 23, 30, 0, tzinfo=timezone.utc))
     client.post(

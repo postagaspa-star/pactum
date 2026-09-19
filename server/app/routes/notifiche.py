@@ -1,7 +1,7 @@
 """Notifiche a polling (tappa 5): ogni notifica nasce per un destinatario e
 ciascun ruolo legge/marca SOLO le proprie. Il genitore riceve sforamenti,
 manomissioni, bonus, modifiche regola, risposte alle proposte, dichiarazioni;
-il figlio riceve le nuove proposte e i verdetti."""
+il figlio riceve le nuove proposte, i verdetti e il segno del genitore (v2.4)."""
 
 import json
 import sqlite3

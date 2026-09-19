@@ -20,6 +20,7 @@ ENDPOINT_GENITORE = [
     ("GET", "/api/finestra", None),
     ("POST", "/api/proposte", {"regola_id": 1, "parametri_proposti": {}}),
     ("POST", "/api/dichiarazioni/1/verdetto", {"verdetto": "conferma"}),
+    ("POST", "/api/segno", None),
 ]
 # Dual-role (v2): serve un token valido di UNO dei due ruoli, ma nessuno dei due e' escluso.
 ENDPOINT_ENTRAMBI = [

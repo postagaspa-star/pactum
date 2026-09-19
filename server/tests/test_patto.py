@@ -12,6 +12,7 @@ CHIAVI_ATTESE = {
     "proposte_pendenti",
     "dichiarazioni_in_attesa",
     "siti_recenti",
+    "striscia",
     "fuso",
 }
 

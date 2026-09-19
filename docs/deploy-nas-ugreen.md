@@ -32,16 +32,45 @@ Il secondo dà al primo un indirizzo pubblico https stabile, tipo
 Funnel è la funzione che rende il NAS raggiungibile da Internet.
 
 1. Vai su **https://login.tailscale.com/admin/acls/file**
-2. Cerca se esiste già una sezione `nodeAttrs`. Se **non** c'è, aggiungila dentro
-   le graffe principali (attenzione alla virgola prima):
-   ```json
-   "nodeAttrs": [
-     { "target": ["autogroup:member"], "attr": ["funnel"] }
-   ]
+2. Seleziona tutto il contenuto dell'editor (Ctrl+A) e sostituiscilo con questo file
+   completo (è la policy di default di Tailscale con in più il blocco `nodeAttrs`;
+   `grants` e `ssh` sono identici a quelli che c'erano):
    ```
-3. **Save**.
+   {
+   	"grants": [
+   		{"src": ["*"], "dst": ["*"], "ip": ["*"]},
+   	],
 
-> Se al PASSO 6 il log dice che Funnel non è abilitato, è questo passo che manca.
+   	"ssh": [
+   		{
+   			"action": "check",
+   			"src":    ["autogroup:member"],
+   			"dst":    ["autogroup:self"],
+   			"users":  ["autogroup:nonroot", "root"],
+   		},
+   	],
+
+   	// Permette ai dispositivi del tuo account di usare Funnel.
+   	"nodeAttrs": [
+   		{
+   			"target": ["autogroup:member"],
+   			"attr":   ["funnel"],
+   		},
+   	],
+   }
+   ```
+3. **Save**. Se compare un errore rosso, copialo e mandamelo.
+
+## PASSO 2-bis — Abilita HTTPS e MagicDNS (obbligatorio per Funnel)
+
+1. Vai su **https://login.tailscale.com/admin/dns**
+2. Controlla che **MagicDNS** sia attivo (di solito lo è già).
+3. Nella sezione **HTTPS Certificates** premi **Enable HTTPS** e conferma.
+   (Il nome `pactum.<tuo-tailnet>.ts.net` finisce nel registro pubblico dei
+   certificati: è normale, non contiene nulla del patto.)
+
+> Se al PASSO 6 il log dice che Funnel o HTTPS non sono abilitati, manca uno di
+> questi due passi.
 
 ## PASSO 3 — Prepara i file sul PC
 

@@ -45,11 +45,14 @@ services:
   tailscale:
     image: tailscale/tailscale:latest
     container_name: pactum-tailscale
-    hostname: pactum             # -> diventa il nome nell'indirizzo pubblico
     restart: unless-stopped
     env_file:
       - ./server/.env            # qui dentro TS_AUTHKEY
     environment:
+      # Nome nell'indirizzo pubblico (pactum.<tailnet>.ts.net). NON usare
+      # "hostname: pactum" sul container: dentro di lui il nome "pactum"
+      # punterebbe a se stesso invece che al server, e il ponte darebbe 502.
+      TS_HOSTNAME: pactum
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "true"
       TS_SERVE_CONFIG: /config/funnel.json   # espone pactum:8000 al pubblico

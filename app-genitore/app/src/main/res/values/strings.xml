@@ -55,6 +55,11 @@
         <item quantity="one">%1$d giorno su %2$d dentro tutte le regole</item>
         <item quantity="other">%1$d giorni su %2$d dentro tutte le regole</item>
     </plurals>
+    <!-- La stessa frase per la striscia piccola dentro la scheda di UNA regola -->
+    <plurals name="striscia_descrizione_regola">
+        <item quantity="one">%1$d giorno su %2$d dentro questa regola</item>
+        <item quantity="other">%1$d giorni su %2$d dentro questa regola</item>
+    </plurals>
     <string name="riepilogo_nessun_fuori_regola">Nessun giorno fuori regola</string>
     <string name="riepilogo_registro_completo">registrazione completa</string>
     <plurals name="riepilogo_giorni_fuori_regola">
@@ -112,6 +117,7 @@
     <string name="manomissione_silenzio">Uso non registrato in questo periodo</string>
     <string name="manomissione_permesso_revocato">Accesso ai dati di utilizzo revocato</string>
     <string name="manomissione_notifiche_disattivate">Notifiche di Pactum disattivate sul telefono del figlio</string>
+    <string name="manomissione_osservazione_siti_interrotta">Osservazione dei siti spenta</string>
     <string name="manomissione_generica">Anomalia: %1$s</string>
 
     <!-- Durate: "45 min", "1 h", "2 h 30 min" (mai "1 h 0 min") -->
@@ -280,6 +286,7 @@
     <string name="proposte_come_sono_andate">COME SONO ANDATE</string>
     <string name="proposte_nessuna_regola_attiva">Nessuna regola attiva su cui proporre: le regole nascono sul telefono del figlio.</string>
     <string name="proposte_bottone_proponi">Proponi una modifica</string>
+    <string name="proposte_gia_in_attesa">Su questa regola c\'è già una proposta in attesa di risposta.</string>
     <string name="proposte_elenco_vuoto">Nessuna proposta ancora.</string>
     <string name="proposta_stato_pendente">In attesa di risposta</string>
     <string name="proposta_stato_accettata">Accettata</string>
@@ -296,7 +303,7 @@
     <string name="proposta_inviata_confronto">Il figlio vedrà: %1$s</string>
     <string name="proposta_errore_generico">Non sono riuscito a inviare la proposta: riprova.</string>
     <string name="proposta_errore_gia_pendente">C\'è già una proposta in attesa su questa regola.</string>
-    <string name="proposta_errore_regola_non_valida">Questa regola non è più valida per una proposta.</string>
+    <string name="proposta_errore_regola_non_valida">Questa regola non è più attiva.</string>
     <string name="proposta_errore_parametri_non_validi">Qualche valore non va bene: controlla i campi e riprova.</string>
 
     <!-- Proposte: dialogo di creazione -->
@@ -343,7 +350,7 @@
     <string name="verdetto_ribalta">Non è andata così</string>
     <string name="verdetto_inviato">Esito registrato.</string>
     <string name="verdetto_errore">Non sono riuscito a registrare la risposta: riprova.</string>
-    <string name="verdetto_errore_non_in_attesa">Questa dichiarazione non è più in attesa.</string>
+    <string name="verdetto_errore_non_in_attesa">Qualcuno ha già risposto a questa dichiarazione.</string>
     <string name="dichiarazione_stato_registrata">Non riuscito — creduto sulla parola</string>
     <string name="dichiarazione_stato_confermata">Successo confermato</string>
     <string name="dichiarazione_stato_confermata_per_conto">Confermato dal genitore per conto di %1$s</string>

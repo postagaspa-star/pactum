@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -34,6 +35,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.dati.CodiciErrore
+import kotlinx.coroutines.launch
 
 /**
  * "Proposte e conferme": le risposte che il genitore deve dare, in una schermata sola
@@ -70,48 +73,46 @@ fun TurnoScreen(
     }
 
     // Gli esiti delle proposte: il confronto in un dialogo, gli errori in basso.
-    val messaggioErroreGenerico = stringResource(R.string.proposta_errore_generico)
-    val messaggioGiaPendente = stringResource(R.string.proposta_errore_gia_pendente)
-    val messaggioRegolaNonValida = stringResource(R.string.proposta_errore_regola_non_valida)
-    val messaggioParametriNonValidi = stringResource(R.string.proposta_errore_parametri_non_validi)
+    // Le frasi vengono dal codice `errore` del 409 (Testi.kt).
+    val parole = parole()
+    val ambito = rememberCoroutineScope()
     LaunchedEffect(proposte.evento) {
-        when (val evento = proposte.evento) {
+        val evento = proposte.evento ?: return@LaunchedEffect
+        // Consumato subito, e lo snackbar parte in uno scope suo: consumare
+        // cambia la chiave e cancellerebbe questo effetto a metà messaggio.
+        proposteVm.consumaEvento()
+        when (evento) {
             is ProposteViewModel.Evento.Inviata -> {
                 regolaSceltaId = null // chiudi il dialogo di creazione
                 confrontoInviato = evento.confronto
             }
             is ProposteViewModel.Evento.Errore -> {
-                val messaggio = when (evento.codice) {
-                    "proposta_gia_pendente" -> messaggioGiaPendente
-                    "regola_non_valida" -> messaggioRegolaNonValida
-                    "parametri_non_validi" -> messaggioParametriNonValidi
-                    else -> messaggioErroreGenerico
+                // Già una proposta in attesa, o regola non più attiva: riprovare
+                // non serve. Via il dialogo, e si rilegge com'è davvero.
+                if (rifiutoPropostaDefinitivo(evento.codice)) {
+                    regolaSceltaId = null
+                    proposteVm.aggiorna()
                 }
-                snackbarHostState.showSnackbar(messaggio)
+                val messaggio = parole.testo(messaggioRifiutoProposta(evento.codice))
+                ambito.launch { snackbarHostState.showSnackbar(messaggio) }
             }
-            null -> Unit
         }
-        if (proposte.evento != null) proposteVm.consumaEvento()
     }
 
     // Gli esiti delle conferme.
-    val messaggioInviato = stringResource(R.string.verdetto_inviato)
-    val messaggioErrore = stringResource(R.string.verdetto_errore)
-    val messaggioNonInAttesa = stringResource(R.string.verdetto_errore_non_in_attesa)
     LaunchedEffect(verdetti.evento) {
-        when (val evento = verdetti.evento) {
-            is VerdettiViewModel.Evento.Inviato -> snackbarHostState.showSnackbar(messaggioInviato)
+        val evento = verdetti.evento ?: return@LaunchedEffect
+        verdettiVm.consumaEvento()
+        val messaggio = when (evento) {
+            is VerdettiViewModel.Evento.Inviato -> parole.testo(R.string.verdetto_inviato)
             is VerdettiViewModel.Evento.Errore -> {
-                val messaggio = if (evento.codice == "dichiarazione_non_in_attesa") {
-                    messaggioNonInAttesa
-                } else {
-                    messaggioErrore
-                }
-                snackbarHostState.showSnackbar(messaggio)
+                // Qualcuno ha già risposto (l'arbitro, l'altro genitore): si
+                // rilegge, così la dichiarazione esce da "DA CONFERMARE".
+                if (evento.codice == CodiciErrore.DICHIARAZIONE_NON_IN_ATTESA) verdettiVm.aggiorna()
+                parole.testo(messaggioRifiutoVerdetto(evento.codice))
             }
-            null -> Unit
         }
-        if (verdetti.evento != null) verdettiVm.consumaEvento()
+        ambito.launch { snackbarHostState.showSnackbar(messaggio) }
     }
 
     Scaffold(

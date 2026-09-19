@@ -14,9 +14,11 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -33,9 +35,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,10 +65,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        destinazioneRichiesta.value = intent?.getStringExtra(EXTRA_DESTINAZIONE)
-        // Consumato: senza rimuoverlo dall'intent, ogni ricreazione dell'attività
-        // (es. rotazione) rileggerebbe lo stesso extra e ri-salterebbe alla scheda
-        // della notifica, ignorando la scheda su cui il genitore si era spostato.
+        // La destinazione vale solo per un tocco VERO sulla notifica. Due casi in
+        // cui Android riconsegna lo stesso intent vecchio, extra compreso:
+        // - la ricreazione dopo la morte del processo (savedInstanceState non
+        //   null): la scheda giusta è quella salvata, non quella della notifica;
+        // - l'apertura dai recenti (FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY): il
+        //   genitore riapre l'app, non la notifica di ieri.
+        // (removeExtra non basta: dopo la morte del processo l'intent torna intero.)
+        val daiRecenti =
+            ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        if (savedInstanceState == null && !daiRecenti) {
+            destinazioneRichiesta.value = intent?.getStringExtra(EXTRA_DESTINAZIONE)
+        }
+        // Consumato comunque: una rotazione non deve rileggerlo nello stesso processo.
         intent?.removeExtra(EXTRA_DESTINAZIONE)
         setContent {
             PactumTheme {
@@ -110,6 +123,9 @@ private enum class Destinazione(@DrawableRes val icona: Int, @StringRes val etic
 
 /** Ogni quanto si ricontano le notifiche non lette, per il badge. */
 private const val INTERVALLO_NON_LETTE_MS = 60_000L
+
+/** L'altezza della barra di Material 3 (NavigationBarTokens.ContainerHeight). */
+private val ALTEZZA_BARRA_MATERIAL = 80.dp
 
 /**
  * Quattro voci: guarda · misura · proposte e conferme · impostazioni (tavola rotonda
@@ -172,11 +188,22 @@ private fun GenitoreRoot(
     // Indietro chiude le notifiche e torna alla finestra.
     BackHandler(enabled = notificheAperte) { notificheAperte = false }
 
+    // "Proposte e conferme" va a capo su 360 e su 411dp (è ~124dp, una voce ne
+    // ha 84-97): tutte le etichette tengono due righe (minLines) così icone ed
+    // etichette restano sulla stessa linea. Ma Material centra icona+etichette
+    // in 80dp: con due righe la pillola dell'icona finiva a 4dp dal bordo alto
+    // (12 di norma). La barra cresce di UNA riga d'etichetta: icone ed etichette
+    // corte stanno dove le mette Material, la seconda riga ha il suo posto sotto.
+    val altezzaVoce = with(LocalDensity.current) {
+        ALTEZZA_BARRA_MATERIAL + MaterialTheme.typography.labelMedium.lineHeight.toDp()
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
                 Destinazione.entries.forEach { voce ->
                     NavigationBarItem(
+                        modifier = Modifier.heightIn(min = altezzaVoce),
                         selected = destinazione == voce,
                         onClick = {
                             destinazione = voce
@@ -188,10 +215,7 @@ private fun GenitoreRoot(
                             // solo sulla campanella, da dove si aprono.
                             Icon(painterResource(voce.icona), contentDescription = null)
                         },
-                        // "Proposte e conferme" non sta in una riga (4 voci su
-                        // 360-411dp): va a capo, centrata, mai troncata. Tutte
-                        // le etichette tengono due righe, così le icone restano
-                        // allineate (la voce centra icona+etichetta in verticale).
+                        // Va a capo, centrata, mai troncata (v. altezzaVoce).
                         label = {
                             Text(
                                 text = stringResource(voce.etichetta),

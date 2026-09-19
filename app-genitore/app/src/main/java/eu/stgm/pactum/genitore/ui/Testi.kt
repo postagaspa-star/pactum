@@ -6,11 +6,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.EsitiDichiarazione
 import eu.stgm.pactum.genitore.dati.EsitiRisposta
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.TipiRegola
+import eu.stgm.pactum.genitore.rete.PostinoClient
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -204,15 +206,20 @@ fun etichettaCategoria(chiave: String): String {
 fun etichettaAppOCategoria(chiave: String): String =
     if (chiave.startsWith("categoria:")) etichettaCategoria(chiave) else chiave
 
-// --- Buchi nel registro --------------------------------------------------------
+// --- Interruzioni nella registrazione -------------------------------------------
 
 @Composable
 fun descrizioneBuco(sottoTipo: String?): String = descrizioneBuco(parole(), sottoTipo)
 
 /**
- * Un buco nel registro (evento `manomissione`) detto per quello che è: quasi
- * sempre batteria, rete o un'impostazione del telefono, mai un'accusa. La
- * stessa frase in "Da guardare insieme" e nelle notifiche.
+ * Un'interruzione nella registrazione (evento `manomissione`) detta per quello
+ * che è: quasi sempre batteria, rete o un'impostazione del telefono, mai
+ * un'accusa. La stessa frase in "Da guardare insieme" e nelle notifiche.
+ *
+ * Ogni `sotto_tipo` che può arrivare ha la sua frase: quelli che manda l'app
+ * del figlio (cambio_ora e cambio_fuso dall'orologio, permesso_revocato e
+ * notifiche_disattivate dal worker, osservazione_siti_interrotta dalla VPN dei
+ * siti) e `silenzio` del contratto. Un sotto-tipo nuovo ripiega su "Anomalia".
  */
 fun descrizioneBuco(parole: Parole, sottoTipo: String?): String = when (sottoTipo) {
     "cambio_ora" -> parole.testo(R.string.manomissione_cambio_ora)
@@ -221,7 +228,40 @@ fun descrizioneBuco(parole: Parole, sottoTipo: String?): String = when (sottoTip
     // Tappa 6: rilevate al giro del worker sul telefono del figlio.
     "permesso_revocato" -> parole.testo(R.string.manomissione_permesso_revocato)
     "notifiche_disattivate" -> parole.testo(R.string.manomissione_notifiche_disattivate)
+    // (v2.3) La VPN locale dei siti spenta o revocata sul telefono del figlio.
+    "osservazione_siti_interrotta" ->
+        parole.testo(R.string.manomissione_osservazione_siti_interrotta)
     else -> parole.testo(R.string.manomissione_generica, sottoTipo ?: "?")
+}
+
+// --- Rifiuti del server (409) ---------------------------------------------------
+
+/**
+ * Che cosa dire quando il server rifiuta una proposta. [codice] è l'`errore`
+ * del 409 (o PARAMETRI_NON_VALIDI per un 422); null = nessun codice leggibile
+ * o rete caduta: "riprova".
+ */
+@StringRes
+fun messaggioRifiutoProposta(codice: String?): Int = when (codice) {
+    CodiciErrore.PROPOSTA_GIA_PENDENTE -> R.string.proposta_errore_gia_pendente
+    CodiciErrore.REGOLA_NON_VALIDA -> R.string.proposta_errore_regola_non_valida
+    PostinoClient.PARAMETRI_NON_VALIDI -> R.string.proposta_errore_parametri_non_validi
+    else -> R.string.proposta_errore_generico
+}
+
+/**
+ * I rifiuti di una proposta che non si risolvono riprovando: la regola ha già
+ * una proposta in attesa, o non è più attiva. Si chiude il dialogo e si rilegge,
+ * così la scheda mostra com'è davvero.
+ */
+fun rifiutoPropostaDefinitivo(codice: String?): Boolean =
+    codice == CodiciErrore.PROPOSTA_GIA_PENDENTE || codice == CodiciErrore.REGOLA_NON_VALIDA
+
+/** Che cosa dire quando il server rifiuta una conferma (verdetto). */
+@StringRes
+fun messaggioRifiutoVerdetto(codice: String?): Int = when (codice) {
+    CodiciErrore.DICHIARAZIONE_NON_IN_ATTESA -> R.string.verdetto_errore_non_in_attesa
+    else -> R.string.verdetto_errore
 }
 
 // --- Dichiarazioni -------------------------------------------------------------

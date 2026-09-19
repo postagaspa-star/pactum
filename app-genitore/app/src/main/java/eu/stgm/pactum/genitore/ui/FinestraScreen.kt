@@ -39,7 +39,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.annotation.PluralsRes
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +50,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -65,6 +68,7 @@ import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.BonusGiorno
 import eu.stgm.pactum.genitore.dati.EventoFinestra
 import eu.stgm.pactum.genitore.dati.Finestra
+import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.ModificaStorico
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.StatoBonus
@@ -76,12 +80,11 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 
 // La finestra ha UN protagonista: il patto (tavola rotonda D1). Quanto ha usato
 // il telefono vive nella scheda Tempo. Tre livelli, dall'alto:
 //  1. il patto — la scheda eroe con la striscia aggregata, poi le regole;
-//  2. da guardare insieme — fuori regola e buchi nel registro, fusi;
+//  2. da guardare insieme — fuori regola e interruzioni degli stessi 8 giorni, fusi;
 //  3. la storia — dietro un tocco, chiusa di default.
 // I colori del patto vivono in core-design (`ColoriPatto`): un solo rosso, in un
 // solo posto — dentro la striscia degli 8 giorni.
@@ -224,20 +227,34 @@ private fun ContenutoFinestra(
     // le regole (anche eliminate), quindi la mappa è completa.
     val regolePerId = finestra.regole.associateBy { it.id }
     val giorni = remember(finestra.striscia) { giorniDaQuadretti(finestra.striscia) }
+    // I giorni si contano nel fuso del patto, non in quello di chi legge.
     val riepilogo = remember(finestra) {
         riepilogoPatto(
+            dalServer = finestra.riepilogo,
             giorni = giorni,
             sforamenti = finestra.sforamentiRecenti,
             manomissioni = finestra.manomissioniRecenti,
-            zona = ZoneId.systemDefault(),
-            oggi = LocalDate.now(),
+            zona = FUSO_PATTO,
+            oggi = LocalDate.now(FUSO_PATTO),
         )
     }
     val daGuardare = remember(finestra) {
-        daGuardareInsieme(finestra.sforamentiRecenti, finestra.manomissioniRecenti)
+        daGuardareInsieme(
+            sforamenti = finestra.sforamentiRecenti,
+            manomissioni = finestra.manomissioniRecenti,
+            giorni = giorni,
+            zona = FUSO_PATTO,
+            oggi = LocalDate.now(FUSO_PATTO),
+        )
     }
 
-    var mostraIntro by rememberSaveable { mutableStateOf(true) }
+    // "Ho capito" vale per sempre: sta in DataStore, non nello stato della
+    // schermata. null = non ancora letto, e la scheda non lampeggia.
+    val context = LocalContext.current
+    val impostazioni = remember { Impostazioni(context.applicationContext) }
+    val introChiusa by impostazioni.introChiusa.collectAsState(initial = null)
+    val ambito = rememberCoroutineScope()
+
     var tuttiDaGuardare by rememberSaveable { mutableStateOf(false) }
     var storiaAperta by rememberSaveable { mutableStateOf(false) }
 
@@ -259,9 +276,11 @@ private fun ContenutoFinestra(
         item { RigaStato(finestra.statoSilenzio, ricevutaAlle) }
 
         // La cornice: cos'è Pactum e perché non impone lui le regole.
-        // Richiudibile: dopo averla letta non ingombra più.
-        if (mostraIntro) {
-            item { CardIntro(onChiudi = { mostraIntro = false }) }
+        // Richiudibile: dopo averla letta non ingombra più, nemmeno dopo.
+        if (introChiusa == false) {
+            item {
+                CardIntro(onChiudi = { ambito.launch { impostazioni.registraIntroChiusa() } })
+            }
         }
 
         // --- 1. Il patto --------------------------------------------------------
@@ -278,6 +297,9 @@ private fun ContenutoFinestra(
                 SchedaPatto(
                     giorni = giorni,
                     riepilogo = riepilogo,
+                    // POST /api/segno è v2.4 come la striscia: senza striscia il
+                    // server è più vecchio, e il pulsante porterebbe a un errore.
+                    mostraSegno = finestra.striscia.isNotEmpty(),
                     segnoSpento = segnoSpento,
                     invioSegno = invioSegno,
                     onMandaSegno = onMandaSegno,
@@ -486,13 +508,15 @@ private fun RigaStato(statoSilenzio: StatoSilenzio, ricevutaAlle: Instant?) {
  * vede il figlio, e una riga che dice a parole ciò che la striscia disegna.
  * Nessuna serie: la serie è del figlio, non di chi guarda (tavola rotonda C6).
  *
- * Senza `striscia` (server vecchio) la scheda non va in errore: restano la riga
- * di riepilogo e il segno.
+ * Senza `striscia` (server vecchio) la scheda non va in errore: resta la riga
+ * di riepilogo, e il segno si nasconde ([mostraSegno] false) perché quel server
+ * non conosce POST /api/segno.
  */
 @Composable
 private fun SchedaPatto(
     giorni: List<GiornoPatto>,
     riepilogo: RiepilogoPatto,
+    mostraSegno: Boolean,
     segnoSpento: Boolean,
     invioSegno: Boolean,
     onMandaSegno: () -> Unit,
@@ -545,7 +569,7 @@ private fun SchedaPatto(
                 StrisciaGiorni(
                     giorni = giorni,
                     lato = 32.dp,
-                    descrizione = descrizioneStriscia(giorni),
+                    descrizione = descrizioneStriscia(giorni, R.plurals.striscia_descrizione),
                 )
             }
 
@@ -557,46 +581,51 @@ private fun SchedaPatto(
 
             // Il gesto non poliziesco: un riconoscimento a testo fisso, uno al
             // giorno. Il genitore sa prima che cosa arriva al figlio.
-            Spacer(Modifier.height(Spazi.s))
-            TextButton(
-                onClick = onMandaSegno,
-                enabled = !segnoSpento && !invioSegno,
-            ) {
+            if (mostraSegno) {
+                Spacer(Modifier.height(Spazi.s))
+                TextButton(
+                    onClick = onMandaSegno,
+                    enabled = !segnoSpento && !invioSegno,
+                ) {
+                    Text(
+                        if (segnoSpento) {
+                            stringResource(R.string.segno_gia_mandato)
+                        } else {
+                            stringResource(R.string.segno_manda)
+                        },
+                    )
+                }
                 Text(
-                    if (segnoSpento) {
-                        stringResource(R.string.segno_gia_mandato)
-                    } else {
-                        stringResource(R.string.segno_manda)
-                    },
+                    text = stringResource(R.string.segno_cosa_arriva),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = stringResource(R.string.segno_cosa_arriva),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
 
-/** La frase che TalkBack legge al posto dei singoli quadretti. */
+/**
+ * La frase che TalkBack legge al posto dei singoli quadretti. [frase] dice di
+ * chi è la striscia: tutte le regole (la scheda del patto) o una sola.
+ * Senza nessun giorno con dati si dicono solo i giorni senza dati: "0 giorni
+ * su 0" non vuol dire niente.
+ */
 @Composable
-private fun descrizioneStriscia(giorni: List<GiornoPatto>): String {
+private fun descrizioneStriscia(giorni: List<GiornoPatto>, @PluralsRes frase: Int): String {
     val (mantenuti, conDati) = contaGiorni(giorni)
     val senzaDati = giorni.size - conDati
-    val base = pluralStringResource(R.plurals.striscia_descrizione, mantenuti, mantenuti, conDati)
-    return if (senzaDati > 0) {
-        base + ", " + pluralStringResource(R.plurals.patto_senza_dati, senzaDati, senzaDati)
-    } else {
-        base
-    }
+    val parteSenzaDati = pluralStringResource(R.plurals.patto_senza_dati, senzaDati, senzaDati)
+    if (conDati == 0) return parteSenzaDati
+    val base = pluralStringResource(frase, mantenuti, mantenuti, conDati)
+    return if (senzaDati > 0) "$base, $parteSenzaDati" else base
 }
 
 /** "Nessun giorno fuori regola · registrazione completa", oppure i conti. */
 @Composable
 private fun testoRiepilogo(riepilogo: RiepilogoPatto): String {
     val fuori = riepilogo.giorniFuoriRegola
-    val buchi = riepilogo.buchiNelRegistro
+    val buchi = riepilogo.interruzioni
     val parteFuori = if (fuori == 0) {
         stringResource(R.string.riepilogo_nessun_fuori_regola)
     } else {
@@ -639,7 +668,7 @@ private fun SchedaRegola(regola: RegolaFinestra) {
                     giorni = giorni,
                     lato = 20.dp,
                     mostraNumero = false,
-                    descrizione = descrizioneStriscia(giorni),
+                    descrizione = descrizioneStriscia(giorni, R.plurals.striscia_descrizione_regola),
                 )
             }
         }
@@ -729,16 +758,29 @@ private fun StrisciaBonus(bonusGiornalieri: List<BonusGiorno>) {
     }
 }
 
-/** Una riga di "Da guardare insieme": che cosa, e quando. */
+/**
+ * Una riga di "Da guardare insieme": che cosa, e quando. Uno sforamento col
+ * `giorno` nei dettagli mostra QUEL giorno ("14/09"), non l'ora in cui è
+ * arrivato al server: è il giorno che la striscia colora.
+ */
 @Composable
 private fun RigaDaGuardare(voce: VoceDaGuardare, regolePerId: Map<Long, RegolaFinestra>) {
     val titolo = when (voce.genere) {
         GenereVoce.FUORI_REGOLA -> testoFuoriRegola(voce.evento, regolePerId)
-        GenereVoce.BUCO_NEL_REGISTRO -> testoBuco(voce.evento)
+        GenereVoce.INTERRUZIONE -> testoBuco(voce.evento)
     }
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
         Text(text = titolo, style = MaterialTheme.typography.bodyLarge)
-        TestoOrario(voce.evento.tsServer, Modifier.padding(top = Spazi.xs))
+        if (voce.giornoDichiarato) {
+            Text(
+                text = giornoBreve(voce.giorno.toString()),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Spazi.xs),
+            )
+        } else {
+            TestoOrario(voce.evento.tsServer, Modifier.padding(top = Spazi.xs))
+        }
     }
 }
 

@@ -26,8 +26,14 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
         val regolePerId: Map<Long, RegolaFinestra> = emptyMap(),
         val configurazioneMancante: Boolean = false,
         val errore: Boolean = false,
-        /** Contatore di fallimenti di "segna come letta": ogni scatto = uno snackbar. */
-        val lettaFallita: Int = 0,
+        /**
+         * Almeno una lettura dal server è finita (riuscita o no). La rotella a
+         * schermo intero è solo per la PRIMA: il badge rilegge ogni minuto, e una
+         * lista vuota non deve diventare una rotella a ogni giro.
+         */
+        val primaLetturaFatta: Boolean = false,
+        /** "Segna come letta" è fallita: da dire UNA volta, poi consumare. */
+        val lettaFallita: Boolean = false,
     )
 
     private val _stato = MutableStateFlow(StatoNotifiche())
@@ -45,7 +51,11 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
             val postino = PostinoClient(configurazione)
             val notifiche = postino.leggiNotifiche()
             if (notifiche == null) {
-                _stato.value = _stato.value.copy(caricamento = false, errore = true)
+                _stato.value = _stato.value.copy(
+                    caricamento = false,
+                    errore = true,
+                    primaLetturaFatta = true,
+                )
                 return@launch
             }
             val ordinate = dallaPiuRecente(notifiche)
@@ -56,6 +66,7 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
                 regolePerId = regole,
                 configurazioneMancante = false,
                 errore = false,
+                primaLetturaFatta = true,
             )
         }
     }
@@ -93,8 +104,12 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
                     notifiche = _stato.value.notifiche.filterNot { it.id == notifica.id },
                 )
             } else {
-                _stato.value = _stato.value.copy(lettaFallita = _stato.value.lettaFallita + 1)
+                _stato.value = _stato.value.copy(lettaFallita = true)
             }
         }
+    }
+
+    fun consumaLettaFallita() {
+        _stato.value = _stato.value.copy(lettaFallita = false)
     }
 }

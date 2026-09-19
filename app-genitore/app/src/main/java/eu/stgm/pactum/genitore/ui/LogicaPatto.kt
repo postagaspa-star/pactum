@@ -5,8 +5,13 @@ import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.design.segnaleDaStato
 import eu.stgm.pactum.genitore.dati.EventoFinestra
 import eu.stgm.pactum.genitore.dati.Notifica
+import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.QuadrettoSemaforo
+import eu.stgm.pactum.genitore.dati.RiepilogoFinestra
+import eu.stgm.pactum.genitore.dati.StatiProposta
 import eu.stgm.pactum.genitore.dati.UsoGiorno
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -34,41 +39,84 @@ const val GIORNI_FINESTRA = 8L
 fun giorniDaQuadretti(quadretti: List<QuadrettoSemaforo>): List<GiornoPatto> =
     quadretti.map { GiornoPatto(it.data, segnaleDaStato(it.stato)) }
 
+// --- I giorni del patto --------------------------------------------------------
+
+/**
+ * Il fuso in cui il server conta i giorni del patto (`PACTUM_TIMEZONE`). La
+ * finestra non lo porta (il campo `fuso` esiste solo in GET /api/patto, che è
+ * del figlio): si usa il default del server. MAI il fuso del telefono che
+ * legge — un genitore in viaggio vedrebbe i fatti spostati di un giorno.
+ */
+val FUSO_PATTO: ZoneId = ZoneId.of("Europe/Rome")
+
+/** Il giorno di un evento dal suo `ts_server`, nel fuso del patto; null se l'orario è illeggibile. */
+fun giornoDelServer(evento: EventoFinestra, zona: ZoneId): LocalDate? =
+    istanteServer(evento.tsServer)?.atZone(zona)?.toLocalDate()
+
+/**
+ * (v2.4) Il `giorno` che il telefono ha scritto nei dettagli di uno sforamento,
+ * se è una data vera: è il giorno in cui lo sforamento è SUCCESSO, anche se è
+ * arrivato al server più tardi. null se manca o non è una data.
+ */
+fun giornoDichiarato(evento: EventoFinestra): LocalDate? =
+    (evento.dettagli["giorno"] as? JsonPrimitive)?.contentOrNull?.let(::dataOppureNull)
+
+/**
+ * Il giorno di uno sforamento, come lo mette il semaforo del server: il
+ * `giorno` dei dettagli se è una data vera, altrimenti il giorno d'arrivo.
+ */
+fun giornoSforamento(evento: EventoFinestra, zona: ZoneId): LocalDate? =
+    giornoDichiarato(evento) ?: giornoDelServer(evento, zona)
+
+/**
+ * Gli 8 giorni di cui parla la finestra: le date della striscia. Senza striscia
+ * (server vecchio) oggi e i sette giorni prima, [oggi] nel fuso del patto.
+ */
+fun giorniDellaFinestra(giorni: List<GiornoPatto>, oggi: LocalDate): Set<LocalDate> {
+    val dallaStriscia = giorni.mapNotNull { dataOppureNull(it.data) }.toSet()
+    if (dallaStriscia.isNotEmpty()) return dallaStriscia
+    return (0 until GIORNI_FINESTRA).map { oggi.minusDays(it) }.toSet()
+}
+
 // --- La riga di riepilogo della scheda del patto ------------------------------
 
 /** Quello che la scheda in cima dice in una riga: i fatti degli ultimi 8 giorni. */
-data class RiepilogoPatto(val giorniFuoriRegola: Int, val buchiNelRegistro: Int)
+data class RiepilogoPatto(val giorniFuoriRegola: Int, val interruzioni: Int)
 
 /**
- * I giorni fuori regola sono i quadretti terracotta della striscia: la riga dice
- * a parole la stessa cosa che la striscia disegna. Se la striscia manca (server
- * vecchio) si contano i giorni distinti degli sforamenti arrivati negli ultimi 8.
- * I buchi nel registro sono le manomissioni degli stessi 8 giorni.
+ * La riga sotto la striscia. Se il server manda il suo `riepilogo` (v2.4) vale
+ * QUELLO: è contato nel fuso del patto su tutto il registro, ed è identico a
+ * quello del figlio.
  *
- * La finestra parte dal primo giorno della striscia; senza striscia, da sette
- * giorni prima di oggi. Un evento con la data illeggibile non si conta: meglio
- * un buco in meno che un giorno inventato.
+ * Server vecchio, ripiego contato qui: i giorni fuori regola sono i quadretti
+ * terracotta della striscia (o, senza striscia, i giorni distinti degli
+ * sforamenti arrivati); le interruzioni sono le manomissioni degli stessi 8
+ * giorni. Il ripiego vede solo i 20 eventi più recenti che il server manda. Un
+ * evento con la data illeggibile non si conta: meglio un'interruzione in meno
+ * che un giorno inventato.
  */
 fun riepilogoPatto(
+    dalServer: RiepilogoFinestra?,
     giorni: List<GiornoPatto>,
     sforamenti: List<EventoFinestra>,
     manomissioni: List<EventoFinestra>,
     zona: ZoneId,
     oggi: LocalDate,
 ): RiepilogoPatto {
-    val inizio = giorni.firstOrNull()?.data?.let(::dataOppureNull)
-        ?: oggi.minusDays(GIORNI_FINESTRA - 1)
-    fun giornoDi(evento: EventoFinestra): LocalDate? =
-        istanteServer(evento.tsServer)?.atZone(zona)?.toLocalDate()?.takeIf { it >= inizio }
-
+    if (dalServer != null) {
+        return RiepilogoPatto(dalServer.giorniFuoriRegola, dalServer.interruzioni)
+    }
+    val finestra = giorniDellaFinestra(giorni, oggi)
     val fuori = if (giorni.isNotEmpty()) {
         giorni.count { it.segnale == Segnale.FUORI_REGOLA }
     } else {
-        sforamenti.mapNotNull(::giornoDi).distinct().size
+        sforamenti.mapNotNull { giornoSforamento(it, zona) }.filter { it in finestra }.distinct().size
     }
     return RiepilogoPatto(
         giorniFuoriRegola = fuori,
-        buchiNelRegistro = manomissioni.count { giornoDi(it) != null },
+        interruzioni = manomissioni.count { evento ->
+            giornoDelServer(evento, zona)?.let { it in finestra } == true
+        },
     )
 }
 
@@ -80,27 +128,57 @@ private fun dataOppureNull(iso: String): LocalDate? = try {
 
 // --- "Da guardare insieme" -----------------------------------------------------
 
-enum class GenereVoce { FUORI_REGOLA, BUCO_NEL_REGISTRO }
-
-/** Una riga di "Da guardare insieme": un giorno fuori regola o un buco nel registro. */
-data class VoceDaGuardare(val genere: GenereVoce, val evento: EventoFinestra)
+enum class GenereVoce { FUORI_REGOLA, INTERRUZIONE }
 
 /**
- * Sforamenti e manomissioni fusi in una lista sola, dal più recente. Le voci con
- * la data illeggibile vanno in fondo invece di sparire: il registro non si
- * accorcia per un orario storto. A parità di istante, prima i fuori regola.
+ * Una riga di "Da guardare insieme": un giorno fuori regola o un'interruzione
+ * nella registrazione. [giorno] è il giorno della striscia in cui cade (fuso del
+ * patto). [giornoDichiarato] = il giorno viene dai dettagli dello sforamento: la
+ * riga mostra QUEL giorno, non l'ora in cui l'evento è arrivato al server.
+ */
+data class VoceDaGuardare(
+    val genere: GenereVoce,
+    val evento: EventoFinestra,
+    val giorno: LocalDate,
+    val giornoDichiarato: Boolean = false,
+)
+
+/**
+ * Sforamenti e manomissioni fusi in una lista sola, SOLO quelli che cadono negli
+ * 8 giorni della striscia: la lista racconta gli stessi giorni della riga di
+ * riepilogo, mai uno sforamento di 12 giorni fa sotto "Nessun giorno fuori
+ * regola". Il giorno di uno sforamento è quello dei suoi dettagli (se è una data
+ * vera), altrimenti quello d'arrivo; quello di un'interruzione, il giorno
+ * d'arrivo. Tutti nel fuso del patto. Un evento senza giorno leggibile resta
+ * fuori, come nel riepilogo.
+ *
+ * Dal giorno più recente; nello stesso giorno dall'arrivo più recente, e a
+ * parità di istante prima i fuori regola.
  */
 fun daGuardareInsieme(
     sforamenti: List<EventoFinestra>,
     manomissioni: List<EventoFinestra>,
-): List<VoceDaGuardare> =
-    (sforamenti.map { VoceDaGuardare(GenereVoce.FUORI_REGOLA, it) } +
-        manomissioni.map { VoceDaGuardare(GenereVoce.BUCO_NEL_REGISTRO, it) })
+    giorni: List<GiornoPatto>,
+    zona: ZoneId,
+    oggi: LocalDate,
+): List<VoceDaGuardare> {
+    val finestra = giorniDellaFinestra(giorni, oggi)
+    val fuori = sforamenti.mapNotNull { evento ->
+        val dichiarato = giornoDichiarato(evento)
+        val giorno = dichiarato ?: giornoDelServer(evento, zona) ?: return@mapNotNull null
+        VoceDaGuardare(GenereVoce.FUORI_REGOLA, evento, giorno, giornoDichiarato = dichiarato != null)
+    }
+    val interruzioni = manomissioni.mapNotNull { evento ->
+        giornoDelServer(evento, zona)?.let { VoceDaGuardare(GenereVoce.INTERRUZIONE, evento, it) }
+    }
+    return (fuori + interruzioni)
+        .filter { it.giorno in finestra }
         .sortedWith(
-            compareByDescending<VoceDaGuardare> {
-                istanteServer(it.evento.tsServer)?.toEpochMilli() ?: Long.MIN_VALUE
-            }.thenBy { it.genere.ordinal },
+            compareByDescending<VoceDaGuardare> { it.giorno }
+                .thenByDescending { istanteServer(it.evento.tsServer)?.toEpochMilli() ?: Long.MIN_VALUE }
+                .thenBy { it.genere.ordinal },
         )
+}
 
 /** Quante righe di "Da guardare insieme" si vedono senza toccare niente. */
 const val VOCI_DA_GUARDARE_VISIBILI = 5
@@ -125,16 +203,34 @@ fun dallaPiuRecente(notifiche: List<Notifica>): List<Notifica> =
 fun segnoGiaMandato(segnoOggi: Boolean, mandatoIl: LocalDate?, oggi: LocalDate): Boolean =
     segnoOggi || mandatoIl == oggi
 
+// --- Proposte -------------------------------------------------------------------
+
+/**
+ * Le regole che hanno già una proposta in attesa: il server ne accetta una sola
+ * per regola (409 `proposta_gia_pendente`), quindi su queste "Proponi una
+ * modifica" non si offre.
+ */
+fun regoleConPropostaInAttesa(proposte: List<Proposta>): Set<Long> =
+    proposte.filter { it.stato == StatiProposta.PENDENTE }.map { it.regolaId }.toSet()
+
 // --- Tempo: dentro il patto / il resto della giornata ---------------------------
 
-/** Una voce dell'elenco del Tempo: un'app o una categoria, col limite se c'è. */
+/**
+ * Una voce dell'elenco del Tempo: un'app o una categoria, col limite se c'è.
+ * [bonus] = minuti concessi quel giorno su quella regola (v2.4, 0 se nessuno o
+ * server vecchio): il limite di quel giorno è `limite + bonus`, come per il figlio.
+ */
 data class VoceTempo(
     val chiave: String,
     val nome: String?,
     val minuti: Int,
     val limite: Int?,
     val categoria: Boolean,
-)
+    val bonus: Int = 0,
+) {
+    /** Il limite vero di quel giorno: base + bonus. null senza limite. */
+    val limiteDelGiorno: Int? get() = limite?.let { it + bonus.coerceAtLeast(0) }
+}
 
 /**
  * L'elenco sotto i grafici, in due blocchi.
@@ -151,13 +247,13 @@ data class ElencoTempo(
 
 fun elencoTempo(giorno: UsoGiorno): ElencoTempo {
     val app = giorno.app.map {
-        VoceTempo(it.chiave, it.nome, it.minuti, it.limite, categoria = false)
+        VoceTempo(it.chiave, it.nome, it.minuti, it.limite, categoria = false, bonus = it.bonus)
     }
     // Le categorie entrano solo se hanno un limite e un uso: quelle senza limite
     // vivono già nella legenda della ciambella.
     val categorie = giorno.categorie
         .filter { it.limite != null && it.minuti > 0 }
-        .map { VoceTempo(it.chiave, null, it.minuti, it.limite, categoria = true) }
+        .map { VoceTempo(it.chiave, null, it.minuti, it.limite, categoria = true, bonus = it.bonus) }
 
     val dentro = (app.filter { it.limite != null } + categorie).sortedWith(
         compareByDescending<VoceTempo> { vicinanzaAlLimite(it) }
@@ -174,12 +270,16 @@ fun elencoTempo(giorno: UsoGiorno): ElencoTempo {
     )
 }
 
-/** Minuti usati sul limite: 1.0 = limite raggiunto, oltre 1 = oltre. */
+/** Minuti usati sul limite del giorno (base + bonus): 1.0 = raggiunto, oltre 1 = oltre. */
 fun vicinanzaAlLimite(voce: VoceTempo): Double {
-    val limite = voce.limite ?: return 0.0
+    val limite = voce.limiteDelGiorno ?: return 0.0
     return voce.minuti.toDouble() / limite.coerceAtLeast(1)
 }
 
-/** Di quanto si è andati oltre il limite; 0 se dentro o senza limite. */
-fun minutiOltre(minuti: Int, limite: Int?): Int =
-    if (limite == null) 0 else (minuti - limite).coerceAtLeast(0)
+/**
+ * Di quanto si è andati oltre il limite di quel giorno, cioè `limite + bonus`
+ * (contratto v2.4, uso_recente): con +15 concessi, 70 su 60 è DENTRO, come lo
+ * vede il figlio. 0 se dentro o senza limite; [bonus] 0 su un server vecchio.
+ */
+fun minutiOltre(minuti: Int, limite: Int?, bonus: Int = 0): Int =
+    if (limite == null) 0 else (minuti - limite - bonus.coerceAtLeast(0)).coerceAtLeast(0)

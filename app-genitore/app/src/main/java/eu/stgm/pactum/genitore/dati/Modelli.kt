@@ -8,7 +8,9 @@ import kotlinx.serialization.json.JsonObject
  * Le risposte del postino per il genitore (docs/contratto-api.md, sezione
  * "Endpoint del genitore" — la fonte di verità del protocollo). I timestamp
  * `ts_server` sono ISO 8601 UTC e fanno fede; si mostrano nel fuso del
- * telefono. I campi sconosciuti si ignorano (tolleranza evolutiva).
+ * telefono, ma i GIORNI del patto si contano nel fuso del patto (v.
+ * FUSO_PATTO in ui/LogicaPatto.kt). I campi sconosciuti si ignorano
+ * (tolleranza evolutiva).
  */
 @Serializable
 data class Finestra(
@@ -35,10 +37,32 @@ data class Finestra(
     // due app mostrano la stessa striscia per costruzione. Vuota = server vecchio:
     // la scheda del patto mostra solo quello che può, senza inventarla.
     val striscia: List<QuadrettoSemaforo> = emptyList(),
+    // (v2.4) La riga sotto la striscia, contata dal SERVER nel fuso del patto e
+    // su tutto il registro (non sui 20 eventi che arrivano all'app): è la stessa
+    // che vede il figlio. `null` = server vecchio: l'app ripiega sul suo conto.
+    val riepilogo: RiepilogoFinestra? = null,
     // (v2.4) Il genitore ha già mandato il segno oggi (fuso del patto). Assente
     // su un server vecchio: false, e sarà il server a dire di no se serve.
     @SerialName("segno_oggi") val segnoOggi: Boolean = false,
 )
+
+/** (v2.4) Il `riepilogo` della finestra: giorni fuori regola e interruzioni negli 8 giorni. */
+@Serializable
+data class RiepilogoFinestra(
+    @SerialName("giorni_fuori_regola") val giorniFuoriRegola: Int = 0,
+    val interruzioni: Int = 0,
+)
+
+/**
+ * I codici `errore` dei 409 del contratto che l'app sa dire a parole. FastAPI li
+ * manda dentro `detail` (`{"detail": {"errore": "…"}}`): li estrae PostinoClient.
+ */
+object CodiciErrore {
+    const val PROPOSTA_GIA_PENDENTE = "proposta_gia_pendente"
+    const val REGOLA_NON_VALIDA = "regola_non_valida"
+    const val DICHIARAZIONE_NON_IN_ATTESA = "dichiarazione_non_in_attesa"
+    const val SEGNO_GIA_MANDATO = "segno_gia_mandato"
+}
 
 /** Risposta di POST /api/segno (v2.4): il riconoscimento a testo fisso è partito. */
 @Serializable
@@ -125,6 +149,9 @@ data class UsoApp(
     // combacia esattamente con la chiave (limite base, senza i bonus del giorno).
     val limite: Int? = null,
     @SerialName("regola_id") val regolaId: Long? = null,
+    // (v2.4) I minuti bonus concessi QUEL giorno su QUELLA regola: il limite del
+    // giorno è `limite + bonus`, come per il figlio. Assente (server vecchio) = 0.
+    val bonus: Int = 0,
 )
 
 @Serializable
@@ -133,6 +160,8 @@ data class UsoCategoria(
     val minuti: Int = 0,
     val limite: Int? = null,
     @SerialName("regola_id") val regolaId: Long? = null,
+    // (v2.4) Come in UsoApp: i minuti bonus del giorno su questa regola.
+    val bonus: Int = 0,
 )
 
 @Serializable

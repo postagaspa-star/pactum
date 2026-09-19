@@ -12,7 +12,9 @@ import kotlinx.serialization.json.putJsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * Le frasi che il padre legge: durate e testi delle notifiche. Le parole sono
@@ -198,6 +200,101 @@ class TestiTest {
             buco("silenzio"),
         )
         assertEquals("Cambio manuale dell'ora", buco("cambio_ora").testo)
+    }
+
+    @Test
+    fun `ogni sotto-tipo che puo arrivare ha la sua frase, mai la chiave grezza`() {
+        // Quelli che manda l'app del figlio (SottoTipiManomissione, orologio,
+        // worker) e `silenzio` del contratto.
+        val attese = mapOf(
+            "cambio_ora" to "Cambio manuale dell'ora",
+            "cambio_fuso" to "Cambio di fuso orario del telefono",
+            "silenzio" to "Uso non registrato in questo periodo",
+            "permesso_revocato" to "Accesso ai dati di utilizzo revocato",
+            "notifiche_disattivate" to "Notifiche di Pactum disattivate sul telefono del figlio",
+            "osservazione_siti_interrotta" to "Osservazione dei siti spenta",
+        )
+        attese.forEach { (sottoTipo, frase) ->
+            assertEquals(sottoTipo, frase, descrizioneBuco(p, sottoTipo))
+        }
+    }
+
+    @Test
+    fun `un sotto-tipo nuovo ripiega su Anomalia`() {
+        assertEquals("Anomalia: batteria_strana", descrizioneBuco(p, "batteria_strana"))
+    }
+
+    @Test
+    fun `l'osservazione dei siti spenta arriva al padre come frase anche in notifica`() {
+        val t = testo(
+            notifica(
+                "manomissione",
+                buildJsonObject {
+                    put("evento_id", "x")
+                    putJsonObject("dettagli") { put("sotto_tipo", "osservazione_siti_interrotta") }
+                },
+            ),
+        )
+        assertEquals(TestoNotifica("Anomalia", "Osservazione dei siti spenta"), t)
+    }
+
+    // --- i rifiuti del server (409) --------------------------------------------------
+
+    @Test
+    fun `ogni rifiuto di una proposta dice il motivo vero`() {
+        assertEquals(
+            "C'è già una proposta in attesa su questa regola.",
+            p.testo(messaggioRifiutoProposta("proposta_gia_pendente")),
+        )
+        assertEquals(
+            "Questa regola non è più attiva.",
+            p.testo(messaggioRifiutoProposta("regola_non_valida")),
+        )
+        assertEquals(
+            "Qualche valore non va bene: controlla i campi e riprova.",
+            p.testo(messaggioRifiutoProposta("parametri_non_validi")),
+        )
+        assertEquals(
+            "Non sono riuscito a inviare la proposta: riprova.",
+            p.testo(messaggioRifiutoProposta(null)),
+        )
+    }
+
+    @Test
+    fun `solo i rifiuti che riprovare non risolve chiudono il dialogo`() {
+        assertTrue(rifiutoPropostaDefinitivo("proposta_gia_pendente"))
+        assertTrue(rifiutoPropostaDefinitivo("regola_non_valida"))
+        assertFalse(rifiutoPropostaDefinitivo("parametri_non_validi"))
+        assertFalse(rifiutoPropostaDefinitivo(null))
+    }
+
+    @Test
+    fun `una conferma arrivata tardi dice che qualcuno ha gia risposto`() {
+        assertEquals(
+            "Qualcuno ha già risposto a questa dichiarazione.",
+            p.testo(messaggioRifiutoVerdetto("dichiarazione_non_in_attesa")),
+        )
+        assertEquals(
+            "Non sono riuscito a registrare la risposta: riprova.",
+            p.testo(messaggioRifiutoVerdetto(null)),
+        )
+    }
+
+    // --- terminologia ------------------------------------------------------------------
+
+    @Test
+    fun `le parole scartate da Andrea non tornano in strings xml`() {
+        val tutto = File("src/main/res/values/strings.xml").readText().replace("\\'", "'")
+        listOf(
+            "buchi nel registro",
+            "buco nel registro",
+            "Il tuo turno",
+            "Come è cambiato il patto",
+            "Dati fermi",
+            "l'app non ha potuto vedere",
+        ).forEach {
+            assertFalse("'$it' è tornato in strings.xml", tutto.contains(it, ignoreCase = true))
+        }
     }
 
     @Test

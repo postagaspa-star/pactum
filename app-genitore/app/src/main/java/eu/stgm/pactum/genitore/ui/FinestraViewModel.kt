@@ -3,6 +3,7 @@ package eu.stgm.pactum.genitore.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.rete.EsitoScrittura
@@ -64,24 +65,15 @@ class FinestraViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * Il riconoscimento al figlio (POST /api/segno): testo fisso, uno al giorno.
-     * Un 409 vuol dire che oggi è già partito: si spegne il pulsante e basta.
+     * Un 409 `segno_gia_mandato` vuol dire che oggi è già partito: si spegne il
+     * pulsante e basta.
      */
     fun mandaSegno() {
         if (_stato.value.invioSegno) return
         _stato.value = _stato.value.copy(invioSegno = true)
         viewModelScope.launch {
             val configurazione = Impostazioni(getApplication()).leggiConfigurazione()
-            val esito = when (val risposta = PostinoClient(configurazione).mandaSegno()) {
-                is EsitoScrittura.Riuscito -> EsitoSegno.MANDATO
-                // Il 422 non è "già mandato": è una risposta che non ci aspettiamo.
-                is EsitoScrittura.Rifiutato ->
-                    if (risposta.errore == PostinoClient.PARAMETRI_NON_VALIDI) {
-                        EsitoSegno.FALLITO
-                    } else {
-                        EsitoSegno.GIA_MANDATO
-                    }
-                EsitoScrittura.Fallito -> EsitoSegno.FALLITO
-            }
+            val esito = esitoDelSegno(PostinoClient(configurazione).mandaSegno())
             _stato.value = _stato.value.copy(
                 invioSegno = false,
                 segnoMandatoIl = if (esito == EsitoSegno.FALLITO) {
@@ -98,4 +90,21 @@ class FinestraViewModel(application: Application) : AndroidViewModel(application
     fun consumaEsitoSegno() {
         _stato.value = _stato.value.copy(esitoSegno = null)
     }
+}
+
+/**
+ * Che cosa dire dopo POST /api/segno. Solo il 409 `segno_gia_mandato` è "oggi è
+ * già partito" (e spegne il pulsante); qualunque altro rifiuto — un altro 409, un
+ * 409 senza codice, un 422 — è una risposta che non ci aspettiamo: "riprova",
+ * senza fingere che il segno sia arrivato.
+ */
+fun esitoDelSegno(risposta: EsitoScrittura<*>): FinestraViewModel.EsitoSegno = when (risposta) {
+    is EsitoScrittura.Riuscito -> FinestraViewModel.EsitoSegno.MANDATO
+    is EsitoScrittura.Rifiutato ->
+        if (risposta.errore == CodiciErrore.SEGNO_GIA_MANDATO) {
+            FinestraViewModel.EsitoSegno.GIA_MANDATO
+        } else {
+            FinestraViewModel.EsitoSegno.FALLITO
+        }
+    EsitoScrittura.Fallito -> FinestraViewModel.EsitoSegno.FALLITO
 }

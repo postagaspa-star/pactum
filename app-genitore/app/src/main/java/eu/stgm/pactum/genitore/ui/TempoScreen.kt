@@ -268,12 +268,15 @@ private fun nomeVoce(voce: VoceTempo): String =
 /**
  * Una voce DENTRO IL PATTO: la barra è sul limite — l'unica scala che il ragazzo
  * si è dato — e resta `primary` anche oltre. Quanto oltre, lo dice il chip.
+ * "Oltre" e barra contano sul limite di QUEL giorno (base + bonus concessi),
+ * come li conta il figlio; il chip del limite resta quello base della regola.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RigaDentroIlPatto(voce: VoceTempo) {
     val limite = voce.limite ?: return
-    val oltre = minutiOltre(voce.minuti, limite)
+    val limiteDelGiorno = voce.limiteDelGiorno ?: limite
+    val oltre = minutiOltre(voce.minuti, limite, voce.bonus)
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -290,7 +293,7 @@ private fun RigaDentroIlPatto(voce: VoceTempo) {
             )
         }
         Spacer(modifier = Modifier.height(Spazi.s))
-        BarraUso(minuti = voce.minuti, limite = limite, massimoDelGiorno = limite)
+        BarraUso(minuti = voce.minuti, limite = limiteDelGiorno, massimoDelGiorno = limiteDelGiorno)
         Spacer(modifier = Modifier.height(Spazi.s))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(Spazi.s),

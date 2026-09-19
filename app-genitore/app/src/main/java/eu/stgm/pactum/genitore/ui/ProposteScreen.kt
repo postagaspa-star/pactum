@@ -57,7 +57,9 @@ import kotlinx.serialization.json.putJsonArray
 
 /**
  * La sezione delle proposte dentro "Proposte e conferme".
- * - DA MANDARE: le regole attive, ciascuna col suo "Proponi una modifica";
+ * - DA MANDARE: le regole attive, ciascuna col suo "Proponi una modifica" —
+ *   tranne quelle che ne hanno già una in attesa (il server ne accetta una sola
+ *   per regola): lì una riga dice perché;
  * - IN ATTESA DI RISPOSTA: le proposte pendenti, il confronto in grande;
  * - COME SONO ANDATE: le chiuse, come righe di storia.
  */
@@ -69,6 +71,7 @@ internal fun LazyListScope.sezioneProposte(
     val regolePerId = regoleAttive.associateBy { it.id }
     val pendenti = proposte.filter { it.stato == StatiProposta.PENDENTE }
     val chiuse = proposte.filter { it.stato != StatiProposta.PENDENTE }
+    val conPropostaInAttesa = regoleConPropostaInAttesa(proposte)
 
     item { TitoloSezione(stringResource(R.string.turno_sezione_proposte)) }
 
@@ -77,7 +80,11 @@ internal fun LazyListScope.sezioneProposte(
         item { RigaVuota(stringResource(R.string.proposte_nessuna_regola_attiva)) }
     } else {
         items(regoleAttive, key = { "attiva-${it.id}" }) { regola ->
-            CardRegolaProponibile(regola, onProponi)
+            CardRegolaProponibile(
+                regola = regola,
+                propostaInAttesa = regola.id in conPropostaInAttesa,
+                onProponi = onProponi,
+            )
         }
     }
 
@@ -107,8 +114,17 @@ internal fun LazyListScope.sezioneProposte(
     }
 }
 
+/**
+ * Una regola attiva su cui proporre. Con una proposta già in attesa il pulsante
+ * non c'è: il server rifiuterebbe la seconda (409 `proposta_gia_pendente`), e
+ * al suo posto una riga dice perché.
+ */
 @Composable
-private fun CardRegolaProponibile(regola: RegolaFinestra, onProponi: (RegolaFinestra) -> Unit) {
+private fun CardRegolaProponibile(
+    regola: RegolaFinestra,
+    propostaInAttesa: Boolean,
+    onProponi: (RegolaFinestra) -> Unit,
+) {
     CardContenuto {
         Column(modifier = Modifier.padding(Spazi.l)) {
             SopraTitolo(
@@ -121,8 +137,16 @@ private fun CardRegolaProponibile(regola: RegolaFinestra, onProponi: (RegolaFine
                 modifier = Modifier.padding(top = Spazi.xs),
             )
             Spacer(modifier = Modifier.height(Spazi.s))
-            FilledTonalButton(onClick = { onProponi(regola) }) {
-                Text(stringResource(R.string.proposte_bottone_proponi))
+            if (propostaInAttesa) {
+                Text(
+                    text = stringResource(R.string.proposte_gia_in_attesa),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                FilledTonalButton(onClick = { onProponi(regola) }) {
+                    Text(stringResource(R.string.proposte_bottone_proponi))
+                }
             }
         }
     }

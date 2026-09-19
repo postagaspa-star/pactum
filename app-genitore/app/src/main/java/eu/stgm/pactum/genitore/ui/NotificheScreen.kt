@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
@@ -44,6 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Notifica
+import kotlinx.coroutines.launch
 
 /**
  * Le notifiche non lette del patto. Non è più una scheda: si apre dalla
@@ -62,9 +64,15 @@ fun NotificheScreen(onChiudi: () -> Unit, vm: NotificheViewModel = viewModel()) 
         onPauseOrDispose { }
     }
 
-    // Ogni scatto del contatore = un fallimento di "segna come letta" da dire.
+    // Un fallimento di "segna come letta" si dice una volta: l'evento si consuma
+    // subito (come l'esito del segno), così riaprire la lista non lo ripete. Lo
+    // snackbar parte in uno scope suo: consumare cambia la chiave e
+    // cancellerebbe questo effetto a metà messaggio.
+    val ambito = rememberCoroutineScope()
     LaunchedEffect(stato.lettaFallita) {
-        if (stato.lettaFallita > 0) snackbarHostState.showSnackbar(messaggioLettaFallita)
+        if (!stato.lettaFallita) return@LaunchedEffect
+        vm.consumaLettaFallita()
+        ambito.launch { snackbarHostState.showSnackbar(messaggioLettaFallita) }
     }
 
     Scaffold(
@@ -91,7 +99,9 @@ fun NotificheScreen(onChiudi: () -> Unit, vm: NotificheViewModel = viewModel()) 
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when {
-                stato.caricamento && stato.notifiche.isEmpty() ->
+                // Solo la prima lettura: dopo, le riletture del badge (ogni
+                // minuto) aggiornano la lista senza coprirla con la rotella.
+                stato.caricamento && !stato.primaLetturaFatta ->
                     Caricamento(stringResource(R.string.notifiche_caricamento))
 
                 stato.configurazioneMancante -> Centro {

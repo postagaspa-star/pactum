@@ -45,6 +45,9 @@ class Impostazioni(private val context: Context) {
         val DIGEST_ATTIVO = booleanPreferencesKey("digest_attivo")
         val DIGEST_ORA = intPreferencesKey("digest_ora")
         val DIGEST_ULTIMO_GIORNO = stringPreferencesKey("digest_ultimo_giorno")
+
+        // "Ho capito" sulla scheda "Come funziona Pactum": chiusa una volta, non torna.
+        val INTRO_CHIUSA = booleanPreferencesKey("intro_chiusa")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -167,6 +170,14 @@ class Impostazioni(private val context: Context) {
 
     suspend fun registraRichiestaNotificheFatta() {
         context.dataStore.edit { p -> p[Chiavi.RICHIESTA_NOTIFICHE_FATTA] = true }
+    }
+
+    /** true = il genitore ha già chiuso la scheda "Come funziona Pactum" con "Ho capito". */
+    val introChiusa: Flow<Boolean> =
+        context.dataStore.data.map { p -> p[Chiavi.INTRO_CHIUSA] ?: false }
+
+    suspend fun registraIntroChiusa() {
+        context.dataStore.edit { p -> p[Chiavi.INTRO_CHIUSA] = true }
     }
 
     private companion object {

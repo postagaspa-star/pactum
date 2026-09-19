@@ -4,6 +4,7 @@ import eu.stgm.pactum.design.GiornoPatto
 import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.design.segnaleDaStato
 import eu.stgm.pactum.genitore.dati.EventoFinestra
+import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.QuadrettoSemaforo
 import eu.stgm.pactum.genitore.dati.UsoGiorno
 import java.time.Instant
@@ -103,6 +104,16 @@ fun daGuardareInsieme(
 
 /** Quante righe di "Da guardare insieme" si vedono senza toccare niente. */
 const val VOCI_DA_GUARDARE_VISIBILI = 5
+
+// --- Notifiche ------------------------------------------------------------------
+
+/**
+ * Le notifiche dalla più recente alla più vecchia. Il server le manda per `id`
+ * crescente (contratto-api.md): l'id è autoincrementale, quindi è anche
+ * l'ordine d'arrivo — e non dipende da un orario da interpretare.
+ */
+fun dallaPiuRecente(notifiche: List<Notifica>): List<Notifica> =
+    notifiche.sortedByDescending { it.id }
 
 // --- Il segno -------------------------------------------------------------------
 

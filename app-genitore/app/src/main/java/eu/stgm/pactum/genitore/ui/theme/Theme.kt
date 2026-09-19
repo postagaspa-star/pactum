@@ -41,6 +41,13 @@ private val SchemaChiaro = lightColorScheme(
     surfaceContainer = Color(0xFFEFF2F6),
     surfaceContainerHigh = Color(0xFFE9EDF2),
     surfaceContainerHighest = Color(0xFFE3E8EE),
+    // I colori "inversi" vestono le snackbar (la conferma di "Manda un segno").
+    // Lasciati alla baseline M3 erano un fondo quasi nero con l'azione lavanda:
+    // qui un blu ardesia della stessa famiglia del binocolo, testo chiaro
+    // (8,86:1) e l'azione nel blu chiaro del primary scuro (5,59:1).
+    inverseSurface = Color(0xFF2B4560),
+    inverseOnSurface = Color(0xFFEEF3F8),
+    inversePrimary = Color(0xFF9CC7F2),
 )
 
 // Nessuno schema scuro: Pactum va solo su fondo chiaro (scelta di Andrea).

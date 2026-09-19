@@ -96,7 +96,7 @@ private fun CardInAttesa(
         Column(modifier = Modifier.padding(Spazi.l)) {
             IntestazioneDichiarazione(dichiarazione, regola)
             Text(
-                text = stringResource(R.string.dichiarazione_successo_dichiarato),
+                text = testoEsitoDichiarato(dichiarazione.esito),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = Spazi.xs),
             )

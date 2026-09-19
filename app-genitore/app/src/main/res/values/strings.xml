@@ -85,8 +85,10 @@
     <string name="regola_fascia_oraria">Niente telefono dalle %1$s alle %2$s (%3$s)</string>
     <string name="regola_vita_reale">%1$s — arbitro: %2$s, %3$s</string>
 
-    <string name="bonus_chip_giorno">bonus di oggi: restano %1$d min su %2$d</string>
-    <string name="bonus_chip_settimana">bonus della settimana: restano %1$d min su %2$d</string>
+    <!-- I bonus sono contatori GLOBALI, non di una regola: si dicono una volta
+         sola, dopo le regole, accanto ai minuti bonus degli 8 giorni. -->
+    <string name="bonus_titolo">BONUS</string>
+    <string name="bonus_residui">Oggi restano %1$d min su %2$d · questa settimana %3$d su %4$d</string>
     <string name="bonus_striscia_titolo">MINUTI BONUS NEGLI ULTIMI 8 GIORNI</string>
 
     <string name="sezione_da_guardare">Da guardare insieme</string>
@@ -107,13 +109,20 @@
 
     <string name="manomissione_cambio_ora">Cambio manuale dell\'ora</string>
     <string name="manomissione_cambio_fuso">Cambio di fuso orario del telefono</string>
-    <string name="manomissione_silenzio">Uso non registrato in questo periodo</string>
+    <string name="manomissione_silenzio">L\'app non ha potuto vedere per un po\'</string>
     <string name="manomissione_permesso_revocato">Accesso ai dati di utilizzo revocato</string>
     <string name="manomissione_notifiche_disattivate">Notifiche di Pactum disattivate sul telefono del figlio</string>
-    <string name="manomissione_generica">Anomalia: %1$s</string>
+    <string name="manomissione_generica">Buco nel registro: %1$s</string>
 
+    <!-- Durate: "45 min", "1 h", "2 h 30 min" (mai "1 h 0 min") -->
     <string name="formato_minuti">%1$d min</string>
+    <string name="formato_ore">%1$d h</string>
     <string name="formato_ore_minuti">%1$d h %2$d min</string>
+
+    <!-- La regola come complemento di una frase: "Ha accettato la tua proposta su TikTok" -->
+    <string name="regola_su_app">su %1$s</string>
+    <string name="regola_su_fascia">sulla fascia %1$s–%2$s</string>
+    <string name="regola_su_vita_reale">su «%1$s»</string>
 
     <!-- Notifiche (lista aperta dalla campanella della Panoramica) -->
     <string name="notifiche_titolo">Notifiche</string>
@@ -129,12 +138,24 @@
     <string name="notifica_segna_letta">Segna come letta</string>
     <string name="notifica_letta_fallita">Non sono riuscito a segnarla come letta: riprova.</string>
     <string name="tipo_sforamento">Fuori regola</string>
-    <string name="tipo_manomissione">Anomalia</string>
+    <string name="tipo_manomissione">Buco nel registro</string>
     <string name="tipo_bonus">Bonus</string>
     <string name="tipo_modifica_regola">Modifica del patto</string>
     <string name="tipo_novita">Novità dal patto</string>
     <string name="tipo_proposta_risposta">Risposta a una proposta</string>
+    <string name="tipo_proposta_annullata">Proposta annullata</string>
     <string name="tipo_dichiarazione">Dichiarazione del figlio</string>
+
+    <!-- Le frasi delle notifiche: le scrive l'app da tipo e payload, non il
+         server. Le stesse nella lista e nelle notifiche di sistema. -->
+    <string name="notifica_regola_nuova">Nuova regola</string>
+    <string name="notifica_bonus">Si è dato %1$s in più %2$s</string>
+    <string name="notifica_bonus_motivo">%1$s. Motivo: %2$s</string>
+    <string name="notifica_proposta_accettata">Ha accettato la tua proposta %1$s</string>
+    <string name="notifica_proposta_rifiutata">Ha rifiutato la tua proposta %1$s</string>
+    <string name="notifica_proposta_annullata">La tua proposta %1$s non vale più: la regola è uscita dal patto</string>
+    <string name="notifica_dichiarazione_successo">Dice di aver fatto: %1$s (%2$s)</string>
+    <string name="notifica_dichiarazione_fallimento">Dice di non aver fatto: %1$s (%2$s)</string>
 
     <!-- Canale notifiche di sistema -->
     <string name="canale_patto_nome">Avvisi del patto</string>
@@ -312,7 +333,8 @@
     <string name="verdetti_nel_registro">NEL REGISTRO</string>
     <string name="dichiarazione_regola_sconosciuta">Regola di vita reale</string>
     <string name="dichiarazione_giorno">Giorno: %1$s</string>
-    <string name="dichiarazione_successo_dichiarato">Ha dichiarato: successo</string>
+    <string name="dichiarazione_esito_successo">Dice di avercela fatta</string>
+    <string name="dichiarazione_esito_fallimento">Dice di non avercela fatta</string>
     <string name="dichiarazione_nota">Nota del figlio: %1$s</string>
     <string name="verdetto_nota_campo">Nota (facoltativa)</string>
     <string name="verdetto_conferma">Confermo</string>

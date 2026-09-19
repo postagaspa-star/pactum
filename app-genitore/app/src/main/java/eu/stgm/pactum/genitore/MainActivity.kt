@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -50,7 +48,6 @@ import eu.stgm.pactum.genitore.ui.NotificheScreen
 import eu.stgm.pactum.genitore.ui.NotificheViewModel
 import eu.stgm.pactum.genitore.ui.TempoScreen
 import eu.stgm.pactum.genitore.ui.TurnoScreen
-import eu.stgm.pactum.genitore.ui.testoBadge
 import eu.stgm.pactum.genitore.ui.theme.PactumTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -117,7 +114,7 @@ private const val INTERVALLO_NON_LETTE_MS = 60_000L
  * Quattro voci: guarda · misura · il tuo turno · impostazioni (tavola rotonda
  * C4). La finestra è la casa; le notifiche non sono una scheda, sono la lista
  * che si apre dalla campanella della finestra, col conto delle non lette come
- * badge sulla voce.
+ * badge sulla campanella (e solo lì).
  */
 @Composable
 private fun GenitoreRoot(
@@ -185,16 +182,10 @@ private fun GenitoreRoot(
                             notificheAperte = false
                         },
                         icon = {
-                            BadgedBox(
-                                badge = {
-                                    if (voce == Destinazione.FINESTRA && nonLette > 0) {
-                                        Badge { Text(testoBadge(nonLette)) }
-                                    }
-                                },
-                            ) {
-                                // L'etichetta sotto dice già il nome: l'icona tace.
-                                Icon(painterResource(voce.icona), contentDescription = null)
-                            }
+                            // L'etichetta sotto dice già il nome: l'icona tace.
+                            // Niente badge qui: il conto delle non lette sta
+                            // solo sulla campanella, da dove si aprono.
+                            Icon(painterResource(voce.icona), contentDescription = null)
                         },
                         label = { Text(stringResource(voce.etichetta)) },
                     )

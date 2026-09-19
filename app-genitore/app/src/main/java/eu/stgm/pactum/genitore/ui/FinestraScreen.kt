@@ -5,8 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -182,7 +180,12 @@ fun FinestraScreen(
     }
 }
 
-/** La campanella delle notifiche non lette: le notifiche si aprono da qui. */
+/**
+ * La campanella delle notifiche non lette: le notifiche si aprono da qui, e il
+ * conto delle non lette sta solo qui. Il badge è nel blu dell'app, non nel
+ * rosso `error` di Material: il rosso vive solo nella striscia dei giorni, e
+ * `error` resta alla validazione dei form (§3.1, le tre leggi del colore).
+ */
 @Composable
 private fun PulsanteNotifiche(nonLette: Int, onClick: () -> Unit) {
     val descrizione = if (nonLette > 0) {
@@ -193,7 +196,14 @@ private fun PulsanteNotifiche(nonLette: Int, onClick: () -> Unit) {
     IconButton(onClick = onClick) {
         BadgedBox(
             badge = {
-                if (nonLette > 0) Badge { Text(testoBadge(nonLette)) }
+                if (nonLette > 0) {
+                    Badge(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ) {
+                        Text(testoBadge(nonLette))
+                    }
+                }
             },
         ) {
             Icon(Icons.Outlined.Notifications, contentDescription = descrizione)
@@ -276,13 +286,20 @@ private fun ContenutoFinestra(
                 )
             }
             item { TitoloSezione(stringResource(R.string.sezione_regole)) }
-            items(finestra.regole, key = { "regola-${it.id}" }) {
-                SchedaRegola(it, finestra.bonus)
-            }
-            // I minuti bonus degli 8 giorni sono globali, non di una regola:
-            // stanno in coda alle regole, e solo se ce n'è stato almeno uno.
-            if (finestra.bonusGiornalieri.any { it.minuti > 0 }) {
-                item { StrisciaBonus(finestra.bonusGiornalieri) }
+            items(finestra.regole, key = { "regola-${it.id}" }) { SchedaRegola(it) }
+            // I bonus sono globali, non di una regola: si dicono UNA volta, in
+            // coda alle regole. I residui solo se c'è una limite_tempo attiva
+            // (il bonus allunga solo quelle), la striscia solo se negli 8
+            // giorni ce n'è stato almeno uno.
+            val residui = finestra.regole.any { it.attiva && it.tipo == TipiRegola.LIMITE_TEMPO }
+            val striscia = finestra.bonusGiornalieri.any { it.minuti > 0 }
+            if (residui || striscia) {
+                item {
+                    SezioneBonus(
+                        bonus = finestra.bonus.takeIf { residui },
+                        bonusGiornalieri = finestra.bonusGiornalieri.takeIf { striscia },
+                    )
+                }
             }
         }
 
@@ -596,11 +613,10 @@ private fun testoRiepilogo(riepilogo: RiepilogoPatto): String {
 /**
  * Una regola (§3.4): il tipo come sopra-titolo, la frase, la sua striscia
  * piccola da 20dp — un dettaglio, non un verdetto: il verdetto sta in cima.
- * Le limite_tempo attive portano i bonus ancora disponibili come chip.
+ * Niente bonus qui: sono contatori di tutto il patto, non di questa regola.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SchedaRegola(regola: RegolaFinestra, bonus: StatoBonus) {
+private fun SchedaRegola(regola: RegolaFinestra) {
     CardContenuto {
         Column(modifier = Modifier.padding(Spazi.l)) {
             SopraTitolo(
@@ -626,28 +642,35 @@ private fun SchedaRegola(regola: RegolaFinestra, bonus: StatoBonus) {
                     descrizione = descrizioneStriscia(giorni),
                 )
             }
-            if (regola.attiva && regola.tipo == TipiRegola.LIMITE_TEMPO) {
-                Spacer(Modifier.height(Spazi.m))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Spazi.s),
-                    verticalArrangement = Arrangement.spacedBy(Spazi.xs),
-                ) {
-                    Etichetta(
-                        stringResource(
-                            R.string.bonus_chip_giorno,
-                            bonus.giorno.residui,
-                            bonus.giorno.tetto,
-                        ),
-                    )
-                    Etichetta(
-                        stringResource(
-                            R.string.bonus_chip_settimana,
-                            bonus.settimana.residui,
-                            bonus.settimana.tetto,
-                        ),
-                    )
-                }
-            }
+        }
+    }
+}
+
+/**
+ * I bonus di tutto il patto, detti una volta sola: quanti minuti restano oggi
+ * e in settimana ([bonus], null se non c'è una limite_tempo attiva) e i minuti
+ * bonus di ciascuno degli 8 giorni ([bonusGiornalieri], null se sono tutti zero).
+ */
+@Composable
+private fun SezioneBonus(bonus: StatoBonus?, bonusGiornalieri: List<BonusGiorno>?) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = Spazi.xs)) {
+        if (bonus != null) {
+            SopraTitolo(stringResource(R.string.bonus_titolo))
+            Text(
+                text = stringResource(
+                    R.string.bonus_residui,
+                    bonus.giorno.residui,
+                    bonus.giorno.tetto,
+                    bonus.settimana.residui,
+                    bonus.settimana.tetto,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = Spazi.xs),
+            )
+        }
+        if (bonusGiornalieri != null) {
+            if (bonus != null) Spacer(modifier = Modifier.height(Spazi.m))
+            StrisciaBonus(bonusGiornalieri)
         }
     }
 }
@@ -655,7 +678,7 @@ private fun SchedaRegola(regola: RegolaFinestra, bonus: StatoBonus) {
 /** I minuti bonus di ciascuno degli 8 giorni (globali, non per regola). */
 @Composable
 private fun StrisciaBonus(bonusGiornalieri: List<BonusGiorno>) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = Spazi.xs)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         SopraTitolo(stringResource(R.string.bonus_striscia_titolo))
         Spacer(modifier = Modifier.height(Spazi.s))
         Row(horizontalArrangement = Arrangement.spacedBy(Spazi.xs)) {
@@ -729,19 +752,10 @@ private fun testoFuoriRegola(evento: EventoFinestra, regolePerId: Map<Long, Rego
     }
 }
 
+// La stessa frase della notifica di quel buco (Testi.kt).
 @Composable
-private fun testoBuco(evento: EventoFinestra): String {
-    val sottoTipo = campoTesto(evento.dettagli, "sotto_tipo")
-    return when (sottoTipo) {
-        "cambio_ora" -> stringResource(R.string.manomissione_cambio_ora)
-        "cambio_fuso" -> stringResource(R.string.manomissione_cambio_fuso)
-        "silenzio" -> stringResource(R.string.manomissione_silenzio)
-        // Tappa 6: rilevate al giro del worker sul telefono del figlio.
-        "permesso_revocato" -> stringResource(R.string.manomissione_permesso_revocato)
-        "notifiche_disattivate" -> stringResource(R.string.manomissione_notifiche_disattivate)
-        else -> stringResource(R.string.manomissione_generica, sottoTipo ?: "?")
-    }
-}
+private fun testoBuco(evento: EventoFinestra): String =
+    descrizioneBuco(campoTesto(evento.dettagli, "sotto_tipo"))
 
 @Composable
 private fun RigaStorico(modifica: ModificaStorico, regolePerId: Map<Long, RegolaFinestra>) {
@@ -756,8 +770,8 @@ private fun RigaStorico(modifica: ModificaStorico, regolePerId: Map<Long, Regola
         else -> modifica.azione
     }
     // La regola raccontata coi parametri DELLA modifica (dopo, o prima se
-    // eliminata), non con quelli vigenti: lo storico racconta il passato. Il
-    // nome leggibile dell'app vale solo se l'app è ancora la stessa.
+    // eliminata), non con quelli vigenti: lo storico racconta il passato
+    // (descrizioneParametri, la stessa delle notifiche di modifica).
     val parametri = modifica.dopo ?: modifica.prima
     val regola = regolePerId[modifica.regolaId]
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
@@ -772,14 +786,8 @@ private fun RigaStorico(modifica: ModificaStorico, regolePerId: Map<Long, Regola
             }
         }
         if (regola != null && parametri != null) {
-            val stessaApp = parametroTesto(parametri, "app_o_categoria") ==
-                parametroTesto(regola.parametri, "app_o_categoria")
             Text(
-                text = descrizioneRegola(
-                    regola.tipo,
-                    parametri,
-                    regola.nome.takeIf { stessaApp },
-                ),
+                text = descrizioneParametri(regola, parametri),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

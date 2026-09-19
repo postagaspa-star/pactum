@@ -25,12 +25,15 @@ import eu.stgm.pactum.genitore.aggiornamento.Aggiornatore
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.Notifica
+import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
 import eu.stgm.pactum.genitore.dati.UsoGiorno
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import eu.stgm.pactum.genitore.ui.istanteServer
 import eu.stgm.pactum.genitore.ui.oraOppureDataOra
+import eu.stgm.pactum.genitore.ui.paroleDi
 import eu.stgm.pactum.genitore.ui.testoDurata
+import eu.stgm.pactum.genitore.ui.testoNotifica
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -63,12 +66,16 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             ?: return Result.retry() // offline o server muto: si riprova col backoff
         impostazioni.registraVerificaRiuscita()
 
-        avvisaNovitaDelPatto(context, impostazioni, notifiche)
-
-        // Una lettura sola della finestra per le due sorveglianze (silenzio e
-        // digest): meglio sforzo — se non arriva, si ritenta al giro dopo (le
-        // notifiche sono già state gestite, niente Result.retry per questo).
+        // Una lettura sola della finestra per i testi delle notifiche (il nome
+        // leggibile delle regole) e per le due sorveglianze (silenzio e digest):
+        // meglio sforzo — se non arriva, le notifiche partono lo stesso col
+        // messaggio del server e il resto si ritenta al giro dopo (niente
+        // Result.retry per questo).
         val finestra = postino.leggiFinestra()
+        val regolePerId = finestra?.regole?.associateBy { it.id }.orEmpty()
+
+        avvisaNovitaDelPatto(context, impostazioni, notifiche, regolePerId)
+
         sorvegliaSilenzio(context, impostazioni, finestra)
         inviaDigest(context, impostazioni, finestra)
 
@@ -85,6 +92,7 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         context: Context,
         impostazioni: Impostazioni,
         notifiche: List<Notifica>,
+        regolePerId: Map<Long, RegolaFinestra>,
     ) {
         val giaAvvisate = impostazioni.leggiIdAvvisati()
         val nuove = notifiche.filter { it.id !in giaAvvisate }
@@ -98,7 +106,10 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         val gestore = NotificationManagerCompat.from(context)
         nuove.forEach { notifica ->
             try {
-                gestore.notify(notifica.id.toInt(), notificaDiSistema(context, notifica))
+                gestore.notify(
+                    notifica.id.toInt(),
+                    notificaDiSistema(context, notifica, regolePerId),
+                )
             } catch (e: SecurityException) {
                 return // permesso revocato tra il controllo e la notify
             }
@@ -208,23 +219,24 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             ?: return context.getString(R.string.digest_titolo_nessun_dato) to
                 context.getString(R.string.digest_testo_nessun_dato)
 
+        val parole = paroleDi(context)
         val titolo = context.getString(
             R.string.digest_titolo,
-            testoDurata(context, totale.toLong()),
+            testoDurata(parole, totale.toLong()),
         )
         val prime = uso.app
             .sortedByDescending { it.minuti }
             .take(APP_NEL_DIGEST)
             .joinToString(" · ") { app ->
                 val nome = app.nome ?: app.chiave
-                val durata = testoDurata(context, app.minuti.toLong())
+                val durata = testoDurata(parole, app.minuti.toLong())
                 val limite = app.limite
                 if (limite != null) {
                     context.getString(
                         R.string.digest_app_con_limite,
                         nome,
                         durata,
-                        testoDurata(context, limite.toLong()),
+                        testoDurata(parole, limite.toLong()),
                     )
                 } else {
                     context.getString(R.string.digest_app, nome, durata)
@@ -249,13 +261,20 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         return titolo to testo
     }
 
-    private fun notificaDiSistema(context: Context, notifica: Notifica): Notification =
-        notificaBase(
+    /** Titolo e frase dalla stessa funzione della lista in app (testoNotifica, Testi.kt). */
+    private fun notificaDiSistema(
+        context: Context,
+        notifica: Notifica,
+        regolePerId: Map<Long, RegolaFinestra>,
+    ): Notification {
+        val testo = testoNotifica(paroleDi(context), notifica, regolePerId)
+        return notificaBase(
             context,
-            titolo = context.getString(etichettaTipo(notifica.tipo)),
-            testo = notifica.messaggio,
+            titolo = testo.titolo,
+            testo = testo.testo,
             destinazione = destinazionePerTipo(notifica.tipo),
         )
+    }
 
     private fun avvisoSilenzio(context: Context, stato: StatoSilenzio): Notification {
         val quando = istanteServer(stato.ultimoBattito)?.let { oraOppureDataOra(it) }
@@ -373,19 +392,6 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
                 NotificationManagerCompat.from(context).areNotificationsEnabled()
             }
 
-        /** Titolo leggibile per il tipo di notifica del patto. */
-        fun etichettaTipo(tipo: String): Int = when (tipo) {
-            "sforamento" -> R.string.tipo_sforamento
-            "manomissione" -> R.string.tipo_manomissione
-            "bonus" -> R.string.tipo_bonus
-            "modifica_regola" -> R.string.tipo_modifica_regola
-            // Tappa 5: il genitore riceve anche le risposte alle proposte e le
-            // dichiarazioni del figlio (contratto-api.md, notifiche con destinatario).
-            "proposta_risposta" -> R.string.tipo_proposta_risposta
-            "dichiarazione" -> R.string.tipo_dichiarazione
-            else -> R.string.tipo_novita // tipo nuovo dal server: tolleranza evolutiva
-        }
-
         /**
          * Dove aprire l'app toccando la notifica (hook di navigazione). Le
          * risposte che toccano al genitore vanno su "Il tuo turno"; tutto il
@@ -393,7 +399,7 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
          * stessa notifica si legge per intero e si segna come letta.
          */
         private fun destinazionePerTipo(tipo: String): String = when (tipo) {
-            "proposta_risposta", "dichiarazione" -> MainActivity.DEST_TURNO
+            "proposta_risposta", "proposta_annullata", "dichiarazione" -> MainActivity.DEST_TURNO
             else -> MainActivity.DEST_NOTIFICHE
         }
     }

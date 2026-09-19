@@ -44,7 +44,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Notifica
-import eu.stgm.pactum.genitore.sync.VedettaWorker
 
 /**
  * Le notifiche non lette del patto. Non è più una scheda: si apre dalla
@@ -129,7 +128,11 @@ fun NotificheScreen(onChiudi: () -> Unit, vm: NotificheViewModel = viewModel()) 
                     } else {
                         item {
                             ListaRighe(stato.notifiche) { notifica ->
-                                RigaNotifica(notifica, onSegnaLetta = { vm.segnaLetta(notifica) })
+                                RigaNotifica(
+                                    notifica = notifica,
+                                    testo = testoNotifica(parole(), notifica, stato.regolePerId),
+                                    onSegnaLetta = { vm.segnaLetta(notifica) },
+                                )
                             }
                         }
                     }
@@ -139,9 +142,12 @@ fun NotificheScreen(onChiudi: () -> Unit, vm: NotificheViewModel = viewModel()) 
     }
 }
 
-/** Una notifica: icona del tipo, cosa è successo, quando — e il segno di "letta". */
+/**
+ * Una notifica: icona del tipo, cosa è successo, quando — e il segno di "letta".
+ * Il [testo] lo scrive l'app (testoNotifica, lo stesso della notifica di sistema).
+ */
 @Composable
-private fun RigaNotifica(notifica: Notifica, onSegnaLetta: () -> Unit) {
+private fun RigaNotifica(notifica: Notifica, testo: TestoNotifica, onSegnaLetta: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
         verticalAlignment = Alignment.Top,
@@ -158,12 +164,12 @@ private fun RigaNotifica(notifica: Notifica, onSegnaLetta: () -> Unit) {
                 .padding(start = Spazi.m),
         ) {
             Text(
-                text = stringResource(VedettaWorker.etichettaTipo(notifica.tipo)),
+                text = testo.titolo,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                text = notifica.messaggio,
+                text = testo.testo,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = Spazi.xs),
             )
@@ -182,6 +188,7 @@ private fun iconaTipo(tipo: String): Painter = when (tipo) {
     "manomissione" -> rememberVectorPainter(Icons.Outlined.Info)
     "bonus" -> rememberVectorPainter(Icons.Outlined.AddCircle)
     "modifica_regola" -> rememberVectorPainter(Icons.Outlined.Edit)
-    "proposta_risposta", "dichiarazione" -> painterResource(R.drawable.ic_scheda_turno)
+    "proposta_risposta", "proposta_annullata", "dichiarazione" ->
+        painterResource(R.drawable.ic_scheda_turno)
     else -> painterResource(R.drawable.ic_notifica_binocolo)
 }

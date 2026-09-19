@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.Notifica
+import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +17,13 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
 
     data class StatoNotifiche(
         val caricamento: Boolean = true,
+        /** Le non lette, dalla più recente alla più vecchia. */
         val notifiche: List<Notifica> = emptyList(),
+        /**
+         * Le regole della finestra (tutte, anche le eliminate): servono solo a
+         * scrivere i testi col nome leggibile dell'app ("TikTok").
+         */
+        val regolePerId: Map<Long, RegolaFinestra> = emptyMap(),
         val configurazioneMancante: Boolean = false,
         val errore: Boolean = false,
         /** Contatore di fallimenti di "segna come letta": ogni scatto = uno snackbar. */
@@ -35,18 +42,44 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
                 _stato.value = StatoNotifiche(caricamento = false, configurazioneMancante = true)
                 return@launch
             }
-            val notifiche = PostinoClient(configurazione).leggiNotifiche()
-            _stato.value = if (notifiche == null) {
-                _stato.value.copy(caricamento = false, errore = true)
-            } else {
-                _stato.value.copy(
-                    caricamento = false,
-                    notifiche = notifiche,
-                    configurazioneMancante = false,
-                    errore = false,
-                )
+            val postino = PostinoClient(configurazione)
+            val notifiche = postino.leggiNotifiche()
+            if (notifiche == null) {
+                _stato.value = _stato.value.copy(caricamento = false, errore = true)
+                return@launch
             }
+            val ordinate = dallaPiuRecente(notifiche)
+            val regole = regoleAggiornate(postino, ordinate, _stato.value)
+            _stato.value = _stato.value.copy(
+                caricamento = false,
+                notifiche = ordinate,
+                regolePerId = regole,
+                configurazioneMancante = false,
+                errore = false,
+            )
         }
+    }
+
+    /**
+     * Le regole si rileggono dalla finestra solo quando servono davvero: è
+     * arrivata una notifica nuova (una modifica può aver cambiato la regola) o
+     * una notifica cita una regola che non si conosce ancora. Il badge si
+     * riconta ogni minuto: senza novità non si scarica la finestra ogni volta.
+     * Se la finestra non arriva, si tengono le regole di prima e i testi che
+     * non si possono scrivere ripiegano sul messaggio del server.
+     */
+    private suspend fun regoleAggiornate(
+        postino: PostinoClient,
+        notifiche: List<Notifica>,
+        prima: StatoNotifiche,
+    ): Map<Long, RegolaFinestra> {
+        val citate = notifiche.mapNotNull(::regolaIdNotifica)
+        if (citate.isEmpty()) return prima.regolePerId
+        val giaViste = prima.notifiche.map { it.id }.toSet()
+        val novita = notifiche.any { it.id !in giaViste } ||
+            citate.any { it !in prima.regolePerId }
+        if (!novita) return prima.regolePerId
+        return postino.leggiFinestra()?.regole?.associateBy { it.id } ?: prima.regolePerId
     }
 
     fun segnaLetta(notifica: Notifica) {

@@ -13,6 +13,7 @@ import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.Regola
+import eu.stgm.pactum.figlio.dati.Riepilogo
 import eu.stgm.pactum.figlio.dati.StatoBonus
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import eu.stgm.pactum.figlio.dati.zonaPatto
@@ -70,6 +71,9 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
     sealed interface Evento {
         data class Bonus(val esito: EsitoBonus) : Evento
 
+        /** Il bonus rimasto in sospeso per la rete è arrivato: dopo "Niente rete", lo si dice. */
+        data class BonusPartito(val minuti: Int) : Evento
+
         /** "Aggiungi perché" arrivato un attimo dopo la partenza del bonus. */
         data object BonusGiaPartito : Evento
     }
@@ -80,6 +84,8 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
         val datiFermi: Boolean = false,
         val datiFermiAlle: Long? = null,
         val striscia: List<GiornoPatto> = emptyList(),
+        /** La riga sotto la striscia, uguale a quella del genitore. null = server vecchio. */
+        val riepilogo: Riepilogo? = null,
         val serie: Int = 0,
         val record: Int = 0,
         val regole: List<RigaRegola> = emptyList(),
@@ -98,22 +104,43 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Vero da quando il ragazzo tocca un bonus (o manda il perché) finché non
-     * arriva il suo esito: solo quegli esiti si raccontano. Un recupero fatto
-     * in silenzio dal servizio non deve spuntare come snackbar.
+     * arriva il suo esito DEFINITIVO: solo quegli esiti si raccontano. Un
+     * recupero fatto in silenzio dal servizio non deve spuntare come snackbar.
+     * "Niente rete" non è definitivo: il bonus resta in sospeso e riparte da
+     * solo, e com'è finita (partito, tetto, scaduto) si dice quando si sa.
      */
     private var attesaEsito = false
+
+    /** Il ragazzo ha già letto "Niente rete" per il bonus che aspetta. */
+    private var senzaReteGiaDetto = false
 
     init {
         viewModelScope.launch {
             ConsegnaBonus.esiti.collect { esito ->
-                val daMostrare = attesaEsito && esito !is EsitoBonus.Concesso
-                attesaEsito = false
+                val daMostrare = attesaEsito && when (esito) {
+                    // "Niente rete" una volta sola, non a ogni tentativo.
+                    is EsitoBonus.SenzaRete -> !senzaReteGiaDetto
+                    // Il sì si vede già sulla riga; dopo un "niente rete" si dice.
+                    is EsitoBonus.Concesso -> senzaReteGiaDetto
+                    else -> true
+                }
+                if (esito is EsitoBonus.SenzaRete) {
+                    if (attesaEsito) senzaReteGiaDetto = true
+                } else {
+                    attesaEsito = false
+                    senzaReteGiaDetto = false
+                }
                 val sospeso = CassettaBonus(getApplication()).leggi()
+                val evento = when {
+                    !daMostrare -> null
+                    esito is EsitoBonus.Concesso -> Evento.BonusPartito(esito.minuti)
+                    else -> Evento.Bonus(esito)
+                }
                 _stato.update {
                     it.copy(
                         bonusInSospeso = sospeso,
                         finestraBonus = false,
-                        evento = if (daMostrare) Evento.Bonus(esito) else it.evento,
+                        evento = evento ?: it.evento,
                     )
                 }
                 if (esito is EsitoBonus.Concesso) aggiorna()
@@ -164,13 +191,21 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 .sortedByDescending { it.minuti }
             val sospeso = CassettaBonus(context).leggi()
+            val datiFermiAlle = if (fermi) locale.aggiornatoIl() else null
 
             _stato.update {
+                // La lettura del cassetto può essere di un attimo PRIMA del tocco
+                // sul bonus: un null qui non chiude la snackbar aperta. A
+                // chiuderla sono l'esito della consegna, il perché o il tempo.
+                val aperto = it.bonusInSospeso?.takeIf { _ -> it.finestraBonus }
+                val finestra = aperto != null &&
+                    (sospeso == null || (sospeso.id == aperto.id && !sospeso.inScrittura))
                 it.copy(
                     caricamento = false,
                     datiFermi = fermi,
-                    datiFermiAlle = if (fermi) locale.aggiornatoIl() else null,
+                    datiFermiAlle = datiFermiAlle,
                     striscia = giorni,
+                    riepilogo = patto?.riepilogo,
                     serie = serie,
                     record = record,
                     regole = regole,
@@ -178,9 +213,8 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                     fuso = patto?.fuso,
                     righe = righe,
                     minutiTotali = contati.sumOf { u -> u.millisPrimoPiano } / 60_000,
-                    bonusInSospeso = sospeso,
-                    finestraBonus = it.finestraBonus && sospeso != null &&
-                        sospeso.id == it.bonusInSospeso?.id && !sospeso.inScrittura,
+                    bonusInSospeso = if (sospeso == null && finestra) aperto else sospeso,
+                    finestraBonus = finestra,
                 )
             }
         }
@@ -227,6 +261,7 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             attesaEsito = true
+            senzaReteGiaDetto = false
             _stato.update { it.copy(bonusInSospeso = bonus, finestraBonus = true) }
             // La snackbar si chiude poco dopo la finestra anche se la rete è
             // lenta: da lì in poi la riga dice "+15 min in partenza" finché il

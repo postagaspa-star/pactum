@@ -111,6 +111,87 @@ class SerieTest {
         assertEquals(SerieSalvata("2026-09-19", 8), Serie.calcola(giorni, salvata))
     }
 
+    // --- la striscia più vecchia della memoria (copia locale senza rete) ---
+
+    @Test
+    fun `una striscia piu' vecchia della memoria non accorcia la serie`() {
+        // La memoria arriva al 19 (12 giorni); senza rete si rilegge la copia del 17.
+        val vecchia = striscia("2026-09-17", M, M, M, M, M, M, M, M)
+        val salvata = SerieSalvata("2026-09-19", 12)
+        assertEquals(salvata, Serie.calcola(vecchia, salvata))
+        assertEquals(salvata, Serie.memoria(vecchia, salvata))
+    }
+
+    @Test
+    fun `una striscia vecchia che finisce rossa non cancella una memoria piu' nuova`() {
+        val vecchia = striscia("2026-09-15", M, M, M, M, M, M, M, F)
+        val salvata = SerieSalvata("2026-09-18", 3)
+        assertEquals(salvata, Serie.calcola(vecchia, salvata))
+        assertEquals(salvata, Serie.memoria(vecchia, salvata))
+    }
+
+    // --- memoria: un grigio non è una rottura ---
+
+    @Test
+    fun `ieri grigio perche' le fotografie non sono ancora arrivate, poi verde`() {
+        // 20 giorni di fila fino al 17. Il 18 è ancora grigio: le fotografie
+        // sono in coda sul telefono. Oggi (19) non ha ancora dati.
+        val salvata = SerieSalvata("2026-09-17", 20)
+        val primaLettura = striscia("2026-09-19", M, M, M, M, M, M, N, N)
+        // Da mostrare, adesso: la striscia non arriva a ieri, quindi zero...
+        assertNull(Serie.calcola(primaLettura, salvata))
+        // ...ma la memoria resta com'era.
+        val tenuta = Serie.memoria(primaLettura, salvata)
+        assertEquals(salvata, tenuta)
+
+        // Arrivano le fotografie: il 18 diventa verde e la serie lunga torna.
+        val secondaLettura = striscia("2026-09-19", M, M, M, M, M, M, M, N)
+        assertEquals(SerieSalvata("2026-09-18", 21), Serie.calcola(secondaLettura, tenuta))
+        assertEquals(SerieSalvata("2026-09-18", 21), Serie.memoria(secondaLettura, tenuta))
+    }
+
+    @Test
+    fun `ieri rosso invece cancella la memoria`() {
+        val salvata = SerieSalvata("2026-09-17", 20)
+        val giorni = striscia("2026-09-19", M, M, M, M, M, M, F, N)
+        assertNull(Serie.memoria(giorni, salvata))
+    }
+
+    @Test
+    fun `un rosso dopo un grigio rompe comunque la serie`() {
+        val salvata = SerieSalvata("2026-09-15", 20)
+        val giorni = striscia("2026-09-19", M, M, M, M, N, F, M, M)
+        assertEquals(SerieSalvata("2026-09-19", 2), Serie.memoria(giorni, salvata))
+    }
+
+    @Test
+    fun `dopo un grigio si mostra la serie nuova ma si ricorda quella lunga`() {
+        // Il 16 è grigio; dal 17 al 19 tre giorni verdi.
+        val salvata = SerieSalvata("2026-09-15", 20)
+        val giorni = striscia("2026-09-19", M, M, M, M, N, M, M, M)
+        assertEquals(SerieSalvata("2026-09-19", 3), Serie.calcola(giorni, salvata))
+        assertEquals(salvata, Serie.memoria(giorni, salvata))
+        // Il 16 diventa verde: 20 fino al 15, più quattro giorni.
+        val dopo = striscia("2026-09-19", M, M, M, M, M, M, M, M)
+        assertEquals(SerieSalvata("2026-09-19", 24), Serie.calcola(dopo, salvata))
+    }
+
+    @Test
+    fun `un grigio che resta grigio esce dalla finestra e la memoria non si riattacca`() {
+        // Il 16 resta grigio per sempre. Quando la finestra parte dal 17, la
+        // memoria del 15 non si può più attaccare: vale la serie dal 17 in poi.
+        val salvata = SerieSalvata("2026-09-15", 20)
+        val giorni = striscia("2026-09-24", M, M, M, M, M, M, M, M)
+        assertEquals(SerieSalvata("2026-09-24", 8), Serie.calcola(giorni, salvata))
+        assertEquals(SerieSalvata("2026-09-24", 8), Serie.memoria(giorni, salvata))
+    }
+
+    @Test
+    fun `senza memoria la memoria e' la serie della striscia`() {
+        val giorni = striscia("2026-09-19", F, M, M, M, M, M, M, M)
+        assertEquals(SerieSalvata("2026-09-19", 7), Serie.memoria(giorni, null))
+    }
+
     // --- conOggi (chiusura della sera) ---
 
     @Test

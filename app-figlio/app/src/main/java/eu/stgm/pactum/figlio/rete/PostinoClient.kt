@@ -203,7 +203,7 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
                 val body: RequestBody? = corpo?.toRequestBody(JSON_MEDIA_TYPE)
                     ?: if (metodo == "DELETE") null else CORPO_VUOTO
                 val richiesta = richiesta(percorso).method(metodo, body).build()
-                http.newCall(richiesta).execute().use { risposta ->
+                httpMutazioni.newCall(richiesta).execute().use { risposta ->
                     RispostaHttp(
                         ok = risposta.isSuccessful,
                         codice = risposta.code,
@@ -240,6 +240,18 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
+            .build()
+
+        /**
+         * Le mutazioni (bonus, dichiarazioni, risposte alle proposte, regole)
+         * NON si ritentano da sole. Con il ritentativo di OkHttp, una
+         * connessione caduta dopo che il server ha già ricevuto il POST lo
+         * rimanderebbe in silenzio: due bonus al posto di uno. Il dubbio dopo
+         * una risposta persa lo risolve chi chiama (per il bonus: `inviato` e
+         * `base` in ConsegnaBonus), non la rete. Stesso pool di connessioni.
+         */
+        private val httpMutazioni: OkHttpClient = http.newBuilder()
+            .retryOnConnectionFailure(false)
             .build()
 
         /**

@@ -1,6 +1,8 @@
 package eu.stgm.pactum.figlio.giornata
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalTime
 import java.time.ZoneId
@@ -14,6 +16,7 @@ class TestoSeraleTest {
 
     private val parole = ParoleSerale(
         dentro = "Oggi dentro tutte le tue regole.",
+        finoraDentro = "Finora dentro le tue regole.",
         giornoInParole = "%1\$s giorno.",
         ordinali = listOf(
             "Primo", "Secondo", "Terzo", "Quarto", "Quinto",
@@ -100,6 +103,45 @@ class TestoSeraleTest {
     @Test
     fun `una serie a zero non si scrive`() {
         assertEquals(Chiusura.Dentro(null), TestoSerale.chiusura(emptyList(), false, 0))
+    }
+
+    // --- una fascia ancora da venire: la giornata non è finita ---
+
+    @Test
+    fun `con una fascia ancora da venire si dice solo finora`() {
+        // 22:00-07:00 e sono le 21:30: la frase non certifica la giornata.
+        val testo = TestoSerale.testo(
+            TestoSerale.chiusura(emptyList(), rossoSulServer = false, serieConOggi = 9, fasciaAperta = true),
+            parole,
+        )
+        assertEquals("Finora dentro le tue regole. Nono giorno.", testo)
+    }
+
+    @Test
+    fun `una fascia aperta non cambia una giornata gia' andata oltre`() {
+        val fuori = listOf(FuoriOggi(TipoFuori.LIMITE, "TikTok", 40))
+        assertEquals(
+            Chiusura.OltreLimite("TikTok", 40, 0),
+            TestoSerale.chiusura(fuori, rossoSulServer = false, serieConOggi = null, fasciaAperta = true),
+        )
+    }
+
+    // --- una volta al giorno, anche con l'orologio portato indietro ---
+
+    @Test
+    fun `il giorno gia' chiuso non si richiude`() {
+        assertTrue(TestoSerale.giaChiusa("2026-09-19", "2026-09-19"))
+    }
+
+    @Test
+    fun `con l'orologio portato indietro la chiusura non riparte`() {
+        // Chiusa il 19; l'orologio torna al 18: il 18 era già stato raccontato.
+        assertTrue(TestoSerale.giaChiusa("2026-09-19", "2026-09-18"))
+    }
+
+    @Test
+    fun `il giorno dopo la chiusura riparte`() {
+        assertFalse(TestoSerale.giaChiusa("2026-09-18", "2026-09-19"))
     }
 
     // --- quando guardare ---

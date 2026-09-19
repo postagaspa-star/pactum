@@ -20,6 +20,7 @@ class RegoleBonusTest {
         base: Int? = null,
         minuti: Int = 15,
         giorno: String = "2026-09-19",
+        giornoBase: String? = null,
     ) = BonusInSospeso(
         id = "b1",
         regolaId = 3,
@@ -29,6 +30,7 @@ class RegoleBonusTest {
         inScrittura = inScrittura,
         inviato = inviato,
         base = base,
+        giornoBase = giornoBase,
     )
 
     // --- pronto: quando parte da solo ---
@@ -79,9 +81,102 @@ class RegoleBonusTest {
     @Test
     fun `un bonus di ieri non si manda oggi`() {
         assertEquals(RegoleBonus.Passo.Scarta, RegoleBonus.passo(bonus(), "2026-09-20", 0))
-        // Nemmeno se era partito: di ieri è di ieri.
+        // Nemmeno se era partito: di ieri è di ieri. Ma era partito, quindi
+        // non si dice che "non è partito in tempo".
         val partito = bonus(inviato = true, base = 0)
-        assertEquals(RegoleBonus.Passo.Scarta, RegoleBonus.passo(partito, "2026-09-20", 0))
+        assertEquals(RegoleBonus.Passo.ScartaGiaPartito, RegoleBonus.passo(partito, "2026-09-20", 0))
+    }
+
+    // --- mezzanotte: il contatore del server riparte da zero ---
+
+    @Test
+    fun `se il giorno del server e' cambiato un bonus partito non si rimanda`() {
+        // Partito alle 23:59 del 19 (base letta il 19), risposta persa. Il
+        // telefono dice ancora 19, il server è già al 20: il suo contatore è a
+        // zero anche se il bonus era arrivato. Rimandarlo lo darebbe due volte.
+        val b = bonus(inviato = true, base = 0, giornoBase = "2026-09-19")
+        assertEquals(
+            RegoleBonus.Passo.ScartaGiaPartito,
+            RegoleBonus.passo(b, "2026-09-19", minutiSulServer = 0, giornoServer = "2026-09-20"),
+        )
+    }
+
+    @Test
+    fun `nello stesso giorno del server il controllo sul contatore vale`() {
+        val b = bonus(inviato = true, base = 0, giornoBase = "2026-09-19")
+        assertEquals(
+            RegoleBonus.Passo.GiaArrivato,
+            RegoleBonus.passo(b, "2026-09-19", minutiSulServer = 15, giornoServer = "2026-09-19"),
+        )
+        assertEquals(
+            RegoleBonus.Passo.Manda,
+            RegoleBonus.passo(b, "2026-09-19", minutiSulServer = 0, giornoServer = "2026-09-19"),
+        )
+    }
+
+    @Test
+    fun `un bonus mai partito non guarda il giorno della base`() {
+        // Niente base: il giorno del server conta solo per un invio incerto.
+        assertEquals(
+            RegoleBonus.Passo.Manda,
+            RegoleBonus.passo(bonus(), "2026-09-19", minutiSulServer = 0, giornoServer = "2026-09-20"),
+        )
+    }
+
+    // --- il bonus in sospeso nel limite della sentinella ---
+
+    @Test
+    fun `il bonus in sospeso di oggi allarga il limite della sua regola`() {
+        val conto = RegoleBonus.bonusConSospeso(
+            bonusOggi = mapOf("3" to 5),
+            sospeso = bonus(minuti = 15),
+            oggi = "2026-09-19",
+            residuo = 25,
+        )
+        assertEquals(mapOf("3" to 20), conto)
+    }
+
+    @Test
+    fun `il bonus in sospeso fuori dal residuo non conta`() {
+        // Il server lo rifiuterà (tetto): lo sforamento va registrato.
+        val conto = RegoleBonus.bonusConSospeso(
+            bonusOggi = emptyMap(),
+            sospeso = bonus(minuti = 30),
+            oggi = "2026-09-19",
+            residuo = 15,
+        )
+        assertEquals(emptyMap<String, Int>(), conto)
+    }
+
+    @Test
+    fun `senza residuo noto il bonus in sospeso conta`() {
+        // Server vecchio senza contatori: decide il server, e se dice no il
+        // giro dopo lo sforamento c'è.
+        val conto = RegoleBonus.bonusConSospeso(emptyMap(), bonus(minuti = 5), "2026-09-19", null)
+        assertEquals(mapOf("3" to 5), conto)
+    }
+
+    @Test
+    fun `il bonus in sospeso di un altro giorno non conta`() {
+        val conto = RegoleBonus.bonusConSospeso(emptyMap(), bonus(giorno = "2026-09-18"), "2026-09-19", 30)
+        assertEquals(emptyMap<String, Int>(), conto)
+    }
+
+    @Test
+    fun `un bonus gia' contato dal server non si somma due volte`() {
+        // Partito con base 5, il server ne conta già 20: è arrivato.
+        val conto = RegoleBonus.bonusConSospeso(
+            bonusOggi = mapOf("3" to 20),
+            sospeso = bonus(inviato = true, base = 5, minuti = 15),
+            oggi = "2026-09-19",
+            residuo = 10,
+        )
+        assertEquals(mapOf("3" to 20), conto)
+    }
+
+    @Test
+    fun `senza bonus in sospeso restano i bonus del server`() {
+        assertEquals(mapOf("3" to 5), RegoleBonus.bonusConSospeso(mapOf("3" to 5), null, "2026-09-19", 25))
     }
 
     // --- esito della risposta ---

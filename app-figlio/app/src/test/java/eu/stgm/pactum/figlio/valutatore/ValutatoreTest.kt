@@ -1,7 +1,10 @@
 package eu.stgm.pactum.figlio.valutatore
 
+import eu.stgm.pactum.figlio.bonus.BonusInSospeso
+import eu.stgm.pactum.figlio.bonus.RegoleBonus
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiRegola
+import eu.stgm.pactum.figlio.misura.UsoApp
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -139,5 +142,53 @@ class ValutatoreTest {
         assertEquals(20L, indice.minuti("COM.Instagram.android "))
         assertEquals(50L, indice.minuti("categoria:social"))
         assertEquals(0L, indice.minuti("categoria:giochi"))
+    }
+
+    @Test
+    fun `le categorie contano le stesse app della fotografia del genitore`() {
+        // La Home (launcher) e Pactum non vanno nella fotografia: non devono
+        // finire nemmeno in "categoria:altro" della sentinella (D3).
+        val uso = listOf(
+            UsoApp("com.android.launcher3", 40 * 60_000L),
+            UsoApp("eu.stgm.pactum.figlio", 10 * 60_000L),
+            UsoApp("org.telegram.messenger", 25 * 60_000L),
+        )
+        val fotografia = setOf("org.telegram.messenger")
+        val indice = IndiceUso.daUso(
+            uso = uso,
+            contaNellUso = { it in fotografia },
+            categoriaDi = { "categoria:altro" },
+        )
+        assertEquals(25L, indice.minuti("categoria:altro"))
+        assertEquals(0L, indice.minuti("com.android.launcher3"))
+    }
+
+    // --- il bonus in sospeso nella valutazione (sentinella) ---
+
+    @Test
+    fun `un bonus in sospeso nel residuo evita lo sforamento, rifiutato non piu'`() {
+        // Limite 60, usati 70: il ragazzo si è appena dato +15, che aspetta
+        // ancora la snackbar o la rete.
+        val regole = listOf(limite(3, "com.zhiliaoapp.musically", 60))
+        val sospeso = BonusInSospeso(
+            id = "b1",
+            regolaId = 3,
+            minuti = 15,
+            giorno = "2026-09-19",
+            creatoIl = 0L,
+        )
+        fun valuta(bonus: Map<String, Int>) = Valutatore.valuta(
+            regole = regole,
+            bonusOggiPerRegola = bonus,
+            usoMinutiEtichetta = { 70L },
+            usoMinutiIntervallo = { _, _ -> 0L },
+            now = ms("2026-09-19T20:00:00"),
+            zona = roma,
+        )
+        val conSospeso = RegoleBonus.bonusConSospeso(emptyMap(), sospeso, "2026-09-19", residuo = 30)
+        assertEquals(emptyList<Sforamento>(), valuta(conSospeso))
+        // Il server l'ha rifiutato: il cassetto è vuoto, e lo sforamento c'è.
+        val dopoIlRifiuto = RegoleBonus.bonusConSospeso(emptyMap(), null, "2026-09-19", residuo = 30)
+        assertEquals(10, valuta(dopoIlRifiuto).single().minutiOltre)
     }
 }

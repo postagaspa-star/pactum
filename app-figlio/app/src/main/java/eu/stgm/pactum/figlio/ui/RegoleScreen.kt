@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -63,12 +64,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.GiornoPatto
 import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.design.StrisciaGiorni
+import eu.stgm.pactum.design.contaGiorni
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.catalogo.AppInstallata
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiRegola
+import eu.stgm.pactum.figlio.dati.inGiorniPatto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -284,6 +289,18 @@ private fun CardRegola(
                         modifier = Modifier.padding(top = Spazi.xs),
                     )
                 }
+            // (v2.4) Gli 8 giorni di QUESTA regola, la stessa striscia piccola che
+            // il genitore vede sulla sua scheda (D3). Server vecchio: niente.
+            val giorni = remember(regola.semaforo) { regola.semaforo.inGiorniPatto() }
+            if (giorni.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(Spazi.m))
+                StrisciaGiorni(
+                    giorni = giorni,
+                    lato = 20.dp,
+                    mostraNumero = false,
+                    descrizione = descrizioneStrisciaRegola(giorni),
+                )
+            }
             Row(modifier = Modifier.padding(top = Spazi.xs)) {
                 TextButton(onClick = onModifica) {
                     Text(stringResource(R.string.azione_modifica))
@@ -294,6 +311,17 @@ private fun CardRegola(
                 }
             }
         }
+    }
+}
+
+/** Quello che TalkBack legge al posto dei quadretti: "6 su 7 giorni dentro questa regola". */
+@Composable
+private fun descrizioneStrisciaRegola(giorni: List<GiornoPatto>): String {
+    val (mantenuti, conDati) = contaGiorni(giorni)
+    return if (conDati == 0) {
+        stringResource(R.string.oggi_striscia_senza_dati)
+    } else {
+        pluralStringResource(R.plurals.regola_striscia_frase, conDati, mantenuti, conDati)
     }
 }
 

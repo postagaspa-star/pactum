@@ -61,7 +61,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        destinazioneRichiesta.value = intent?.getStringExtra(EXTRA_DESTINAZIONE)
+        // Solo a un avvio vero. Dopo una rotazione (o la morte del processo)
+        // savedInstanceState c'è e l'intent è ancora quello della notifica:
+        // rileggerlo riporterebbe il ragazzo sulla scheda della notifica. Lo
+        // stesso dalla schermata delle app recenti, che ripresenta l'intent vecchio.
+        val daRecenti = ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        if (savedInstanceState == null && !daRecenti) {
+            destinazioneRichiesta.value = prendiDestinazione(intent)
+        } else {
+            intent?.removeExtra(EXTRA_DESTINAZIONE)
+        }
         setContent {
             PactumTheme {
                 PactumRoot(
@@ -75,7 +84,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        destinazioneRichiesta.value = intent.getStringExtra(EXTRA_DESTINAZIONE)
+        destinazioneRichiesta.value = prendiDestinazione(intent)
+    }
+
+    /** La destinazione della notifica, tolta dall'intent: si usa una volta sola. */
+    private fun prendiDestinazione(intent: Intent?): String? {
+        val destinazione = intent?.getStringExtra(EXTRA_DESTINAZIONE)
+        intent?.removeExtra(EXTRA_DESTINAZIONE)
+        return destinazione
     }
 
     companion object {
@@ -154,6 +170,22 @@ private fun PactumRoot(
     var mostraSiti by rememberSaveable { mutableStateOf(false) }
     var mostraCosaVede by rememberSaveable { mutableStateOf(false) }
 
+    // Arrivo da una notifica: salta alla scheda giusta, una volta sola, anche
+    // se sopra c'è un'altra schermata (Impostazioni, Siti, Cosa vede): per
+    // questo sta PRIMA dei loro return, altrimenti non girerebbe finché non si
+    // chiudono. Una destinazione che non si conosce (versione vecchia) apre
+    // Oggi: un tocco su una notifica non finisce mai nel vuoto.
+    LaunchedEffect(destinazioneRichiesta) {
+        if (destinazioneRichiesta != null) {
+            nomeScheda = (Scheda.entries.firstOrNull { it.destinazione == destinazioneRichiesta }
+                ?: Scheda.OGGI).name
+            mostraImpostazioni = false
+            mostraSiti = false
+            mostraCosaVede = false
+            onDestinazioneConsumata()
+        }
+    }
+
     // Gate della prima regola (concept.md: almeno una regola obbligatoria). Lo
     // stesso RegoleViewModel dell'Activity serve il gate e la scheda Regole.
     val regoleVm: RegoleViewModel = viewModel()
@@ -212,20 +244,6 @@ private fun PactumRoot(
             )
         }
         return
-    }
-
-    // Arrivo da una notifica: salta alla scheda giusta, una volta sola. Una
-    // destinazione che non si conosce (versione vecchia) apre Oggi: un tocco su
-    // una notifica non finisce mai nel vuoto.
-    LaunchedEffect(destinazioneRichiesta) {
-        if (destinazioneRichiesta != null) {
-            nomeScheda = (Scheda.entries.firstOrNull { it.destinazione == destinazioneRichiesta }
-                ?: Scheda.OGGI).name
-            mostraImpostazioni = false
-            mostraSiti = false
-            mostraCosaVede = false
-            onDestinazioneConsumata()
-        }
     }
 
     Scaffold(

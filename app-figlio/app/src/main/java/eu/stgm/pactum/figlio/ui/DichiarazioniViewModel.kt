@@ -65,9 +65,11 @@ class DichiarazioniViewModel(application: Application) : AndroidViewModel(applic
          * la sua versione dello stesso giorno sulla stessa regola.
          */
         val tutte: List<Dichiarazione>
-            get() = provvisorie.filter { p ->
-                dichiarazioni.none { it.regolaId == p.regolaId && it.giorno == p.giorno }
-            } + dichiarazioni
+            get() = (
+                provvisorie.filter { p ->
+                    dichiarazioni.none { it.regolaId == p.regolaId && it.giorno == p.giorno }
+                } + dichiarazioni
+                ).distinctBy { it.id } // gli id sono le chiavi della lista: mai due uguali
     }
 
     private val _stato = MutableStateFlow(StatoDiario())
@@ -179,7 +181,13 @@ class DichiarazioniViewModel(application: Application) : AndroidViewModel(applic
                     } else {
                         it.provvisorie.filterNot { p -> p.id == provvisoria?.id }
                     },
-                    dichiarazioni = if (creata != null) listOf(creata) + it.dichiarazioni else it.dichiarazioni,
+                    // Una rilettura partita nel frattempo può averla già portata:
+                    // due volte lo stesso id è una chiave doppia nella lista (crash).
+                    dichiarazioni = if (creata != null) {
+                        listOf(creata) + it.dichiarazioni.filterNot { d -> d.id == creata.id }
+                    } else {
+                        it.dichiarazioni
+                    },
                     evento = evento,
                 )
             }

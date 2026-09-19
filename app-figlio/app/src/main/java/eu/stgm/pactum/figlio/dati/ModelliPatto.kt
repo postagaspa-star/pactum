@@ -35,6 +35,10 @@ data class Patto(
     // mostra così com'è. Serie e record si calcolano da qui, in locale, e non
     // tornano mai indietro. Vuota = server vecchio senza il campo.
     val striscia: List<GiornoStriscia> = emptyList(),
+    // (v2.4) La riga sotto la striscia, IDENTICA a quella della finestra del
+    // genitore: la conta il server nel fuso del patto. null = server vecchio
+    // senza il campo, e allora la riga non si mostra.
+    val riepilogo: Riepilogo? = null,
     val fuso: String? = null,
     // App-interno (NON dal server): il giorno del patto in cui `bonusOggiPerRegola`
     // è valido, stampato da PattoLocale al salvataggio. Se al momento della
@@ -42,27 +46,51 @@ data class Patto(
     @SerialName("bonus_giorno_locale") val bonusGiornoLocale: String? = null,
 ) {
     /** La striscia nel linguaggio del design system (core-design). */
-    fun giorniPatto(): List<GiornoPatto> =
-        striscia.map { GiornoPatto(it.data, segnaleDaStato(it.stato)) }
+    fun giorniPatto(): List<GiornoPatto> = striscia.inGiorniPatto()
 
     /**
      * I bonus di oggi per regola, ma solo se la copia è stata sincronizzata OGGI
      * nel fuso del patto: dopo una notte offline il bonus di ieri non deve
      * allargare il limite di oggi (contratto: il bonus è del giorno).
      */
-    fun bonusValidiOggi(now: Long = System.currentTimeMillis()): Map<String, Int> {
+    fun bonusValidiOggi(now: Long = System.currentTimeMillis()): Map<String, Int> =
+        if (copiaDiOggi(now)) bonusOggiPerRegola else emptyMap()
+
+    /**
+     * Quanti minuti di bonus restano oggi: il più piccolo dei due tetti. Null
+     * se non si sa (server vecchio senza contatori, o copia di un altro giorno).
+     */
+    fun residuoBonusOggi(now: Long = System.currentTimeMillis()): Int? {
+        val contatori = bonus ?: return null
+        if (!copiaDiOggi(now)) return null
+        return minOf(contatori.giorno.residui, contatori.settimana.residui)
+    }
+
+    /** La copia è stata sincronizzata oggi, nel fuso del patto (o non si sa quando). */
+    private fun copiaDiOggi(now: Long): Boolean {
         val giornoPatto = Instant.ofEpochMilli(now).atZone(zonaPatto(fuso)).toLocalDate().toString()
-        return if (bonusGiornoLocale == null || bonusGiornoLocale == giornoPatto) {
-            bonusOggiPerRegola
-        } else {
-            emptyMap()
-        }
+        return bonusGiornoLocale == null || bonusGiornoLocale == giornoPatto
     }
 }
 
 /** (v2.4) Un giorno della striscia: `stato` ∈ verde · rosso · grigio. */
 @Serializable
 data class GiornoStriscia(val data: String = "", val stato: String = "")
+
+/** Una striscia del contratto (`striscia` o `semaforo`) nel linguaggio di core-design. */
+fun List<GiornoStriscia>.inGiorniPatto(): List<GiornoPatto> =
+    map { GiornoPatto(it.data, segnaleDaStato(it.stato)) }
+
+/**
+ * (v2.4) Il `riepilogo` di GET /api/patto, identico a quello di GET
+ * /api/finestra: i giorni `rosso` della striscia e le interruzioni nella
+ * registrazione negli stessi 8 giorni.
+ */
+@Serializable
+data class Riepilogo(
+    @SerialName("giorni_fuori_regola") val giorniFuoriRegola: Int = 0,
+    val interruzioni: Int = 0,
+)
 
 /**
  * Il fuso in cui contare i "giorni" del patto (bonus, dichiarazioni): quello
@@ -82,6 +110,9 @@ data class Regola(
     @SerialName("creata_ts") val creataTs: String = "",
     @SerialName("ultima_modifica_ts") val ultimaModificaTs: String = "",
     @SerialName("allentabile_dal") val allentabileDal: String? = null,
+    // (v2.4, solo in GET /api/patto) Gli 8 giorni di QUESTA regola, identici
+    // a quelli che il genitore vede sulla sua scheda. Vuoto = server vecchio.
+    val semaforo: List<GiornoStriscia> = emptyList(),
 )
 
 object TipiRegola {

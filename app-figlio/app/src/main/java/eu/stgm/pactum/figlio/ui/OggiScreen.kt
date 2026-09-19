@@ -60,6 +60,7 @@ import eu.stgm.pactum.design.contaGiorni
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.bonus.BonusInSospeso
 import eu.stgm.pactum.figlio.bonus.EsitoBonus
+import eu.stgm.pactum.figlio.dati.Riepilogo
 import eu.stgm.pactum.figlio.dati.StatoBonus
 import eu.stgm.pactum.figlio.ui.OggiViewModel.RigaRegola
 import eu.stgm.pactum.figlio.valutatore.MomentoFascia
@@ -108,6 +109,8 @@ fun OggiScreen(
     LaunchedEffect(stato.evento) {
         val messaggio = when (val evento = stato.evento) {
             is OggiViewModel.Evento.Bonus -> testoEsitoBonus(context, evento.esito, stato.bonus)
+            is OggiViewModel.Evento.BonusPartito ->
+                context.getString(R.string.bonus_partito_dopo_rete, evento.minuti)
             OggiViewModel.Evento.BonusGiaPartito -> context.getString(R.string.bonus_gia_partito)
             null -> null
         }
@@ -162,6 +165,7 @@ fun OggiScreen(
                 item {
                     SchedaPatto(
                         striscia = stato.striscia,
+                        riepilogo = stato.riepilogo,
                         serie = stato.serie,
                         record = stato.record,
                         modifier = Modifier.padding(bottom = Spazi.l),
@@ -290,10 +294,14 @@ fun OggiScreen(
     }
 }
 
-/** La scheda eroe: la serie, il record una riga sotto, la striscia degli 8 giorni. */
+/**
+ * La scheda eroe: la serie, il record una riga sotto, la striscia degli 8
+ * giorni e sotto la stessa riga di riepilogo che vede il genitore (D3).
+ */
 @Composable
 private fun SchedaPatto(
     striscia: List<GiornoPatto>,
+    riepilogo: Riepilogo?,
     serie: Int,
     record: Int,
     modifier: Modifier = Modifier,
@@ -347,8 +355,37 @@ private fun SchedaPatto(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = Spazi.s),
             )
+            // Server vecchio senza `riepilogo`: la riga non c'è.
+            if (riepilogo != null) {
+                Text(
+                    text = testoRiepilogo(riepilogo),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = Spazi.xs),
+                )
+            }
         }
     }
+}
+
+/**
+ * "Nessun giorno fuori regola · registrazione completa", oppure i conti. Le
+ * stesse frasi dell'app del genitore: gli stessi fatti, con le stesse parole.
+ */
+@Composable
+private fun testoRiepilogo(riepilogo: Riepilogo): String {
+    val fuori = riepilogo.giorniFuoriRegola
+    val interruzioni = riepilogo.interruzioni
+    val parteFuori = if (fuori == 0) {
+        stringResource(R.string.riepilogo_nessun_fuori_regola)
+    } else {
+        pluralStringResource(R.plurals.riepilogo_giorni_fuori_regola, fuori, fuori)
+    }
+    val parteInterruzioni = if (interruzioni == 0) {
+        stringResource(R.string.riepilogo_registro_completo)
+    } else {
+        pluralStringResource(R.plurals.riepilogo_interruzioni, interruzioni, interruzioni)
+    }
+    return "$parteFuori · $parteInterruzioni"
 }
 
 @Composable
@@ -534,4 +571,6 @@ private fun testoEsitoBonus(
     is EsitoBonus.Rifiutato -> context.getString(R.string.bonus_errore)
     is EsitoBonus.SenzaRete -> context.getString(R.string.bonus_senza_rete)
     is EsitoBonus.Scaduto -> context.getString(R.string.bonus_scaduto)
+    // Era già partito: niente "non è partito in tempo".
+    is EsitoBonus.GiornoCambiato -> context.getString(R.string.bonus_giorno_cambiato)
 }

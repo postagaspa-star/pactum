@@ -70,6 +70,19 @@
         <item quantity="other">%1$d su %2$d giorni dentro tutte le regole</item>
     </plurals>
     <string name="oggi_striscia_senza_dati">Negli ultimi 8 giorni non ci sono ancora dati</string>
+    <!-- La riga sotto la striscia (v2.4, riepilogo del server): le STESSE frasi
+         dell'app del genitore (chiavi riepilogo_* in app-genitore). Stessi
+         fatti, stesse parole: se cambiano là, cambiano qui. -->
+    <string name="riepilogo_nessun_fuori_regola">Nessun giorno fuori regola</string>
+    <string name="riepilogo_registro_completo">registrazione completa</string>
+    <plurals name="riepilogo_giorni_fuori_regola">
+        <item quantity="one">%1$d giorno fuori regola</item>
+        <item quantity="other">%1$d giorni fuori regola</item>
+    </plurals>
+    <plurals name="riepilogo_interruzioni">
+        <item quantity="one">%1$d interruzione nella registrazione</item>
+        <item quantity="other">%1$d interruzioni nella registrazione</item>
+    </plurals>
     <string name="oggi_sezione_regole">LE TUE REGOLE OGGI</string>
     <string name="oggi_minuti_su_limite">%1$s su %2$s</string>
     <string name="oggi_oltre">%1$s oltre</string>
@@ -108,6 +121,10 @@
     <string name="bonus_errore">Non sono riuscito a darti il bonus: riprova.</string>
     <string name="bonus_senza_rete">Niente rete: il bonus parte appena torna.</string>
     <string name="bonus_scaduto">Il bonus di ieri non è partito in tempo: un bonus vale solo per il giorno in cui te lo dai.</string>
+    <!-- Era già partito ma la conferma è arrivata dopo mezzanotte: vero sia se è arrivato sia se no. -->
+    <string name="bonus_giorno_cambiato">Il bonus di ieri non vale per oggi: un bonus vale solo per il giorno in cui te lo dai.</string>
+    <!-- Dopo "Niente rete": la rete è tornata e il bonus è arrivato. -->
+    <string name="bonus_partito_dopo_rete">Il bonus è partito: +%1$d min.</string>
     <string name="bonus_gia_partito">Il bonus era già partito, senza perché.</string>
 
     <!-- Impostazioni -->
@@ -173,6 +190,11 @@
     <string name="regole_unica_regola">Questa è l\'unica regola del patto: puoi modificarla, ma non eliminarla.</string>
     <string name="regole_nuova">Nuova regola</string>
     <string name="regola_concordata">concordata</string>
+    <!-- Letta da TalkBack al posto dei quadretti della striscia piccola di una regola -->
+    <plurals name="regola_striscia_frase">
+        <item quantity="one">%1$d su %2$d giorno dentro questa regola</item>
+        <item quantity="other">%1$d su %2$d giorni dentro questa regola</item>
+    </plurals>
     <string name="regola_allentabile_dal">Allentabile dal %1$s</string>
     <string name="azione_modifica">Modifica</string>
     <string name="azione_elimina">Elimina</string>
@@ -299,6 +321,8 @@
     <!-- Chiusura della sera (redesign C5) -->
     <string name="serale_titolo">Com\'è andata oggi</string>
     <string name="serale_dentro">Oggi dentro tutte le tue regole.</string>
+    <!-- Una fascia oraria è ancora da venire o in corso: la giornata non è finita. -->
+    <string name="serale_finora_dentro">Finora dentro le tue regole.</string>
     <string name="serale_giorno_in_parole">%1$s giorno.</string>
     <string-array name="serale_ordinali">
         <item>Primo</item>

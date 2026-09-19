@@ -33,6 +33,12 @@ data class BonusInSospeso(
     val inviato: Boolean = false,
     /** I minuti bonus su questa regola letti dal server subito prima del POST. */
     val base: Int? = null,
+    /**
+     * Il giorno del SERVER in cui è stata letta [base] (l'ultima data della
+     * striscia). Il contatore del server riparte a mezzanotte: se il giorno è
+     * cambiato, [base] non si può più confrontare e il bonus non si rimanda.
+     */
+    @SerialName("giorno_base") val giornoBase: String? = null,
 )
 
 /** Com'è finita una consegna: quello che la schermata deve dire. */
@@ -53,6 +59,13 @@ sealed interface EsitoBonus {
 
     /** Era di un giorno ormai passato: mandarlo oggi darebbe minuti mai chiesti. */
     data class Scaduto(override val minuti: Int) : EsitoBonus
+
+    /**
+     * Era già partito, ma la conferma non è arrivata e nel frattempo il giorno
+     * è cambiato: non si rimanda. Se è arrivato vale per il suo giorno, se non
+     * è arrivato non vale: in tutti e due i casi non vale per oggi.
+     */
+    data class GiornoCambiato(override val minuti: Int) : EsitoBonus
 }
 
 /**
@@ -75,8 +88,14 @@ object RegoleBonus {
     }
 
     sealed interface Passo {
-        /** Di un altro giorno: si butta, non si manda. */
+        /** Di un altro giorno, mai partito: si butta, non si manda. */
         data object Scarta : Passo
+
+        /**
+         * Già partito senza risposta, e il giorno è cambiato: si butta senza
+         * rimandarlo, e senza dire che "non è partito in tempo".
+         */
+        data object ScartaGiaPartito : Passo
 
         /** Un invio precedente era arrivato: il server lo conta già, non si rimanda. */
         data object GiaArrivato : Passo
@@ -90,12 +109,54 @@ object RegoleBonus {
      * si considera arrivato se il contatore del server è cresciuto almeno dei
      * suoi minuti rispetto a prima. Funziona perché i bonus partono solo da
      * qui, uno alla volta: nessun altro può far crescere quel contatore.
+     *
+     * Il confronto vale solo nello stesso giorno del server: a mezzanotte il
+     * contatore riparte da zero, e un bonus arrivato ieri sembrerebbe mai
+     * arrivato. Per questo [giornoServer] (l'ultima data della striscia) si
+     * confronta col giorno in cui è stata letta la base: se è cambiato, non si
+     * rimanda. [oggi] è il giorno del patto secondo l'orologio del telefono,
+     * lo stesso con cui è stato scritto `bonus.giorno`.
      */
-    fun passo(bonus: BonusInSospeso, oggi: String, minutiSulServer: Int): Passo = when {
-        bonus.giorno != oggi -> Passo.Scarta
+    fun passo(
+        bonus: BonusInSospeso,
+        oggi: String,
+        minutiSulServer: Int,
+        giornoServer: String? = null,
+    ): Passo = when {
+        bonus.inviato && bonus.giornoBase != null && giornoServer != null &&
+            giornoServer != bonus.giornoBase -> Passo.ScartaGiaPartito
         bonus.inviato && bonus.base != null && minutiSulServer >= bonus.base + bonus.minuti ->
             Passo.GiaArrivato
+        bonus.giorno != oggi -> if (bonus.inviato) Passo.ScartaGiaPartito else Passo.Scarta
         else -> Passo.Manda
+    }
+
+    /**
+     * I minuti bonus di oggi per regola come li deve contare la sentinella:
+     * quelli del server più il bonus in sospeso, se è di [oggi] (giorno del
+     * patto) e sta nel [residuo] noto (il più piccolo dei due tetti; null =
+     * non noto, e allora conta). Senza, chi si dà +15 a limite già superato
+     * verrebbe segnato fuori regola nei secondi in cui il bonus aspetta la
+     * snackbar o la rete. Se poi il server lo rifiuta, il cassetto si svuota e
+     * la valutazione successiva registra lo sforamento come sempre.
+     *
+     * Un bonus già partito e già contato dal server (contatore cresciuto
+     * almeno dei suoi minuti rispetto alla base) non si somma due volte.
+     */
+    fun bonusConSospeso(
+        bonusOggi: Map<String, Int>,
+        sospeso: BonusInSospeso?,
+        oggi: String,
+        residuo: Int?,
+    ): Map<String, Int> {
+        if (sospeso == null || sospeso.giorno != oggi) return bonusOggi
+        val chiave = sospeso.regolaId.toString()
+        val sulServer = bonusOggi[chiave] ?: 0
+        val giaContato = sospeso.inviato && sospeso.base != null &&
+            sulServer >= sospeso.base + sospeso.minuti
+        if (giaContato) return bonusOggi
+        if (residuo != null && sospeso.minuti > residuo) return bonusOggi
+        return bonusOggi + (chiave to sulServer + sospeso.minuti)
     }
 
     /**

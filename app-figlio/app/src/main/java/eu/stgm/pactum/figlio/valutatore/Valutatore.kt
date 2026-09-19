@@ -2,6 +2,7 @@ package eu.stgm.pactum.figlio.valutatore
 
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiRegola
+import eu.stgm.pactum.figlio.misura.UsoApp
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonArray
@@ -74,8 +75,23 @@ class IndiceUso(
         return if (k.startsWith(PREFISSO_CATEGORIA)) perCategoria[k] ?: 0L else perPacchetto[k] ?: 0L
     }
 
-    private companion object {
-        const val PREFISSO_CATEGORIA = "categoria:"
+    companion object {
+        private const val PREFISSO_CATEGORIA = "categoria:"
+
+        /**
+         * L'indice dall'uso letto sul telefono, tenendo SOLO i pacchetti che
+         * [contaNellUso] ammette: lo stesso filtro della fotografia inviata al
+         * server, così una categoria qui somma le stesse app che il genitore
+         * vede sommate nella sua finestra.
+         */
+        fun daUso(
+            uso: List<UsoApp>,
+            contaNellUso: (String) -> Boolean,
+            categoriaDi: (String) -> String,
+        ): IndiceUso = IndiceUso(
+            uso = uso.filter { contaNellUso(it.pacchetto) }.map { it.pacchetto to it.millisPrimoPiano },
+            categoriaDi = categoriaDi,
+        )
     }
 }
 

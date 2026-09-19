@@ -99,6 +99,23 @@ object ConsegnaBonus {
         ambito.launch { recupera(app) }
     }
 
+    /**
+     * Server o codice cambiati nelle Impostazioni: il bonus in sospeso era del
+     * patto vecchio e non deve partire verso quello nuovo (né essere
+     * "verificato" sul contatore di un altro patto). Sotto lo stesso mutex
+     * della consegna, così un invio già in corso finisce prima. Si butta solo
+     * il bonus [id] che c'era al momento del cambio, non uno preparato dopo.
+     */
+    fun dimenticaInFondo(context: Context, id: String) {
+        val app = context.applicationContext
+        ambito.launch {
+            mutex.withLock {
+                val cassetta = CassettaBonus(app)
+                if (cassetta.leggi()?.id == id) cassetta.svuota()
+            }
+        }
+    }
+
     private suspend fun consegna(
         context: Context,
         id: String?,
@@ -147,18 +164,27 @@ object ConsegnaBonus {
         } else {
             PattoLocale(context).salva(patto)
             val oggi = LocalDate.now(zonaPatto(patto.fuso)).toString()
+            // Il giorno del server è l'ultima data della striscia (v2.4). Un
+            // server vecchio senza striscia: il giorno del patto sul telefono.
+            val giornoServer = patto.striscia.lastOrNull()?.data?.takeIf { it.isNotBlank() } ?: oggi
             val sulServer = patto.bonusOggiPerRegola[bonus.regolaId.toString()] ?: 0
-            when (RegoleBonus.passo(bonus, oggi, sulServer)) {
+            when (RegoleBonus.passo(bonus, oggi, sulServer, giornoServer)) {
                 RegoleBonus.Passo.Scarta -> {
                     cassetta.svuota()
                     EsitoBonus.Scaduto(bonus.minuti)
+                }
+                RegoleBonus.Passo.ScartaGiaPartito -> {
+                    cassetta.svuota()
+                    EsitoBonus.GiornoCambiato(bonus.minuti)
                 }
                 RegoleBonus.Passo.GiaArrivato -> {
                     cassetta.svuota()
                     EsitoBonus.Concesso(bonus.minuti)
                 }
                 RegoleBonus.Passo.Manda -> {
-                    cassetta.scrivi(bonus.copy(inviato = true, base = sulServer))
+                    cassetta.scrivi(
+                        bonus.copy(inviato = true, base = sulServer, giornoBase = giornoServer),
+                    )
                     val risposta = postino.inviaBonus(
                         BonusIn(minuti = bonus.minuti, regolaId = bonus.regolaId, motivo = bonus.motivo),
                     )

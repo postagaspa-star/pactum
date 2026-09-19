@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.giornata
 
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZonedDateTime
 
@@ -13,8 +14,12 @@ enum class TipoFuori { LIMITE, FASCIA }
 
 /** Com'è andata la giornata, in una delle quattro frasi possibili. */
 sealed interface Chiusura {
-    /** Dentro tutte le regole; [serie] contando oggi, null se non si può sapere. */
-    data class Dentro(val serie: Int?) : Chiusura
+    /**
+     * Dentro tutte le regole; [serie] contando oggi, null se non si può sapere.
+     * [finora]: una fascia oraria di oggi deve ancora cominciare o è in corso,
+     * quindi la giornata non si può ancora dire tenuta, solo "finora".
+     */
+    data class Dentro(val serie: Int?, val finora: Boolean = false) : Chiusura
 
     /** Oltre un limite di tempo: il più grande, e quante altre regole fuori. */
     data class OltreLimite(val nome: String, val minuti: Int, val altre: Int) : Chiusura
@@ -29,6 +34,7 @@ sealed interface Chiusura {
 /** Le frasi, da strings.xml. `durata` scrive i minuti come il resto dell'app. */
 data class ParoleSerale(
     val dentro: String,
+    val finoraDentro: String,
     val giornoInParole: String,
     val ordinali: List<String>,
     val giornoInCifre: String,
@@ -46,20 +52,27 @@ object TestoSerale {
     /**
      * La giornata in una frase. Prima i fatti misurati sul telefono (un limite
      * superato dice di quanto e dove), poi quello che sa solo il server; se
-     * niente è uscito, la giornata è dentro.
+     * niente è uscito, la giornata è dentro. Ma se una fascia oraria di oggi
+     * deve ancora cominciare o è in corso ([fasciaAperta]), "dentro" vale solo
+     * fin qui: la frase non certifica una giornata che non è finita.
      */
-    fun chiusura(fuori: List<FuoriOggi>, rossoSulServer: Boolean, serieConOggi: Int?): Chiusura {
+    fun chiusura(
+        fuori: List<FuoriOggi>,
+        rossoSulServer: Boolean,
+        serieConOggi: Int?,
+        fasciaAperta: Boolean = false,
+    ): Chiusura {
         val limite = fuori.filter { it.tipo == TipoFuori.LIMITE }.maxByOrNull { it.minuti }
         if (limite != null) return Chiusura.OltreLimite(limite.nome ?: "?", limite.minuti, fuori.size - 1)
         val fascia = fuori.filter { it.tipo == TipoFuori.FASCIA }.maxByOrNull { it.minuti }
         if (fascia != null) return Chiusura.NellaFascia(fascia.minuti, fuori.size - 1)
         if (rossoSulServer) return Chiusura.Fuori
-        return Chiusura.Dentro(serieConOggi?.takeIf { it > 0 })
+        return Chiusura.Dentro(serieConOggi?.takeIf { it > 0 }, finora = fasciaAperta)
     }
 
     fun testo(chiusura: Chiusura, parole: ParoleSerale): String = when (chiusura) {
         is Chiusura.Dentro -> listOfNotNull(
-            parole.dentro,
+            if (chiusura.finora) parole.finoraDentro else parole.dentro,
             chiusura.serie?.let { ordinale(it, parole) },
         ).joinToString(" ")
         is Chiusura.OltreLimite -> listOfNotNull(
@@ -84,6 +97,18 @@ object TestoSerale {
         n <= 0 -> null
         n == 1 -> parole.unAltraRegola
         else -> parole.altreRegole.format(n)
+    }
+
+    /**
+     * Il giorno [oggi] è già stato chiuso: è [ultima], o viene prima di lei.
+     * Con "==" basterebbe portare indietro l'orologio di un giorno per far
+     * ripartire la chiusura di un giorno già raccontato. Date illeggibili:
+     * non chiusa (meglio una chiusura in più che nessuna, per sempre).
+     */
+    fun giaChiusa(ultima: String, oggi: String): Boolean {
+        val u = runCatching { LocalDate.parse(ultima) }.getOrNull() ?: return false
+        val o = runCatching { LocalDate.parse(oggi) }.getOrNull() ?: return false
+        return !u.isBefore(o)
     }
 
     /**

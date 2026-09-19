@@ -9,6 +9,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import eu.stgm.pactum.design.GiornoPatto
+import eu.stgm.pactum.figlio.bonus.CassettaBonus
+import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.giornata.Serie
 import eu.stgm.pactum.figlio.giornata.SerieSalvata
 import kotlinx.coroutines.flow.Flow
@@ -96,6 +98,9 @@ class Impostazioni(private val context: Context) {
     suspend fun leggiConfigurazione(): ConfigurazionePostino = configurazione.first()
 
     suspend fun salvaConfigurazione(serverUrl: String, token: String) {
+        // Il bonus in sospeso adesso: se il patto cambia, era del patto vecchio.
+        val sospeso = CassettaBonus(context).leggi()
+        var cambiata = false
         context.dataStore.edit { p ->
             val urlNuovo = serverUrl.trim().trimEnd('/')
             val tokenNuovo = token.trim()
@@ -103,6 +108,7 @@ class Impostazioni(private val context: Context) {
             // e gli id delle notifiche già avvisate appartengono al patto vecchio e
             // soffocherebbero gli avvisi del nuovo (regole e id riciclati).
             if (p[Chiavi.SERVER_URL] != urlNuovo || p[Chiavi.TOKEN] != tokenNuovo) {
+                cambiata = true
                 p.remove(Chiavi.SFORAMENTI_SEGNALATI)
                 p.remove(Chiavi.NOTIFICHE_AVVISATE)
                 // Nuovo patto = nuova base dei permessi: senza azzerare, una revoca
@@ -120,6 +126,8 @@ class Impostazioni(private val context: Context) {
             p[Chiavi.SERVER_URL] = urlNuovo
             p[Chiavi.TOKEN] = tokenNuovo
         }
+        // Un bonus del patto vecchio non parte verso quello nuovo.
+        if (cambiata && sospeso != null) ConsegnaBonus.dimenticaInFondo(context, sospeso.id)
     }
 
     suspend fun leggiAncoraTempo(): AncoraTempo? {
@@ -274,15 +282,20 @@ class Impostazioni(private val context: Context) {
             val salvata = p[Chiavi.SERIE_FINE]?.let { fine ->
                 p[Chiavi.SERIE_LUNGHEZZA]?.let { SerieSalvata(fine, it) }
             }
-            val nuova = if (giorni.isEmpty()) salvata else Serie.calcola(giorni, salvata)
-            if (nuova == null) {
+            // Due cose diverse: la serie da mostrare adesso e la memoria da
+            // tenere. Un giorno grigio dopo la fine ricordata azzera la prima
+            // ma non la seconda (Serie.memoria): quando diventa verde, la
+            // serie lunga torna com'era.
+            val mostrata = if (giorni.isEmpty()) salvata else Serie.calcola(giorni, salvata)
+            val memoria = if (giorni.isEmpty()) salvata else Serie.memoria(giorni, salvata)
+            if (memoria == null) {
                 p.remove(Chiavi.SERIE_FINE)
                 p.remove(Chiavi.SERIE_LUNGHEZZA)
             } else {
-                p[Chiavi.SERIE_FINE] = nuova.fine
-                p[Chiavi.SERIE_LUNGHEZZA] = nuova.lunghezza
+                p[Chiavi.SERIE_FINE] = memoria.fine
+                p[Chiavi.SERIE_LUNGHEZZA] = memoria.lunghezza
             }
-            val serie = nuova?.lunghezza ?: 0
+            val serie = mostrata?.lunghezza ?: 0
             val record = Serie.record(p[Chiavi.RECORD_SERIE] ?: 0, serie)
             p[Chiavi.RECORD_SERIE] = record
             esito = serie to record

@@ -5,7 +5,13 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Looper
 import eu.stgm.pactum.figlio.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 /** Una app installata, mostrabile nel selettore delle regole limite_tempo. */
 data class AppInstallata(val pacchetto: String, val etichetta: String)
@@ -120,23 +126,57 @@ object CatalogoApp {
     // TikTok disinstallata dopo aver scritto la regola: PackageManager non la
     // risolve più e la regola diventerebbe "com.zhiliaoapp.musically". Ogni
     // etichetta risolta passa di qui (anche quelle dei `nomi` della fotografia
-    // d'uso, ogni 15 minuti) e resta sul telefono. SharedPreferences e non
-    // DataStore: la descrizione di una regola si scrive dentro la composizione,
-    // la lettura deve essere sincrona; dopo la prima, sta in memoria.
+    // d'uso, ogni 15 minuti) e resta sul telefono.
+    //
+    // La descrizione di una regola si scrive DENTRO la composizione, dove il
+    // disco non si tocca: i nomi vivono in memoria. Si caricano dal disco una
+    // volta, fuori dal thread principale ([precarica] all'avvio del processo,
+    // oppure alla prima chiamata da un thread di lavoro), e ogni nome nuovo si
+    // scrive su disco da un thread di I/O. Sul thread principale, prima che il
+    // caricamento finisca, un'app disinstallata si legge col suo pacchetto:
+    // è un attimo, e alla composizione dopo il nome c'è.
 
     private const val PREFERENZE_NOMI = "nomi_app"
 
-    private fun ultimoNome(context: Context, pacchetto: String): String? =
-        preferenzeNomi(context).getString(pacchetto, null)
+    private val nomi = ConcurrentHashMap<String, String>()
+
+    @Volatile
+    private var nomiCaricati = false
+
+    private val ambitoDisco = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Carica i nomi ricordati, fuori dalla composizione: da chiamare all'avvio del processo. */
+    fun precarica(context: Context) {
+        val app = context.applicationContext
+        ambitoDisco.launch { caricaNomi(app) }
+    }
+
+    private fun caricaNomi(context: Context) {
+        if (nomiCaricati) return
+        synchronized(nomi) {
+            if (nomiCaricati) return
+            preferenzeNomi(context).all.forEach { (pacchetto, nome) ->
+                // Un nome risolto nel frattempo è più fresco di quello su disco.
+                if (nome is String) nomi.putIfAbsent(pacchetto, nome)
+            }
+            nomiCaricati = true
+        }
+    }
+
+    private fun ultimoNome(context: Context, pacchetto: String): String? {
+        // Da un thread di lavoro (worker, sentinella, ViewModel) il disco si
+        // può leggere; dal thread principale (la composizione) mai.
+        if (!nomiCaricati && Looper.myLooper() != Looper.getMainLooper()) caricaNomi(context)
+        return nomi[pacchetto]
+    }
 
     private fun ricordaNome(context: Context, pacchetto: String, etichetta: String) {
         // Un'app senza etichetta restituisce il pacchetto stesso: non è un nome.
         if (etichetta.isBlank() || etichetta == pacchetto) return
-        val preferenze = preferenzeNomi(context)
         // Si scrive solo quando cambia: questa funzione gira a ogni composizione.
-        if (preferenze.getString(pacchetto, null) != etichetta) {
-            preferenze.edit().putString(pacchetto, etichetta).apply()
-        }
+        if (nomi.put(pacchetto, etichetta) == etichetta) return
+        val app = context.applicationContext
+        ambitoDisco.launch { preferenzeNomi(app).edit().putString(pacchetto, etichetta).apply() }
     }
 
     private fun preferenzeNomi(context: Context) =

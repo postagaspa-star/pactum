@@ -3,6 +3,8 @@ package eu.stgm.pactum.figlio.valutatore
 import android.content.Context
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.MainActivity
+import eu.stgm.pactum.figlio.bonus.CassettaBonus
+import eu.stgm.pactum.figlio.bonus.RegoleBonus
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.CodaEventi
 import eu.stgm.pactum.figlio.dati.Evento
@@ -12,7 +14,9 @@ import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiEvento
 import eu.stgm.pactum.figlio.dati.TipiRegola
+import eu.stgm.pactum.figlio.dati.zonaPatto
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
+import eu.stgm.pactum.figlio.misura.UsoApp
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import kotlinx.coroutines.sync.Mutex
@@ -91,10 +95,22 @@ class SentinellaPatto(private val context: Context) {
         // (contratto v2.1), e il match dev'essere esatto sull'uno o sull'altra.
         val indice = indiceUso(context, reader.usoDelGiorno(zona = zona, adesso = now))
 
+        // I bonus di "oggi" valgono solo se la copia è di oggi (fuso del patto).
+        // Più il bonus appena dato e non ancora confermato dal server (snackbar
+        // aperta, rete assente): chi si dà +15 a limite passato non va segnato
+        // fuori regola nei secondi in cui il bonus aspetta. Se il server lo
+        // rifiuta, il cassetto si svuota e il giro dopo lo sforamento c'è.
+        val oggiPatto = Instant.ofEpochMilli(now).atZone(zonaPatto(patto.fuso)).toLocalDate().toString()
+        val bonusOggi = RegoleBonus.bonusConSospeso(
+            bonusOggi = patto.bonusValidiOggi(now),
+            sospeso = CassettaBonus(context).leggi(),
+            oggi = oggiPatto,
+            residuo = patto.residuoBonusOggi(now),
+        )
+
         val sforamenti = Valutatore.valuta(
             regole = patto.regole,
-            // I bonus di "oggi" valgono solo se la copia è di oggi (fuso del patto).
-            bonusOggiPerRegola = patto.bonusValidiOggi(now),
+            bonusOggiPerRegola = bonusOggi,
             usoMinutiEtichetta = indice::minuti,
             usoMinutiIntervallo = { inizio, fine ->
                 reader.usoNellIntervallo(inizio, fine)
@@ -148,13 +164,16 @@ class SentinellaPatto(private val context: Context) {
         private val mutex = Mutex()
 
         /**
-         * L'uso di oggi come lo conta il valutatore: tutto tranne Pactum stessa
-         * (un testimone non testimonia contro sé stesso), per pacchetto e categoria.
+         * L'uso di oggi come lo conta il valutatore, per pacchetto e categoria.
+         * Stesso filtro della fotografia che arriva al genitore
+         * (CatalogoApp.contaNellUso: fuori la Home, i pezzi di sistema senza
+         * icona e le due app Pactum): così lo sforamento, la barra del figlio
+         * e la barra del padre contano gli stessi minuti (D3).
          */
-        fun indiceUso(context: Context, uso: List<eu.stgm.pactum.figlio.misura.UsoApp>): IndiceUso =
-            IndiceUso(
-                uso = uso.filter { it.pacchetto != context.packageName }
-                    .map { it.pacchetto to it.millisPrimoPiano },
+        fun indiceUso(context: Context, uso: List<UsoApp>): IndiceUso =
+            IndiceUso.daUso(
+                uso = uso,
+                contaNellUso = { CatalogoApp.contaNellUso(context, it) },
                 categoriaDi = { CatalogoApp.categoriaDiPacchetto(context, it) },
             )
     }

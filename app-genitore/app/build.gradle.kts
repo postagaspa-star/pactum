@@ -30,8 +30,8 @@ android {
         targetSdk = 35
         // v0.6.0: registro dei siti visitati (solo domini). Nuova funzione =
         // nuovo versionCode, altrimenti l'auto-aggiornamento non la propone.
-        versionCode = 7
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.8.0"
     }
 
     signingConfigs {

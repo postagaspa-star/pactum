@@ -297,7 +297,7 @@ Fino alla v2.4 il sistema conosceva **un figlio con un telefono** e **un genitor
 - ogni figlio ha uno o più **dispositivi**, di tipo `telefono` (Android) o `computer` (un account di Windows su un PC: due fratelli sullo stesso PC con account diversi sono due dispositivi);
 - **ogni dispositivo ha regole, tempi, bonus, siti e registro separati**;
 - le regole `vita_reale` appartengono al **figlio**, non a un dispositivo;
-- la **striscia** degli 8 giorni resta **del figlio**: un giorno è `verde` solo se lo è per tutte le sue regole, su tutti i suoi dispositivi (stessa aggregazione della v2.4, ora su tutti i dispositivi). Accanto c'è la striscia di ciascun dispositivo.
+- la **striscia** degli 8 giorni resta **del figlio**, con la stessa aggregazione della v2.4 applicata a tutte le regole di tutti i suoi dispositivi: un giorno è `rosso` se almeno una regola è rossa, altrimenti `verde` se almeno una è verde, altrimenti `grigio` (nessun dato). Un dispositivo senza dati quel giorno non lo rende grigio né rosso: semplicemente non conta. Accanto c'è la striscia di ciascun dispositivo.
 
 Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
 
@@ -313,8 +313,9 @@ Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
 - `POST /api/figli/{id}/dispositivi` (genitore) `{ "nome": "Computer di camera", "tipo": "computer" }` → `201 { "dispositivo": {…}, "codice": "483920", "scade_ts": "…" }`. Il dispositivo nasce **non abbinato**.
 - `POST /api/dispositivi/{id}/codice` (genitore): nuovo codice per un dispositivo già creato (primo abbinamento non riuscito, oppure telefono reinstallato). Genera un token nuovo **al momento dell'abbinamento** e invalida il vecchio: la storia del dispositivo continua.
 - Il **codice** è di 6 cifre, casuale, vale **15 minuti**, **una volta sola**. Un nuovo codice per lo stesso dispositivo annulla il precedente.
-- `POST /api/abbina` (**nessun auth**) `{ "codice": "483920", "versione_app": "0.8.0" }` → `200 { "token": "…", "dispositivo": { "id", "nome", "tipo" }, "figlio": { "id", "nome" } }`. Il token si restituisce una volta sola: l'app lo conserva.
+- `POST /api/abbina` (**nessun auth**) `{ "codice": "483920", "tipo": "computer", "versione_app": "0.8.0" }` → `200 { "token": "…", "dispositivo": { "id", "nome", "tipo" }, "figlio": { "id", "nome" } }`. Il token si restituisce una volta sola: l'app lo conserva.
   - `409 { "errore": "codice_non_valido" }`: sbagliato, scaduto o già usato (stessa risposta per tutti e tre).
+  - (v3.1) `tipo` (`telefono` | `computer`, facoltativo ma le app 0.8 lo mandano sempre): se il codice è di un dispositivo di un altro tipo → `409 { "errore": "tipo_non_corrispondente", "tipo_atteso": "telefono" }` e il codice **non** viene consumato. Evita che un computer prenda il posto del telefono (o il contrario) scrivendo il codice sbagliato. Un `tipo` sbagliato conta come tentativo fallito.
   - Contro chi prova i codici a caso: dopo **10 tentativi falliti in 10 minuti** (contati su tutto il server) ogni abbinamento risponde `429 { "errore": "troppi_tentativi", "riprova_tra_secondi": n }` per 10 minuti, anche con un codice giusto.
 - `DELETE /api/dispositivi/{id}` (genitore): **revoca** il dispositivo (il suo token smette di funzionare, `401`). Niente si cancella: regole, registro e storia restano. Le regole attive di un dispositivo revocato restano nella storia ma non contano più nella striscia dai giorni successivi alla revoca (come una regola eliminata).
 
@@ -348,7 +349,8 @@ Gli endpoint del dispositivo non hanno `figlio_id`: il figlio è quello del toke
 - `POST /api/regole` (dispositivo): `dispositivo_id` facoltativo nel corpo; se manca vale **il dispositivo che chiama**. Deve essere un dispositivo dello stesso figlio (`403` altrimenti). Per `vita_reale` il server lo ignora e mette `null`.
 - `GET /api/regole` (dispositivo): le regole attive **del figlio**, di tutti i suoi dispositivi più quelle di vita reale, ciascuna con `dispositivo_id`.
 - `PATCH` / `DELETE` su qualsiasi regola **dello stesso figlio** (`403` su quelle di un altro figlio). Il blocco dei 4 giorni resta per regola.
-- `ultima_regola` vale **per figlio**: non si può eliminare l'ultima regola attiva del figlio (contando tutti i suoi dispositivi).
+- `ultima_regola` vale **per figlio**: non si può eliminare l'ultima regola attiva del figlio, contando tutti i suoi dispositivi **non revocati** e la vita reale.
+- (v3.1) Le regole di un dispositivo **revocato** non si modificano più, né direttamente né con una proposta: `PATCH`, `DELETE` e `POST /api/proposte` rispondono `409 { "errore": "dispositivo_revocato" }`. Restano nella storia.
 - `app_o_categoria`:
   - sui **telefoni** resta come prima: nome del pacchetto Android oppure `categoria:*`;
   - sui **computer**: `exe:<nome>` (nome del file del programma, minuscolo, es. `exe:minecraft.exe`), oppure `sito:<dominio>` (dominio registrabile minuscolo, es. `sito:youtube.com`: il tempo passato su quel sito nel browser), oppure `categoria:*`;
@@ -435,6 +437,7 @@ La forma della v2.4 resta, riferita al figlio indicato:
    - al dispositivo 1 vanno anche eventi, battiti, bonus, fotografie;
    - notifiche → figlio 1.
 4. Niente si perde e niente si duplica. Riavviare il server non ripete la migrazione.
+5. (v3.1) **Prima di toccare un database che ha già dati, il server ne fa una copia completa** accanto al file (`<db>.prima-v3-<data>`). Se la copia non riesce, il server **non parte**: meglio fermo che migrato senza rete di sicurezza.
 
 ---
 **Versione: v3 — 23/09/2026** (decisione di Andrea): famiglia con più figli, ogni figlio con più dispositivi (telefoni e computer) con regole, tempi, bonus e registro separati; vita reale e striscia per figlio; token per dispositivo e per genitore con abbinamento a codice di 6 cifre; computer con programmi (`exe:`), siti (`sito:`, letti dalla barra degli indirizzi, solo il dominio) e spegnimento che non è un'interruzione; compatibile con le app 0.7.

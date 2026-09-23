@@ -1,15 +1,15 @@
 {
   "figlio": {
-    "versione_code": 7,
-    "versione_nome": "0.7.0",
+    "versione_code": 8,
+    "versione_nome": "0.8.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.7.0: nuova grafica. In Oggi la tua serie di giorni di fila e la striscia degli ultimi 8 giorni; bonus in due tocchi accanto alle regole; 'Cosa vede tuo padre'; un riepilogo la sera."
+    "note": "v0.8.0: più dispositivi per figlio (telefono e computer) con regole e tempi separati; collegamento con un codice di 6 cifre; in Oggi anche la striscia degli altri dispositivi."
   },
   "genitore": {
-    "versione_code": 7,
-    "versione_nome": "0.7.0",
+    "versione_code": 8,
+    "versione_nome": "0.8.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.7.0: nuova grafica. In cima la striscia degli ultimi 8 giorni; proposte e conferme in una schermata sola; 'Manda un segno'; notifiche scritte in modo più chiaro."
+    "note": "v0.8.0: più figli e più dispositivi per figlio, compreso il computer; nelle Impostazioni la sezione Famiglia per aggiungerli con un codice di 6 cifre; tempi e siti divisi per dispositivo."
   },
   "computer": {
     "versione_code": 1,

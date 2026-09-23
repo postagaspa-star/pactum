@@ -25,6 +25,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import okhttp3.ConnectionPool
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -297,10 +298,18 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
          * connessione caduta dopo che il server ha già ricevuto il POST lo
          * rimanderebbe in silenzio: due bonus al posto di uno. Il dubbio dopo
          * una risposta persa lo risolve chi chiama (per il bonus: `inviato` e
-         * `base` in ConsegnaBonus), non la rete. Stesso pool di connessioni.
+         * `base` in ConsegnaBonus), non la rete.
+         *
+         * Pool proprio, senza connessioni tenute aperte: senza ritentativo, una
+         * connessione rimasta ferma e già chiusa dal server (uvicorn la chiude
+         * dopo 5 s) farebbe fallire il primo invio dopo ogni pausa. Visto
+         * sull'emulatore: il primo "Accetto" falliva, il secondo andava. Una
+         * connessione nuova per ogni mutazione costa un giro in più, e le
+         * mutazioni sono rare.
          */
         private val httpMutazioni: OkHttpClient = http.newBuilder()
             .retryOnConnectionFailure(false)
+            .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
             .build()
 
         /**

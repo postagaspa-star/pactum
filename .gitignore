@@ -36,3 +36,5 @@ keystore.properties
 
 # Backup del registro: artefatti, non nel repo
 server/backup/*.db
+# Il pacchetto del programma per il computer: si ricostruisce con pc/prove/crea-pacchetto.ps1
+server/apk/*.zip

@@ -274,6 +274,14 @@ Il **dominio registrabile** e quante volte è stato richiesto in un giorno. Punt
 5. **Granularità: il giorno.** Nessun orario, nessuna sequenza, nessuna durata. "128 richieste il 1 agosto", mai "alle 23:14".
 6. **Se manca, manca.** Un giorno senza fotografia resta con `totale_domini: null`: telefono spento, app ferma o osservazione non attiva si vedono tutti come **assenza**, mai come zero. La cecità dichiarata (`dns_cifrato`) e l'assenza di dati sono due informazioni diverse e restano distinte.
 
+### Sul computer (v3, deciso da Andrea il 23/09/2026)
+Su Windows 11 un programma senza diritti di amministratore non può leggere le richieste DNS (verificato sul PC di casa: serve l'elevazione). Andrea ha scelto questa strada:
+- il programma legge **l'indirizzo nella barra del browser in primo piano** (Chrome, Edge, Firefox) e ne tiene **solo il dominio registrabile**; l'indirizzo completo resta in memoria per un istante e poi si butta. Non si salva, non si manda, non si mostra, mai. Non si leggono mai i titoli delle pagine né quello che c'è dentro;
+- in cambio si misura anche **quanto tempo** si passa su ogni sito;
+- la promessa quindi è diversa da quella del telefono: sul telefono l'app **non può** vedere le pagine, sul computer il programma **le vede solo per un istante e non le registra mai**. Lo dicono chiaro "Cosa vede tuo padre" e questo contratto; va detto al padre;
+- stessa granularità: per giorno, nessun orario, nessuna sequenza;
+- se per un browser il programma non riesce a leggere l'indirizzo, lo dichiara (`dns_cifrato: true` sul giorno) invece di fingere zero siti.
+
 ### Il patto etico
 - **Il genitore vede, non blocca.** Non esiste — e non esisterà — nessun endpoint per bloccare, filtrare o limitare un sito. Pactum non blocca niente: se un sito è un problema, il problema si affronta parlando (concept.md, *"testimone, non carceriere"*).
 - **Il figlio vede la stessa lista.** `GET /api/patto` restituisce `siti_recenti` **identico** a `GET /api/finestra`: nessuna riga esiste solo dalla parte del genitore. È il principio della tavola rotonda applicato alla lettera.
@@ -281,8 +289,156 @@ Il **dominio registrabile** e quante volte è stato richiesto in un giorno. Punt
 - **Niente di nascosto.** L'osservazione dei domini vive nell'app del figlio e si vede nell'app del figlio: è il **suo** registro, che lui condivide, non una registrazione fatta su di lui.
 - **I siti non sono infrazioni.** `siti_giornalieri` non genera notifiche, non entra nel semaforo, non produce sforamenti. È materiale per una conversazione, non per un verdetto.
 
+## v3 — Famiglia, figli e dispositivi (deciso da Andrea il 23/09/2026)
+
+Fino alla v2.4 il sistema conosceva **un figlio con un telefono** e **un genitore**. Dalla v3:
+
+- la **famiglia** ha uno o più **figli**;
+- ogni figlio ha uno o più **dispositivi**, di tipo `telefono` (Android) o `computer` (un account di Windows su un PC: due fratelli sullo stesso PC con account diversi sono due dispositivi);
+- **ogni dispositivo ha regole, tempi, bonus, siti e registro separati**;
+- le regole `vita_reale` appartengono al **figlio**, non a un dispositivo;
+- la **striscia** degli 8 giorni resta **del figlio**: un giorno è `verde` solo se lo è per tutte le sue regole, su tutti i suoi dispositivi (stessa aggregazione della v2.4, ora su tutti i dispositivi). Accanto c'è la striscia di ciascun dispositivo.
+
+Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
+
+### Identità e credenziali
+
+- Ogni **dispositivo** e ogni **genitore** hanno il proprio token (casuale, `secrets.token_urlsafe(32)`). Il server salva solo l'**hash SHA-256** del token, mai il token.
+- Ruoli: `genitore` (vede tutta la famiglia) e `dispositivo` (agisce per il proprio figlio; è il vecchio ruolo `figlio`). `401` token assente o sconosciuto o revocato, `403` token valido ma del ruolo sbagliato o di un altro figlio.
+- **Compatibilità con le app 0.7 già installate**: `PACTUM_TOKEN_GENITORE` resta il token del **genitore 1**; `PACTUM_TOKEN_FIGLIO` resta il token del **dispositivo 1** (`"Telefono"`, tipo `telefono`) del **figlio 1**. Al primo avvio della v3 il server crea queste righe e attacca tutti i dati esistenti al figlio 1 / dispositivo 1 (v. Migrazione). Le app 0.7 continuano a funzionare senza toccare niente. In produzione i due token d'ambiente restano obbligatori e forti come prima.
+
+### Abbinamento con codice (niente più token da copiare)
+
+- `POST /api/figli` (genitore) `{ "nome": "Andrea" }` → `201 { "id", "nome", "creato_ts" }`. `PATCH /api/figli/{id}` `{ "nome" }` per rinominare. Nome 1-40 caratteri.
+- `POST /api/figli/{id}/dispositivi` (genitore) `{ "nome": "Computer di camera", "tipo": "computer" }` → `201 { "dispositivo": {…}, "codice": "483920", "scade_ts": "…" }`. Il dispositivo nasce **non abbinato**.
+- `POST /api/dispositivi/{id}/codice` (genitore): nuovo codice per un dispositivo già creato (primo abbinamento non riuscito, oppure telefono reinstallato). Genera un token nuovo **al momento dell'abbinamento** e invalida il vecchio: la storia del dispositivo continua.
+- Il **codice** è di 6 cifre, casuale, vale **15 minuti**, **una volta sola**. Un nuovo codice per lo stesso dispositivo annulla il precedente.
+- `POST /api/abbina` (**nessun auth**) `{ "codice": "483920", "versione_app": "0.8.0" }` → `200 { "token": "…", "dispositivo": { "id", "nome", "tipo" }, "figlio": { "id", "nome" } }`. Il token si restituisce una volta sola: l'app lo conserva.
+  - `409 { "errore": "codice_non_valido" }`: sbagliato, scaduto o già usato (stessa risposta per tutti e tre).
+  - Contro chi prova i codici a caso: dopo **10 tentativi falliti in 10 minuti** (contati su tutto il server) ogni abbinamento risponde `429 { "errore": "troppi_tentativi", "riprova_tra_secondi": n }` per 10 minuti, anche con un codice giusto.
+- `DELETE /api/dispositivi/{id}` (genitore): **revoca** il dispositivo (il suo token smette di funzionare, `401`). Niente si cancella: regole, registro e storia restano. Le regole attive di un dispositivo revocato restano nella storia ma non contano più nella striscia dai giorni successivi alla revoca (come una regola eliminata).
+
+### La famiglia vista dal genitore
+
+`GET /api/famiglia` (genitore) →
+
+```json
+{ "figli": [
+  { "id": 1, "nome": "Andrea",
+    "striscia": [ { "data": "…", "stato": "verde" } ],
+    "riepilogo": { "giorni_fuori_regola": 1, "interruzioni": 0 },
+    "notifiche_non_lette": 3,
+    "dispositivi": [
+      { "id": 1, "nome": "Telefono", "tipo": "telefono", "abbinato": true, "revocato": false,
+        "versione_app": "0.8.0",
+        "stato_silenzio": { "ultimo_battito": "…", "silente": false, "spento": false, "spento_dal": null } } ] } ] }
+```
+
+Figli in ordine di `id`, dispositivi in ordine di `id`, revocati compresi (`revocato: true`).
+
+### Quale figlio: il parametro `figlio_id`
+
+Tutti gli endpoint del genitore che riguardano un figlio accettano `figlio_id` (query per i `GET`, corpo per i `POST`): `GET /api/finestra?figlio_id=2`, `POST /api/segno { "figlio_id": 2 }`, `GET /api/proposte?figlio_id=2`, `GET /api/dichiarazioni?figlio_id=2`. **Se manca vale il figlio con l'`id` più basso**: così l'app del genitore 0.7 continua a vedere il primo figlio. Un `figlio_id` inesistente → `404`.
+
+Gli endpoint del dispositivo non hanno `figlio_id`: il figlio è quello del token.
+
+### Regole
+
+- Ogni regola ha `figlio_id` e `dispositivo_id`. `limite_tempo` e `fascia_oraria` appartengono a un dispositivo; `vita_reale` ha `dispositivo_id: null` (è del figlio).
+- `POST /api/regole` (dispositivo): `dispositivo_id` facoltativo nel corpo; se manca vale **il dispositivo che chiama**. Deve essere un dispositivo dello stesso figlio (`403` altrimenti). Per `vita_reale` il server lo ignora e mette `null`.
+- `GET /api/regole` (dispositivo): le regole attive **del figlio**, di tutti i suoi dispositivi più quelle di vita reale, ciascuna con `dispositivo_id`.
+- `PATCH` / `DELETE` su qualsiasi regola **dello stesso figlio** (`403` su quelle di un altro figlio). Il blocco dei 4 giorni resta per regola.
+- `ultima_regola` vale **per figlio**: non si può eliminare l'ultima regola attiva del figlio (contando tutti i suoi dispositivi).
+- `app_o_categoria`:
+  - sui **telefoni** resta come prima: nome del pacchetto Android oppure `categoria:*`;
+  - sui **computer**: `exe:<nome>` (nome del file del programma, minuscolo, es. `exe:minecraft.exe`), oppure `sito:<dominio>` (dominio registrabile minuscolo, es. `sito:youtube.com`: il tempo passato su quel sito nel browser), oppure `categoria:*`;
+  - il server rifiuta con `422` una chiave che non va bene per il tipo del dispositivo della regola.
+- Ogni regola nelle risposte porta anche `"dispositivo": { "id", "nome", "tipo" }` (o `null` per la vita reale), così le app scrivono "sul computer" senza un'altra chiamata.
+
+### Bonus: per dispositivo
+
+- `POST /api/bonus` dal dispositivo: `regola_id` deve essere una `limite_tempo` attiva **di quel dispositivo** (`409 regola_non_valida` altrimenti).
+- I tetti (30 al giorno, 90 alla settimana) valgono **per dispositivo**. `bonus`, `bonus_oggi_per_regola` e `bonus_giornalieri` sono sempre quelli di un dispositivo.
+
+### Il dispositivo: `GET /api/patto`
+
+Come prima, con queste regole:
+
+- `regole`: quelle attive **di questo dispositivo** più quelle di **vita reale del figlio** (ciascuna col suo `semaforo`);
+- `bonus`, `bonus_oggi_per_regola`, `siti_recenti`: **di questo dispositivo**;
+- `proposte_pendenti` e `dichiarazioni_in_attesa`: **di tutto il figlio** (una proposta su una regola del computer si vede e si può accettare anche dal telefono);
+- `striscia` e `riepilogo`: **del figlio** (tutti i dispositivi, identici alla finestra del genitore);
+- in più:
+  - `"figlio": { "id", "nome" }`
+  - `"dispositivo": { "id", "nome", "tipo" }`
+  - `"striscia_dispositivo": [ … ]`: la striscia di questo dispositivo, identica a quella del genitore;
+  - `"dispositivi": [ { "id", "nome", "tipo", "striscia": [ … ] } ]`: tutti i dispositivi del figlio (per la riga "sul computer 5 su 7").
+
+### Il genitore: `GET /api/finestra?figlio_id=…`
+
+La forma della v2.4 resta, riferita al figlio indicato:
+
+- `regole`: tutte le regole del figlio (tutti i dispositivi, eliminate comprese), ciascuna con `dispositivo_id` e `dispositivo`;
+- `striscia`, `riepilogo`, `storico_modifiche`, `sforamenti_recenti`, `manomissioni_recenti`, `segno_oggi`: del figlio (gli eventi portano `dispositivo_id`);
+- in più **`dispositivi`**: un elemento per dispositivo del figlio (revocati compresi), con tutto quello che è **per dispositivo**:
+
+```json
+"dispositivi": [ { "id": 2, "nome": "Computer", "tipo": "computer", "abbinato": true, "revocato": false,
+  "stato_silenzio": { "ultimo_battito": "…", "silente": false, "spento": true, "spento_dal": "…" },
+  "striscia": [ … ], "uso_recente": [ … ], "siti_recenti": [ … ], "medie": { … },
+  "bonus": { … }, "bonus_giornalieri": [ … ] } ]
+```
+
+- **Compatibilità 0.7**: i campi di primo livello `uso_recente`, `siti_recenti`, `medie`, `bonus`, `bonus_giornalieri`, `stato_silenzio` restano e valgono **per il primo dispositivo del figlio** (quello con `id` più basso non revocato).
+
+### Registro: tutto per dispositivo
+
+- Eventi, battiti, fotografie `uso_giornaliero` e `siti_giornalieri` appartengono al dispositivo che li manda. La fotografia vigente è per **(dispositivo, giorno)**, con la stessa monotonia di prima.
+- "Niente verde senza dati": una regola di un dispositivo è `verde` in un giorno solo se **quel dispositivo** ha mandato la fotografia `uso_giornaliero` di quel giorno.
+- `riepilogo.interruzioni`: eventi `manomissione` di **qualsiasi dispositivo del figlio** negli 8 giorni.
+- Le notifiche portano `figlio_id` e `dispositivo_id` (o `null`). Il genitore riceve quelle di tutti i figli. Un dispositivo riceve quelle del suo figlio che hanno `dispositivo_id` uguale al suo o `null`.
+  - Quelle su una regola di un dispositivo (proposta, verdetto su regola del dispositivo) hanno il suo `dispositivo_id`.
+  - Quelle del figlio (proposte e verdetti sulla vita reale, `segno`) hanno `null`.
+  - Marcarne una come letta la marca per tutti.
+- `POST /api/segno { "figlio_id" }`: un segno al giorno **per figlio**, notificato a tutti i suoi dispositivi.
+
+### Computer: cosa cambia nel registro
+
+- `uso_giornaliero` di un computer:
+  - `uso_minuti` ha chiavi `exe:<nome>` e `nomi` ha il nome leggibile (es. `"exe:minecraft.exe": "Minecraft"`);
+  - `totale_minuti` è il tempo attivo al computer;
+  - `uso_categorie` conta il tempo nel browser nella categoria **del sito** (se il sito ha una categoria), altrimenti in quella del browser.
+- `siti_giornalieri` di un computer:
+  - `domini` = quante **visite** (quante volte il sito è diventato quello in primo piano);
+  - in più **`minuti`**: `{ "youtube.com": 42 }`, i minuti passati con quel sito in primo piano;
+  - `dns_cifrato: true` sul computer vuol dire "per una parte del giorno il programma non è riuscito a leggere i siti" (per esempio un browser che non sa leggere). Il nome resta per compatibilità.
+  - In `siti_recenti` ogni voce dei computer ha anche `minuti`, e le voci sono ordinate per `minuti` decrescenti (poi per dominio).
+- Nuovi eventi dei computer:
+  - `sospensione` `{ "motivo": "spegnimento" | "sospensione" | "disconnessione" }`, mandato quando Windows si spegne, va in sospensione o l'utente esce;
+  - `ripresa` `{ "motivo": "avvio" | "riattivazione" | "accesso", "avvio_sistema_ts": ms }`.
+  - Per un computer **il silenzio dopo una `sospensione` non è un'interruzione**: `stato_silenzio` dà `silente: false`, `spento: true`, `spento_dal: ts della sospensione`. Un computer spento la sera è normale; un telefono no, e per i telefoni non cambia niente.
+- `manomissione` dei computer, nuovi `sotto_tipo`:
+  - `programma_chiuso` `{ "dal": ms, "al": ms }`: al riavvio il programma si accorge di essere stato chiuso mentre Windows era acceso;
+  - `siti_non_leggibili`.
+
+### Versioni e download
+
+- `GET /api/versione` ha anche `"computer": { "versione_code", "versione_nome", "url": "/scarica/pactum-computer.zip", "note" }`.
+- `/scarica` offre anche `pactum-computer.zip`.
+
+### Migrazione (una volta, automatica, al primo avvio della v3)
+
+1. Crea `figli`, `dispositivi`, `credenziali`, `codici_abbinamento` e il registro dei tentativi falliti.
+2. Crea il figlio 1 (`"nome": "Figlio"`, rinominabile dall'app del genitore) e il dispositivo 1 (`"Telefono"`, `telefono`, abbinato) con l'hash di `PACTUM_TOKEN_FIGLIO`. Crea il genitore 1 con l'hash di `PACTUM_TOKEN_GENITORE`.
+3. Attacca **tutti** i dati esistenti a figlio 1 / dispositivo 1:
+   - regole: `vita_reale` → figlio 1 senza dispositivo; le altre → dispositivo 1;
+   - al dispositivo 1 vanno anche eventi, battiti, bonus, fotografie;
+   - notifiche → figlio 1.
+4. Niente si perde e niente si duplica. Riavviare il server non ripete la migrazione.
+
 ---
-**Versione: v2.4 — 19/09/2026** (redesign Fascia B/C della tavola rotonda, deciso da Andrea): `striscia` aggregata degli 8 giorni in `GET /api/finestra` **e identica** in `GET /api/patto`, uscita da una sola funzione del server; semaforo senza verde nei giorni senza fotografia (un giorno di cui non si sa niente non è un giorno mantenuto); `giorno` opzionale nei dettagli di `sforamento`, così gli sforamenti consegnati in ritardo cadono nel giorno giusto; `riepilogo` (giorni fuori regola + interruzioni negli 8 giorni) e `semaforo` per regola anche in `GET /api/patto`, cosi' il figlio vede gli stessi fatti del genitore; `POST /api/segno` (riconoscimento del genitore a testo fisso, max 1 al giorno) + `segno_oggi` nella finestra + notifica di tipo `segno` al figlio.
+**Versione: v3 — 23/09/2026** (decisione di Andrea): famiglia con più figli, ogni figlio con più dispositivi (telefoni e computer) con regole, tempi, bonus e registro separati; vita reale e striscia per figlio; token per dispositivo e per genitore con abbinamento a codice di 6 cifre; computer con programmi (`exe:`), siti (`sito:`, letti dalla barra degli indirizzi, solo il dominio) e spegnimento che non è un'interruzione; compatibile con le app 0.7.
+**v2.4 — 19/09/2026** (redesign Fascia B/C della tavola rotonda, deciso da Andrea): `striscia` aggregata degli 8 giorni in `GET /api/finestra` **e identica** in `GET /api/patto`, uscita da una sola funzione del server; semaforo senza verde nei giorni senza fotografia (un giorno di cui non si sa niente non è un giorno mantenuto); `giorno` opzionale nei dettagli di `sforamento`, così gli sforamenti consegnati in ritardo cadono nel giorno giusto; `riepilogo` (giorni fuori regola + interruzioni negli 8 giorni) e `semaforo` per regola anche in `GET /api/patto`, cosi' il figlio vede gli stessi fatti del genitore; `POST /api/segno` (riconoscimento del genitore a testo fisso, max 1 al giorno) + `segno_oggi` nella finestra + notifica di tipo `segno` al figlio.
 **v2.3 — 01/08/2026** (decisione di Andrea col padre): il genitore **vede** i siti visitati dal figlio, senza poterli bloccare — nuovo evento `siti_giornalieri` (fotografia cumulativa del giorno, monotona, `dns_cifrato` appiccicoso come dichiarazione di cecità), `siti_recenti` in `GET /api/finestra` **e identico** in `GET /api/patto` (tavola rotonda), limiti del dato e patto etico messi per iscritto nella sezione "Siti visitati". Solo domini, mai URL, contenuti o ricerche.
 **v2.2 — 15/07/2026** (richieste di Andrea + feedback del padre): fotografia uso_giornaliero con `nomi` e `uso_categorie`; finestra con `uso_recente` (tempi di TUTTE le app, 8 giorni, limiti accanto dove esistono, mai zeri finti). Il digest giornaliero del genitore (notifica all'ora scelta con totale + prime app) è comportamento dell'app genitore, nessun endpoint nuovo.
 **v2.1 — 15/07/2026** (dopo revisione adversariale tappa 5): atomicità garantita su risposta-proposta/regole/dichiarazioni concorrenti; proposte `annullata` all'eliminazione della regola; confronto ricalcolato in lettura per le pendenti; `giorno` dichiarazioni vincolato (oggi ↔ −7gg); arbitro congelato sulla dichiarazione; campo `verdetto.registro`; semaforo per le `vita_reale`; convenzione `app_o_categoria` (pacchetto o `categoria:*`).

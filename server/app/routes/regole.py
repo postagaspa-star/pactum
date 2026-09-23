@@ -100,12 +100,32 @@ def regola_del_figlio_o_errore(
 def verifica_non_ultima(conn: sqlite3.Connection, figlio_id: int) -> None:
     # concept.md: almeno una regola obbligatoria. Vale anche per l'eliminazione
     # concordata nata da proposta accettata. (v3) Per figlio, contando le regole di
-    # tutti i suoi dispositivi.
+    # tutti i suoi dispositivi. (v3.1) Solo quelle che contano ancora: le regole di
+    # un dispositivo revocato restano nella storia ma non tengono in piedi il patto,
+    # altrimenti il figlio eliminerebbe l'ultima regola viva e resterebbe senza.
+    # Chi chiama ha gia' escluso la regola di un revocato (verifica_dispositivo_vivo):
+    # quella da eliminare e' tra le contate.
     attive = conn.execute(
-        "SELECT COUNT(*) AS n FROM regole WHERE attiva = 1 AND figlio_id = ?", (figlio_id,)
+        "SELECT COUNT(*) AS n FROM regole r LEFT JOIN dispositivi d ON d.id = r.dispositivo_id"
+        " WHERE r.attiva = 1 AND r.figlio_id = ?"
+        " AND (r.dispositivo_id IS NULL OR d.revocato_ts IS NULL)",
+        (figlio_id,),
     ).fetchone()["n"]
     if attive <= 1:
         raise HTTPException(status_code=409, detail={"errore": "ultima_regola"})
+
+
+def verifica_dispositivo_vivo(conn: sqlite3.Connection, regola: sqlite3.Row) -> None:
+    """(v3.1) Le regole di un dispositivo revocato non si modificano piu', ne'
+    direttamente ne' con una proposta: restano nella storia com'erano. 409
+    dispositivo_revocato. La vita reale (nessun dispositivo) e' sempre modificabile."""
+    if regola["dispositivo_id"] is None:
+        return
+    dispositivo = conn.execute(
+        "SELECT revocato_ts FROM dispositivi WHERE id = ?", (regola["dispositivo_id"],)
+    ).fetchone()
+    if dispositivo is not None and dispositivo["revocato_ts"] is not None:
+        raise HTTPException(status_code=409, detail={"errore": "dispositivo_revocato"})
 
 
 def applica_modifica(
@@ -264,41 +284,50 @@ def crea_regola(
     chi: Identita = Depends(richiede_dispositivo),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    dispositivo_id = None
-    tipo = None
-    if corpo.tipo != "vita_reale":
-        # (v3) Una regola di tempo o di fascia vale su un dispositivo: quello che
-        # chiama, o un altro dello STESSO figlio (una regola del computer si puo'
-        # scrivere anche dal telefono). Mai su quello di un altro figlio.
-        destinazione = corpo.dispositivo_id if corpo.dispositivo_id is not None else chi.dispositivo_id
-        dispositivo = conn.execute(
-            "SELECT * FROM dispositivi WHERE id = ?", (destinazione,)
-        ).fetchone()
-        if dispositivo is None or dispositivo["figlio_id"] != chi.figlio_id:
-            raise HTTPException(status_code=403, detail="dispositivo di un altro figlio")
-        if dispositivo["revocato_ts"] is not None:
-            raise HTTPException(status_code=409, detail={"errore": "dispositivo_revocato"})
-        dispositivo_id, tipo = dispositivo["id"], dispositivo["tipo"]
-    parametri = _valida_o_422(corpo.tipo, corpo.parametri, tipo)
-    ts = clock.iso(clock.now())
-    cursore = conn.execute(
-        "INSERT INTO regole"
-        " (tipo, parametri, attiva, creata_ts, ultima_modifica_ts, figlio_id, dispositivo_id)"
-        " VALUES (?, ?, 1, ?, ?, ?, ?)",
-        (corpo.tipo, json.dumps(parametri), ts, ts, chi.figlio_id, dispositivo_id),
-    )
-    regola_id = cursore.lastrowid
-    registra_modifica(conn, regola_id, "creazione", None, None, parametri, False, ts)
-    accoda_notifica(
-        conn,
-        "modifica_regola",
-        f"Nuova regola {corpo.tipo} creata",
-        {"regola_id": regola_id, "azione": "creazione", "parametri": parametri},
-        ts,
-        figlio_id=chi.figlio_id,
-        dispositivo_id=dispositivo_id,
-    )
-    conn.commit()
+    # (v3.1) BEGIN IMMEDIATE: il controllo "dispositivo revocato" e l'inserimento
+    # sono un atto unico. Senza, una revoca che arriva in mezzo lascerebbe nascere
+    # una regola su un dispositivo gia' revocato. Il lock serializza con la revoca
+    # (anche lei BEGIN IMMEDIATE): o la regola nasce prima, o la revoca vince e 409.
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        dispositivo_id = None
+        tipo = None
+        if corpo.tipo != "vita_reale":
+            # (v3) Una regola di tempo o di fascia vale su un dispositivo: quello che
+            # chiama, o un altro dello STESSO figlio (una regola del computer si puo'
+            # scrivere anche dal telefono). Mai su quello di un altro figlio.
+            destinazione = corpo.dispositivo_id if corpo.dispositivo_id is not None else chi.dispositivo_id
+            dispositivo = conn.execute(
+                "SELECT * FROM dispositivi WHERE id = ?", (destinazione,)
+            ).fetchone()
+            if dispositivo is None or dispositivo["figlio_id"] != chi.figlio_id:
+                raise HTTPException(status_code=403, detail="dispositivo di un altro figlio")
+            if dispositivo["revocato_ts"] is not None:
+                raise HTTPException(status_code=409, detail={"errore": "dispositivo_revocato"})
+            dispositivo_id, tipo = dispositivo["id"], dispositivo["tipo"]
+        parametri = _valida_o_422(corpo.tipo, corpo.parametri, tipo)
+        ts = clock.iso(clock.now())
+        cursore = conn.execute(
+            "INSERT INTO regole"
+            " (tipo, parametri, attiva, creata_ts, ultima_modifica_ts, figlio_id, dispositivo_id)"
+            " VALUES (?, ?, 1, ?, ?, ?, ?)",
+            (corpo.tipo, json.dumps(parametri), ts, ts, chi.figlio_id, dispositivo_id),
+        )
+        regola_id = cursore.lastrowid
+        registra_modifica(conn, regola_id, "creazione", None, None, parametri, False, ts)
+        accoda_notifica(
+            conn,
+            "modifica_regola",
+            f"Nuova regola {corpo.tipo} creata",
+            {"regola_id": regola_id, "azione": "creazione", "parametri": parametri},
+            ts,
+            figlio_id=chi.figlio_id,
+            dispositivo_id=dispositivo_id,
+        )
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
     riga = conn.execute("SELECT * FROM regole WHERE id = ?", (regola_id,)).fetchone()
     return formatta_regola(conn, riga)
 
@@ -319,6 +348,7 @@ def modifica_regola(
     conn.execute("BEGIN IMMEDIATE")
     try:
         riga = regola_del_figlio_o_errore(conn, regola_id, chi.figlio_id)
+        verifica_dispositivo_vivo(conn, riga)  # (v3.1) prima di consumare una proposta
         parametri_prima = json.loads(riga["parametri"])
         parametri_dopo = _valida_o_422(riga["tipo"], corpo.parametri, tipo_dispositivo(conn, riga))
 
@@ -355,6 +385,7 @@ def elimina_regola(
     conn.execute("BEGIN IMMEDIATE")
     try:
         riga = regola_del_figlio_o_errore(conn, regola_id, chi.figlio_id)
+        verifica_dispositivo_vivo(conn, riga)  # (v3.1)
         verifica_non_ultima(conn, chi.figlio_id)
 
         concordata = False

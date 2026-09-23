@@ -14,6 +14,7 @@ copia i release firmati (mai nel repo).
 (v3) C'e' anche il programma per il computer: `computer` in /api/versione e
 pactum-computer.zip, nella stessa cartella degli APK."""
 
+import html
 import json
 from datetime import datetime
 from pathlib import Path
@@ -242,6 +243,10 @@ def _pagina_html(versioni: dict, apk_dir: str = "") -> str:
 
 
 def _non_trovato_html(nome_file: str) -> str:
+    # Il nome arriva dall'indirizzo, cioe' da chiunque su Internet: nella pagina va
+    # solo come testo (html.escape), mai come HTML. Senza, /scarica/<script...>
+    # farebbe girare codice sul dominio pubblico del postino.
+    nome_file = html.escape(nome_file)
     return f"""<!DOCTYPE html>
 <html lang="it">
 <head>

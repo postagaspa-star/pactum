@@ -4,12 +4,17 @@ le regole eliminate diventano attiva=0, i dispositivi revocati restano (v3)."""
 
 import hashlib
 import json
+import logging
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Request
 
 from . import clock, config
+
+# Lo stesso logger di main.py: uvicorn lo manda nel log del container.
+log = logging.getLogger("uvicorn.error")
 
 # uso_giornaliero e' una fotografia CUMULATIVA del giorno (contratto-api.md):
 # il registro eventi conserva ogni fotografia ricevuta, ma la verita' sull'uso
@@ -234,7 +239,8 @@ CREATE TABLE IF NOT EXISTS bonus (
 -- genitore (backfill via _migra). (v3) figlio_id: il figlio di cui parla.
 -- dispositivo_id: il dispositivo della regola o dell'evento, NULL per quelle del
 -- figlio (vita reale, segno). 'figlio' vuol dire i dispositivi di quel figlio:
--- ciascuno legge quelle col suo dispositivo_id o NULL.
+-- ciascuno legge quelle col suo dispositivo_id o NULL. (v3.1) `letta` vale per
+-- quelle del genitore; quelle del figlio si leggono per dispositivo (notifiche_lette).
 CREATE TABLE IF NOT EXISTS notifiche (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     destinatario TEXT NOT NULL DEFAULT 'genitore' CHECK (destinatario IN ('figlio', 'genitore')),
@@ -247,6 +253,28 @@ CREATE TABLE IF NOT EXISTS notifiche (
     dispositivo_id INTEGER REFERENCES dispositivi(id)
 );
 """
+
+# (v3.1) Chi ha letto una notifica del figlio: ogni dispositivo per conto suo, cosi'
+# una notifica per tutto il figlio (il segno) arriva al telefono E al computer anche
+# se il telefono l'ha gia' mostrata. Per le notifiche del figlio `notifiche.letta`
+# resta com'era (storia della v2.4) e non si usa piu'; quelle del genitore restano
+# condivise e usano `letta`. Non sta in SCHEMA apposta: nasce in _migra_letture,
+# nella stessa transazione che ci copia le letture di prima, cosi' "la tabella
+# esiste" vuol dire "la migrazione delle letture e' fatta" e non si ripete mai.
+TABELLA_NOTIFICHE_LETTE = """
+CREATE TABLE notifiche_lette (
+    notifica_id INTEGER NOT NULL REFERENCES notifiche(id),
+    dispositivo_id INTEGER NOT NULL REFERENCES dispositivi(id),
+    ts_server TEXT NOT NULL,
+    PRIMARY KEY (notifica_id, dispositivo_id)
+)
+"""
+
+# (v3.1) La copia completa fatta prima della migrazione v3: <db>.prima-v3-<data>.
+SUFFISSO_COPIA_V3 = ".prima-v3-"
+
+# Le tabelle che dicono se un database ha gia' una storia (_ci_sono_dati).
+TABELLE_STORIA = ("regole", "eventi", "battiti", "bonus", "notifiche")
 
 # (v3) Le colonne che i database v2.4 non hanno. ALTER TABLE ADD COLUMN con
 # REFERENCES vuole il default NULL: che siano sempre riempite lo garantisce il codice.
@@ -275,12 +303,18 @@ FOTOGRAFIE_V3 = {
 }
 
 # Indici sulle colonne v3: si creano DOPO la migrazione, quando le colonne esistono.
+# (v3.1) idx_eventi_tipo_dispositivo_ts: le letture della finestra e del patto
+# partono da una data (semaforo.inizio_letture) e le liste "recenti" vogliono gli
+# ultimi 20: con ts_server nell'indice si leggono solo quelle righe, non tutta la
+# storia del dispositivo. Quello senza ts_server resta per le ricerche per rowid
+# (sospensione e ripresa del computer).
 INDICI_V3 = """
 CREATE INDEX IF NOT EXISTS idx_credenziali_hash ON credenziali (token_hash);
 CREATE INDEX IF NOT EXISTS idx_codici_hash ON codici_abbinamento (codice_hash);
 CREATE INDEX IF NOT EXISTS idx_dispositivi_figlio ON dispositivi (figlio_id);
 CREATE INDEX IF NOT EXISTS idx_regole_figlio ON regole (figlio_id);
 CREATE INDEX IF NOT EXISTS idx_eventi_tipo_dispositivo ON eventi (tipo, dispositivo_id);
+CREATE INDEX IF NOT EXISTS idx_eventi_tipo_dispositivo_ts ON eventi (tipo, dispositivo_id, ts_server);
 CREATE INDEX IF NOT EXISTS idx_battiti_dispositivo ON battiti (dispositivo_id, ts_server);
 CREATE INDEX IF NOT EXISTS idx_bonus_dispositivo ON bonus (dispositivo_id, ts_server);
 CREATE INDEX IF NOT EXISTS idx_notifiche_figlio ON notifiche (figlio_id, letta);
@@ -309,6 +343,10 @@ def hash_segreto(segreto: str) -> str:
 
 def _colonne(conn: sqlite3.Connection, tabella: str) -> set[str]:
     return {r[1] for r in conn.execute(f"PRAGMA table_info({tabella})")}
+
+
+def _tabelle(conn: sqlite3.Connection) -> set[str]:
+    return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 
 
 def _migra(conn: sqlite3.Connection, crea_famiglia: bool = False) -> None:
@@ -437,16 +475,103 @@ def _migra(conn: sqlite3.Connection, crea_famiglia: bool = False) -> None:
 
     _migra_v3(conn, crea_famiglia)
     conn.executescript("BEGIN;" + INDICI_V3 + "COMMIT;")
+    _migra_letture(conn)
 
 
 def _ci_sono_dati(conn: sqlite3.Connection) -> bool:
     """Il database ha gia' una storia (regole, registro, battiti, bonus o notifiche):
     va attaccata al figlio 1 / dispositivo 1. Proposte, dichiarazioni, storico e
-    fotografie non esistono senza regole o eventi."""
+    fotografie non esistono senza regole o eventi. Funziona anche prima che SCHEMA
+    abbia creato le tabelle (v3.1: la copia si decide prima di toccare il file)."""
+    esistenti = _tabelle(conn)
     return any(
-        conn.execute(f"SELECT 1 FROM {tabella} LIMIT 1").fetchone() is not None
-        for tabella in ("regole", "eventi", "battiti", "bonus", "notifiche")
+        tabella in esistenti
+        and conn.execute(f"SELECT 1 FROM {tabella} LIMIT 1").fetchone() is not None
+        for tabella in TABELLE_STORIA
     )
+
+
+def _mancanze_v3(conn: sqlite3.Connection) -> tuple[list, list]:
+    """(v3) Cosa manca al database per essere in forma v3: le colonne nuove
+    (tabella, colonna, definizione) e le fotografie ancora con la chiave `giorno`.
+    Una tabella che non c'e' ancora ha tutto da fare."""
+    colonne_mancanti = [
+        (tabella, colonna, definizione)
+        for tabella, colonna, definizione in COLONNE_V3
+        if colonna not in _colonne(conn, tabella)
+    ]
+    da_ricostruire = [
+        tabella for tabella in FOTOGRAFIE_V3 if "dispositivo_id" not in _colonne(conn, tabella)
+    ]
+    return colonne_mancanti, da_ricostruire
+
+
+def _senza_figli(conn: sqlite3.Connection) -> bool:
+    return "figli" not in _tabelle(conn) or conn.execute("SELECT 1 FROM figli LIMIT 1").fetchone() is None
+
+
+def _va_migrato_a_v3(conn: sqlite3.Connection) -> bool:
+    """(v3.1) Un database con una storia che la migrazione v3 toccherebbe: colonne o
+    fotografie da rifare, o nessun figlio a cui attaccare la storia. Un database
+    nuovo (niente storia) o gia' in forma v3 no."""
+    if not _ci_sono_dati(conn):
+        return False
+    colonne_mancanti, da_ricostruire = _mancanze_v3(conn)
+    return bool(colonne_mancanti or da_ricostruire) or _senza_figli(conn)
+
+
+def _percorso_copia(db_path: str, ora: datetime) -> str:
+    """<db>.prima-v3-AAAAMMGG-HHMMSS accanto al database, con l'ora del patto (quella
+    che legge chi apre la cartella). Una copia non si sovrascrive mai: se il nome e'
+    gia' preso (un avvio che non era riuscito a migrare, nello stesso secondo) si
+    aggiunge -2, -3..."""
+    base = f"{db_path}{SUFFISSO_COPIA_V3}{ora.astimezone(config.fuso_patto()):%Y%m%d-%H%M%S}"
+    percorso, numero = base, 2
+    while os.path.exists(percorso) or os.path.exists(percorso + ".parziale"):
+        percorso, numero = f"{base}-{numero}", numero + 1
+    return percorso
+
+
+def _copia_prima_della_migrazione(conn: sqlite3.Connection, db_path: str) -> str:
+    """(v3.1) Contratto, "Migrazione" punto 5: prima di toccare un database che ha gia'
+    una storia, una copia completa accanto al file. Se non riesce il server NON parte:
+    meglio fermo che migrato senza rete di sicurezza.
+
+    VACUUM INTO scrive una copia coerente (una fotografia del database, come un
+    backup) ma non la forza su disco: lo fa os.fsync, perche' la copia serve proprio
+    se dopo va storto qualcosa, anche un NAS che si spegne. La copia nasce col nome
+    `.parziale` e prende il suo nome solo quando e' completa e su disco: un file
+    `.prima-v3-...` e' sempre una copia buona. Se non riesce, la copia a meta' si
+    toglie: non serve a niente e occuperebbe il disco del NAS (con il disco pieno,
+    anche quello degli altri servizi)."""
+    percorso = _percorso_copia(db_path, clock.now())
+    parziale = percorso + ".parziale"
+    creato = False
+    try:
+        # "x": il file lo crea questo avvio (VACUUM INTO accetta un file vuoto), cosi'
+        # se qualcosa va storto si toglie solo quello che abbiamo scritto noi.
+        open(parziale, "xb").close()
+        creato = True
+        conn.execute("VACUUM INTO ?", (parziale,))
+        with open(parziale, "rb+") as copia:
+            os.fsync(copia.fileno())
+        os.replace(parziale, percorso)
+    except (sqlite3.Error, OSError) as errore:
+        if creato:
+            try:
+                os.remove(parziale)
+            except OSError:
+                pass
+        messaggio = (
+            f"MIGRAZIONE v3 FERMATA: non riesco a fare la copia di sicurezza del database"
+            f" ({percorso}): {errore}. Il database NON e' stato toccato e il server NON"
+            f" parte. Controlla lo spazio libero e i permessi della cartella"
+            f" {os.path.dirname(os.path.abspath(db_path))}, poi riavvia."
+        )
+        log.error(messaggio)
+        raise RuntimeError(messaggio) from errore
+    log.info("Copia di sicurezza prima della migrazione v3: %s", percorso)
+    return percorso
 
 
 def _crea_famiglia_iniziale(conn: sqlite3.Connection, ts: str) -> tuple[int, int]:
@@ -535,17 +660,8 @@ def _migra_v3(conn: sqlite3.Connection, crea_famiglia: bool) -> None:
     Il figlio 1 / dispositivo 1 nasce quando nel database non c'e' ancora nessun
     figlio e c'e' qualcosa a cui darlo: una storia da migrare o il token del
     telefono (PACTUM_TOKEN_FIGLIO, sempre presente quando il server parte)."""
-    colonne_mancanti = [
-        (tabella, colonna, definizione)
-        for tabella, colonna, definizione in COLONNE_V3
-        if colonna not in _colonne(conn, tabella)
-    ]
-    da_ricostruire = [
-        tabella for tabella in FOTOGRAFIE_V3 if "dispositivo_id" not in _colonne(conn, tabella)
-    ]
-    nasce_famiglia = conn.execute("SELECT 1 FROM figli LIMIT 1").fetchone() is None and (
-        crea_famiglia or _ci_sono_dati(conn)
-    )
+    colonne_mancanti, da_ricostruire = _mancanze_v3(conn)
+    nasce_famiglia = _senza_figli(conn) and (crea_famiglia or _ci_sono_dati(conn))
     if not (colonne_mancanti or da_ricostruire or nasce_famiglia):
         return
 
@@ -573,6 +689,36 @@ def _migra_v3(conn: sqlite3.Connection, crea_famiglia: bool) -> None:
             raise
     finally:
         conn.execute("PRAGMA foreign_keys=ON")
+
+
+def _migra_letture(conn: sqlite3.Connection) -> None:
+    """(v3.1) Le notifiche del figlio si leggono per dispositivo (tabella
+    notifiche_lette). Una volta sola, in una transazione: la tabella nasce qui
+    insieme alle letture di prima, cosi' se esiste la migrazione e' fatta.
+
+    Le notifiche del figlio gia' lette (`letta = 1`) risultano lette per i
+    dispositivi del figlio che esistono adesso e che le ricevono (quello della
+    notifica, o tutti per quelle del figlio). Quelle non lette restano da leggere
+    per tutti. Un dispositivo nato dopo non ne ha lette nessuna: per lui valgono le
+    notifiche "non ancora lette da quel dispositivo" del contratto."""
+    if "notifiche_lette" in _tabelle(conn):
+        return
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if "notifiche_lette" not in _tabelle(conn):  # riletto dentro il lock
+            conn.execute(TABELLA_NOTIFICHE_LETTE)
+            conn.execute(
+                "INSERT INTO notifiche_lette (notifica_id, dispositivo_id, ts_server)"
+                " SELECT n.id, d.id, ? FROM notifiche n JOIN dispositivi d ON d.figlio_id = n.figlio_id"
+                " WHERE n.destinatario = 'figlio' AND n.letta = 1"
+                " AND (n.dispositivo_id IS NULL OR n.dispositivo_id = d.id)",
+                (clock.iso(clock.now()),),
+            )
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
 
 
 def _sincronizza_credenziali(
@@ -640,6 +786,11 @@ def init_db(
 ) -> None:
     conn = connetti(db_path)
     try:
+        # (v3.1) Prima di scrivere qualsiasi cosa (anche solo le tabelle nuove dello
+        # SCHEMA): un database con una storia da migrare alla v3 si copia accanto al
+        # file. Se la copia non riesce, init_db si ferma qui e il server non parte.
+        if _va_migrato_a_v3(conn):
+            _copia_prima_della_migrazione(conn, db_path)
         # Tutto lo schema in una transazione: una scrittura sola su disco invece di
         # una per tabella (su Windows ogni transazione e' un file di journal in piu').
         conn.executescript("BEGIN;" + SCHEMA + "COMMIT;")

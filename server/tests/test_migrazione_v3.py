@@ -7,9 +7,13 @@ tests/dati_v24.py) a famiglia/figli/dispositivi, al primo avvio, da sola.
 - Niente si perde e niente si duplica: ogni riga di prima c'e' ancora, uguale, ed
   e' attaccata al figlio 1 / dispositivo 1 come dice il contratto.
 - Riavviare non ripete niente; un errore a meta' lascia il database com'era.
-- I token d'ambiente restano quelli delle app 0.7, salvati solo come hash."""
+- I token d'ambiente restano quelli delle app 0.7, salvati solo come hash.
+- (v3.1) Prima di migrare, una copia completa accanto al file; se non riesce, il
+  server non parte. Le notifiche del figlio gia' lette restano lette per i
+  dispositivi di quel momento (da qui in poi si leggono per dispositivo)."""
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -17,7 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import dati_v24
-from aiuti_v3 import auth, contenuto_in
+from aiuti_v3 import auth, contenuto_in, dispositivo_abbinato
 from conftest import FIGLIO, GENITORE, TOKEN_FIGLIO, TOKEN_GENITORE, Orologio
 
 PRIMA = json.loads((Path(__file__).parent / "dati" / "v24_prima.json").read_text(encoding="utf-8"))
@@ -292,6 +296,148 @@ def test_telefono_revocato_il_token_d_ambiente_non_torna(avvia):
     with avvia() as c:
         assert c.get("/api/patto", headers=FIGLIO).status_code == 401
         assert c.get("/api/finestra", headers=GENITORE).status_code == 200  # la storia resta
+
+
+# --- (v3.1) la copia di sicurezza prima di migrare ---
+
+def _copie(db_path) -> list[Path]:
+    percorso = Path(db_path)
+    return sorted(percorso.parent.glob(percorso.name + ".prima-v3-*"))
+
+
+def test_prima_di_migrare_una_copia_completa_accanto_al_file(avvia, db_v24):
+    prima = dati_v24.righe(db_v24)
+    with avvia() as c:
+        assert c.get("/api/finestra", headers=GENITORE).status_code == 200
+    (copia,) = _copie(db_v24)
+    assert copia.name == "nas-v24.db.prima-v3-20260923-120000"  # 10:00 UTC = 12:00 a Roma
+    # si apre ed e' il database di prima, riga per riga: ancora v2.4, niente v3
+    conn = sqlite3.connect(copia)
+    try:
+        assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    finally:
+        conn.close()
+    assert dati_v24.righe(str(copia)) == prima
+    assert "figli" not in dati_v24.righe(str(copia))
+    assert not list(Path(db_v24).parent.glob("*.parziale"))
+
+
+def test_la_copia_si_fa_una_volta_sola(avvia, db_v24, orologio):
+    with avvia():
+        pass
+    orologio.avanza(hours=1)
+    for _ in range(2):
+        with avvia():  # gia' v3: niente da copiare
+            pass
+    assert len(_copie(db_v24)) == 1
+
+
+def test_niente_copia_su_un_database_nuovo(client, db_path):
+    assert client.get("/api/patto", headers=FIGLIO).status_code == 200
+    assert _copie(db_path) == []
+
+
+def test_se_la_copia_non_riesce_il_server_non_parte(avvia, db_v24, monkeypatch, caplog):
+    """Meglio fermo che migrato senza rete di sicurezza: il database resta com'era
+    (neanche le tabelle nuove), il log dice cosa e' successo, e al riavvio con la
+    cartella a posto la migrazione riparte da capo."""
+    from app import db
+
+    prima = dati_v24.righe(db_v24)
+    percorso_vero = db._percorso_copia
+    cartella_che_non_c_e = Path(db_v24).parent / "non-esiste" / "copia.db"
+    monkeypatch.setattr(db, "_percorso_copia", lambda *_: str(cartella_che_non_c_e))
+    with caplog.at_level(logging.ERROR, logger="uvicorn.error"):
+        with pytest.raises(RuntimeError, match="MIGRAZIONE v3 FERMATA"):
+            avvia()
+    assert dati_v24.righe(db_v24) == prima
+    assert _copie(db_v24) == []
+    (errore,) = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert "copia di sicurezza" in errore.getMessage() and "NON parte" in errore.getMessage()
+
+    monkeypatch.setattr(db, "_percorso_copia", percorso_vero)
+    with avvia() as c:
+        assert c.get("/api/patto", headers=FIGLIO).status_code == 200
+    (copia,) = _copie(db_v24)
+    assert dati_v24.righe(str(copia)) == prima
+
+
+def test_una_copia_a_meta_non_resta_sul_disco(avvia, db_v24, monkeypatch):
+    """Se la copia si rompe a meta' (qui: non si riesce a forzarla su disco) il
+    server non parte e il file a meta' sparisce: non passa per una copia buona e
+    non occupa il disco del NAS."""
+    from app import db
+
+    prima = dati_v24.righe(db_v24)
+
+    def disco_che_non_risponde(_):
+        raise OSError(5, "errore di scrittura")
+
+    monkeypatch.setattr(db.os, "fsync", disco_che_non_risponde)
+    with pytest.raises(RuntimeError, match="MIGRAZIONE v3 FERMATA"):
+        avvia()
+    assert list(Path(db_v24).parent.glob("*.prima-v3-*")) == []  # neanche il .parziale
+    assert dati_v24.righe(db_v24) == prima
+
+
+def test_un_avvio_fallito_a_meta_non_sovrascrive_la_copia(db_v24, monkeypatch, orologio):
+    """Un avvio che copia e poi non riesce a migrare, e il riavvio nello stesso
+    secondo: due copie, nessuna sovrascritta."""
+    from app import db
+
+    attacca_vero = db._attacca_dati_esistenti
+
+    def guasto(*_):
+        raise RuntimeError("corrente saltata a meta' migrazione")
+
+    monkeypatch.setattr(db, "_attacca_dati_esistenti", guasto)
+    with pytest.raises(RuntimeError):
+        db.init_db(db_v24, 30, 90, TOKEN_FIGLIO, TOKEN_GENITORE)
+    monkeypatch.setattr(db, "_attacca_dati_esistenti", attacca_vero)
+    db.init_db(db_v24, 30, 90, TOKEN_FIGLIO, TOKEN_GENITORE)
+    assert [c.name for c in _copie(db_v24)] == [
+        "nas-v24.db.prima-v3-20260923-120000", "nas-v24.db.prima-v3-20260923-120000-2",
+    ]
+
+
+# --- (v3.1) le notifiche del figlio lette per dispositivo ---
+
+def test_le_notifiche_gia_lette_restano_lette_per_il_telefono(avvia, db_v24):
+    """Le notifiche del figlio lette in v2.4 (4 e 6) risultano lette per il telefono,
+    l'unico dispositivo al momento della migrazione; 9 e 10 restano da leggere."""
+    with avvia() as c:
+        assert [n["id"] for n in _get(c, "/api/notifiche", FIGLIO)["notifiche"]] == [9, 10]
+    lette = dati_v24.righe(db_v24)["notifiche_lette"]
+    assert sorted((r["notifica_id"], r["dispositivo_id"]) for r in lette) == [(4, 1), (6, 1)]
+
+
+def test_migrazione_delle_letture_su_un_database_gia_v3(client, db_path):
+    """Un database gia' v3 ma senza la v3.1 (letture condivise, `letta = 1`): al
+    riavvio le lette risultano lette per TUTTI i dispositivi del figlio che ci sono
+    in quel momento, una volta sola. Un dispositivo nato dopo non le ha lette."""
+    pc, pc_id = dispositivo_abbinato(client, 1, "Computer", "computer")
+    assert client.post("/api/segno", json={"figlio_id": 1}, headers=GENITORE).status_code == 200
+    (segno,) = [n["id"] for n in _get(client, "/api/notifiche", FIGLIO)["notifiche"]]
+    conn = sqlite3.connect(db_path)
+    try:  # com'era in v3: letta per tutti, e nessuna tabella delle letture
+        conn.execute("UPDATE notifiche SET letta = 1 WHERE id = ?", (segno,))
+        conn.execute("DROP TABLE notifiche_lette")
+        conn.commit()
+    finally:
+        conn.close()
+
+    from app.main import create_app
+
+    with TestClient(create_app()) as c:  # riavvio con la v3.1
+        assert _get(c, "/api/notifiche", FIGLIO)["notifiche"] == []
+        assert _get(c, "/api/notifiche", pc)["notifiche"] == []
+        dopo, _ = dispositivo_abbinato(c, 1, "Telefono nuovo", "telefono")
+        assert [n["id"] for n in _get(c, "/api/notifiche", dopo)["notifiche"]] == [segno]
+    righe = dati_v24.righe(db_path)["notifiche_lette"]
+    with TestClient(create_app()):  # un altro riavvio non ripete niente
+        pass
+    assert dati_v24.righe(db_path)["notifiche_lette"] == righe
+    assert sorted(r["dispositivo_id"] for r in righe) == [1, pc_id]
 
 
 def test_primo_avvio_su_database_vuoto(client):

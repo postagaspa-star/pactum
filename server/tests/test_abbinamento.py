@@ -118,6 +118,57 @@ def test_un_codice_nuovo_annulla_il_precedente(client):
     assert abbina(client, nuovo.json()["codice"]).status_code == 200
 
 
+# --- (v3.1) il tipo di chi si abbina ---
+
+def _abbina_col_tipo(client, codice: str, tipo):
+    return client.post("/api/abbina", json={"codice": codice, "versione_app": "0.8.0", "tipo": tipo})
+
+
+@pytest.mark.parametrize("tipo", ["telefono", "computer"])
+def test_abbinamento_col_tipo_giusto(client, tipo):
+    creato = nuovo_dispositivo(client, 1, "Nuovo", tipo)
+    r = _abbina_col_tipo(client, creato["codice"], tipo)
+    assert r.status_code == 200 and r.json()["dispositivo"]["tipo"] == tipo
+
+
+def test_tipo_sbagliato_409_e_il_codice_resta_valido(client):
+    """Un computer che scrive il codice del telefono non ne prende il posto: 409 col
+    tipo atteso, e il codice non si consuma (il telefono lo usa subito dopo)."""
+    telefono = nuovo_dispositivo(client, 1, "Telefono nuovo", "telefono")
+    r = _abbina_col_tipo(client, telefono["codice"], "computer")
+    assert r.status_code == 409
+    assert r.json()["detail"] == {"errore": "tipo_non_corrispondente", "tipo_atteso": "telefono"}
+    (figlio,) = _famiglia(client)["figli"]
+    assert [d["abbinato"] for d in figlio["dispositivi"] if d["id"] == telefono["dispositivo"]["id"]] == [False]
+    r = _abbina_col_tipo(client, telefono["codice"], "telefono")
+    assert r.status_code == 200
+    assert r.json()["dispositivo"] == {"id": telefono["dispositivo"]["id"], "nome": "Telefono nuovo", "tipo": "telefono"}
+    # e il contrario: il codice di un computer non abbina un telefono
+    computer = nuovo_dispositivo(client, 1, "Computer", "computer")
+    r = _abbina_col_tipo(client, computer["codice"], "telefono")
+    assert r.status_code == 409 and r.json()["detail"]["tipo_atteso"] == "computer"
+
+
+def test_senza_tipo_l_abbinamento_va_come_prima(client):
+    creato = nuovo_dispositivo(client, 1, "Computer", "computer")
+    assert abbina(client, creato["codice"]).status_code == 200  # nessun `tipo` nel corpo
+
+
+def test_tipo_sbagliato_conta_come_tentativo_fallito(client):
+    """Senza, il tipo sbagliato direbbe gratis se un codice provato a caso e' giusto."""
+    creato = nuovo_dispositivo(client, 1, "Computer", "computer")
+    _sbaglia(client, 9, creato["codice"])
+    assert _abbina_col_tipo(client, creato["codice"], "telefono").status_code == 409  # il decimo
+    r = _abbina_col_tipo(client, creato["codice"], "computer")  # anche giusto: bloccato
+    assert r.status_code == 429 and r.json()["detail"]["errore"] == "troppi_tentativi"
+
+
+def test_tipo_sconosciuto_422(client):
+    creato = nuovo_dispositivo(client, 1, "Computer", "computer")
+    assert _abbina_col_tipo(client, creato["codice"], "tablet").status_code == 422
+    assert _abbina_col_tipo(client, creato["codice"], "computer").status_code == 200
+
+
 def test_codice_sbagliato_scaduto_o_usato_stessa_risposta(client, orologio):
     creato = nuovo_dispositivo(client, 1, "Computer", "computer")
     for codice in ("abc", "12345", _codice_sbagliato(creato["codice"])):

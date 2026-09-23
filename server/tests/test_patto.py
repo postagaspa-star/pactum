@@ -3,6 +3,7 @@ una risposta sola — regole attive (col semaforo, v2.4), residui bonus, bonus d
 per regola (per il limite efficace del valutatore locale), proposte pendenti,
 dichiarazioni in attesa, fuso."""
 
+from aiuti_v3 import dispositivo_abbinato, regola
 from conftest import FIGLIO, GENITORE, crea_regola
 
 CHIAVI_ATTESE = {
@@ -105,6 +106,37 @@ def test_patto_dichiarazioni_in_attesa(client):
     assert [d["id"] for d in in_attesa] == [successo["id"]]
     assert in_attesa[0]["stato"] == "in_attesa"
     _ = limite  # il limite serve solo a non lasciare il patto senza altre regole
+
+
+def test_regola_nata_mentre_si_calcola_il_patto(client, monkeypatch):
+    """(v3.1) Il computer crea una regola mentre il telefono sincronizza: arriva
+    subito dopo il calcolo dei semafori. Il patto legge le regole PRIMA dei
+    semafori (come la finestra), quindi ogni regola che restituisce ha il suo
+    semaforo: niente KeyError, niente 500. Nell'ordine di prima si rompeva."""
+    from app import semaforo
+    from app.routes import figlio as rotte_figlio
+
+    pc, _ = dispositivo_abbinato(client, 1, "Computer", "computer")
+    prima = crea_regola(client)
+    originale = semaforo.quadro
+    nate_in_mezzo = []
+
+    def quadro_poi_una_regola_nuova(*args, **kwargs):
+        risultato = originale(*args, **kwargs)
+        monkeypatch.setattr(rotte_figlio.semaforo, "quadro", originale)  # una volta sola
+        # vita reale: entra nelle regole del patto del telefono
+        nate_in_mezzo.append(regola(client, pc, tipo="vita_reale", parametri=_vita())["id"])
+        return risultato
+
+    monkeypatch.setattr(rotte_figlio.semaforo, "quadro", quadro_poi_una_regola_nuova)
+    risposta = client.get("/api/patto", headers=FIGLIO)
+    assert risposta.status_code == 200, risposta.text
+    assert nate_in_mezzo  # la regola e' nata davvero in mezzo
+    regole = risposta.json()["regole"]
+    assert [r["id"] for r in regole] == [prima["id"]]
+    assert all(len(r["semaforo"]) == 8 for r in regole)
+    # al giro dopo c'e' anche lei, col suo semaforo
+    assert [r["id"] for r in _patto(client)["regole"]] == [prima["id"], nate_in_mezzo[0]]
 
 
 def test_patto_dopo_il_verdetto_niente_in_attesa(client):

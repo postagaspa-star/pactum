@@ -229,16 +229,21 @@ def patto(
     dispositivi = famiglia.dispositivi_del_figlio(conn, chi.figlio_id)
     per_id = {d["id"]: d for d in dispositivi}
     questo = per_id[chi.dispositivo_id]
+    # (v3.1) Le regole si leggono PRIMA dei semafori, come nella finestra: le righe
+    # non si cancellano mai (soft-delete), quindi ogni regola letta qui ha il suo
+    # semaforo anche se intanto ne nasce una (dal computer, mentre il telefono
+    # sincronizza). Nell'ordine inverso la regola nuova non avrebbe semaforo: 500.
+    righe_regole = conn.execute(
+        "SELECT * FROM regole WHERE attiva = 1 AND figlio_id = ?"
+        " AND (dispositivo_id = ? OR dispositivo_id IS NULL) ORDER BY id",
+        (chi.figlio_id, chi.dispositivo_id),
+    ).fetchall()
     quadro = semaforo.quadro(conn, ora, chi.figlio_id, dispositivi)
     # (v2.4) Ogni regola porta il suo semaforo, lo stesso della finestra: il
     # genitore vede la striscia regola per regola, quindi la vede anche il figlio.
     regole = [
         {**_riga_regola(r, per_id), "semaforo": quadro["semafori"][r["id"]]}
-        for r in conn.execute(
-            "SELECT * FROM regole WHERE attiva = 1 AND figlio_id = ?"
-            " AND (dispositivo_id = ? OR dispositivo_id IS NULL) ORDER BY id",
-            (chi.figlio_id, chi.dispositivo_id),
-        ).fetchall()
+        for r in righe_regole
     ]
     return {
         "regole": regole,

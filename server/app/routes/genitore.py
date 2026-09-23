@@ -27,6 +27,10 @@ router = APIRouter(dependencies=[Depends(richiede_genitore)])
 # siti.GIORNI_FINESTRA, unica per tutte le sezioni.
 RECENTI = 20
 STORICO_MASSIMO = 50
+# (v3.1) Le etichette leggibili delle app si cercano nelle fotografie degli ultimi
+# 60 giorni, non in tutta la storia: una regola su un'app mai piu' usata da due
+# mesi mostra il nome del pacchetto (il ripiego del contratto).
+GIORNI_NOMI = 60
 
 # (v2.4) Il testo del segno e' fisso: non lo sceglie il genitore (contratto-api.md).
 MESSAGGIO_SEGNO = "Ho visto la settimana. Bene così."
@@ -41,6 +45,25 @@ def _evento_out(riga: sqlite3.Row) -> dict:
         "ts_server": riga["ts_server"],
         "dispositivo_id": riga["dispositivo_id"],
     }
+
+
+def _eventi_recenti(conn: sqlite3.Connection, dispositivi: list, tipo: str) -> list:
+    """Gli ultimi RECENTI eventi di un tipo, di tutti i dispositivi del figlio, dal
+    piu' recente (contratto: max 20 ciascuno, senza limite di data).
+
+    (v3.1) Il limite sta nella query, una per dispositivo: con l'indice
+    (tipo, dispositivo_id, ts_server) ciascuna legge solo le sue ultime 20 righe,
+    mentre una query sola su piu' dispositivi dovrebbe ordinare tutta la storia.
+    Poi i pochi candidati si mettono in fila con lo stesso ordine della query."""
+    candidati = []
+    for dispositivo in dispositivi:
+        candidati += conn.execute(
+            "SELECT * FROM eventi WHERE tipo = ? AND dispositivo_id = ?"
+            " ORDER BY ts_server DESC, id DESC LIMIT ?",
+            (tipo, dispositivo["id"], RECENTI),
+        ).fetchall()
+    candidati.sort(key=lambda e: (e["ts_server"], e["id"]), reverse=True)
+    return [_evento_out(e) for e in candidati[:RECENTI]]
 
 
 def _minuti_validi(mappa) -> dict:
@@ -160,19 +183,20 @@ def _medie(conn: sqlite3.Connection, dispositivo_id: int | None, oggi) -> dict:
     return {"settimana": media(7), "mese": media(30)}
 
 
-def _nomi_recenti(conn: sqlite3.Connection, figlio_id: int) -> dict:
+def _nomi_recenti(conn: sqlite3.Connection, figlio_id: int, oggi) -> dict:
     """(S2) L'ultima etichetta leggibile vista per ciascun pacchetto nelle
     fotografie uso_giornaliero (la piu' recente vince): serve a mostrare al
     genitore "TikTok" invece di com.zhiliaoapp.musically sulle regole
-    limite_tempo. Le fotografie sono al piu' una per giorno per dispositivo:
-    l'insieme e' piccolo. Fotografie senza `nomi` (pre-v2.2) si saltano.
-    (v3) Dalle fotografie di tutti i dispositivi del figlio: anche "Minecraft"
-    per exe:minecraft.exe arriva cosi' dal computer."""
+    limite_tempo. Le fotografie sono al piu' una per giorno per dispositivo.
+    Fotografie senza `nomi` (pre-v2.2) si saltano. (v3) Dalle fotografie di tutti
+    i dispositivi del figlio: anche "Minecraft" per exe:minecraft.exe arriva cosi'
+    dal computer. (v3.1) Solo quelle degli ultimi GIORNI_NOMI giorni: la storia
+    cresce, e ogni fotografia letta qui e' un JSON da aprire."""
     nomi: dict = {}
     for riga in conn.execute(
         "SELECT u.dettagli FROM uso_giornaliero u JOIN dispositivi d ON d.id = u.dispositivo_id"
-        " WHERE d.figlio_id = ? ORDER BY u.ts_server DESC, u.giorno DESC",
-        (figlio_id,),
+        " WHERE d.figlio_id = ? AND u.giorno >= ? ORDER BY u.ts_server DESC, u.giorno DESC",
+        (figlio_id, (oggi - timedelta(days=GIORNI_NOMI - 1)).isoformat()),
     ).fetchall():
         mappa = json.loads(riga["dettagli"]).get("nomi")
         if not isinstance(mappa, dict):
@@ -207,11 +231,13 @@ def _misure(
 
     # Riepilogo bonus per giorno (per tutto il dispositivo, stessa finestra di 8
     # giorni): dalla tabella bonus autoritativa, coi giorni nel fuso del patto.
+    # (v3.1) Solo i bonus dall'inizio della finestra (col margine di semaforo.py):
+    # quelli piu' vecchi cadrebbero fuori dagli 8 giorni comunque.
     minuti_per_giorno = defaultdict(int)
     bonus_regola = defaultdict(int)  # (giorno locale, regola_id) -> minuti
     for riga in conn.execute(
-        "SELECT minuti, regola_id, ts_server FROM bonus WHERE dispositivo_id = ?",
-        (dispositivo_id,),
+        "SELECT minuti, regola_id, ts_server FROM bonus WHERE dispositivo_id = ? AND ts_server >= ?",
+        (dispositivo_id, semaforo.inizio_letture(ora)),
     ).fetchall():
         giorno = semaforo.data_locale(riga["ts_server"], tz)
         minuti_per_giorno[giorno] += riga["minuti"]
@@ -248,13 +274,6 @@ def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(ge
     dispositivi = famiglia.dispositivi_del_figlio(conn, figlio["id"])
     per_id = {d["id"]: d for d in dispositivi}
 
-    eventi = conn.execute(
-        "SELECT e.* FROM eventi e JOIN dispositivi d ON d.id = e.dispositivo_id"
-        " WHERE e.tipo IN ('sforamento', 'manomissione') AND d.figlio_id = ?"
-        " ORDER BY e.ts_server DESC, e.id DESC",
-        (figlio["id"],),
-    ).fetchall()
-
     # Il semaforo per regola si calcola in semaforo.py: da li' esce anche la
     # striscia aggregata, condivisa con GET /api/patto. Le regole si leggono
     # PRIMA dei semafori: le righe non si cancellano mai (soft-delete), quindi
@@ -263,7 +282,7 @@ def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(ge
         "SELECT * FROM regole WHERE figlio_id = ? ORDER BY id", (figlio["id"],)
     ).fetchall()
     quadro = semaforo.quadro(conn, ora, figlio["id"], dispositivi)
-    nomi = _nomi_recenti(conn, figlio["id"])
+    nomi = _nomi_recenti(conn, figlio["id"], giorni[-1])
     regole = []
     for riga in righe_regole:
         voce = {**_riga_regola(riga, per_id), "semaforo": quadro["semafori"][riga["id"]]}
@@ -308,12 +327,8 @@ def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(ge
 
     return {
         "regole": regole,
-        "sforamenti_recenti": [
-            _evento_out(e) for e in eventi if e["tipo"] == "sforamento"
-        ][:RECENTI],
-        "manomissioni_recenti": [
-            _evento_out(e) for e in eventi if e["tipo"] == "manomissione"
-        ][:RECENTI],
+        "sforamenti_recenti": _eventi_recenti(conn, dispositivi, "sforamento"),
+        "manomissioni_recenti": _eventi_recenti(conn, dispositivi, "manomissione"),
         "storico_modifiche": storico,
         "bonus": compatibili["bonus"],
         "bonus_giornalieri": compatibili["bonus_giornalieri"],

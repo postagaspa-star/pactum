@@ -16,15 +16,33 @@ I giorni sono gli stessi 8 della finestra (siti.giorni_finestra), nel fuso del p
 import json
 import sqlite3
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from . import clock, famiglia, siti
 from .config import fuso_patto
+
+# (v3.1) Il registro cresce ogni giorno: le letture per gli 8 giorni della finestra
+# partono dall'inizio della finestra meno questo margine, non dall'inizio dei tempi.
+# Il filtro e' su ts_server (l'arrivo al server). Uno sforamento consegnato in
+# ritardo arriva DOPO il suo `giorno`: se il giorno cade nella finestra, l'arrivo
+# pure. Il margine copre il caso opposto, un `giorno` del telefono piu' avanti
+# dell'arrivo (telefono in un fuso piu' avanti del patto, orologio un po' avanti).
+MARGINE_LETTURE_GIORNI = 2
 
 
 def data_locale(ts_server: str, tz) -> str:
     """Il giorno LOCALE (fuso del patto) di un ts_server UTC ISO."""
     return datetime.fromisoformat(ts_server).astimezone(tz).date().isoformat()
+
+
+def inizio_letture(ora: datetime) -> str:
+    """(v3.1) Il ts_server (UTC ISO, confrontabile come stringa con quelli salvati)
+    da cui leggere il registro per la finestra: la mezzanotte locale del primo degli
+    8 giorni, meno MARGINE_LETTURE_GIORNI."""
+    primo = siti.giorni_finestra(ora)[0]
+    mezzanotte = datetime(primo.year, primo.month, primo.day, tzinfo=fuso_patto())
+    inizio = mezzanotte.astimezone(timezone.utc) - timedelta(days=MARGINE_LETTURE_GIORNI)
+    return clock.iso(inizio)
 
 
 def _semaforo_vita(stato_dich: str | None) -> str:
@@ -63,8 +81,8 @@ def _semafori(
     for evento in conn.execute(
         "SELECT e.dettagli, e.ts_server, e.dispositivo_id FROM eventi e"
         " JOIN dispositivi d ON d.id = e.dispositivo_id"
-        " WHERE e.tipo = 'sforamento' AND d.figlio_id = ?",
-        (figlio_id,),
+        " WHERE e.tipo = 'sforamento' AND d.figlio_id = ? AND e.ts_server >= ?",
+        (figlio_id, inizio_letture(ora)),
     ).fetchall():
         dettagli = json.loads(evento["dettagli"])
         regola_id = dettagli.get("regola_id")
@@ -83,12 +101,13 @@ def _semafori(
             continue  # un regola_id non confrontabile (lista, oggetto) non e' di nessuna regola
 
     # Dichiarazioni per le regole vita_reale: (regola_id, giorno locale) -> stato.
-    # Max una per regola per giorno, quindi la mappa e' univoca.
+    # Max una per regola per giorno, quindi la mappa e' univoca. (v3.1) Solo quelle
+    # dei giorni della finestra: `giorno` e' gia' il giorno locale, niente margine.
     dich_per_regola = defaultdict(dict)  # regola_id -> {giorno ISO: stato dichiarazione}
     for d in conn.execute(
         "SELECT d.regola_id, d.giorno, d.stato FROM dichiarazioni d"
-        " JOIN regole r ON r.id = d.regola_id WHERE r.figlio_id = ?",
-        (figlio_id,),
+        " JOIN regole r ON r.id = d.regola_id WHERE r.figlio_id = ? AND d.giorno >= ?",
+        (figlio_id, date_iso[0]),
     ).fetchall():
         dich_per_regola[d["regola_id"]][d["giorno"]] = d["stato"]
 
@@ -180,8 +199,8 @@ def _interruzioni(conn: sqlite3.Connection, ora: datetime, figlio_id: int) -> in
         1
         for e in conn.execute(
             "SELECT e.ts_server FROM eventi e JOIN dispositivi d ON d.id = e.dispositivo_id"
-            " WHERE e.tipo = 'manomissione' AND d.figlio_id = ?",
-            (figlio_id,),
+            " WHERE e.tipo = 'manomissione' AND d.figlio_id = ? AND e.ts_server >= ?",
+            (figlio_id, inizio_letture(ora)),
         )
         if data_locale(e["ts_server"], tz) in giorni
     )

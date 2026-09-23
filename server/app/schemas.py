@@ -184,3 +184,7 @@ class DispositivoIn(NomeIn):
 class AbbinaIn(BaseModel):
     codice: str
     versione_app: str | None = None
+    # (v3.1) Il tipo di chi si abbina (le app 0.8 lo mandano sempre): se il codice e'
+    # di un dispositivo di un altro tipo, 409 tipo_non_corrispondente e il codice
+    # resta valido. Facoltativo: senza, l'abbinamento va come prima.
+    tipo: Literal["telefono", "computer"] | None = None

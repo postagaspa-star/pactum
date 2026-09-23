@@ -169,6 +169,19 @@ def test_download_nome_sconosciuto_404(client_apk):
     assert r.headers["content-type"].startswith("text/html")
 
 
+def test_nome_sconosciuto_nella_pagina_solo_come_testo(client_apk):
+    """(v3.1) Il nome del file arriva dall'indirizzo, cioe' da chiunque: nella pagina
+    404 finisce escapato, mai come HTML (niente script sul dominio del postino)."""
+    r = client_apk.get("/scarica/%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E")
+    assert r.status_code == 404
+    assert r.headers["content-type"].startswith("text/html")
+    assert "<img" not in r.text
+    assert "&lt;img src=x onerror=alert(1)&gt;" in r.text
+    r = client_apk.get("/scarica/%22%3E%3Csvg%20onload%3Dalert(1)%3E")
+    assert r.status_code == 404
+    assert "<svg" not in r.text and "&quot;&gt;&lt;svg onload=alert(1)&gt;" in r.text
+
+
 def test_download_senza_auth(client_apk, apk_dir):
     (apk_dir / "pactum-figlio.apk").write_bytes(b"x")
     # Nessun header: il download e' pubblico.

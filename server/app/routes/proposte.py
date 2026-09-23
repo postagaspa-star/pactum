@@ -20,6 +20,7 @@ from .regole import (
     formatta_regola,
     regola_del_figlio_o_errore,
     tipo_dispositivo,
+    verifica_dispositivo_vivo,
     verifica_non_ultima,
 )
 
@@ -98,33 +99,37 @@ def crea_proposta(
     chi: Identita = Depends(richiede_genitore),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    if corpo.figlio_id is not None:
-        famiglia.figlio_o_404(conn, corpo.figlio_id)
-    riga = conn.execute(
-        "SELECT * FROM regole WHERE id = ? AND attiva = 1", (corpo.regola_id,)
-    ).fetchone()
-    if riga is None or (corpo.figlio_id is not None and riga["figlio_id"] != corpo.figlio_id):
-        # Regola inesistente, non attiva o (v3) non di quel figlio: non c'e' niente
-        # da proporre.
-        raise HTTPException(status_code=409, detail={"errore": "regola_non_valida"})
-
-    if corpo.parametri_proposti == MARCATORE_ELIMINA:
-        parametri = MARCATORE_ELIMINA
-        testo = "propone di eliminare la regola"
-        direzione = "elimina"
-    else:
-        parametri = _valida_o_422(riga["tipo"], corpo.parametri_proposti, tipo_dispositivo(conn, riga))
-        testo, direzione = confronto.confronto_e_direzione(
-            riga["tipo"], json.loads(riga["parametri"]), parametri
-        )
-
     # BEGIN IMMEDIATE: il controllo "una sola pendente per regola" deve essere
     # atomico, altrimenti due POST simultanei leggono entrambi "nessuna pendente"
     # e ne creano due. Il lock di scrittura serializza i concorrenti; chi arriva
-    # secondo rilegge la pendente gia' creata e viene respinto.
+    # secondo rilegge la pendente gia' creata e viene respinto. (v3.1) Dentro il
+    # lock anche la lettura della regola e il controllo "dispositivo revocato": una
+    # revoca (o un'eliminazione) che arriva in mezzo non lascia nascere una proposta
+    # su una regola che non si puo' piu' modificare.
     ts = clock.iso(clock.now())
     conn.execute("BEGIN IMMEDIATE")
     try:
+        if corpo.figlio_id is not None:
+            famiglia.figlio_o_404(conn, corpo.figlio_id)
+        riga = conn.execute(
+            "SELECT * FROM regole WHERE id = ? AND attiva = 1", (corpo.regola_id,)
+        ).fetchone()
+        if riga is None or (corpo.figlio_id is not None and riga["figlio_id"] != corpo.figlio_id):
+            # Regola inesistente, non attiva o (v3) non di quel figlio: non c'e' niente
+            # da proporre.
+            raise HTTPException(status_code=409, detail={"errore": "regola_non_valida"})
+        verifica_dispositivo_vivo(conn, riga)  # (v3.1) 409 dispositivo_revocato
+
+        if corpo.parametri_proposti == MARCATORE_ELIMINA:
+            parametri = MARCATORE_ELIMINA
+            testo = "propone di eliminare la regola"
+            direzione = "elimina"
+        else:
+            parametri = _valida_o_422(riga["tipo"], corpo.parametri_proposti, tipo_dispositivo(conn, riga))
+            testo, direzione = confronto.confronto_e_direzione(
+                riga["tipo"], json.loads(riga["parametri"]), parametri
+            )
+
         gia_pendente = conn.execute(
             "SELECT 1 FROM proposte WHERE regola_id = ? AND stato = 'pendente'",
             (corpo.regola_id,),
@@ -232,6 +237,10 @@ def rispondi_proposta(
             # Auto-applicazione atomica della modifica concordata: lock bypassato,
             # parametri esatti della proposta, concordata=true nello storico.
             riga = regola_del_figlio_o_errore(conn, proposta["regola_id"], chi.figlio_id)
+            # (v3.1) Una proposta nata prima della revoca non modifica la regola di un
+            # dispositivo revocato: accettarla risponde 409 dispositivo_revocato e la
+            # proposta resta pendente (rifiutarla si puo', non tocca la regola).
+            verifica_dispositivo_vivo(conn, riga)
             if parametri == MARCATORE_ELIMINA:
                 verifica_non_ultima(conn, chi.figlio_id)  # eliminare l'ultima regola resta vietato
                 applica_eliminazione(conn, riga, concordata=True, ora=ora)

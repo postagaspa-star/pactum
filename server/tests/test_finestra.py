@@ -109,6 +109,51 @@ def test_manomissioni_e_sforamenti_recenti(client):
     assert [e["id"] for e in finestra["sforamenti_recenti"]] == ["s3"]
 
 
+def test_recenti_al_massimo_venti_per_tipo(client, orologio):
+    """(v3.1) Il limite dei 20 sta nella query, un tipo per volta: 25 sforamenti
+    recenti non tolgono posto alle 3 manomissioni piu' vecchie. Dal piu' recente,
+    senza limite di data (il contratto non ne mette)."""
+    crea_regola(client)
+    manomissioni = [f"m{i}" for i in range(3)]
+    for evento_id in manomissioni:
+        client.post("/api/eventi", headers=FIGLIO, json={"eventi": [
+            {"id": evento_id, "tipo": "manomissione", "dettagli": {"sotto_tipo": "silenzio"}}]})
+        orologio.avanza(minutes=1)
+    orologio.avanza(days=30)  # fuori dalla finestra degli 8 giorni: nella lista restano
+    sforamenti = [f"s{i:02d}" for i in range(25)]
+    for evento_id in sforamenti:
+        client.post("/api/eventi", headers=FIGLIO, json={"eventi": [
+            {"id": evento_id, "tipo": "sforamento", "dettagli": {"regola_id": 1}}]})
+        orologio.avanza(minutes=1)
+    finestra = _finestra(client)
+    assert [e["id"] for e in finestra["sforamenti_recenti"]] == sforamenti[::-1][:20]
+    assert [e["id"] for e in finestra["manomissioni_recenti"]] == manomissioni[::-1]
+
+
+def test_nome_dell_app_dalle_fotografie_degli_ultimi_60_giorni(client, orologio):
+    """(v3.1) L'etichetta leggibile si cerca negli ultimi 60 giorni: oltre, la regola
+    mostra il pacchetto (il ripiego del contratto) finche' l'app non torna."""
+    crea_regola(client, parametri={"app_o_categoria": "com.esempio.gioco", "minuti_al_giorno": 30})
+
+    def foto(giorno, nome):
+        client.post("/api/eventi", headers=FIGLIO, json={"eventi": [{
+            "id": f"uso-{giorno}", "tipo": "uso_giornaliero",
+            "dettagli": {"giorno": giorno, "uso_minuti": {"com.esempio.gioco": 5}, "totale_minuti": 5,
+                         "nomi": {"com.esempio.gioco": nome}}}]})
+
+    def nome():
+        return _finestra(client)["regole"][0]["nome"]
+
+    foto("2026-07-14", "Gioco")
+    assert nome() == "Gioco"
+    orologio.avanza(days=59)  # 11/09: il 14/07 e' il sessantesimo giorno, dentro
+    assert nome() == "Gioco"
+    orologio.avanza(days=1)  # 12/09: fuori
+    assert nome() == "com.esempio.gioco"
+    foto("2026-09-12", "Gioco 2")
+    assert nome() == "Gioco 2"
+
+
 def test_regola_eliminata_resta_visibile_nella_finestra(client, orologio):
     crea_regola(client)
     regola = crea_regola(client, parametri={"app_o_categoria": "YouTube", "minuti_al_giorno": 120})

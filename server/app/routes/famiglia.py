@@ -168,6 +168,9 @@ def abbina(corpo: AbbinaIn, conn: sqlite3.Connection = Depends(get_conn)):
     """Il codice diventa il token del dispositivo, restituito UNA volta sola.
     409 codice_non_valido per un codice sbagliato, scaduto o gia' usato (stessa
     risposta per tutti e tre); 429 troppi_tentativi quando l'abbinamento e' bloccato.
+    (v3.1) 409 tipo_non_corrispondente se il codice e' di un dispositivo di un altro
+    tipo: un computer non prende il posto del telefono (o il contrario) per un codice
+    scritto male. Il codice non si consuma, ma il tentativo conta come fallito.
 
     BEGIN IMMEDIATE: blocco, codice e token sono un unico atto, cosi' lo stesso
     codice non abbina due volte e i tentativi falliti si contano tutti anche sotto
@@ -188,6 +191,15 @@ def abbina(corpo: AbbinaIn, conn: sqlite3.Connection = Depends(get_conn)):
             abbinamento.registra_fallimento(conn, ora)
             conn.commit()  # il tentativo fallito resta contato anche se si risponde 409
             raise HTTPException(status_code=409, detail={"errore": "codice_non_valido"})
+        if corpo.tipo is not None and corpo.tipo != trovato["dispositivo_tipo"]:
+            # Conta come fallito: senza, il tipo sbagliato sarebbe un modo gratuito
+            # per sapere se un codice provato a caso e' giusto.
+            abbinamento.registra_fallimento(conn, ora)
+            conn.commit()
+            raise HTTPException(
+                status_code=409,
+                detail={"errore": "tipo_non_corrispondente", "tipo_atteso": trovato["dispositivo_tipo"]},
+            )
         token = abbinamento.abbina(conn, trovato, corpo.versione_app, ora)
         conn.commit()
     except BaseException:

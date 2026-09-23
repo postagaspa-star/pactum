@@ -297,6 +297,73 @@ def test_sforamento_in_ritardo_di_una_regola_poi_eliminata(client, orologio):
     assert striscia["2026-07-19"] == "verde"
 
 
+# --- (v3.1) il registro si legge dall'inizio della finestra, non da sempre ---
+
+def test_sforamento_consegnato_una_settimana_dopo_nel_primo_giorno_della_finestra(client, orologio):
+    """Il filtro e' sull'arrivo al server: uno sforamento in ritardo arriva DOPO il
+    suo `giorno`, quindi se il giorno e' nella finestra ci e' anche l'arrivo. Il
+    caso limite: il primo giorno della finestra, consegnato sette giorni dopo."""
+    regola = crea_regola(client)  # 14/07
+    orologio.avanza(days=7)  # 21/07: finestra 14-21
+    _sforamento(client, "s-settimana", regola["id"], giorno="2026-07-14")
+    assert _semaforo(client, regola["id"])["2026-07-14"] == "rosso"
+    assert _striscia(client)["2026-07-14"] == "rosso"
+    assert _patto(client)["striscia"][0] == {"data": "2026-07-14", "stato": "rosso"}
+
+
+def test_sforamento_arrivato_prima_della_finestra_col_giorno_dentro(client, orologio):
+    """Il margine di 2 giorni: il telefono (in un fuso piu' avanti, o con l'orologio
+    un po' avanti) dichiara il 16 uno sforamento che al server arriva la sera del 15,
+    prima della mezzanotte di Roma da cui parte la finestra del 23."""
+    regola = crea_regola(client)  # 14/07
+    orologio.vai_a(datetime(2026, 7, 15, 20, 0, tzinfo=timezone.utc))  # 22:00 del 15 a Roma
+    _sforamento(client, "s-avanti", regola["id"], giorno="2026-07-16")
+    orologio.vai_a(datetime(2026, 7, 23, 10, 0, tzinfo=timezone.utc))  # finestra 16-23
+    assert _semaforo(client, regola["id"])["2026-07-16"] == "rosso"
+    assert _striscia(client)["2026-07-16"] == "rosso"
+    assert _patto(client)["striscia"][0] == {"data": "2026-07-16", "stato": "rosso"}
+
+
+def _inserisci(db_path, sql, *valori):
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(sql, valori)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_sforamenti_e_manomissioni_vecchi_non_si_leggono_piu(client, db_path):
+    """La prova che semaforo e riepilogo non leggono tutta la storia: due eventi di
+    due settimane fa, rotti apposta (JSON illeggibile), non danno fastidio a patto e
+    famiglia. Letti, li farebbero cadere."""
+    crea_regola(client)
+    for evento_id, tipo in (("vecchio-sf", "sforamento"), ("vecchio-ma", "manomissione")):
+        _inserisci(
+            db_path,
+            "INSERT INTO eventi (id, tipo, dettagli, ts_device, ts_server, dispositivo_id)"
+            " VALUES (?, ?, '{rotto', NULL, '2026-06-30T10:00:00+00:00', 1)",
+            evento_id, tipo,
+        )
+    assert client.get("/api/patto", headers=FIGLIO).status_code == 200
+    assert client.get("/api/famiglia", headers=GENITORE).status_code == 200
+
+
+def test_bonus_vecchi_non_si_leggono_piu(client, db_path):
+    """Lo stesso per i bonus nella finestra: un bonus di due settimane fa con una
+    data illeggibile non la fa cadere, e non conta."""
+    regola = crea_regola(client)
+    _inserisci(
+        db_path,
+        "INSERT INTO bonus (minuti, regola_id, motivo, ts_server, dispositivo_id)"
+        " VALUES (15, ?, 'vecchio', '2026-06-30T10:00:00+00:00 rotto', 1)",
+        regola["id"],
+    )
+    finestra = _finestra(client)
+    assert [v["minuti"] for v in finestra["bonus_giornalieri"]] == [0] * 8
+    assert finestra["bonus"]["settimana"]["usati"] == 0
+
+
 # --- riepilogo e semaforo per regola in /api/patto (v2.4, D3) ---
 
 

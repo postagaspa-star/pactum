@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- Solo per System.Windows.Automation (lettura della barra degli indirizzi): nessuna finestra WPF. -->
+    <UseWPF>true</UseWPF>
+    <!-- WinForms e WPF insieme renderebbero ambigui Application e MessageBox: gli using sono in GlobalUsings.cs. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <RootNamespace>Pactum</RootNamespace>
+    <AssemblyName>Pactum</AssemblyName>
+    <AssemblyTitle>Pactum</AssemblyTitle>
+    <Product>Pactum</Product>
+    <Version>0.8.0</Version>
+    <FileVersion>0.8.0.0</FileVersion>
+    <ApplicationIcon>Risorse\pactum.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- Un programma che resta acceso tutto il giorno: niente thread di GC in più. -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <Import Project="Pubblicazione.props" />
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Pactum.Tests" />
+    <EmbeddedResource Include="Risorse\pactum.ico" LogicalName="Pactum.Risorse.pactum.ico" />
+  </ItemGroup>
+
+  <!--
+    L'interfaccia (pc/ui) la scrive un altro costruttore: qui si copia soltanto
+    nella cartella ui accanto a Pactum.exe. Finché pc/ui/index.html non esiste,
+    nella cartella di uscita va la pagina segnaposto (mai dentro pc/ui).
+  -->
+  <PropertyGroup>
+    <PactumCartellaUi>$(MSBuildProjectDirectory)\..\ui\</PactumCartellaUi>
+    <PactumUiPresente Condition="Exists('$(PactumCartellaUi)index.html')">true</PactumUiPresente>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="segnaposto-ui\**" />
+    <Content Remove="segnaposto-ui\**" />
+  </ItemGroup>
+
+  <!-- La stessa interfaccia viaggia anche dentro l'exe: se lo si avvia da dentro lo zip, accanto non c'è la cartella ui. -->
+  <ItemGroup Condition="'$(PactumUiPresente)' == 'true'">
+    <Content Include="$(PactumCartellaUi)**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <EmbeddedResource Include="$(PactumCartellaUi)**\*" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(PactumUiPresente)' != 'true'">
+    <Content Include="segnaposto-ui\**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <EmbeddedResource Include="segnaposto-ui\**\*" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
+  </ItemGroup>
+
+</Project>

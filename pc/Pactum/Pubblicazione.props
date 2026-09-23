@@ -1,0 +1,23 @@
+<Project>
+  <!--
+    Le impostazioni del pacchetto, tenute fuori dal .csproj così una build di
+    sviluppo resta veloce. Le usa crea-pacchetto.ps1 con -p:PubblicazionePactum=true.
+  -->
+  <PropertyGroup Condition="'$(PubblicazionePactum)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!--
+      Pacchetto A CARTELLA, non single-file: niente eseguibile che si scompatta da solo (che
+      un antivirus può scambiare per un programma sospetto). Nello zip c'è una cartella Pactum\
+      con Pactum.exe, le dll del runtime .NET e la cartella ui. Il programma gira da lì.
+    -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <!-- Niente trimming: WinForms, WPF (UI Automation) e WebView2 usano la reflection. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+  </PropertyGroup>
+</Project>

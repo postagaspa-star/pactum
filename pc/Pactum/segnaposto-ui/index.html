@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Pactum</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light; --verde: #1F6E5C; --inchiostro: #10181C; --bordo: #d5dbd9; }
+  body { margin: 0; font: 15px/1.5 "Segoe UI", system-ui, sans-serif; color: var(--inchiostro); background: #fff; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; color: var(--verde); }
+  .nota { color: #4C5A69; margin: 0 0 24px; }
+  section { border: 1px solid var(--bordo); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  label { display: block; margin: 8px 0 4px; }
+  input { font: inherit; padding: 8px 10px; border: 1px solid var(--bordo); border-radius: 6px; width: 100%; box-sizing: border-box; }
+  button { font: inherit; margin-top: 12px; padding: 8px 16px; border: 0; border-radius: 6px; background: var(--verde); color: #fff; cursor: pointer; }
+  pre { background: #f4f6f5; padding: 12px; border-radius: 6px; overflow: auto; font-size: 13px; margin: 0; }
+  [hidden] { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pactum</h1>
+  <p class="nota">Pagina provvisoria: l'interfaccia vera arriva con la cartella <code>ui</code>. Il programma intanto misura e manda.</p>
+
+  <section id="collega" hidden>
+    <h2>Collega questo computer</h2>
+    <label for="server">Indirizzo del server</label>
+    <input id="server" placeholder="https://…" autocomplete="off">
+    <label for="codice">Codice di 6 cifre (te lo dà il genitore dall'app)</label>
+    <input id="codice" inputmode="numeric" maxlength="6" autocomplete="off">
+    <button id="abbina">Collega</button>
+    <p id="esito"></p>
+  </section>
+
+  <section>
+    <h2>Stato</h2>
+    <pre id="stato">…</pre>
+  </section>
+
+  <section>
+    <h2>Oggi</h2>
+    <pre id="oggi">…</pre>
+  </section>
+</main>
+<script>
+  async function chiedi(metodo, percorso, corpo) {
+    const r = await fetch(percorso, { method: metodo, headers: corpo ? { 'Content-Type': 'application/json' } : {}, body: corpo ? JSON.stringify(corpo) : undefined });
+    return r.json();
+  }
+  async function aggiorna() {
+    const stato = await chiedi('GET', '/locale/stato');
+    document.getElementById('stato').textContent = JSON.stringify(stato, null, 2);
+    document.getElementById('collega').hidden = stato.abbinato;
+    document.getElementById('oggi').textContent = JSON.stringify(await chiedi('GET', '/locale/oggi'), null, 2);
+  }
+  document.getElementById('abbina').addEventListener('click', async () => {
+    const esito = await chiedi('POST', '/locale/abbina', {
+      server: document.getElementById('server').value,
+      codice: document.getElementById('codice').value,
+    });
+    document.getElementById('esito').textContent = esito.ok ? 'Collegato.' : 'Non riuscito: ' + esito.errore;
+    aggiorna();
+  });
+  aggiorna();
+  setInterval(aggiorna, 30000);
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# Il pacchetto si ricostruisce con crea-pacchetto.ps1
+dist/
+
+# Dati delle prove col finto server
+prove/dati/
+
+# Per sicurezza, se qualcuno compila senza Directory.Build.props
+bin/
+obj/

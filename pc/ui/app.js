@@ -1557,6 +1557,7 @@
     // Le stesse frasi del telefono (collega_codice_non_valido, collega_troppi_tentativi).
     const testi = {
       codice_non_valido: { testo: 'Codice non valido: forse è sbagliato, è scaduto (vale 15 minuti) o è già stato usato. Chiedine uno nuovo al genitore.', campo: 'codice' },
+      tipo_non_corrispondente: { testo: 'Questo codice è per un telefono, non per questo computer: chiedi il codice giusto.', campo: 'codice' },
       troppi_tentativi: { testo: 'Troppi codici sbagliati: il server ne accetta di nuovo tra ' + (attesa ? T.testoAttesa(attesa) : 'una decina di minuti') + ', anche quello giusto. Riprova più tardi.', campo: 'codice' },
       rete: { testo: 'Niente rete: il computer non riesce a raggiungere il server. Controlla la connessione e riprova.', campo: null },
       indirizzo_non_valido: { testo: 'L\'indirizzo del server non è giusto: controlla com\'è scritto (per esempio https://pactum.esempio.it).', campo: 'server' },

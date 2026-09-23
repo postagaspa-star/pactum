@@ -12,7 +12,7 @@ Decisioni di Andrea (23/09/2026): il computer misura **programmi e siti**; il fi
 - Cartelle:
   - `pc/Pactum/`: il motore (progetto C#);
   - `pc/ui/`: l'interfaccia (HTML/CSS/JS, niente librerie esterne, niente rete verso fuori).
-- **Per utente, senza amministratore**: si installa in `%LOCALAPPDATA%\Programs\Pactum`, parte al login con la chiave `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, un'istanza sola per utente (mutex con nome per sessione).
+- **Per utente, senza amministratore**: gira dalla cartella dove è stato scompattato (non si copia da nessuna parte), parte al login con la chiave `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` che punta a quella cartella, un'istanza sola per utente (mutex con nome per sessione).
 - **Dati** in `%LOCALAPPDATA%\Pactum\`:
   - `config.json`: indirizzo del server, token protetto con DPAPI dell'utente, dispositivo, figlio;
   - un file per giorno con la misura;
@@ -65,6 +65,7 @@ Decisioni di Andrea (23/09/2026): il computer misura **programmi e siti**; il fi
   - il programma scrive ogni minuto "sono vivo alle…";
   - al riavvio confronta quell'orario con l'avvio di Windows (`Environment.TickCount64`);
   - se Windows era acceso da prima dell'ultimo "sono vivo" e non c'era stata una chiusura pulita, manda `manomissione {sotto_tipo: "programma_chiuso", dal, al}`.
+- **Avviato in ritardo** (Pactum tolto dall'avvio automatico, o aperto tardi a mano): se al primo giro Windows è acceso da più di 10 minuti e l'ultima chiusura era pulita, manda `manomissione {sotto_tipo: "programma_chiuso", dal: <avvio di Windows>, al: <adesso>, avvio_ritardato: true}` — così il tempo in cui il computer era acceso senza Pactum non sparisce dal registro (altrimenti il server lo vedrebbe "spento" all'infinito).
 - **Orologio spostato a mano**: confronta a ogni giro l'orologio di Windows con un cronometro interno. Un salto di più di 2 minuti manda `manomissione {sotto_tipo: "cambio_ora", drift_secondi}`. Un cambio di fuso manda `cambio_fuso`.
 
 ## Regole valutate sul computer
@@ -79,6 +80,7 @@ Decisioni di Andrea (23/09/2026): il computer misura **programmi e siti**; il fi
 
 - Primo avvio: finestra "Collega questo computer": indirizzo del server + codice di 6 cifre (glielo dà il genitore dall'app).
 - Poi `POST /api/abbina` e il token salvato con DPAPI. Da lì in poi niente da configurare.
+- L'abbinamento manda sempre `tipo: "computer"` (contratto v3.1): se il codice era di un telefono il server risponde `tipo_non_corrispondente` e il figlio legge "Questo codice è per un telefono, non per questo computer".
 
 ## L'accordo fra motore e interfaccia
 
@@ -118,9 +120,19 @@ Risposta di `GET /locale/oggi`:
 
 ## Aggiornamento
 
-- `GET /api/versione` → `computer`.
-- Se c'è una versione nuova il programma scarica lo zip, lo scompatta accanto e al prossimo avvio si sostituisce. Il primo scaricamento, fatto a mano dal browser, passa dall'avviso di Windows SmartScreen ("Ulteriori informazioni" → "Esegui comunque"): il programma non è firmato.
+- `GET /api/versione` → `computer`: ogni 12 ore il programma confronta `versione_code` col proprio.
+- Se ce n'è una più nuova **avvisa e basta**: un fumetto "C'è una versione nuova di Pactum" e, al clic, apre la pagina `<server>/scarica` nel browser predefinito. Il programma **non scarica e non sostituisce niente da solo**: il figlio scarica lo zip e lo reinstalla come la prima volta (vedi Installazione). Così l'aggiornamento resta un gesto visibile e non un file che si cambia da sé (che un antivirus scambierebbe per un programma sospetto).
 
 ## Pacchetto
 
-`dotnet publish` self-contained per `win-x64`: un file `Pactum.exe` + la cartella `ui`, dentro `pactum-computer.zip`. Al primo avvio da una cartella qualsiasi il programma si copia in `%LOCALAPPDATA%\Programs\Pactum`, registra l'avvio al login e riparte da lì.
+`dotnet publish` self-contained per `win-x64`, **a cartella** (non single-file: niente eseguibile che si scompatta da solo). Lo zip `pactum-computer.zip` contiene una cartella `Pactum\` con `Pactum.exe`, le dll del runtime .NET e la cartella `ui`. Si costruisce con `pc/prove/crea-pacchetto.ps1`.
+
+Il programma **non si copia da nessuna parte**: gira dalla cartella dove il figlio ha scompattato lo zip e vi resta. L'unica cosa che scrive è la voce di avvio al login in `HKCU\...\Run`, che punta proprio a quella cartella.
+
+## Installazione (sabato)
+
+1. Scaricare `pactum-computer.zip` dalla pagina `<server>/scarica`.
+2. Scompattarlo in una cartella stabile, per esempio `Documenti\Pactum` (non nei Download, che si svuotano). Dentro c'è la cartella `Pactum\` con `Pactum.exe`.
+3. Aprire `Pactum.exe`. Windows SmartScreen avvisa che il programma non è firmato: **"Ulteriori informazioni" → "Esegui comunque"**.
+4. Se Bitdefender lo blocca, l'eccezione la aggiunge la famiglia (serve un account amministratore). Nella prova del 23/09 il pacchetto a cartella **non** è stato bloccato (a differenza del vecchio single-file da 66 MB, che era finito in quarantena).
+5. Alla prima apertura il programma chiede l'**indirizzo del server** e un **codice di 6 cifre** (lo crea il genitore dall'app, vale 15 minuti). Da lì in poi parte da solo al login, dalla cartella dov'è.

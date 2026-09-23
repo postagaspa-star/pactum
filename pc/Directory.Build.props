@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    bin/ e obj/ fuori da OneDrive: il Desktop è sincronizzato, e OneDrive che
+    blocca un file mentre lo carica fa fallire la build a caso ("file in uso").
+    Il pacchetto finale resta in pc/dist (crea-pacchetto.ps1).
+  -->
+  <PropertyGroup>
+    <PactumCartellaBuild>$(LOCALAPPDATA)\Pactum-build\</PactumCartellaBuild>
+    <BaseIntermediateOutputPath>$(PactumCartellaBuild)$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(PactumCartellaBuild)$(MSBuildProjectName)\bin\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

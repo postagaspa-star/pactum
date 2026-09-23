@@ -43,9 +43,36 @@ def valida_parametri(tipo: str, parametri: dict) -> dict:
     return MODELLI_PARAMETRI[tipo](**parametri).model_dump()
 
 
+# (v3) app_o_categoria secondo il tipo del dispositivo della regola. Sui telefoni
+# resta come prima (nome del pacchetto Android o categoria:*), ma le chiavi dei
+# computer non valgono. Sui computer: exe:<nome del programma>, sito:<dominio
+# registrabile> (entrambi minuscoli, senza percorsi) o categoria:*.
+PREFISSI_SOLO_COMPUTER = ("exe:", "sito:")
+CARATTERI_VIETATI_CHIAVE = "/\\:"
+
+
+def chiave_adatta(tipo_dispositivo: str, chiave: str) -> bool:
+    if tipo_dispositivo != "computer":
+        return not chiave.startswith(PREFISSI_SOLO_COMPUTER)
+    if chiave.startswith("categoria:"):
+        return len(chiave) > len("categoria:")
+    for prefisso in PREFISSI_SOLO_COMPUTER:
+        if chiave.startswith(prefisso):
+            nome = chiave[len(prefisso):]
+            return (
+                bool(nome)
+                and nome == nome.lower()
+                and not any(c.isspace() or c in CARATTERI_VIETATI_CHIAVE for c in nome)
+            )
+    return False
+
+
 class RegolaCrea(BaseModel):
     tipo: Literal["limite_tempo", "fascia_oraria", "vita_reale"]
     parametri: dict
+    # (v3) Su quale dispositivo del figlio: se manca, quello che chiama. Per le
+    # vita_reale si ignora (sono del figlio).
+    dispositivo_id: int | None = None
 
 
 class RegolaPatch(BaseModel):
@@ -72,6 +99,10 @@ TipoEvento = Literal[
     "sforamento",
     "bonus_usato",
     "dichiarazione",
+    # (v3) Dei computer: Windows si spegne, va in sospensione o l'utente esce, e
+    # poi torna. Il silenzio dopo una sospensione non e' un'interruzione.
+    "sospensione",
+    "ripresa",
 ]
 
 
@@ -98,6 +129,8 @@ class ProponiIn(BaseModel):
     # parametri per il tipo della regola OPPURE il marcatore {"azione": "elimina"}.
     parametri_proposti: dict
     motivazione: str | None = None
+    # (v3) Facoltativo: il figlio lo dice gia' la regola; se c'e', deve combaciare.
+    figlio_id: int | None = None
 
 
 class RispostaPropostaIn(BaseModel):
@@ -116,3 +149,38 @@ class DichiarazioneIn(BaseModel):
 class VerdettoIn(BaseModel):
     verdetto: Literal["conferma", "conferma_per_conto", "ribalta"]
     nota: str | None = None
+    # (v3) Facoltativo: il figlio lo dice gia' la dichiarazione; se c'e', deve combaciare.
+    figlio_id: int | None = None
+
+
+class SegnoIn(BaseModel):
+    # (v3) Il segno va a un figlio; se manca, al figlio con l'id piu' basso (app 0.7).
+    # Nessun altro campo: il testo non lo sceglie il genitore.
+    figlio_id: int | None = None
+
+
+LUNGHEZZA_MASSIMA_NOME = 40
+
+
+class NomeIn(BaseModel):
+    """(v3) Il nome di un figlio o di un dispositivo: 1-40 caratteri, spazi ai
+    bordi tolti (un nome fatto di soli spazi non e' un nome)."""
+
+    nome: str
+
+    @field_validator("nome")
+    @classmethod
+    def nome_valido(cls, nome: str) -> str:
+        nome = nome.strip()
+        if not 1 <= len(nome) <= LUNGHEZZA_MASSIMA_NOME:
+            raise ValueError(f"il nome va da 1 a {LUNGHEZZA_MASSIMA_NOME} caratteri")
+        return nome
+
+
+class DispositivoIn(NomeIn):
+    tipo: Literal["telefono", "computer"]
+
+
+class AbbinaIn(BaseModel):
+    codice: str
+    versione_app: str | None = None

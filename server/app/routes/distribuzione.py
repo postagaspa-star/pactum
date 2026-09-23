@@ -9,7 +9,10 @@ d'integrita' e' la firma dell'APK, stessa chiave e versionCode crescente):
 
 Le versioni pubblicizzate stanno in un JSON (config.versioni_path) aggiornabile
 senza toccare il codice; gli APK in una cartella (config.apk_dir) dove la build
-copia i release firmati (mai nel repo)."""
+copia i release firmati (mai nel repo).
+
+(v3) C'e' anche il programma per il computer: `computer` in /api/versione e
+pactum-computer.zip, nella stessa cartella degli APK."""
 
 import json
 from datetime import datetime
@@ -33,15 +36,23 @@ VERSIONI_DEFAULT = {
         "url": "/scarica/pactum-genitore.apk",
         "note": None,
     },
-}
-
-# I due APK serviti: nome del file su /scarica -> (nome nella cartella apk, ruolo).
-APK = {
-    "pactum-figlio.apk": "figlio",
-    "pactum-genitore.apk": "genitore",
+    "computer": {
+        "versione_code": 1,
+        "versione_nome": "0.8.0",
+        "url": "/scarica/pactum-computer.zip",
+        "note": None,
+    },
 }
 
 MEDIA_TYPE_APK = "application/vnd.android.package-archive"
+MEDIA_TYPE_ZIP = "application/zip"
+
+# I file serviti: nome su /scarica (e nella cartella apk) -> tipo del contenuto.
+FILE_SCARICABILI = {
+    "pactum-figlio.apk": MEDIA_TYPE_APK,
+    "pactum-genitore.apk": MEDIA_TYPE_APK,
+    "pactum-computer.zip": MEDIA_TYPE_ZIP,
+}
 
 versione_router = APIRouter()  # montato sotto /api
 scarica_router = APIRouter()  # montato alla radice
@@ -83,15 +94,13 @@ def pagina_scarica(request: Request):
 
 @scarica_router.get("/scarica/{nome_file}")
 def scarica_apk(nome_file: str, request: Request):
-    ruolo = APK.get(nome_file)
-    if ruolo is None:
+    media_type = FILE_SCARICABILI.get(nome_file)
+    if media_type is None:
         return HTMLResponse(_non_trovato_html(nome_file), status_code=404, headers=SENZA_CACHE)
     percorso = Path(request.app.state.settings.apk_dir) / nome_file
     if not percorso.is_file():
         return HTMLResponse(_non_trovato_html(nome_file), status_code=404, headers=SENZA_CACHE)
-    return FileResponse(
-        percorso, media_type=MEDIA_TYPE_APK, filename=nome_file, headers=SENZA_CACHE
-    )
+    return FileResponse(percorso, media_type=media_type, filename=nome_file, headers=SENZA_CACHE)
 
 
 def _versione_nome(versioni: dict, ruolo: str) -> str:
@@ -114,8 +123,10 @@ def _data_apk(apk_dir: str, nome_file: str) -> str:
 def _pagina_html(versioni: dict, apk_dir: str = "") -> str:
     v_figlio = _versione_nome(versioni, "figlio")
     v_genitore = _versione_nome(versioni, "genitore")
+    v_computer = _versione_nome(versioni, "computer")
     d_figlio = _data_apk(apk_dir, "pactum-figlio.apk")
     d_genitore = _data_apk(apk_dir, "pactum-genitore.apk")
+    d_computer = _data_apk(apk_dir, "pactum-computer.zip")
     return f"""<!DOCTYPE html>
 <html lang="it">
 <head>
@@ -183,6 +194,14 @@ def _pagina_html(versioni: dict, apk_dir: str = "") -> str:
     <p class="pubbl">Pubblicata il {d_genitore}</p>
   </div>
 
+  <div class="card">
+    <h2>Pactum per il computer</h2>
+    <p class="chi">Va installato sul PC Windows del <strong>ragazzo</strong>, nel suo account: misura
+       programmi e siti come l'app del telefono. Non blocca niente.</p>
+    <a class="btn" href="/scarica/pactum-computer.zip">Scarica per il computer<span class="ver">v{v_computer}</span></a>
+    <p class="pubbl">Pubblicato il {d_computer}</p>
+  </div>
+
   <div class="box">
     <h3>Come si installa (leggi prima)</h3>
     <ol>
@@ -199,6 +218,19 @@ def _pagina_html(versioni: dict, apk_dir: str = "") -> str:
           non compare.</li>
       <li>Concedi le notifiche e l'esenzione dal risparmio batteria quando l'app le chiede: servono a
           non perdere i battiti e gli avvisi.</li>
+    </ol>
+  </div>
+
+  <div class="box">
+    <h3>Sul computer</h3>
+    <ol>
+      <li>Scarica il file <code>.zip</code>, estrailo in una cartella qualsiasi e apri
+          <code>Pactum.exe</code>: si installa da solo nell'account di chi lo apre.</li>
+      <li><strong>Avviso di Windows SmartScreen:</strong> il programma non &egrave; firmato. Scegli
+          <strong>&ldquo;Ulteriori informazioni&rdquo;</strong> e poi
+          <strong>&ldquo;Esegui comunque&rdquo;</strong>.</li>
+      <li>Alla prima apertura chiede l'indirizzo del server e un <strong>codice di 6 cifre</strong>:
+          lo crea il genitore dalla sua app e vale 15 minuti.</li>
     </ol>
   </div>
 
@@ -230,7 +262,7 @@ def _non_trovato_html(nome_file: str) -> str:
 </head>
 <body>
   <h1>Questo file non e' ancora disponibile</h1>
-  <p>L'APK <code>{nome_file}</code> non e' stato ancora pubblicato sul postino,
+  <p>Il file <code>{nome_file}</code> non e' stato ancora pubblicato sul postino,
      oppure l'indirizzo non e' corretto.</p>
   <p>Torna alla <a href="/scarica">pagina di download</a> e riprova tra poco.</p>
 </body>

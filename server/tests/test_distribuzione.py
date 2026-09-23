@@ -39,7 +39,11 @@ def test_versione_shape_e_default(client):
     r = client.get("/api/versione")
     assert r.status_code == 200, r.text
     dati = r.json()
-    assert set(dati) == {"figlio", "genitore"}
+    # (v3) c'e' anche il programma per il computer, con la sua numerazione.
+    assert set(dati) == {"figlio", "genitore", "computer"}
+    assert dati["computer"]["versione_code"] == 1
+    assert dati["computer"]["versione_nome"] == "0.8.0"
+    assert dati["computer"]["url"] == "/scarica/pactum-computer.zip"
     for ruolo in ("figlio", "genitore"):
         blocco = dati[ruolo]
         assert set(blocco) >= {"versione_code", "versione_nome", "url"}

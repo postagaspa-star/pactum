@@ -23,6 +23,7 @@ CHIAVI_ATTESE = {
     "striscia",
     "riepilogo",
     "segno_oggi",
+    "dispositivi",  # (v3)
 }
 
 

@@ -61,7 +61,8 @@ def test_ts_device_non_numerico_422(client):
 
 def test_mai_sentita_e_silente(client):
     stato = _silenzio(client)
-    assert stato == {"ultimo_battito": None, "silente": True}
+    # (v3) stato_silenzio porta anche spento/spento_dal: per un telefono sempre false/null.
+    assert stato == {"ultimo_battito": None, "silente": True, "spento": False, "spento_dal": None}
 
 
 def test_battito_recente_non_silente(client, orologio):

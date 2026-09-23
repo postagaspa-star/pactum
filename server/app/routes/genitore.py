@@ -1,6 +1,11 @@
-"""Endpoint del genitore: la finestra (non vetrata), il segno di riconoscimento
-e le notifiche a polling. Il silenzio si calcola in lettura: nessun job in
-background nella v1."""
+"""Endpoint del genitore: la finestra (non vetrata) e il segno di riconoscimento.
+Il silenzio si calcola in lettura: nessun job in background nella v1.
+
+(v3) La finestra e' di UN figlio (`figlio_id`, o il primo): regole, striscia,
+storico ed eventi di tutti i suoi dispositivi, e in `dispositivi` tutto quello che
+e' per dispositivo. I campi di primo livello per dispositivo (tempi, siti, medie,
+bonus, silenzio) restano e valgono per il primo dispositivo del figlio: l'app del
+genitore 0.7 continua a leggere quelli."""
 
 import json
 import sqlite3
@@ -9,10 +14,11 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import clock, semaforo, siti
+from .. import clock, famiglia, semaforo, siti
 from ..auth import richiede_genitore
-from ..config import SOGLIA_SILENZIO_MINUTI, fuso_patto
+from ..config import fuso_patto
 from ..db import accoda_notifica, get_conn, segno_mandato_oggi, stato_bonus
+from ..schemas import SegnoIn
 from .regole import _riga_regola
 
 router = APIRouter(dependencies=[Depends(richiede_genitore)])
@@ -33,18 +39,7 @@ def _evento_out(riga: sqlite3.Row) -> dict:
         "dettagli": json.loads(riga["dettagli"]),
         "ts_device": riga["ts_device"],
         "ts_server": riga["ts_server"],
-    }
-
-
-def _stato_silenzio(conn: sqlite3.Connection, ora: datetime) -> dict:
-    riga = conn.execute("SELECT MAX(ts_server) AS ultimo FROM battiti").fetchone()
-    ultimo = riga["ultimo"]
-    if ultimo is None:
-        return {"ultimo_battito": None, "silente": True}
-    trascorso = ora - datetime.fromisoformat(ultimo)
-    return {
-        "ultimo_battito": ultimo,
-        "silente": trascorso > timedelta(minutes=SOGLIA_SILENZIO_MINUTI),
+        "dispositivo_id": riga["dispositivo_id"],
     }
 
 
@@ -67,7 +62,11 @@ def _con_limite(voce: dict, limite: dict | None, bonus_regola: dict, giorno: str
 
 
 def _uso_recente(
-    conn: sqlite3.Connection, giorni: list, limiti: dict, bonus_regola: dict | None = None
+    conn: sqlite3.Connection,
+    dispositivo_id: int | None,
+    giorni: list,
+    limiti: dict,
+    bonus_regola: dict | None = None,
 ) -> list:
     """(v2.2) I tempi d'uso di TUTTE le app negli 8 giorni della finestra, dalla
     fotografia uso_giornaliero VIGENTE di ciascun giorno. Un giorno senza
@@ -79,14 +78,17 @@ def _uso_recente(
     giorno sono gia' visibili in bonus_giornalieri. (v2.4) Accanto al limite va
     anche `bonus`, i minuti concessi QUEL giorno su QUELLA regola: senza, il
     genitore vedrebbe "10 min oltre" in un giorno che per il figlio (limite + bonus)
-    e' dentro la regola."""
+    e' dentro la regola. (v3) Tutto di un dispositivo: le sue fotografie, i limiti
+    delle sue regole, i suoi bonus."""
     bonus_regola = bonus_regola or {}
     date_iso = [g.isoformat() for g in giorni]
     segnaposto = ",".join("?" * len(date_iso))
     vigenti = {
         r["giorno"]: r
         for r in conn.execute(
-            f"SELECT * FROM uso_giornaliero WHERE giorno IN ({segnaposto})", date_iso
+            "SELECT * FROM uso_giornaliero"
+            f" WHERE dispositivo_id = ? AND giorno IN ({segnaposto})",
+            [dispositivo_id, *date_iso],
         ).fetchall()
     }
 
@@ -133,7 +135,7 @@ def _uso_recente(
     return voci
 
 
-def _medie(conn: sqlite3.Connection, oggi) -> dict:
+def _medie(conn: sqlite3.Connection, dispositivo_id: int | None, oggi) -> dict:
     """(S1) Media dei minuti d'uso sui SOLI giorni con una fotografia, su due
     finestre: settimana (ultimi 7 giorni locali) e mese (ultimi 30). Ogni voce e'
     {"minuti": intero, "giorni": quanti giorni avevano dati}, oppure None se nella
@@ -142,13 +144,13 @@ def _medie(conn: sqlite3.Connection, oggi) -> dict:
     il confronto stringa e' corretto nel fuso senza conversioni; i giorni assenti
     non sono righe, cosi' l'AVG non li conta (la regola "solo giorni con dati" e'
     rispettata per costruzione). Un giorno con totale_minuti=0 e' una fotografia
-    reale (uso zero) e va contato: l'AVG lo include."""
+    reale (uso zero) e va contato: l'AVG lo include. (v3) Di un dispositivo."""
     def media(giorni_finestra: int) -> dict | None:
         inizio = (oggi - timedelta(days=giorni_finestra - 1)).isoformat()
         r = conn.execute(
             "SELECT AVG(totale_minuti) AS m, COUNT(*) AS n FROM uso_giornaliero"
-            " WHERE giorno >= ? AND giorno <= ?",
-            (inizio, oggi.isoformat()),
+            " WHERE dispositivo_id = ? AND giorno >= ? AND giorno <= ?",
+            (dispositivo_id, inizio, oggi.isoformat()),
         ).fetchone()
         n = r["n"]
         if not n:
@@ -158,15 +160,19 @@ def _medie(conn: sqlite3.Connection, oggi) -> dict:
     return {"settimana": media(7), "mese": media(30)}
 
 
-def _nomi_recenti(conn: sqlite3.Connection) -> dict:
+def _nomi_recenti(conn: sqlite3.Connection, figlio_id: int) -> dict:
     """(S2) L'ultima etichetta leggibile vista per ciascun pacchetto nelle
     fotografie uso_giornaliero (la piu' recente vince): serve a mostrare al
     genitore "TikTok" invece di com.zhiliaoapp.musically sulle regole
-    limite_tempo. Le fotografie sono al piu' una per giorno (PRIMARY KEY giorno):
-    l'insieme e' piccolo. Fotografie senza `nomi` (pre-v2.2) si saltano."""
+    limite_tempo. Le fotografie sono al piu' una per giorno per dispositivo:
+    l'insieme e' piccolo. Fotografie senza `nomi` (pre-v2.2) si saltano.
+    (v3) Dalle fotografie di tutti i dispositivi del figlio: anche "Minecraft"
+    per exe:minecraft.exe arriva cosi' dal computer."""
     nomi: dict = {}
     for riga in conn.execute(
-        "SELECT dettagli FROM uso_giornaliero ORDER BY ts_server DESC, giorno DESC"
+        "SELECT u.dettagli FROM uso_giornaliero u JOIN dispositivi d ON d.id = u.dispositivo_id"
+        " WHERE d.figlio_id = ? ORDER BY u.ts_server DESC, u.giorno DESC",
+        (figlio_id,),
     ).fetchall():
         mappa = json.loads(riga["dettagli"]).get("nomi")
         if not isinstance(mappa, dict):
@@ -177,58 +183,96 @@ def _nomi_recenti(conn: sqlite3.Connection) -> dict:
     return nomi
 
 
-@router.get("/finestra")
-def finestra(conn: sqlite3.Connection = Depends(get_conn)):
-    ora = clock.now()
+def _misure(
+    conn: sqlite3.Connection,
+    ora: datetime,
+    giorni: list,
+    dispositivo: sqlite3.Row | None,
+    righe_regole: list,
+) -> dict:
+    """(v3) Tutto quello che e' per dispositivo, come in v2.4 era per il telefono:
+    tempi, siti, medie, bonus, bonus del giorno e silenzio. Senza dispositivo
+    (figlio appena creato, o tutti revocati) le stesse forme senza dati: null e
+    liste vuote, mai zeri finti."""
     tz = fuso_patto()
-    # I giorni della finestra sono giorni LOCALI del patto (contratto-api.md):
-    # in UTC il confine cadrebbe alle 02:00 locali italiane.
-    oggi = ora.astimezone(tz).date()
+    dispositivo_id = dispositivo["id"] if dispositivo is not None else None
+    limiti = {}  # app_o_categoria -> {"limite", "regola_id"} delle limite_tempo ATTIVE
+    for riga in righe_regole:
+        if riga["tipo"] == "limite_tempo" and riga["attiva"] and riga["dispositivo_id"] == dispositivo_id:
+            parametri = json.loads(riga["parametri"])
+            limiti.setdefault(
+                parametri["app_o_categoria"],
+                {"limite": parametri["minuti_al_giorno"], "regola_id": riga["id"]},
+            )
+
+    # Riepilogo bonus per giorno (per tutto il dispositivo, stessa finestra di 8
+    # giorni): dalla tabella bonus autoritativa, coi giorni nel fuso del patto.
+    minuti_per_giorno = defaultdict(int)
+    bonus_regola = defaultdict(int)  # (giorno locale, regola_id) -> minuti
+    for riga in conn.execute(
+        "SELECT minuti, regola_id, ts_server FROM bonus WHERE dispositivo_id = ?",
+        (dispositivo_id,),
+    ).fetchall():
+        giorno = semaforo.data_locale(riga["ts_server"], tz)
+        minuti_per_giorno[giorno] += riga["minuti"]
+        if riga["regola_id"] is not None:
+            bonus_regola[(giorno, riga["regola_id"])] += riga["minuti"]
+
+    return {
+        "stato_silenzio": famiglia.stato_silenzio(conn, dispositivo, ora),
+        "uso_recente": _uso_recente(conn, dispositivo_id, giorni, limiti, bonus_regola),
+        # (v2.3) I siti visitati: il genitore vede QUALI siti, mai cosa ci fa
+        # dentro. Stessa funzione di GET /api/patto — il figlio vede la stessa
+        # identica lista (tavola rotonda). Non entra nel semaforo: non e' un'infrazione.
+        "siti_recenti": siti.siti_recenti(
+            conn, ora, dispositivo_id, dispositivo["tipo"] if dispositivo is not None else "telefono"
+        ),
+        "medie": _medie(conn, dispositivo_id, ora.astimezone(tz).date()),
+        "bonus": stato_bonus(conn, ora, dispositivo_id),
+        "bonus_giornalieri": [
+            {"giorno": g.isoformat(), "minuti": minuti_per_giorno[g.isoformat()]} for g in giorni
+        ],
+    }
+
+
+@router.get("/finestra")
+def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+    ora = clock.now()
+    figlio = famiglia.figlio_scelto(conn, figlio_id)
     # Una sola definizione degli 8 giorni (siti.giorni_finestra) per semaforo,
     # bonus_giornalieri, uso_recente e siti_recenti: cosi' le sezioni della
-    # finestra non possono raccontare finestre temporali diverse.
+    # finestra non possono raccontare finestre temporali diverse. I giorni sono
+    # giorni LOCALI del patto (contratto-api.md): in UTC il confine cadrebbe alle
+    # 02:00 locali italiane.
     giorni = siti.giorni_finestra(ora)
+    dispositivi = famiglia.dispositivi_del_figlio(conn, figlio["id"])
+    per_id = {d["id"]: d for d in dispositivi}
 
     eventi = conn.execute(
-        "SELECT * FROM eventi WHERE tipo IN ('sforamento', 'manomissione')"
-        " ORDER BY ts_server DESC, id DESC"
+        "SELECT e.* FROM eventi e JOIN dispositivi d ON d.id = e.dispositivo_id"
+        " WHERE e.tipo IN ('sforamento', 'manomissione') AND d.figlio_id = ?"
+        " ORDER BY e.ts_server DESC, e.id DESC",
+        (figlio["id"],),
     ).fetchall()
 
     # Il semaforo per regola si calcola in semaforo.py: da li' esce anche la
     # striscia aggregata, condivisa con GET /api/patto. Le regole si leggono
     # PRIMA dei semafori: le righe non si cancellano mai (soft-delete), quindi
     # ogni regola letta qui ha il suo semaforo anche se intanto ne nasce una.
-    righe_regole = conn.execute("SELECT * FROM regole ORDER BY id").fetchall()
-    semafori = semaforo.semafori(conn, ora)
-    nomi = _nomi_recenti(conn)
+    righe_regole = conn.execute(
+        "SELECT * FROM regole WHERE figlio_id = ? ORDER BY id", (figlio["id"],)
+    ).fetchall()
+    quadro = semaforo.quadro(conn, ora, figlio["id"], dispositivi)
+    nomi = _nomi_recenti(conn, figlio["id"])
     regole = []
-    limiti = {}  # app_o_categoria -> {"limite", "regola_id"} delle limite_tempo ATTIVE
     for riga in righe_regole:
-        voce = {**_riga_regola(riga), "semaforo": semafori[riga["id"]]}
+        voce = {**_riga_regola(riga, per_id), "semaforo": quadro["semafori"][riga["id"]]}
         if riga["tipo"] == "limite_tempo":
-            parametri = json.loads(riga["parametri"])
-            chiave = parametri["app_o_categoria"]
-            if riga["attiva"]:
-                limiti.setdefault(
-                    chiave, {"limite": parametri["minuti_al_giorno"], "regola_id": riga["id"]}
-                )
+            chiave = json.loads(riga["parametri"])["app_o_categoria"]
             # (S2) Le categorie le traduce l'app: il nome si allega solo ai pacchetti.
             if not chiave.startswith("categoria:"):
                 voce["nome"] = nomi.get(chiave) or chiave
         regole.append(voce)
-
-    # Riepilogo bonus per giorno (globale, stessa finestra di 8 giorni):
-    # dalla tabella bonus autoritativa, coi giorni nel fuso del patto.
-    minuti_per_giorno = defaultdict(int)
-    bonus_regola = defaultdict(int)  # (giorno locale, regola_id) -> minuti
-    for riga in conn.execute("SELECT minuti, regola_id, ts_server FROM bonus").fetchall():
-        giorno = semaforo.data_locale(riga["ts_server"], tz)
-        minuti_per_giorno[giorno] += riga["minuti"]
-        if riga["regola_id"] is not None:
-            bonus_regola[(giorno, riga["regola_id"])] += riga["minuti"]
-    bonus_giornalieri = [
-        {"giorno": g.isoformat(), "minuti": minuti_per_giorno[g.isoformat()]} for g in giorni
-    ]
 
     storico = [
         {
@@ -242,9 +286,25 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
             "ts_server": r["ts_server"],
         }
         for r in conn.execute(
-            "SELECT * FROM storico_modifiche ORDER BY id DESC LIMIT ?", (STORICO_MASSIMO,)
+            "SELECT s.* FROM storico_modifiche s JOIN regole r ON r.id = s.regola_id"
+            " WHERE r.figlio_id = ? ORDER BY s.id DESC LIMIT ?",
+            (figlio["id"], STORICO_MASSIMO),
         ).fetchall()
     ]
+
+    per_dispositivo = [
+        {
+            **famiglia.descrizione(d),
+            **_misure(conn, ora, giorni, d, righe_regole),
+            "striscia": quadro["strisce_dispositivi"][d["id"]],
+        }
+        for d in dispositivi
+    ]
+    primo = famiglia.primo_dispositivo(dispositivi)
+    if primo is not None:
+        compatibili = next(v for v in per_dispositivo if v["id"] == primo["id"])
+    else:
+        compatibili = _misure(conn, ora, giorni, None, righe_regole)
 
     return {
         "regole": regole,
@@ -255,28 +315,29 @@ def finestra(conn: sqlite3.Connection = Depends(get_conn)):
             _evento_out(e) for e in eventi if e["tipo"] == "manomissione"
         ][:RECENTI],
         "storico_modifiche": storico,
-        "bonus": stato_bonus(conn, ora),
-        "bonus_giornalieri": bonus_giornalieri,
-        "stato_silenzio": _stato_silenzio(conn, ora),
-        "uso_recente": _uso_recente(conn, giorni, limiti, bonus_regola),
-        # (v2.3) I siti visitati: il genitore vede QUALI siti, mai cosa ci fa
-        # dentro. Stessa funzione di GET /api/patto — il figlio vede la stessa
-        # identica lista (tavola rotonda). Non entra nel semaforo: non e' un'infrazione.
-        "siti_recenti": siti.siti_recenti(conn, ora),
-        "medie": _medie(conn, oggi),
+        "bonus": compatibili["bonus"],
+        "bonus_giornalieri": compatibili["bonus_giornalieri"],
+        "stato_silenzio": compatibili["stato_silenzio"],
+        "uso_recente": compatibili["uso_recente"],
+        "siti_recenti": compatibili["siti_recenti"],
+        "medie": compatibili["medie"],
         # (v2.4) Stessa funzione di GET /api/patto: le due app mostrano la stessa
-        # striscia per costruzione.
-        "striscia": semaforo.striscia(conn, ora),
-        "riepilogo": semaforo.riepilogo(conn, ora),
-        "segno_oggi": segno_mandato_oggi(conn, ora),
+        # striscia per costruzione. (v3) E' la striscia del figlio, su tutti i suoi
+        # dispositivi e sulla vita reale.
+        "striscia": quadro["striscia"],
+        "riepilogo": quadro["riepilogo"],
+        "segno_oggi": segno_mandato_oggi(conn, ora, figlio["id"]),
+        "dispositivi": per_dispositivo,
     }
 
 
 @router.post("/segno")
-def manda_segno(conn: sqlite3.Connection = Depends(get_conn)):
+def manda_segno(corpo: SegnoIn | None = None, conn: sqlite3.Connection = Depends(get_conn)):
     """(v2.4) Il segno di riconoscimento al figlio: testo fisso, al massimo uno al
-    giorno nel fuso del patto. Nessun corpo e nessuna traccia nel registro eventi:
-    e' un gesto del genitore, non un fatto del patto."""
+    giorno nel fuso del patto. Nessuna traccia nel registro eventi: e' un gesto del
+    genitore, non un fatto del patto. (v3) Uno al giorno PER FIGLIO (`figlio_id`,
+    o il primo), notificato a tutti i suoi dispositivi."""
+    figlio = famiglia.figlio_scelto(conn, corpo.figlio_id if corpo is not None else None)
     # BEGIN IMMEDIATE: il controllo "gia' mandato oggi" e l'invio devono essere un
     # unico atto, altrimenti due tocchi simultanei leggono entrambi "non ancora" e
     # partono due segni. Chi arriva secondo rilegge dentro il lock e viene respinto.
@@ -284,9 +345,12 @@ def manda_segno(conn: sqlite3.Connection = Depends(get_conn)):
     ts = clock.iso(ora)
     conn.execute("BEGIN IMMEDIATE")
     try:
-        if segno_mandato_oggi(conn, ora):
+        if segno_mandato_oggi(conn, ora, figlio["id"]):
             raise HTTPException(status_code=409, detail={"errore": "segno_gia_mandato"})
-        accoda_notifica(conn, "segno", MESSAGGIO_SEGNO, {}, ts, destinatario="figlio")
+        accoda_notifica(
+            conn, "segno", MESSAGGIO_SEGNO, {}, ts, destinatario="figlio",
+            figlio_id=figlio["id"], dispositivo_id=None,
+        )
         conn.commit()
     except BaseException:
         conn.rollback()

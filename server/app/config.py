@@ -18,6 +18,15 @@ TETTO_BONUS_GIORNO_DEFAULT = 30
 TETTO_BONUS_SETTIMANA_DEFAULT = 90
 TIMEZONE_DEFAULT = "Europe/Rome"
 
+# (v3) Abbinamento con codice: 6 cifre, valido 15 minuti, una volta sola. Contro
+# chi prova i codici a caso: 10 tentativi falliti in 10 minuti (su tutto il
+# server) bloccano ogni abbinamento per 10 minuti.
+CIFRE_CODICE = 6
+DURATA_CODICE_MINUTI = 15
+TENTATIVI_MASSIMI = 10
+FINESTRA_TENTATIVI_MINUTI = 10
+BLOCCO_ABBINAMENTO_MINUTI = 10
+
 # Ambiente d'esecuzione. In "dev" (default) i token possono restare i default di
 # sviluppo: comodo per test e sviluppo locale. In "prod" il postino RIFIUTA di
 # partire con token deboli o di default (vedi valida_produzione).

@@ -5,6 +5,11 @@ finestra perche' la striscia aggregata (v2.4) serve anche a GET /api/patto: come
 per siti.siti_recenti, le due app leggono la striscia dalla STESSA funzione, quindi
 quella del figlio e quella del genitore non possono divergere (tavola rotonda).
 
+(v3) Tutto e' per figlio: la striscia del figlio aggrega le regole di tutti i suoi
+dispositivi piu' la vita reale; accanto c'e' la striscia di ciascun dispositivo,
+fatta delle sole regole di quel dispositivo. Un unico `quadro` le calcola tutte
+per GET /api/finestra, GET /api/patto e GET /api/famiglia.
+
 I giorni sono gli stessi 8 della finestra (siti.giorni_finestra), nel fuso del patto.
 """
 
@@ -13,7 +18,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime
 
-from . import clock, siti
+from . import clock, famiglia, siti
 from .config import fuso_patto
 
 
@@ -34,20 +39,32 @@ def _semaforo_vita(stato_dich: str | None) -> str:
     return "grigio"  # in_attesa o nessuna dichiarazione
 
 
-def semafori(conn: sqlite3.Connection, ora: datetime) -> dict:
-    """Il semaforo di OGNI regola, eliminate comprese: {regola_id: 8 voci
-    {"data", "stato"}}, dal piu' vecchio a oggi.
+def _semafori(
+    conn: sqlite3.Connection, ora: datetime, figlio_id: int, dispositivi: list[sqlite3.Row]
+) -> tuple[dict, dict]:
+    """Il semaforo di OGNI regola del figlio, eliminate comprese: {regola_id: 8 voci
+    {"data", "stato"}}, dal piu' vecchio a oggi; e {regola_id: dispositivo_id}.
 
     Tre colori: verde/rosso/grigio. Il giallo non esiste piu': il bonus
     autoritativo vive nella tabella bonus e si legge in bonus_giornalieri, non
     appeso a una regola. Per limite_tempo/fascia_oraria il rosso viene dagli
-    sforamenti; per le vita_reale (v2.1) dalle dichiarazioni e dai verdetti."""
+    sforamenti; per le vita_reale (v2.1) dalle dichiarazioni e dai verdetti.
+
+    (v3) Una regola di un dispositivo guarda solo il registro di QUEL dispositivo:
+    i suoi sforamenti e le sue fotografie. Un evento con il regola_id di un altro
+    dispositivo (o di un altro figlio) non tinge niente."""
     tz = fuso_patto()
     date_iso = [g.isoformat() for g in siti.giorni_finestra(ora)]
+    revoche = {
+        d["id"]: data_locale(d["revocato_ts"], tz) for d in dispositivi if d["revocato_ts"]
+    }
 
-    sforamenti_per_regola = defaultdict(set)  # regola_id -> {data ISO locale}
+    sforamenti = defaultdict(set)  # (dispositivo_id, regola_id) -> {data ISO locale}
     for evento in conn.execute(
-        "SELECT dettagli, ts_server FROM eventi WHERE tipo = 'sforamento'"
+        "SELECT e.dettagli, e.ts_server, e.dispositivo_id FROM eventi e"
+        " JOIN dispositivi d ON d.id = e.dispositivo_id"
+        " WHERE e.tipo = 'sforamento' AND d.figlio_id = ?",
+        (figlio_id,),
     ).fetchall():
         dettagli = json.loads(evento["dettagli"])
         regola_id = dettagli.get("regola_id")
@@ -60,43 +77,62 @@ def semafori(conn: sqlite3.Connection, ora: datetime) -> dict:
         giorno = dettagli.get("giorno")
         if not clock.giorno_valido(giorno):
             giorno = data_locale(evento["ts_server"], tz)
-        sforamenti_per_regola[regola_id].add(giorno)
+        try:
+            sforamenti[(evento["dispositivo_id"], regola_id)].add(giorno)
+        except TypeError:
+            continue  # un regola_id non confrontabile (lista, oggetto) non e' di nessuna regola
 
     # Dichiarazioni per le regole vita_reale: (regola_id, giorno locale) -> stato.
     # Max una per regola per giorno, quindi la mappa e' univoca.
     dich_per_regola = defaultdict(dict)  # regola_id -> {giorno ISO: stato dichiarazione}
-    for d in conn.execute("SELECT regola_id, giorno, stato FROM dichiarazioni").fetchall():
+    for d in conn.execute(
+        "SELECT d.regola_id, d.giorno, d.stato FROM dichiarazioni d"
+        " JOIN regole r ON r.id = d.regola_id WHERE r.figlio_id = ?",
+        (figlio_id,),
+    ).fetchall():
         dich_per_regola[d["regola_id"]][d["giorno"]] = d["stato"]
 
-    # (v2.4) I giorni di cui il telefono ha raccontato qualcosa: quelli con una
+    # (v2.4) I giorni di cui il dispositivo ha raccontato qualcosa: quelli con una
     # fotografia uso_giornaliero vigente. `giorno` e' gia' il giorno locale.
     segnaposto = ",".join("?" * len(date_iso))
     giorni_con_dati = {
-        r["giorno"]
+        (r["dispositivo_id"], r["giorno"])
         for r in conn.execute(
-            f"SELECT giorno FROM uso_giornaliero WHERE giorno IN ({segnaposto})", date_iso
+            "SELECT u.dispositivo_id, u.giorno FROM uso_giornaliero u"
+            " JOIN dispositivi d ON d.id = u.dispositivo_id"
+            f" WHERE d.figlio_id = ? AND u.giorno IN ({segnaposto})",
+            [figlio_id, *date_iso],
         ).fetchall()
     }
 
     per_regola = {}
+    dispositivo_della_regola = {}
     for riga in conn.execute(
-        "SELECT id, tipo, attiva, creata_ts, ultima_modifica_ts FROM regole ORDER BY id"
+        "SELECT id, tipo, attiva, creata_ts, ultima_modifica_ts, dispositivo_id FROM regole"
+        " WHERE figlio_id = ? ORDER BY id",
+        (figlio_id,),
     ).fetchall():
+        dispositivo_id = riga["dispositivo_id"]
         creata = data_locale(riga["creata_ts"], tz)
-        eliminata = None
+        fine = None
         if not riga["attiva"]:
             # Soft-delete: i giorni STRETTAMENTE successivi all'eliminazione
             # sono fuori dalla vita della regola -> grigio, non verde.
-            eliminata = data_locale(riga["ultima_modifica_ts"], tz)
+            fine = data_locale(riga["ultima_modifica_ts"], tz)
+        revoca = revoche.get(dispositivo_id)
+        if revoca is not None and (fine is None or revoca < fine):
+            # (v3) Il dispositivo revocato: le sue regole restano nella storia ma
+            # dal giorno dopo la revoca non contano piu', come se eliminate.
+            fine = revoca
         voci = []
         for data in date_iso:
-            if data < creata or (eliminata is not None and data > eliminata):
+            if data < creata or (fine is not None and data > fine):
                 stato = "grigio"
             elif riga["tipo"] == "vita_reale":
                 stato = _semaforo_vita(dich_per_regola[riga["id"]].get(data))
-            elif data in sforamenti_per_regola[riga["id"]]:
+            elif data in sforamenti[(dispositivo_id, riga["id"])]:
                 stato = "rosso"  # lo sforamento e' gia' un dato: rosso anche senza fotografia
-            elif data in giorni_con_dati:
+            elif (dispositivo_id, data) in giorni_con_dati:
                 stato = "verde"
             else:
                 # (v2.4) Niente verde senza dati: un giorno di cui non si sa nulla
@@ -104,19 +140,18 @@ def semafori(conn: sqlite3.Connection, ora: datetime) -> dict:
                 stato = "grigio"
             voci.append({"data": data, "stato": stato})
         per_regola[riga["id"]] = voci
-    return per_regola
+        dispositivo_della_regola[riga["id"]] = dispositivo_id
+    return per_regola, dispositivo_della_regola
 
 
-def striscia(conn: sqlite3.Connection, ora: datetime) -> list:
-    """(v2.4) La striscia AGGREGATA del patto: 8 voci {"data", "stato"}, gli stessi
-    giorni del semaforo, dal piu' vecchio a oggi. Si ricava dai semafori di TUTTE
-    le regole, eliminate comprese (fuori dalla loro vita sono gia' grigie, quindi
-    contano solo nei giorni in cui erano in vita): rosso se almeno una e' rossa,
-    altrimenti verde se almeno una e' verde, altrimenti grigio.
-
-    Unica fonte della striscia di GET /api/finestra e di GET /api/patto."""
+def _aggrega(semafori: list, ora: datetime) -> list:
+    """(v2.4) L'aggregazione della striscia: 8 voci {"data", "stato"}, gli stessi
+    giorni del semaforo, dal piu' vecchio a oggi. Rosso se almeno una regola e'
+    rossa, altrimenti verde se almeno una e' verde, altrimenti grigio (nessuna
+    regola in vita o nessun dato). Le regole eliminate contano solo nei giorni in
+    cui erano in vita: fuori sono gia' grigie."""
     stati_per_giorno = defaultdict(set)
-    for voci in semafori(conn, ora).values():
+    for voci in semafori:
         for voce in voci:
             stati_per_giorno[voce["data"]].add(voce["stato"])
 
@@ -129,26 +164,62 @@ def striscia(conn: sqlite3.Connection, ora: datetime) -> list:
         elif "verde" in stati:
             stato = "verde"
         else:
-            stato = "grigio"  # nessuna regola in vita o nessun dato
+            stato = "grigio"
         risultato.append({"data": data, "stato": stato})
     return risultato
 
 
-def riepilogo(conn: sqlite3.Connection, ora: datetime) -> dict:
-    """(v2.4) La riga sotto la striscia, uguale nelle due app: quanti giorni della
-    striscia sono fuori regola e quante interruzioni della registrazione (eventi
-    manomissione) cadono negli stessi 8 giorni, contati nel fuso del patto.
-
-    Si calcola qui, e non nelle app, per due motivi: le app ricevono al massimo
-    gli ultimi 20 eventi, e il giorno di un evento va preso nel fuso del patto,
-    non in quello del telefono che legge. Unica fonte per /api/finestra e
-    /api/patto."""
+def _interruzioni(conn: sqlite3.Connection, ora: datetime, figlio_id: int) -> int:
+    """Gli eventi `manomissione` di qualsiasi dispositivo del figlio il cui
+    ts_server, nel fuso del patto, cade negli 8 giorni della striscia. Si contano
+    qui, e non nelle app, perche' le app ricevono al massimo gli ultimi 20 eventi
+    e il giorno va preso nel fuso del patto, non in quello di chi legge."""
     tz = fuso_patto()
     giorni = {g.isoformat() for g in siti.giorni_finestra(ora)}
-    interruzioni = sum(
+    return sum(
         1
-        for e in conn.execute("SELECT ts_server FROM eventi WHERE tipo = 'manomissione'")
+        for e in conn.execute(
+            "SELECT e.ts_server FROM eventi e JOIN dispositivi d ON d.id = e.dispositivo_id"
+            " WHERE e.tipo = 'manomissione' AND d.figlio_id = ?",
+            (figlio_id,),
+        )
         if data_locale(e["ts_server"], tz) in giorni
     )
-    fuori_regola = sum(1 for voce in striscia(conn, ora) if voce["stato"] == "rosso")
-    return {"giorni_fuori_regola": fuori_regola, "interruzioni": interruzioni}
+
+
+def quadro(
+    conn: sqlite3.Connection,
+    ora: datetime,
+    figlio_id: int,
+    dispositivi: list[sqlite3.Row] | None = None,
+) -> dict:
+    """Tutto quello che il semaforo dice di un figlio, in un colpo solo:
+
+    - `semafori`: {regola_id: 8 voci} per ogni regola del figlio, eliminate comprese;
+    - `striscia`: la striscia del FIGLIO (v2.4, ora su tutti i dispositivi + vita reale);
+    - `strisce_dispositivi`: {dispositivo_id: striscia delle sole regole di quel dispositivo};
+    - `riepilogo`: {"giorni_fuori_regola", "interruzioni"}, la riga sotto la striscia.
+
+    Unica fonte di striscia e riepilogo per GET /api/finestra, GET /api/patto e
+    GET /api/famiglia: le app mostrano gli stessi fatti per costruzione."""
+    if dispositivi is None:
+        dispositivi = famiglia.dispositivi_del_figlio(conn, figlio_id)
+    semafori, dispositivo_della_regola = _semafori(conn, ora, figlio_id, dispositivi)
+    striscia = _aggrega(list(semafori.values()), ora)
+    strisce_dispositivi = {
+        d["id"]: _aggrega(
+            [voci for regola_id, voci in semafori.items()
+             if dispositivo_della_regola[regola_id] == d["id"]],
+            ora,
+        )
+        for d in dispositivi
+    }
+    return {
+        "semafori": semafori,
+        "striscia": striscia,
+        "strisce_dispositivi": strisce_dispositivi,
+        "riepilogo": {
+            "giorni_fuori_regola": sum(1 for voce in striscia if voce["stato"] == "rosso"),
+            "interruzioni": _interruzioni(conn, ora, figlio_id),
+        },
+    }

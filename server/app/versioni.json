@@ -10,5 +10,11 @@
     "versione_nome": "0.7.0",
     "url": "/scarica/pactum-genitore.apk",
     "note": "v0.7.0: nuova grafica. In cima la striscia degli ultimi 8 giorni; proposte e conferme in una schermata sola; 'Manda un segno'; notifiche scritte in modo più chiaro."
+  },
+  "computer": {
+    "versione_code": 1,
+    "versione_nome": "0.8.0",
+    "url": "/scarica/pactum-computer.zip",
+    "note": "v0.8.0: prima versione per il computer. Misura programmi e siti, mostra il tuo patto e non blocca niente."
   }
 }

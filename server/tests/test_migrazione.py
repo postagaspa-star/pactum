@@ -199,6 +199,7 @@ def test_migrazione_siti_giornalieri_su_db_esistente(tmp_path):
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     assert _colonne(conn, "siti_giornalieri") == {
+        "dispositivo_id",  # (v3) la fotografia vigente e' per (dispositivo, giorno)
         "giorno", "dettagli", "evento_id", "ts_server",
         "totale_domini", "totale_visite", "dns_cifrato",
     }

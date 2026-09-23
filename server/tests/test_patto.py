@@ -15,6 +15,11 @@ CHIAVI_ATTESE = {
     "striscia",
     "riepilogo",
     "fuso",
+    # (v3)
+    "figlio",
+    "dispositivo",
+    "striscia_dispositivo",
+    "dispositivi",
 }
 
 

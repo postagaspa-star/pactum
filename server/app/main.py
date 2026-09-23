@@ -15,6 +15,7 @@ from .config import (
 from .routes import (
     dichiarazioni,
     distribuzione,
+    famiglia,
     figlio,
     genitore,
     notifiche,
@@ -49,7 +50,16 @@ def create_app() -> FastAPI:
     log.info("Pactum avvio: %s", riassunto_config(settings))
     valida_produzione(settings)
     assicura_cartella_db(settings.db_path)
-    db.init_db(settings.db_path, TETTO_BONUS_GIORNO_DEFAULT, TETTO_BONUS_SETTIMANA_DEFAULT)
+    # (v3) I due token d'ambiente restano quelli del genitore 1 e del dispositivo 1
+    # (le app 0.7 installate): init_db li registra come hash, e al primo avvio
+    # migra il database a figli e dispositivi.
+    db.init_db(
+        settings.db_path,
+        TETTO_BONUS_GIORNO_DEFAULT,
+        TETTO_BONUS_SETTIMANA_DEFAULT,
+        token_figlio=settings.token_figlio,
+        token_genitore=settings.token_genitore,
+    )
 
     app = FastAPI(title="Pactum — postino", version=VERSIONE)
     app.state.settings = settings
@@ -69,6 +79,8 @@ def create_app() -> FastAPI:
     app.include_router(notifiche.router, prefix="/api")
     app.include_router(figlio.router, prefix="/api")
     app.include_router(genitore.router, prefix="/api")
+    app.include_router(famiglia.router, prefix="/api")
+    app.include_router(famiglia.abbina_router, prefix="/api")
     # Distribuzione (tappa 6): /api/versione sotto /api; /scarica alla radice.
     app.include_router(distribuzione.versione_router, prefix="/api")
     app.include_router(distribuzione.scarica_router)

@@ -1,6 +1,7 @@
 package eu.stgm.pactum.figlio.dati
 
 import android.content.Context
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -9,14 +10,13 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import eu.stgm.pactum.design.GiornoPatto
-import eu.stgm.pactum.figlio.bonus.CassettaBonus
-import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.giornata.Serie
 import eu.stgm.pactum.figlio.giornata.SerieSalvata
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -25,7 +25,25 @@ private val Context.dataStore by preferencesDataStore(name = "impostazioni")
 
 data class ConfigurazionePostino(val serverUrl: String, val token: String) {
     val completa: Boolean get() = serverUrl.isNotBlank() && token.isNotBlank()
+
+    /**
+     * Un'impronta del collegamento (indirizzo + codice), mai il codice in
+     * chiaro: serve a riconoscere una copia del patto letta col collegamento
+     * di prima (PattoLocale.salva).
+     */
+    val impronta: String
+        get() = MessageDigest.getInstance("SHA-256")
+            .digest("$serverUrl\n$token".toByteArray(Charsets.UTF_8))
+            .take(8)
+            .joinToString("") { "%02x".format(it) }
 }
+
+/**
+ * (v3) Chi è questo telefono per il patto: il dispositivo e il figlio. Arriva
+ * dall'abbinamento e poi da ogni GET /api/patto (il genitore può rinominare).
+ * Vuota = collegato col vecchio codice lungo a un server che non lo dice.
+ */
+data class Identita(val dispositivo: Dispositivo? = null, val figlio: Figlio? = null)
 
 /**
  * Ancora temporale: coppia (orologio a muro, elapsedRealtime) salvata a ogni
@@ -87,8 +105,17 @@ class Impostazioni(private val context: Context) {
         val SERALE_MINUTI = intPreferencesKey("serale_minuti")
         val SERALE_ULTIMO_GIORNO = stringPreferencesKey("serale_ultimo_giorno")
 
-        // "Cosa vede tuo padre" mostrato almeno una volta dopo i permessi.
-        val COSA_VEDE_VISTA = booleanPreferencesKey("cosa_vede_vista")
+        // "Cosa vede tuo padre" mostrato almeno una volta dopo i permessi. La
+        // chiave è per versione del testo: quando cambia quello che il genitore
+        // vede (v3: i dispositivi, il computer), lo si rilegge una volta.
+        val COSA_VEDE_VISTA = booleanPreferencesKey("cosa_vede_vista_v3")
+
+        // v3 — chi è questo telefono per il patto (Identita).
+        val DISPOSITIVO_ID = longPreferencesKey("dispositivo_id")
+        val DISPOSITIVO_NOME = stringPreferencesKey("dispositivo_nome")
+        val DISPOSITIVO_TIPO = stringPreferencesKey("dispositivo_tipo")
+        val FIGLIO_ID = longPreferencesKey("figlio_id")
+        val FIGLIO_NOME = stringPreferencesKey("figlio_nome")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -97,18 +124,28 @@ class Impostazioni(private val context: Context) {
 
     suspend fun leggiConfigurazione(): ConfigurazionePostino = configurazione.first()
 
-    suspend fun salvaConfigurazione(serverUrl: String, token: String) {
-        // Il bonus in sospeso adesso: se il patto cambia, era del patto vecchio.
-        val sospeso = CassettaBonus(context).leggi()
-        var cambiata = false
+    /**
+     * Il collegamento al patto: indirizzo, token e (v3) chi è questo telefono.
+     * Lo chiama solo Collegamento, dentro PattoLocale.cambiaCollegamento.
+     *
+     * [stessoDispositivo] = la storia di questo dispositivo continua (codice
+     * nuovo per lo stesso dispositivo): cambia solo il token. Altrimenti è un
+     * patto diverso e se ne va tutto quello che apparteneva al vecchio; la
+     * serie di giorni di fila resta solo se il figlio è lo stesso
+     * ([stessoFiglio]), perché è calcolata dalla SUA striscia.
+     */
+    suspend fun salvaCollegamento(
+        serverUrl: String,
+        token: String,
+        identita: Identita?,
+        stessoDispositivo: Boolean,
+        stessoFiglio: Boolean,
+    ) {
         context.dataStore.edit { p ->
-            val urlNuovo = serverUrl.trim().trimEnd('/')
-            val tokenNuovo = token.trim()
-            // Server o token diversi = patto diverso: gli sforamenti già segnalati
-            // e gli id delle notifiche già avvisate appartengono al patto vecchio e
-            // soffocherebbero gli avvisi del nuovo (regole e id riciclati).
-            if (p[Chiavi.SERVER_URL] != urlNuovo || p[Chiavi.TOKEN] != tokenNuovo) {
-                cambiata = true
+            if (!stessoDispositivo) {
+                // Gli sforamenti già segnalati e gli id delle notifiche già avvisate
+                // appartengono al patto vecchio e soffocherebbero gli avvisi del
+                // nuovo (regole e id riciclati).
                 p.remove(Chiavi.SFORAMENTI_SEGNALATI)
                 p.remove(Chiavi.NOTIFICHE_AVVISATE)
                 // Nuovo patto = nuova base dei permessi: senza azzerare, una revoca
@@ -118,16 +155,72 @@ class Impostazioni(private val context: Context) {
                 // Idem per l'osservazione dei siti (la SCELTA del figlio resta:
                 // è un consenso dato al telefono, non al server).
                 p.remove(Chiavi.SITI_NOTA)
-                // La serie in corso appartiene al patto vecchio. Il record no:
-                // non scende mai.
-                p.remove(Chiavi.SERIE_FINE)
-                p.remove(Chiavi.SERIE_LUNGHEZZA)
+                if (!stessoFiglio) {
+                    // La serie in corso è di un altro figlio. Il record no: non scende mai.
+                    p.remove(Chiavi.SERIE_FINE)
+                    p.remove(Chiavi.SERIE_LUNGHEZZA)
+                }
+                // Chi era questo telefono non vale più: lo dice il nuovo collegamento
+                // o, col codice lungo, il prossimo patto letto.
+                rimuoviIdentita(p)
             }
-            p[Chiavi.SERVER_URL] = urlNuovo
-            p[Chiavi.TOKEN] = tokenNuovo
+            identita?.let { scriviIdentita(p, it.dispositivo, it.figlio) }
+            p[Chiavi.SERVER_URL] = serverUrl.trim().trimEnd('/')
+            p[Chiavi.TOKEN] = token.trim()
         }
-        // Un bonus del patto vecchio non parte verso quello nuovo.
-        if (cambiata && sospeso != null) ConsegnaBonus.dimenticaInFondo(context, sospeso.id)
+    }
+
+    // --- Chi è questo telefono (v3) -----------------------------------------
+
+    val identita: Flow<Identita> = context.dataStore.data.map { p ->
+        val dispositivo = p[Chiavi.DISPOSITIVO_ID]?.let { id ->
+            Dispositivo(
+                id = id,
+                nome = p[Chiavi.DISPOSITIVO_NOME] ?: "",
+                tipo = p[Chiavi.DISPOSITIVO_TIPO] ?: "",
+            )
+        }
+        val figlio = p[Chiavi.FIGLIO_ID]?.let { id -> Figlio(id = id, nome = p[Chiavi.FIGLIO_NOME] ?: "") }
+        Identita(dispositivo, figlio)
+    }.distinctUntilChanged()
+
+    suspend fun leggiIdentita(): Identita = identita.first()
+
+    /**
+     * Dal patto appena letto (il genitore può aver rinominato figlio o
+     * dispositivo). Scrive solo se cambia qualcosa: gira a ogni sincronizzazione.
+     */
+    suspend fun aggiornaIdentita(dispositivo: Dispositivo?, figlio: Figlio?) {
+        if (dispositivo == null && figlio == null) return
+        val attuale = leggiIdentita()
+        // Solo id, nome e tipo: la striscia non fa parte di "chi è".
+        val nuovo = dispositivo?.takeIf { it.id > 0 }
+            ?.let { Dispositivo(id = it.id, nome = it.nome, tipo = it.tipo) }
+        val nuovoFiglio = figlio?.takeIf { it.id > 0 }
+        val dispositivoUguale = nuovo == null || attuale.dispositivo == nuovo
+        val figlioUguale = nuovoFiglio == null || attuale.figlio == nuovoFiglio
+        if (dispositivoUguale && figlioUguale) return
+        context.dataStore.edit { p -> scriviIdentita(p, nuovo, nuovoFiglio) }
+    }
+
+    private fun scriviIdentita(p: MutablePreferences, dispositivo: Dispositivo?, figlio: Figlio?) {
+        dispositivo?.takeIf { it.id > 0 }?.let {
+            p[Chiavi.DISPOSITIVO_ID] = it.id
+            p[Chiavi.DISPOSITIVO_NOME] = it.nome
+            p[Chiavi.DISPOSITIVO_TIPO] = it.tipo
+        }
+        figlio?.takeIf { it.id > 0 }?.let {
+            p[Chiavi.FIGLIO_ID] = it.id
+            p[Chiavi.FIGLIO_NOME] = it.nome
+        }
+    }
+
+    private fun rimuoviIdentita(p: MutablePreferences) {
+        p.remove(Chiavi.DISPOSITIVO_ID)
+        p.remove(Chiavi.DISPOSITIVO_NOME)
+        p.remove(Chiavi.DISPOSITIVO_TIPO)
+        p.remove(Chiavi.FIGLIO_ID)
+        p.remove(Chiavi.FIGLIO_NOME)
     }
 
     suspend fun leggiAncoraTempo(): AncoraTempo? {

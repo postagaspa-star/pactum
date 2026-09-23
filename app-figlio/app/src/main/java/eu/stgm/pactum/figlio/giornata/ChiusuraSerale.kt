@@ -4,11 +4,11 @@ import android.content.Context
 import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
-import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import eu.stgm.pactum.figlio.dati.zonaPatto
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
+import eu.stgm.pactum.figlio.ui.etichettaChiave
 import eu.stgm.pactum.figlio.ui.testoDurata
 import eu.stgm.pactum.figlio.valutatore.MomentoFascia
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
@@ -63,7 +63,9 @@ object ChiusuraSerale {
 
         val misura = SentinellaPatto(context).misura(now) ?: return
         val patto = misura.patto
-        val misurabili = patto.regole.any {
+        // (v3) Le regole di questo telefono: quelle del computer le misura il computer.
+        val regoleQui = patto.regoleDiQuestoDispositivo()
+        val misurabili = regoleQui.any {
             it.attiva && (it.tipo == TipiRegola.LIMITE_TEMPO || it.tipo == TipiRegola.FASCIA_ORARIA)
         }
         if (!misurabili) {
@@ -72,13 +74,14 @@ object ChiusuraSerale {
             return
         }
 
-        val regolePerId = patto.regole.associateBy { it.id }
+        val regolePerId = regoleQui.associateBy { it.id }
         val fuori = misura.sforamenti
             // La coda mattutina della fascia di ieri appartiene a ieri (come nel semaforo).
             .filter { Valutatore.giornoDelloSforamento(it, misura.giorno) == misura.giorno }
             .map { s ->
-                val nome = (regolePerId[s.regolaId]?.parametri?.get("app_o_categoria") as? JsonPrimitive)
-                    ?.content?.let { CatalogoApp.etichettaValore(context, it) }
+                val regola = regolePerId[s.regolaId]
+                val nome = (regola?.parametri?.get("app_o_categoria") as? JsonPrimitive)
+                    ?.content?.let { etichettaChiave(context, it, regola?.nome) }
                 FuoriOggi(
                     tipo = if (s.tipo == TipiRegola.FASCIA_ORARIA) TipoFuori.FASCIA else TipoFuori.LIMITE,
                     nome = nome,
@@ -94,7 +97,7 @@ object ChiusuraSerale {
         // Una fascia di oggi ancora da venire (22:00-07:00 alle 21:30) o in
         // corso: la giornata non è finita, "dentro" vale solo fin qui.
         val zona = ZoneId.systemDefault()
-        val fasciaAperta = patto.regole.any { regola ->
+        val fasciaAperta = regoleQui.any { regola ->
             regola.attiva && when (Valutatore.momentoFascia(regola, now, zona)) {
                 is MomentoFascia.Prima, is MomentoFascia.InCorso -> true
                 else -> false

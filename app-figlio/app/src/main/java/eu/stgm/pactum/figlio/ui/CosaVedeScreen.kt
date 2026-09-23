@@ -33,9 +33,11 @@ import eu.stgm.pactum.figlio.R
  * subito dopo i permessi, e resta raggiungibile dalle Impostazioni.
  *
  * Il contenuto è ricavato dai campi del contratto (GET /api/finestra, più le
- * dichiarazioni, le proposte e gli avvisi che il genitore riceve): se la
- * finestra cambia, questo elenco cambia con lei — è così che "una finestra,
- * non una vetrata" diventa una cosa verificabile.
+ * dichiarazioni, le proposte e gli avvisi che il genitore riceve; dalla v3
+ * anche GET /api/famiglia e i `dispositivi` della finestra, computer compreso):
+ * se la finestra cambia, questo elenco cambia con lei — è così che "una
+ * finestra, non una vetrata" diventa una cosa verificabile. Quando il testo
+ * cambia, la chiave "già vista" cambia con lui (Impostazioni): si rilegge una volta.
  *
  * [onChiudi] = arrivo dalle Impostazioni (freccia indietro); [onHoCapito] =
  * arrivo dall'onboarding (pulsante in fondo).
@@ -79,6 +81,12 @@ fun CosaVedeScreen(onChiudi: (() -> Unit)? = null, onHoCapito: (() -> Unit)? = n
             Blocco(
                 titolo = stringResource(R.string.cosa_vede_no_titolo),
                 voci = stringArrayResource(R.array.cosa_vede_no).toList(),
+            )
+            // (v3) Sul computer la promessa è diversa da quella del telefono: il
+            // contratto vuole che si dica qui, chiara ("Siti visitati · Sul computer").
+            Blocco(
+                titolo = stringResource(R.string.cosa_vede_computer_titolo),
+                voci = stringArrayResource(R.array.cosa_vede_computer).toList(),
             )
             Blocco(
                 titolo = stringResource(R.string.cosa_vede_tuo_titolo),

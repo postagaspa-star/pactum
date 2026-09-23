@@ -190,9 +190,18 @@ fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
                         item { BannerDatiVecchi(stato.datiFermiAlle) }
                     }
                     if (stato.regole.isEmpty()) {
-                        item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.regole_vuoto)) }
+                        // (v3) Il figlio può avere regole solo sul computer: il patto
+                        // c'è, su questo telefono no.
+                        val vuoto = if (stato.regoleAltrove > 0) {
+                            R.string.regole_vuoto_questo_telefono
+                        } else {
+                            R.string.regole_vuoto
+                        }
+                        item { RigaVuota(Icons.Outlined.Info, stringResource(vuoto)) }
                     } else {
-                        if (stato.regole.size == 1) {
+                        // "L'ultima non si toglie" vale per il figlio, su tutti i
+                        // suoi dispositivi (contratto v3): conta anche il computer.
+                        if (stato.totaleFiglio == 1) {
                             item {
                                 RigaVuota(Icons.Outlined.Info, stringResource(R.string.regole_unica_regola))
                             }
@@ -203,6 +212,20 @@ fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
                                 concordata = regola.id in stato.concordate,
                                 onModifica = { dialogoAperto = DialogoRegole(regola) },
                                 onElimina = { regolaDaEliminare = regola },
+                            )
+                        }
+                    }
+                    // (v3) Qui ci sono le regole di questo telefono e la vita reale;
+                    // quelle degli altri dispositivi si vedono e si cambiano da lì.
+                    if (stato.regoleAltrove > 0) {
+                        item {
+                            RigaVuota(
+                                Icons.Outlined.Info,
+                                pluralStringResource(
+                                    R.plurals.regole_altri_dispositivi,
+                                    stato.regoleAltrove,
+                                    stato.regoleAltrove,
+                                ),
                             )
                         }
                     }
@@ -623,10 +646,15 @@ private fun RigaScelta(testo: String, onClick: () -> Unit) {
  * a scrivere il patto, e un patto senza regole non esiste. Creata la prima, il
  * server vieta di togliere l'ultima, quindi il gate non ricompare; offline la
  * copia locale (già sincronizzata almeno una volta) basta a superarlo.
+ *
+ * (v3) Prima ancora, se il telefono non è collegato, qui si collega: indirizzo
+ * del server e codice di 6 cifre dal genitore. Fatto il collegamento, la
+ * schermata dice "Collegato come: …" e passa alla prima regola (o, se il
+ * figlio ha già un patto, direttamente all'app).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrimaRegolaScreen(vm: RegoleViewModel, onApriImpostazioni: () -> Unit) {
+fun PrimaRegolaScreen(vm: RegoleViewModel) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var dialogoAperto by remember { mutableStateOf(false) }
@@ -661,10 +689,10 @@ fun PrimaRegolaScreen(vm: RegoleViewModel, onApriImpostazioni: () -> Unit) {
                     text = stringResource(R.string.prima_regola_config_intro),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                Button(onClick = onApriImpostazioni, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.prima_regola_apri_impostazioni))
-                }
+                ModuloCollegamento(onCollegato = { vm.aggiorna() })
             } else {
+                // Appena collegato: il ragazzo vede con che nome lo vede il patto.
+                RigaCollegatoCome()
                 Text(
                     text = stringResource(R.string.prima_regola_intro),
                     style = MaterialTheme.typography.bodyMedium,

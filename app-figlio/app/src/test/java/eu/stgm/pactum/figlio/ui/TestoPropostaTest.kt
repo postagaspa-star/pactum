@@ -1,7 +1,9 @@
 package eu.stgm.pactum.figlio.ui
 
 import eu.stgm.pactum.figlio.dati.DirezioniProposta
+import eu.stgm.pactum.figlio.dati.Dispositivo
 import eu.stgm.pactum.figlio.dati.Regola
+import eu.stgm.pactum.figlio.dati.TipiDispositivo
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -24,21 +26,34 @@ class TestoPropostaTest {
         ora = "Ora: %1\$s",
         seAccetti = "Se accetti: %1\$s",
         togliere = "Propone di togliere la regola: %1\$s",
+        oraSu = "Ora %1\$s: %2\$s",
+        togliereSu = "Propone di togliere la regola %1\$s: %2\$s",
     )
 
     private val nomi = mapOf("com.zhiliaoapp.musically" to "TikTok")
 
     private fun durata(m: Long) = if (m < 60) "$m min" else if (m % 60 == 0L) "${m / 60} h" else "${m / 60} h ${m % 60} min"
 
-    private val descrivi: (String, JsonObject) -> String = { tipo, parametri ->
-        when (tipo) {
+    // Come l'app: una regola di questo telefono "TikTok: al massimo 1 h al giorno";
+    // una di un altro dispositivo nella forma breve, senza i due punti.
+    private val descrivi: (Regola, JsonObject) -> String = { regola, parametri ->
+        when (regola.tipo) {
             TipiRegola.LIMITE_TEMPO -> {
                 val app = (parametri["app_o_categoria"] as JsonPrimitive).content
                 val minuti = (parametri["minuti_al_giorno"] as JsonPrimitive).content.toLong()
-                "${nomi[app] ?: app}: al massimo ${durata(minuti)} al giorno"
+                val nome = ChiaviComputer.etichetta(app, null, "%1\$s (sito)") ?: nomi[app] ?: app
+                if (regola.dispositivo?.tipo == TipiDispositivo.COMPUTER) {
+                    "$nome al massimo ${durata(minuti)} al giorno"
+                } else {
+                    "$nome: al massimo ${durata(minuti)} al giorno"
+                }
             }
-            else -> tipo
+            else -> regola.tipo
         }
+    }
+
+    private val sulComputer: (Regola) -> String? = {
+        if (it.dispositivo?.tipo == TipiDispositivo.COMPUTER) "sul computer" else null
     }
 
     private fun limite(minuti: Int) = buildJsonObject {
@@ -119,6 +134,61 @@ class TestoPropostaTest {
                 "Ora: TikTok: al massimo 1 h al giorno\n" +
                 "Se accetti: TikTok: al massimo 1 h 30 min al giorno",
             racconto("+30 min al giorno rispetto ad ora", oggetto).testo,
+        )
+    }
+
+    // --- v3: la proposta su una regola del computer, vista dal telefono -------
+
+    private fun sitoYoutube(minuti: Int) = buildJsonObject {
+        put("app_o_categoria", "sito:youtube.com")
+        put("minuti_al_giorno", minuti)
+    }
+
+    private val youtubeSulComputer = Regola(
+        id = 12,
+        tipo = TipiRegola.LIMITE_TEMPO,
+        parametri = sitoYoutube(60),
+        dispositivoId = 2,
+        dispositivo = Dispositivo(id = 2, nome = "Computer", tipo = TipiDispositivo.COMPUTER),
+    )
+
+    private fun raccontoV3(confronto: String?, oggetto: OggettoProposta?) =
+        TestoProposta.racconto(confronto, oggetto, parole, descrivi, sulComputer)
+
+    @Test
+    fun `una modifica su una regola del computer dice su quale dispositivo`() {
+        val oggetto = TestoProposta.oggetto(
+            12, DirezioniProposta.STRINGE, sitoYoutube(30), regole + youtubeSulComputer,
+        )
+        val racconto = raccontoV3("−30 min al giorno rispetto ad ora", oggetto)
+        assertEquals("−30 min al giorno rispetto ad ora", racconto.titolo)
+        assertEquals(
+            listOf(
+                "Ora sul computer: youtube.com (sito) al massimo 1 h al giorno",
+                "Se accetti: youtube.com (sito) al massimo 30 min al giorno",
+            ),
+            racconto.righe,
+        )
+    }
+
+    @Test
+    fun `togliere una regola del computer dice il dispositivo nel titolo`() {
+        val oggetto = TestoProposta.oggetto(12, DirezioniProposta.ELIMINA, marcatoreElimina, listOf(youtubeSulComputer))
+        assertEquals(
+            "Propone di togliere la regola sul computer: youtube.com (sito) al massimo 1 h al giorno",
+            raccontoV3("propone di eliminare la regola", oggetto).titolo,
+        )
+    }
+
+    @Test
+    fun `una regola di questo telefono resta com'era anche con i dispositivi`() {
+        val oggetto = TestoProposta.oggetto(7, DirezioniProposta.STRINGE, limite(45), regole)
+        assertEquals(
+            listOf(
+                "Ora: TikTok: al massimo 1 h al giorno",
+                "Se accetti: TikTok: al massimo 45 min al giorno",
+            ),
+            raccontoV3("−15 min al giorno rispetto ad ora", oggetto).righe,
         )
     }
 }

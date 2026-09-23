@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.rete
 
+import eu.stgm.pactum.figlio.dati.AbbinaIn
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.BonusIn
 import eu.stgm.pactum.figlio.dati.ConfigurazionePostino
@@ -14,8 +15,10 @@ import eu.stgm.pactum.figlio.dati.PaccoDichiarazioni
 import eu.stgm.pactum.figlio.dati.PaccoEventi
 import eu.stgm.pactum.figlio.dati.PaccoNotifiche
 import eu.stgm.pactum.figlio.dati.PaccoProposte
+import eu.stgm.pactum.figlio.dati.PaccoRegole
 import eu.stgm.pactum.figlio.dati.Patto
 import eu.stgm.pactum.figlio.dati.Proposta
+import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.RispostaPropostaIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,10 +41,11 @@ import java.util.concurrent.TimeUnit
  * (fonte di verità — ogni modifica passa prima da lì).
  *
  *   POST {base}/api/battito · POST {base}/api/eventi   → consegna tollerante all'offline
- *   GET  {base}/api/patto · /api/proposte · /api/dichiarazioni · /api/notifiche
+ *   GET  {base}/api/patto · /api/regole · /api/proposte · /api/dichiarazioni · /api/notifiche
  *   POST/PATCH/DELETE {base}/api/regole · POST /api/bonus · /api/dichiarazioni ·
  *        /api/proposte/{id}/risposta                    → mutazioni con esito HTTP
- *   header: Authorization: Bearer <token del figlio>
+ *   POST {base}/api/abbina (v3, senza token)            → il codice di 6 cifre diventa un token
+ *   header: Authorization: Bearer <token di questo dispositivo>
  *
  * Battito ed eventi restituiscono Boolean (o passa o resta in coda). Le
  * mutazioni del patto restituiscono [RispostaHttp] (codice + corpo) perché
@@ -64,10 +68,52 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         )
     }
 
+    /**
+     * Il battito di prova delle Impostazioni, col suo codice HTTP: 200 = il
+     * server risponde, 401 = questo telefono non è (più) collegato (revocato,
+     * o ricollegato con un codice nuovo altrove), 0 = niente rete.
+     */
+    suspend fun provaBattito(battito: Battito): Int {
+        if (!configurazione.completa) return 0
+        return withContext(Dispatchers.IO) {
+            try {
+                val richiesta = richiesta("/api/battito")
+                    .post(json.encodeToString(Battito.serializer(), battito).toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+                http.newCall(richiesta).execute().use { it.code }
+            } catch (e: IOException) {
+                0
+            } catch (e: IllegalArgumentException) {
+                0
+            }
+        }
+    }
+
     // --- Letture (sync dell'app) --------------------------------------------
 
-    suspend fun leggiPatto(): Patto? =
-        leggi("/api/patto")?.let { decodifica(Patto.serializer(), it) }
+    /**
+     * GET /api/patto. La copia porta l'impronta del collegamento con cui è
+     * stata letta (`letto_con`): PattoLocale non la salva se nel frattempo il
+     * telefono è stato ricollegato.
+     */
+    suspend fun leggiPatto(): Patto? = leggiPattoConCodice().first
+
+    /** Il patto e il codice HTTP della lettura: 401 = questo telefono non è più collegato. */
+    suspend fun leggiPattoConCodice(): Pair<Patto?, Int> {
+        val (corpo, codice) = leggiConCodice("/api/patto")
+        val patto = corpo
+            ?.let { decodifica(Patto.serializer(), it) }
+            ?.copy(lettoCon = configurazione.impronta)
+        return patto to codice
+    }
+
+    /**
+     * (v3) GET /api/regole: le regole attive di TUTTO il figlio, di ogni suo
+     * dispositivo, ciascuna col suo `dispositivo`. Serve a dire su quale regola
+     * del computer verte una proposta. Un server vecchio dà le stesse del patto.
+     */
+    suspend fun leggiRegole(): List<Regola>? =
+        leggi("/api/regole")?.let { decodifica(PaccoRegole.serializer(), it) }?.regole
 
     suspend fun leggiProposte(): List<Proposta>? =
         leggi("/api/proposte")?.let { decodifica(PaccoProposte.serializer(), it) }?.proposte
@@ -180,18 +226,21 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     }
 
     /** Il corpo della risposta 2xx, null per qualunque fallimento (rete o HTTP non-2xx). */
-    private suspend fun leggi(percorso: String): String? {
-        if (!configurazione.completa) return null
+    private suspend fun leggi(percorso: String): String? = leggiConCodice(percorso).first
+
+    /** Come [leggi], più il codice HTTP (0 = rete, URL malformato o non configurato). */
+    private suspend fun leggiConCodice(percorso: String): Pair<String?, Int> {
+        if (!configurazione.completa) return null to 0
         return withContext(Dispatchers.IO) {
             try {
                 val richiesta = richiesta(percorso).get().build()
                 http.newCall(richiesta).execute().use { risposta ->
-                    if (risposta.isSuccessful) risposta.body?.string() else null
+                    (if (risposta.isSuccessful) risposta.body?.string() else null) to risposta.code
                 }
             } catch (e: IOException) {
-                null
+                null to 0
             } catch (e: IllegalArgumentException) {
-                null
+                null to 0
             }
         }
     }
@@ -253,6 +302,34 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         private val httpMutazioni: OkHttpClient = http.newBuilder()
             .retryOnConnectionFailure(false)
             .build()
+
+        /**
+         * (v3) POST /api/abbina: nessun token (è proprio quello che si chiede).
+         * Come le mutazioni, niente ritentativo automatico: il codice vale una
+         * volta sola, e un secondo invio dopo una risposta persa riceverebbe
+         * "codice non valido" al posto del collegamento riuscito. [serverUrl] è
+         * già normalizzato (normalizzaUrlServer).
+         */
+        suspend fun abbina(serverUrl: String, corpo: AbbinaIn): RispostaHttp =
+            withContext(Dispatchers.IO) {
+                try {
+                    val richiesta = Request.Builder()
+                        .url("$serverUrl/api/abbina")
+                        .post(json.encodeToString(AbbinaIn.serializer(), corpo).toRequestBody(JSON_MEDIA_TYPE))
+                        .build()
+                    httpMutazioni.newCall(richiesta).execute().use { risposta ->
+                        RispostaHttp(
+                            ok = risposta.isSuccessful,
+                            codice = risposta.code,
+                            corpo = risposta.body?.string(),
+                        )
+                    }
+                } catch (e: IOException) {
+                    RispostaHttp(ok = false, codice = 0, corpo = null)
+                } catch (e: IllegalArgumentException) {
+                    RispostaHttp(ok = false, codice = 0, corpo = null)
+                }
+            }
 
         /**
          * Normalizza e valida l'indirizzo del server prima del salvataggio:

@@ -39,7 +39,14 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
 
     data class StatoRegole(
         val caricamento: Boolean = true,
+        /** (v3) Le regole di QUESTO telefono e quelle di vita reale del figlio. */
         val regole: List<Regola> = emptyList(),
+        /**
+         * (v3) Quante regole attive ha il figlio sugli ALTRI suoi dispositivi
+         * (GET /api/regole). Il patto è del figlio: "almeno una regola" e
+         * "l'ultima non si toglie" contano anche quelle (contratto v3, Regole).
+         */
+        val regoleAltrove: Int = 0,
         /** Le regole i cui parametri attuali sono nati da una proposta accettata. */
         val concordate: Set<Long> = emptySet(),
         val configurazioneMancante: Boolean = false,
@@ -48,7 +55,10 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
         val datiFermiAlle: Long? = null,
         val invioInCorso: Boolean = false,
         val evento: Evento? = null,
-    )
+    ) {
+        /** Tutte le regole attive del figlio, su ogni dispositivo. */
+        val totaleFiglio: Int get() = regole.size + regoleAltrove
+    }
 
     private val _stato = MutableStateFlow(StatoRegole())
     val stato: StateFlow<StatoRegole> = _stato.asStateFlow()
@@ -73,18 +83,32 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
                     configurazioneMancante = false,
                     errore = true,
                     datiFermiAlle = copia.aggiornatoIl(),
-                    regole = locale?.regole ?: _stato.value.regole,
+                    regole = locale?.regoleDiQuestoDispositivo() ?: _stato.value.regole,
                 )
                 return@launch
             }
             PattoLocale(getApplication()).salva(patto)
+            val qui = patto.regoleDiQuestoDispositivo()
+
+            // (v3) Le regole del figlio sugli altri dispositivi: solo contate,
+            // qui non si mostrano (si cambiano da lì). Quelle di un dispositivo
+            // scollegato dal genitore non contano più: da lì non si cambiano. Senza
+            // risposta si tiene l'ultimo numero saputo: meglio vecchio che uno zero finto.
+            val scollegati = patto.dispositivi.filter { it.revocato }.map { it.id }.toSet()
+            val regoleAltrove = postino.leggiRegole()
+                ?.let { tutte ->
+                    tutte.count { r ->
+                        r.attiva && qui.none { it.id == r.id } && r.idDispositivo !in scollegati
+                    }
+                }
+                ?: _stato.value.regoleAltrove
 
             // Badge "concordata": una modifica nata da proposta accettata applica
             // ESATTAMENTE i parametri proposti (contratto) — quindi la regola è
             // concordata se i suoi parametri attuali coincidono con quelli di una
             // proposta accettata e usata. Best effort: senza proposte, nessun badge.
             val proposte = postino.leggiProposte().orEmpty()
-            val concordate = patto.regole
+            val concordate = qui
                 .filter { regola ->
                     proposte.any { proposta ->
                         proposta.stato == StatiProposta.ACCETTATA &&
@@ -100,7 +124,8 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
                 caricamento = false,
                 configurazioneMancante = false,
                 errore = false,
-                regole = patto.regole,
+                regole = qui,
+                regoleAltrove = regoleAltrove,
                 concordate = concordate,
             )
         }

@@ -25,9 +25,16 @@ sealed interface OggettoProposta {
 /** Le frasi, da strings.xml. */
 data class ParoleProposta(
     val senzaConfronto: String,
+    /** "Ora: %1$s" */
     val ora: String,
+    /** "Se accetti: %1$s" */
     val seAccetti: String,
+    /** "Propone di togliere la regola: %1$s" */
     val togliere: String,
+    /** (v3) Regola di un altro dispositivo: "Ora %1$s: %2$s" → "Ora sul computer: …" */
+    val oraSu: String = "Ora %1\$s: %2\$s",
+    /** (v3) "Propone di togliere la regola %1$s: %2$s" → "… la regola sul computer: …" */
+    val togliereSu: String = "Propone di togliere la regola %1\$s: %2\$s",
 )
 
 /** La proposta raccontata: la frase in evidenza e le righe sotto. */
@@ -66,26 +73,36 @@ object TestoProposta {
      * come diventa. Per l'eliminazione il confronto del server è una frase
      * fissa ("propone di eliminare la regola") che non dice quale: al suo posto
      * va la stessa frase CON la regola, così non si ripete due volte.
-     * [descrivi] è la descrizione delle regole che l'app usa ovunque.
+     *
+     * [descrivi] è la descrizione delle regole che l'app usa ovunque, per la
+     * regola e i parametri dati. (v3) [dispositivoDi] dice su quale ALTRO
+     * dispositivo sta la regola ("sul computer"), null se è di questo telefono
+     * o del figlio: allora la frase lo dice ("Ora sul computer: …"). Il
+     * dispositivo si dice una volta, sulla regola di adesso: "Se accetti" parla
+     * della stessa regola.
      */
     fun racconto(
         confronto: String?,
         oggetto: OggettoProposta?,
         parole: ParoleProposta,
-        descrivi: (tipo: String, parametri: JsonObject) -> String,
+        descrivi: (regola: Regola, parametri: JsonObject) -> String,
+        dispositivoDi: (Regola) -> String? = { null },
     ): RaccontoProposta {
         val titolo = confronto?.ifBlank { null } ?: parole.senzaConfronto
+        if (oggetto == null) return RaccontoProposta(titolo, emptyList())
+        val regola = oggetto.regola
+        val su = dispositivoDi(regola)
+        val adesso = descrivi(regola, regola.parametri)
         return when (oggetto) {
-            null -> RaccontoProposta(titolo, emptyList())
             is OggettoProposta.Eliminazione -> RaccontoProposta(
-                parole.togliere.format(descrivi(oggetto.regola.tipo, oggetto.regola.parametri)),
+                if (su == null) parole.togliere.format(adesso) else parole.togliereSu.format(su, adesso),
                 emptyList(),
             )
             is OggettoProposta.Modifica -> RaccontoProposta(
                 titolo,
                 listOfNotNull(
-                    parole.ora.format(descrivi(oggetto.regola.tipo, oggetto.regola.parametri)),
-                    oggetto.parametriDopo?.let { parole.seAccetti.format(descrivi(oggetto.regola.tipo, it)) },
+                    if (su == null) parole.ora.format(adesso) else parole.oraSu.format(su, adesso),
+                    oggetto.parametriDopo?.let { parole.seAccetti.format(descrivi(regola, it)) },
                 ),
             )
         }

@@ -208,8 +208,8 @@ private fun PactumRoot(
         return
     }
 
-    // Le Impostazioni sono raggiungibili anche dal gate (per inserire server e
-    // codice quando mancano), quindi si valutano prima di tutto il resto.
+    // Le Impostazioni si valutano prima di tutto il resto: sopra alle schede
+    // e, se ci si arriva, anche sopra al gate.
     if (mostraImpostazioni) {
         BackHandler { mostraImpostazioni = false }
         ImpostazioniScreen(
@@ -231,17 +231,16 @@ private fun PactumRoot(
     // Finché il patto non ha nemmeno una regola, prima si crea quella: è il
     // figlio a scrivere il patto. Creata la prima, il server vieta di togliere
     // l'ultima, così il gate non torna; offline la copia locale già sincronizzata
-    // basta a superarlo.
-    if (statoRegole.regole.isEmpty()) {
+    // basta a superarlo. Il gate è anche il posto dove un telefono nuovo si
+    // collega col codice di 6 cifre. (v3) Il patto è del figlio: se ha già
+    // regole su un altro dispositivo (il computer), il gate non serve.
+    if (statoRegole.regole.isEmpty() && statoRegole.regoleAltrove == 0) {
         if (statoRegole.caricamento) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
         } else {
-            PrimaRegolaScreen(
-                vm = regoleVm,
-                onApriImpostazioni = { mostraImpostazioni = true },
-            )
+            PrimaRegolaScreen(vm = regoleVm)
         }
         return
     }

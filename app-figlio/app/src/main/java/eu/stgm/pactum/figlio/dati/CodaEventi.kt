@@ -61,6 +61,20 @@ class CodaEventi(context: Context) {
     }
 
     /**
+     * (v3) Toglie dalla coda gli eventi di un [tipo]. Serve quando il telefono
+     * passa a un ALTRO dispositivo del patto: uno sforamento non ancora
+     * consegnato porta il `regola_id` di una regola del dispositivo di prima, e
+     * mandato col nuovo token finirebbe su una regola che non è sua.
+     */
+    suspend fun scartaTipo(tipo: String) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val eventi = leggi()
+            val restano = eventi.filterNot { it.tipo == tipo }
+            if (restano.size != eventi.size) scrivi(restano)
+        }
+    }
+
+    /**
      * Rimuove per id gli eventi appena accettati dal server. Per id e non per
      * posizione: tra lettura e rimozione una sostituzione per giorno può aver
      * cambiato la coda, e "togli i primi N" toglierebbe eventi mai consegnati.

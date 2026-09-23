@@ -20,21 +20,36 @@ import java.time.LocalDate
  */
 class PattoLocale(context: Context) {
 
-    private val file = File(context.filesDir, "patto_locale.json")
+    private val app = context.applicationContext
+    private val file = File(app.filesDir, "patto_locale.json")
 
+    /**
+     * Salva la copia appena letta dal server e, dal patto v3, chi è questo
+     * telefono (Impostazioni.identita). Una copia letta col collegamento di
+     * prima (una lettura in viaggio mentre il telefono veniva ricollegato) non
+     * entra: sarebbe il patto di un altro dispositivo, e la sentinella ne
+     * valuterebbe le regole. Controllo e scrittura stanno sotto lo stesso
+     * mutex di [cambiaCollegamento], così non si possono incrociare.
+     */
     suspend fun salva(patto: Patto) = withContext(Dispatchers.IO) {
+        val impostazioni = Impostazioni(app)
         // Stampa il giorno del patto a cui i bonus_oggi_per_regola si riferiscono:
         // serve al valutatore per non applicare i bonus di ieri al limite di oggi
         // dopo una notte offline (i bonus sono del giorno, contratto-api.md).
         val giorno = LocalDate.now(zonaPatto(patto.fuso)).toString()
         val daScrivere = patto.copy(bonusGiornoLocale = giorno)
         mutex.withLock {
+            val lettoCon = patto.lettoCon
+            if (lettoCon != null && lettoCon != impostazioni.leggiConfigurazione().impronta) {
+                return@withLock
+            }
             val temp = File(file.parentFile, file.name + ".tmp")
             temp.writeText(json.encodeToString(Patto.serializer(), daScrivere))
             if (!temp.renameTo(file)) {
                 file.delete()
                 temp.renameTo(file)
             }
+            impostazioni.aggiornaIdentita(patto.dispositivo, patto.figlio)
         }
     }
 
@@ -49,6 +64,20 @@ class PattoLocale(context: Context) {
     suspend fun aggiornatoIl(): Long? = withContext(Dispatchers.IO) {
         mutex.withLock { file.takeIf { it.exists() }?.lastModified()?.takeIf { it > 0 } }
     }
+
+    /**
+     * Il cambio di collegamento ([cambia] scrive indirizzo, token e identità)
+     * sotto lo stesso mutex di [salva]. Con [cancellaCopia] la copia del patto
+     * vecchio se ne va: le sue regole sono di un altro dispositivo, e la
+     * sentinella non deve valutarle nemmeno per un giro.
+     */
+    suspend fun cambiaCollegamento(cancellaCopia: Boolean, cambia: suspend () -> Unit) =
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                cambia()
+                if (cancellaCopia) file.delete()
+            }
+        }
 
     private companion object {
         val mutex = Mutex()

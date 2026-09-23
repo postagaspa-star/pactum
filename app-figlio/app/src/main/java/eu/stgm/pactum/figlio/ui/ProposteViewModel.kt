@@ -3,6 +3,7 @@ package eu.stgm.pactum.figlio.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import eu.stgm.pactum.figlio.dati.ContestoDispositivi
 import eu.stgm.pactum.figlio.dati.EsitiRisposta
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.PattoLocale
@@ -26,7 +27,8 @@ import kotlinx.coroutines.launch
 class ProposteViewModel(application: Application) : AndroidViewModel(application) {
 
     sealed interface Evento {
-        data object Accettata : Evento
+        /** [regolaId]: la regola accettata, per dire "la regola sul computer è già aggiornata". */
+        data class Accettata(val regolaId: Long) : Evento
         data object Rifiutata : Evento
         data object NonPiuPendente : Evento
         data object Errore : Evento
@@ -34,12 +36,16 @@ class ProposteViewModel(application: Application) : AndroidViewModel(application
 
     data class StatoProposte(
         val caricamento: Boolean = true,
+        /** (v3) Tutte le proposte del figlio, anche sulle regole del computer. */
         val proposte: List<Proposta> = emptyList(),
         /**
-         * Le regole attive del patto: il confronto dice di quanto cambia, la
-         * regola dice COSA. Senza, la card non saprebbe dire "TikTok".
+         * Le regole attive del figlio, su TUTTI i suoi dispositivi (v3): il
+         * confronto dice di quanto cambia, la regola dice COSA e dove. Senza,
+         * la card non saprebbe dire "TikTok" né "sul computer".
          */
         val regole: List<Regola> = emptyList(),
+        /** (v3) Questo telefono tra i dispositivi del figlio: per dire "sul computer". */
+        val contesto: ContestoDispositivi = ContestoDispositivi(),
         val configurazioneMancante: Boolean = false,
         val errore: Boolean = false,
         /** Quando è arrivata la lista che si sta mostrando: l'età dei dati. */
@@ -73,13 +79,18 @@ class ProposteViewModel(application: Application) : AndroidViewModel(application
             // stessa cosa. Senza rete, l'ultima copia locale.
             val locale = PattoLocale(getApplication())
             val patto = postino.leggiPatto()?.also { locale.salva(it) } ?: locale.leggi()
+            // (v3) Una proposta può essere su una regola del computer: il patto di
+            // questo telefono non la contiene, GET /api/regole (tutto il figlio) sì.
+            val delFiglio = postino.leggiRegole()
+            val regole = (delFiglio.orEmpty() + patto?.regole.orEmpty()).distinctBy { it.id }
             _stato.value = _stato.value.copy(
                 caricamento = false,
                 configurazioneMancante = false,
                 errore = false,
                 aggiornateIl = System.currentTimeMillis(),
                 proposte = proposte,
-                regole = patto?.regole ?: _stato.value.regole,
+                regole = regole.ifEmpty { _stato.value.regole },
+                contesto = patto?.contestoDispositivi() ?: _stato.value.contesto,
             )
         }
     }
@@ -94,7 +105,11 @@ class ProposteViewModel(application: Application) : AndroidViewModel(application
                 RispostaPropostaIn(esito = esito, motivazione = motivazione?.ifBlank { null }),
             )
             val evento = if (risposta.ok) {
-                if (esito == EsitiRisposta.ACCETTA) Evento.Accettata else Evento.Rifiutata
+                if (esito == EsitiRisposta.ACCETTA) {
+                    Evento.Accettata(_stato.value.proposte.firstOrNull { it.id == propostaId }?.regolaId ?: 0)
+                } else {
+                    Evento.Rifiutata
+                }
             } else if (leggiDettaglioErrore(risposta.corpo)?.errore == "proposta_non_pendente") {
                 Evento.NonPiuPendente
             } else {

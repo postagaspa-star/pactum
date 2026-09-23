@@ -17,7 +17,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -28,7 +27,6 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,7 +51,8 @@ import java.time.format.DateTimeFormatter
 
 /**
  * Le Impostazioni del figlio: il collegamento al patto (indirizzo del server e
- * codice), la chiusura della sera, e "Cosa vede tuo padre" per sempre a un tocco.
+ * codice di 6 cifre, v3; il vecchio codice lungo dietro "Hai un codice
+ * lungo?"), la chiusura della sera, e "Cosa vede tuo padre" per sempre a un tocco.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,29 +61,16 @@ fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
     val ambito = rememberCoroutineScope()
     val impostazioni = remember { Impostazioni(context.applicationContext) }
 
-    var serverUrl by rememberSaveable { mutableStateOf("") }
-    var token by rememberSaveable { mutableStateOf("") }
-    var caricato by rememberSaveable { mutableStateOf(false) }
-    var urlNonValido by rememberSaveable { mutableStateOf(false) }
     var provaInCorso by remember { mutableStateOf(false) }
+    val configurazione by impostazioni.configurazione.collectAsState(initial = null)
     val ultimoBattito by impostazioni.ultimoBattitoConsegnato.collectAsState(initial = null)
     val serale by impostazioni.chiusuraSerale.collectAsState(initial = null)
     var sceltaOra by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val messaggioSalvato = stringResource(R.string.impostazioni_salvate)
-    val messaggioUrlNonValido = stringResource(R.string.impostazioni_url_non_valido)
     val messaggioProvaOk = stringResource(R.string.impostazioni_prova_ok)
     val messaggioProvaFallita = stringResource(R.string.impostazioni_prova_fallita)
+    val messaggioProvaScollegato = stringResource(R.string.impostazioni_prova_scollegato)
     val messaggioConfigIncompleta = stringResource(R.string.impostazioni_config_incompleta)
-
-    LaunchedEffect(Unit) {
-        if (!caricato) {
-            val configurazione = impostazioni.leggiConfigurazione()
-            serverUrl = configurazione.serverUrl
-            token = configurazione.token
-            caricato = true
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -110,54 +96,19 @@ fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
             TitoloSezione(stringResource(R.string.impostazioni_sezione_collegamento))
+            // (v3) Chi è questo telefono per il patto: "Collegato come: Telefono di Andrea".
+            RigaCollegatoCome()
             Text(
                 text = stringResource(R.string.impostazioni_descrizione),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            OutlinedTextField(
-                value = serverUrl,
-                onValueChange = {
-                    serverUrl = it
-                    urlNonValido = false
-                },
-                label = { Text(stringResource(R.string.impostazioni_server_url)) },
-                placeholder = { Text(stringResource(R.string.impostazioni_server_url_esempio)) },
-                isError = urlNonValido,
-                supportingText = if (urlNonValido) {
-                    { Text(stringResource(R.string.impostazioni_url_non_valido)) }
-                } else {
-                    null
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = token,
-                onValueChange = { token = it },
-                label = { Text(stringResource(R.string.impostazioni_token)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Button(
-                onClick = {
-                    // Un URL scritto male e accettato in silenzio = un'app che
-                    // non consegna mai niente senza dirlo: si rifiuta subito.
-                    val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
-                    if (urlNormalizzato == null) {
-                        urlNonValido = true
-                        ambito.launch { snackbarHostState.showSnackbar(messaggioUrlNonValido) }
-                    } else {
-                        urlNonValido = false
-                        serverUrl = urlNormalizzato
-                        ambito.launch {
-                            impostazioni.salvaConfigurazione(urlNormalizzato, token)
-                            snackbarHostState.showSnackbar(messaggioSalvato)
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.azione_salva))
+            // configurazione null = non ancora letta dal disco: il modulo aspetta,
+            // così i campi partono già con l'indirizzo salvato.
+            configurazione?.let { attuale ->
+                ModuloCollegamento(
+                    onCollegato = {},
+                    giaCollegato = attuale.completa,
+                )
             }
 
             // Verifica onesta del canale: quando è arrivato l'ultimo battito
@@ -176,22 +127,25 @@ fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
                     ambito.launch {
                         provaInCorso = true
                         try {
-                            val configurazione = impostazioni.leggiConfigurazione()
-                            val esito = if (!configurazione.completa) {
+                            val attuale = impostazioni.leggiConfigurazione()
+                            val esito = if (!attuale.completa) {
                                 messaggioConfigIncompleta
                             } else {
-                                val consegnato = PostinoClient(configurazione).inviaBattito(
+                                val codice = PostinoClient(attuale).provaBattito(
                                     Battito(
                                         tsDevice = System.currentTimeMillis(),
                                         versioneApp = BuildConfig.VERSION_NAME,
                                         elapsedRealtime = SystemClock.elapsedRealtime(),
                                     ),
                                 )
-                                if (consegnato) {
-                                    impostazioni.registraBattitoConsegnato()
-                                    messaggioProvaOk
-                                } else {
-                                    messaggioProvaFallita
+                                when (codice) {
+                                    in 200..299 -> {
+                                        impostazioni.registraBattitoConsegnato()
+                                        messaggioProvaOk
+                                    }
+                                    // Token revocato, o sostituito da un codice nuovo.
+                                    401 -> messaggioProvaScollegato
+                                    else -> messaggioProvaFallita
                                 }
                             }
                             snackbarHostState.showSnackbar(esito)

@@ -40,13 +40,40 @@ data class Patto(
     // senza il campo, e allora la riga non si mostra.
     val riepilogo: Riepilogo? = null,
     val fuso: String? = null,
+    // (v3) Di chi è questo telefono e come si chiama: "Collegato come:
+    // Telefono di Andrea". null = server vecchio, che conosce un telefono solo.
+    val figlio: Figlio? = null,
+    val dispositivo: Dispositivo? = null,
+    // (v3) La striscia di QUESTO telefono, identica a quella che il genitore
+    // vede sulla sua scheda. `striscia` qui sopra resta quella del figlio.
+    @SerialName("striscia_dispositivo") val strisciaDispositivo: List<GiornoStriscia> = emptyList(),
+    // (v3) Tutti i dispositivi del figlio, ciascuno con la sua striscia: la
+    // riga "Computer: 5 su 7" sotto la striscia del figlio.
+    val dispositivi: List<Dispositivo> = emptyList(),
     // App-interno (NON dal server): il giorno del patto in cui `bonusOggiPerRegola`
     // è valido, stampato da PattoLocale al salvataggio. Se al momento della
     // valutazione non è più oggi (notte offline), i bonus di "oggi" non valgono.
     @SerialName("bonus_giorno_locale") val bonusGiornoLocale: String? = null,
+    // App-interno (NON dal server): l'impronta del collegamento con cui questa
+    // copia è stata letta (ConfigurazionePostino.impronta). Una lettura partita
+    // col collegamento vecchio e arrivata dopo un nuovo abbinamento non deve
+    // entrare nella copia locale: sarebbe il patto di un altro dispositivo.
+    @SerialName("letto_con") val lettoCon: String? = null,
 ) {
     /** La striscia nel linguaggio del design system (core-design). */
     fun giorniPatto(): List<GiornoPatto> = striscia.inGiorniPatto()
+
+    /**
+     * (v3) Le regole che valgono su QUESTO telefono: le sue e quelle di vita
+     * reale. Il server manda già solo queste; il filtro è una cintura in più,
+     * perché una fascia oraria del computer valutata sul telefono diventerebbe
+     * uno sforamento falso nel registro.
+     */
+    fun regoleDiQuestoDispositivo(): List<Regola> = regoleDelDispositivo(regole, dispositivo?.id)
+
+    /** (v3) Dove sta questo telefono tra i dispositivi del figlio. */
+    fun contestoDispositivi(): ContestoDispositivi =
+        ContestoDispositivi(questo = dispositivo?.id?.takeIf { it > 0 }, dispositivi = dispositivi)
 
     /**
      * I bonus di oggi per regola, ma solo se la copia è stata sincronizzata OGGI
@@ -113,7 +140,61 @@ data class Regola(
     // (v2.4, solo in GET /api/patto) Gli 8 giorni di QUESTA regola, identici
     // a quelli che il genitore vede sulla sua scheda. Vuoto = server vecchio.
     val semaforo: List<GiornoStriscia> = emptyList(),
+    // (v3) Di quale dispositivo è la regola: null = vita reale, che è del
+    // figlio, oppure server vecchio. `dispositivo` porta anche nome e tipo, così
+    // si scrive "sul computer" senza un'altra chiamata.
+    @SerialName("dispositivo_id") val dispositivoId: Long? = null,
+    val dispositivo: Dispositivo? = null,
+    // Il nome leggibile del bersaglio, se il server lo manda (es. "Minecraft"
+    // per `exe:minecraft.exe`). Assente quasi sempre: si ripiega da soli.
+    val nome: String? = null,
+) {
+    /** Il dispositivo della regola, dal campo o dall'oggetto: null = del figlio. */
+    val idDispositivo: Long?
+        get() = dispositivoId ?: dispositivo?.id?.takeIf { it > 0 }
+}
+
+/**
+ * (v3) Un dispositivo del figlio: `telefono` o `computer`. In `dispositivi` di
+ * GET /api/patto porta anche la sua `striscia`; altrove solo id, nome e tipo.
+ * Tutto con un valore di ripiego: un campo mancante non deve far cadere la
+ * lettura dell'intero patto.
+ */
+@Serializable
+data class Dispositivo(
+    val id: Long = 0,
+    val nome: String = "",
+    val tipo: String = "",
+    val striscia: List<GiornoStriscia> = emptyList(),
+    val revocato: Boolean = false,
 )
+
+/** (v3) Il figlio a cui appartiene questo telefono. */
+@Serializable
+data class Figlio(val id: Long = 0, val nome: String = "")
+
+object TipiDispositivo {
+    const val TELEFONO = "telefono"
+    const val COMPUTER = "computer"
+}
+
+/** (v3) Questo telefono (null = non si sa) e tutti i dispositivi del figlio. */
+data class ContestoDispositivi(
+    val questo: Long? = null,
+    val dispositivi: List<Dispositivo> = emptyList(),
+)
+
+/**
+ * Le regole che valgono sul dispositivo [questo]: le sue e quelle del figlio
+ * (vita reale, `dispositivo_id` null). [questo] null = server vecchio, un
+ * telefono solo: valgono tutte.
+ */
+fun regoleDelDispositivo(regole: List<Regola>, questo: Long?): List<Regola> =
+    if (questo == null || questo <= 0) {
+        regole
+    } else {
+        regole.filter { it.idDispositivo == null || it.idDispositivo == questo }
+    }
 
 object TipiRegola {
     const val LIMITE_TEMPO = "limite_tempo"
@@ -235,6 +316,9 @@ data class Notifica(
     val messaggio: String,
     val payload: JsonObject = JsonObject(emptyMap()),
     @SerialName("ts_server") val tsServer: String = "",
+    // (v3) Il server manda a questo telefono solo le sue e quelle del figlio
+    // (null): il filtro è suo, qui il campo si legge e basta.
+    @SerialName("dispositivo_id") val dispositivoId: Long? = null,
 )
 
 /**
@@ -259,6 +343,25 @@ data class InfoVersione(
 // Buste degli elenchi.
 @Serializable
 data class PaccoProposte(val proposte: List<Proposta> = emptyList())
+
+/** (v3) GET /api/regole: le regole attive di TUTTO il figlio, di ogni dispositivo. */
+@Serializable
+data class PaccoRegole(val regole: List<Regola> = emptyList())
+
+/** (v3) POST /api/abbina: il codice di 6 cifre che il genitore ha generato. */
+@Serializable
+data class AbbinaIn(
+    val codice: String,
+    @SerialName("versione_app") val versioneApp: String,
+)
+
+/** (v3) La risposta all'abbinamento: il token si riceve UNA volta sola. */
+@Serializable
+data class AbbinaOut(
+    val token: String = "",
+    val dispositivo: Dispositivo? = null,
+    val figlio: Figlio? = null,
+)
 
 @Serializable
 data class PaccoDichiarazioni(val dichiarazioni: List<Dichiarazione> = emptyList())
@@ -310,6 +413,8 @@ data class DettaglioErrore(
     @SerialName("sblocco_ts") val sbloccoTs: String? = null,
     @SerialName("residuo_giorno") val residuoGiorno: Int? = null,
     @SerialName("residuo_settimana") val residuoSettimana: Int? = null,
+    // (v3) 429 troppi_tentativi dell'abbinamento: fra quanto si può riprovare.
+    @SerialName("riprova_tra_secondi") val riprovaTraSecondi: Long? = null,
 )
 
 private val jsonErrori = Json { ignoreUnknownKeys = true }

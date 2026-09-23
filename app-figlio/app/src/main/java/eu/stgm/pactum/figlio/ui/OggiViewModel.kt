@@ -83,9 +83,18 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
         /** Il server non ha risposto: si mostra l'ultima copia, con la sua età. */
         val datiFermi: Boolean = false,
         val datiFermiAlle: Long? = null,
+        /**
+         * (v3) Il server ha risposto 401: questo telefono non è più collegato
+         * (revocato, o collegato di nuovo altrove). Non è un'età dei dati: va
+         * detto cosa fare.
+         */
+        val scollegato: Boolean = false,
+        /** La striscia del FIGLIO, su tutti i suoi dispositivi: identica a quella del genitore. */
         val striscia: List<GiornoPatto> = emptyList(),
         /** La riga sotto la striscia, uguale a quella del genitore. null = server vecchio. */
         val riepilogo: Riepilogo? = null,
+        /** (v3) Una riga per dispositivo, se il figlio ne ha più d'uno ("Computer: 5 su 7"). */
+        val righeDispositivi: List<RigaDispositivo> = emptyList(),
         val serie: Int = 0,
         val record: Int = 0,
         val regole: List<RigaRegola> = emptyList(),
@@ -97,7 +106,10 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
         /** È aperta la snackbar "Ti sei dato 15 minuti · Aggiungi perché". */
         val finestraBonus: Boolean = false,
         val evento: Evento? = null,
-    )
+    ) {
+        /** (v3) Il figlio ha altri dispositivi: i bonus e i minuti qui sotto sono di questo telefono. */
+        val altriDispositivi: Boolean get() = righeDispositivi.any { !it.questo }
+    }
 
     private val _stato = MutableStateFlow(StatoOggi())
     val stato: StateFlow<StatoOggi> = _stato.asStateFlow()
@@ -157,22 +169,28 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             val impostazioni = Impostazioni(context)
             val configurazione = impostazioni.leggiConfigurazione()
             val locale = PattoLocale(context)
-            val dalServer = if (configurazione.completa) {
-                PostinoClient(configurazione).leggiPatto()
+            val (dalServer, codice) = if (configurazione.completa) {
+                PostinoClient(configurazione).leggiPattoConCodice()
             } else {
-                null
+                null to 0
             }
             if (dalServer != null) locale.salva(dalServer)
             val patto = dalServer ?: locale.leggi()
             val fermi = configurazione.completa && dalServer == null
             val giorni = patto?.giorniPatto().orEmpty()
             val (serie, record) = impostazioni.aggiornaSerie(giorni)
+            // (v3) Le righe degli altri dispositivi, dalla striscia di ciascuno.
+            val righeDispositivi = patto?.let {
+                RigheDispositivi.calcola(it.dispositivi, it.contestoDispositivi().questo, it.strisciaDispositivo)
+            }.orEmpty()
 
             val adesso = System.currentTimeMillis()
             val uso = UsageStatsReader(context).usoDelGiorno()
             val indice = SentinellaPatto.indiceUso(context, uso)
             val bonusOggi = patto?.bonusValidiOggi(adesso).orEmpty()
-            val regole = patto?.regole.orEmpty()
+            // (v3) Solo le regole di questo telefono e la vita reale: quelle del
+            // computer si misurano sul computer.
+            val regole = patto?.regoleDiQuestoDispositivo().orEmpty()
                 .filter { it.attiva }
                 .map { regola -> rigaRegola(regola, bonusOggi, indice::minuti, adesso) }
 
@@ -204,8 +222,10 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                     caricamento = false,
                     datiFermi = fermi,
                     datiFermiAlle = datiFermiAlle,
+                    scollegato = fermi && codice == 401,
                     striscia = giorni,
                     riepilogo = patto?.riepilogo,
+                    righeDispositivi = righeDispositivi,
                     serie = serie,
                     record = record,
                     regole = regole,
@@ -234,7 +254,7 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 RigaRegola.Tempo(
                     regola = regola,
-                    nome = CatalogoApp.etichettaValore(getApplication(), chiave),
+                    nome = etichettaChiave(getApplication(), chiave, regola.nome),
                     minuti = minutiSu(chiave),
                     limiteEfficace = limite,
                     bonusOggi = bonusOggi[regola.id.toString()] ?: 0,

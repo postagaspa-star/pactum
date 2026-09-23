@@ -7,6 +7,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
+import eu.stgm.pactum.figlio.dati.ContestoDispositivi
+import eu.stgm.pactum.figlio.dati.Regola
+import eu.stgm.pactum.figlio.dati.TipiDispositivo
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -60,19 +63,51 @@ fun descrizioneRegola(tipo: String, parametri: JsonObject): String {
     return descrizioneRegola(LocalContext.current, tipo, parametri)
 }
 
-/** La stessa descrizione fuori da Compose (notifiche, worker). */
-fun descrizioneRegola(context: Context, tipo: String, parametri: JsonObject): String = when (tipo) {
-    // app_o_categoria è un pacchetto o una chiave categoria:* (contratto
-    // v2.1): si mostra l'etichetta leggibile, non il valore grezzo.
+/**
+ * Il bersaglio di un limite di tempo in chiaro: un'app o una categoria del
+ * telefono, oppure (v3) un programma o un sito del computer ("Minecraft",
+ * "youtube.com (sito)"). [nomeServer] è il nome leggibile che il server può
+ * mandare sulla regola: per un'app di un altro telefono, che qui non è
+ * installata, è l'unico nome che c'è.
+ */
+fun etichettaChiave(context: Context, chiave: String, nomeServer: String? = null): String {
+    ChiaviComputer.etichetta(chiave, nomeServer, context.getString(R.string.chiave_sito))?.let { return it }
+    val etichetta = CatalogoApp.etichettaValore(context, chiave)
+    if (etichetta != chiave) return etichetta
+    return nomeServer?.trim()?.takeIf { it.isNotEmpty() } ?: etichetta
+}
+
+/**
+ * La stessa descrizione fuori da Compose (notifiche, worker).
+ * [tipoDispositivo] = di che dispositivo è la regola: una fascia oraria del
+ * computer è "Niente computer dalle…". [breve] = la forma che segue il nome del
+ * dispositivo ("Sul computer: youtube.com (sito) al massimo 1 h al giorno"),
+ * senza i due punti dopo il bersaglio e con l'iniziale minuscola.
+ */
+fun descrizioneRegola(
+    context: Context,
+    tipo: String,
+    parametri: JsonObject,
+    tipoDispositivo: String? = null,
+    nomeServer: String? = null,
+    breve: Boolean = false,
+): String = when (tipo) {
+    // app_o_categoria è un pacchetto, una chiave categoria:* (contratto v2.1)
+    // o, sul computer, exe:/sito: (v3): si mostra l'etichetta leggibile.
     TipiRegola.LIMITE_TEMPO -> context.getString(
-        R.string.regola_limite_tempo,
+        if (breve) R.string.regola_limite_tempo_breve else R.string.regola_limite_tempo,
         parametroTesto(parametri, "app_o_categoria")
-            ?.let { CatalogoApp.etichettaValore(context, it) } ?: "?",
+            ?.let { etichettaChiave(context, it, nomeServer) } ?: "?",
         testoDurata(context, parametroTesto(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
     )
 
     TipiRegola.FASCIA_ORARIA -> context.getString(
-        R.string.regola_fascia_oraria,
+        when {
+            tipoDispositivo == TipiDispositivo.COMPUTER && breve -> R.string.regola_fascia_oraria_computer_breve
+            tipoDispositivo == TipiDispositivo.COMPUTER -> R.string.regola_fascia_oraria_computer
+            breve -> R.string.regola_fascia_oraria_breve
+            else -> R.string.regola_fascia_oraria
+        },
         parametroTesto(parametri, "dalle") ?: "?",
         parametroTesto(parametri, "alle") ?: "?",
         giorniTesto(parametri).ifBlank { "?" },
@@ -88,13 +123,85 @@ fun descrizioneRegola(context: Context, tipo: String, parametri: JsonObject): St
     else -> tipo
 }
 
+/**
+ * (v3) La regola con i suoi [parametri] (di default quelli di adesso) nella
+ * forma che va dopo il nome del dispositivo, se è di un altro dispositivo
+ * ("youtube.com (sito) al massimo 1 h al giorno"), altrimenti quella di sempre.
+ * Il nome del server vale solo se il bersaglio è ancora quello della regola.
+ */
+fun descrizioneRegolaSenzaDispositivo(
+    context: Context,
+    regola: Regola,
+    contesto: ContestoDispositivi,
+    parametri: JsonObject = regola.parametri,
+): String {
+    val stessoBersaglio = parametroTesto(parametri, "app_o_categoria") ==
+        parametroTesto(regola.parametri, "app_o_categoria")
+    return descrizioneRegola(
+        context,
+        regola.tipo,
+        parametri,
+        tipoDispositivo = TestoDispositivi.tipoDi(regola, contesto),
+        nomeServer = regola.nome.takeIf { stessoBersaglio },
+        breve = TestoDispositivi.diUnAltro(regola, contesto),
+    )
+}
+
+/**
+ * (v3) La regola detta per intero: se è di un altro dispositivo, lo dice
+ * ("Sul computer: youtube.com (sito) al massimo 1 h al giorno"); se è di
+ * questo telefono o del figlio, com'è sempre stata.
+ */
+fun descrizioneRegolaConDispositivo(context: Context, regola: Regola, contesto: ContestoDispositivi): String {
+    val su = TestoDispositivi.etichetta(regola, contesto, paroleDispositivo(context))
+    val frase = descrizioneRegolaSenzaDispositivo(context, regola, contesto)
+    return if (su == null) {
+        frase
+    } else {
+        context.getString(R.string.regola_con_dispositivo, TestoDispositivi.maiuscola(su), frase)
+    }
+}
+
+/** Le parole per dire su quale dispositivo sta una regola (TestoDispositivi). */
+fun paroleDispositivo(context: Context) = ParoleDispositivo(
+    sulComputer = context.getString(R.string.dispositivo_sul_computer),
+    sulComputerNome = context.getString(R.string.dispositivo_sul_computer_nome),
+    sulTelefonoNome = context.getString(R.string.dispositivo_sul_telefono_nome),
+    sullAltroTelefono = context.getString(R.string.dispositivo_sull_altro_telefono),
+    suNome = context.getString(R.string.dispositivo_su_nome),
+    suAltro = context.getString(R.string.dispositivo_su_altro),
+)
+
 /** Le frasi della proposta (TestoProposta), da strings.xml. */
 fun paroleProposta(context: Context) = ParoleProposta(
     senzaConfronto = context.getString(R.string.proposta_senza_confronto),
     ora = context.getString(R.string.proposta_regola_ora),
     seAccetti = context.getString(R.string.proposta_regola_se_accetti),
     togliere = context.getString(R.string.proposta_regola_togliere),
+    oraSu = context.getString(R.string.proposta_regola_ora_su),
+    togliereSu = context.getString(R.string.proposta_regola_togliere_su),
 )
+
+/**
+ * Il racconto di una proposta con le regole del patto, per la scheda Proposte
+ * e per la notifica: la regola detta in chiaro e, se è di un altro
+ * dispositivo, su quale ("Ora sul computer: …").
+ */
+fun raccontoProposta(
+    context: Context,
+    confronto: String?,
+    oggetto: OggettoProposta?,
+    contesto: ContestoDispositivi,
+): RaccontoProposta {
+    val parole = paroleDispositivo(context)
+    return TestoProposta.racconto(
+        confronto = confronto,
+        oggetto = oggetto,
+        parole = paroleProposta(context),
+        descrivi = { regola, parametri -> descrizioneRegolaSenzaDispositivo(context, regola, contesto, parametri) },
+        dispositivoDi = { regola -> TestoDispositivi.etichetta(regola, contesto, parole) },
+    )
+}
 
 /** "oggi", "ieri", "18/09" dentro una frase (minuscolo). */
 @Composable

@@ -19,6 +19,7 @@ import eu.stgm.pactum.figlio.misura.UsageStatsReader
 import eu.stgm.pactum.figlio.misura.UsoApp
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
+import eu.stgm.pactum.figlio.ui.etichettaChiave
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
@@ -84,7 +85,10 @@ class SentinellaPatto(private val context: Context) {
     suspend fun misura(now: Long = System.currentTimeMillis()): Misura? {
         if (!PermessiHelper.haAccessoUso(context)) return null
         val patto = PattoLocale(context).leggi() ?: return null
-        if (patto.regole.isEmpty()) return null
+        // (v3) Solo le regole di QUESTO telefono: una fascia oraria del computer
+        // misurata sull'uso del telefono sarebbe uno sforamento falso nel registro.
+        val regole = patto.regoleDiQuestoDispositivo()
+        if (regole.isEmpty()) return null
 
         val zona = ZoneId.systemDefault()
         val giorno = Instant.ofEpochMilli(now).atZone(zona).toLocalDate().toString()
@@ -109,7 +113,7 @@ class SentinellaPatto(private val context: Context) {
         )
 
         val sforamenti = Valutatore.valuta(
-            regole = patto.regole,
+            regole = regole,
             bonusOggiPerRegola = bonusOggi,
             usoMinutiEtichetta = indice::minuti,
             usoMinutiIntervallo = { inizio, fine ->
@@ -139,7 +143,7 @@ class SentinellaPatto(private val context: Context) {
         } else {
             titolo = context.getString(R.string.notifica_sforamento_limite_titolo)
             val nomeApp = parametri?.let { testoParametro(it, "app_o_categoria") }
-                ?.let { CatalogoApp.etichettaValore(context, it) } ?: "?"
+                ?.let { etichettaChiave(context, it, regola?.nome) } ?: "?"
             testo = context.getString(
                 R.string.notifica_sforamento_limite_testo,
                 nomeApp,

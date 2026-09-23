@@ -34,8 +34,7 @@ import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.siti.RegistroSiti
 import eu.stgm.pactum.figlio.siti.ReteDns
 import eu.stgm.pactum.figlio.ui.TestoProposta
-import eu.stgm.pactum.figlio.ui.descrizioneRegola
-import eu.stgm.pactum.figlio.ui.paroleProposta
+import eu.stgm.pactum.figlio.ui.raccontoProposta
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -268,11 +267,15 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
             proposta?.parametriProposti,
             patto.regole,
         ) ?: return notifica.messaggio
-        return TestoProposta.racconto(
+        // (v3) Al telefono arrivano le proposte sulle sue regole e sulla vita
+        // reale (il server filtra per dispositivo); se una fosse di un altro
+        // dispositivo, la frase lo direbbe come nella scheda Proposte.
+        return raccontoProposta(
+            context = context,
             confronto = proposta?.confronto ?: (payload["confronto"] as? JsonPrimitive)?.contentOrNull,
             oggetto = oggetto,
-            parole = paroleProposta(context),
-        ) { tipo, parametri -> descrizioneRegola(context, tipo, parametri) }.testo
+            contesto = patto.contestoDispositivi(),
+        ).testo
     }
 
     /**

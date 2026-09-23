@@ -141,7 +141,10 @@ fun OggiScreen(
             contentPadding = PaddingValues(Spazi.l + Spazi.xs),
             verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
-            if (stato.datiFermi) {
+            if (stato.scollegato) {
+                // (v3) Non è un'età dei dati: il telefono va ricollegato, e si dice come.
+                item { RigaNeutra(stringResource(R.string.oggi_scollegato)) }
+            } else if (stato.datiFermi) {
                 item { BannerDatiVecchi(stato.datiFermiAlle) }
             }
 
@@ -168,6 +171,7 @@ fun OggiScreen(
                         riepilogo = stato.riepilogo,
                         serie = stato.serie,
                         record = stato.record,
+                        righeDispositivi = stato.righeDispositivi,
                         modifier = Modifier.padding(bottom = Spazi.l),
                     )
                 }
@@ -195,8 +199,9 @@ fun OggiScreen(
                 if (bonus != null && stato.regole.any { it is RigaRegola.Tempo }) {
                     item {
                         Text(
+                            // (v3) I tetti valgono per dispositivo: con un computer lo si dice.
                             text = stringResource(
-                                R.string.oggi_bonus_tetti,
+                                if (stato.altriDispositivi) R.string.oggi_bonus_tetti_telefono else R.string.oggi_bonus_tetti,
                                 bonus.giorno.residui,
                                 bonus.giorno.tetto,
                                 bonus.settimana.residui,
@@ -239,7 +244,10 @@ fun OggiScreen(
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Sopratitolo(
-                        testo = stringResource(R.string.oggi_sezione_tempo),
+                        // (v3) Con altri dispositivi: questi minuti sono solo del telefono.
+                        testo = stringResource(
+                            if (stato.altriDispositivi) R.string.oggi_sezione_tempo_telefono else R.string.oggi_sezione_tempo,
+                        ),
                         modifier = Modifier.weight(1f),
                     )
                     Text(
@@ -297,6 +305,8 @@ fun OggiScreen(
 /**
  * La scheda eroe: la serie, il record una riga sotto, la striscia degli 8
  * giorni e sotto la stessa riga di riepilogo che vede il genitore (D3).
+ * (v3) Striscia, serie e riepilogo sono del figlio, su tutti i suoi
+ * dispositivi; se ne ha più d'uno, sotto c'è una riga per ciascuno.
  */
 @Composable
 private fun SchedaPatto(
@@ -304,6 +314,7 @@ private fun SchedaPatto(
     riepilogo: Riepilogo?,
     serie: Int,
     record: Int,
+    righeDispositivi: List<RigaDispositivo>,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -363,7 +374,35 @@ private fun SchedaPatto(
                     modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
+            // (v3) Una riga per dispositivo, dalla sua striscia: "Computer: 5 su 7".
+            if (righeDispositivi.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(Spazi.s))
+                righeDispositivi.forEach { riga ->
+                    Text(
+                        text = testoRigaDispositivo(riga),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = Spazi.xs),
+                    )
+                }
+            }
         }
+    }
+}
+
+/** "Computer: 5 su 7", "Questo telefono: 6 su 7", o "ancora nessun dato". */
+@Composable
+private fun testoRigaDispositivo(riga: RigaDispositivo): String {
+    val base = when {
+        riga.questo -> stringResource(R.string.oggi_questo_telefono)
+        riga.nome.isNotBlank() -> riga.nome
+        else -> stringResource(R.string.oggi_dispositivo_senza_nome)
+    }
+    val nome = if (riga.revocato) stringResource(R.string.oggi_dispositivo_scollegato, base) else base
+    return if (riga.conDati == 0) {
+        stringResource(R.string.oggi_dispositivo_riga_senza_dati, nome)
+    } else {
+        stringResource(R.string.oggi_dispositivo_riga, nome, riga.mantenuti, riga.conDati)
     }
 }
 

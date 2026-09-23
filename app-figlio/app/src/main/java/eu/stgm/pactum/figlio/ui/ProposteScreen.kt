@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.dati.ContestoDispositivi
 import eu.stgm.pactum.figlio.dati.DirezioniProposta
 import eu.stgm.pactum.figlio.dati.EsitiRisposta
 import eu.stgm.pactum.figlio.dati.Proposta
@@ -72,13 +73,21 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
         onPauseOrDispose { }
     }
 
+    val context = LocalContext.current
     val messaggioAccettata = stringResource(R.string.proposta_accettata_ok)
     val messaggioRifiutata = stringResource(R.string.proposta_rifiutata_ok)
     val messaggioNonPendente = stringResource(R.string.proposta_non_pendente)
     val messaggioErrore = stringResource(R.string.proposta_errore)
     LaunchedEffect(stato.evento) {
-        when (stato.evento) {
-            is ProposteViewModel.Evento.Accettata -> snackbarHostState.showSnackbar(messaggioAccettata)
+        when (val evento = stato.evento) {
+            is ProposteViewModel.Evento.Accettata -> {
+                // (v3) Accettata da qui una proposta su un altro dispositivo: si dice quale.
+                val su = stato.regole.firstOrNull { it.id == evento.regolaId }
+                    ?.let { TestoDispositivi.etichetta(it, stato.contesto, paroleDispositivo(context)) }
+                snackbarHostState.showSnackbar(
+                    su?.let { context.getString(R.string.proposta_accettata_ok_su, it) } ?: messaggioAccettata,
+                )
+            }
             is ProposteViewModel.Evento.Rifiutata -> snackbarHostState.showSnackbar(messaggioRifiutata)
             is ProposteViewModel.Evento.NonPiuPendente ->
                 snackbarHostState.showSnackbar(messaggioNonPendente)
@@ -126,6 +135,7 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
                 else -> ContenutoProposte(
                     proposte = stato.proposte,
                     regole = stato.regole,
+                    contesto = stato.contesto,
                     invioInCorso = stato.invioInCorso,
                     mostraErrore = stato.errore,
                     aggiornateIl = stato.aggiornateIl,
@@ -140,6 +150,7 @@ fun ProposteScreen(vm: ProposteViewModel = viewModel()) {
 private fun ContenutoProposte(
     proposte: List<Proposta>,
     regole: List<Regola>,
+    contesto: ContestoDispositivi,
     invioInCorso: Boolean,
     mostraErrore: Boolean,
     aggiornateIl: Long?,
@@ -165,7 +176,7 @@ private fun ContenutoProposte(
             }
         } else {
             items(pendenti, key = { "pendente-${it.id}" }) { proposta ->
-                CardPropostaPendente(proposta, regole, invioInCorso, onRispondi)
+                CardPropostaPendente(proposta, regole, contesto, invioInCorso, onRispondi)
             }
         }
 
@@ -174,7 +185,7 @@ private fun ContenutoProposte(
             item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.proposte_storia_vuota)) }
         } else {
             items(storia, key = { "storia-${it.id}" }) { proposta ->
-                CardPropostaStorica(proposta, regole.firstOrNull { it.id == proposta.regolaId })
+                CardPropostaStorica(proposta, regole.firstOrNull { it.id == proposta.regolaId }, contesto)
             }
         }
     }
@@ -184,6 +195,7 @@ private fun ContenutoProposte(
 private fun CardPropostaPendente(
     proposta: Proposta,
     regole: List<Regola>,
+    contesto: ContestoDispositivi,
     invioInCorso: Boolean,
     onRispondi: (Long, String, String?) -> Unit,
 ) {
@@ -194,10 +206,12 @@ private fun CardPropostaPendente(
     val motivazionePulita = { motivazione.trim().ifBlank { null } }
 
     // Su QUALE regola: il ragazzo deve sapere cosa accetta. Regola non
-    // trovata (copia vecchia) = resta il solo confronto, com'era.
+    // trovata (copia vecchia) = resta il solo confronto, com'era. (v3) Se la
+    // regola è di un altro dispositivo, la frase dice quale: "Ora sul computer: …".
     val context = LocalContext.current
     LocalConfiguration.current
-    val racconto = TestoProposta.racconto(
+    val racconto = raccontoProposta(
+        context = context,
         confronto = proposta.confronto,
         oggetto = TestoProposta.oggetto(
             proposta.regolaId,
@@ -205,8 +219,8 @@ private fun CardPropostaPendente(
             proposta.parametriProposti,
             regole,
         ),
-        parole = paroleProposta(context),
-    ) { tipo, parametri -> descrizioneRegola(context, tipo, parametri) }
+        contesto = contesto,
+    )
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
@@ -296,7 +310,8 @@ private fun CardPropostaPendente(
 }
 
 @Composable
-private fun CardPropostaStorica(proposta: Proposta, regola: Regola?) {
+private fun CardPropostaStorica(proposta: Proposta, regola: Regola?, contesto: ContestoDispositivi) {
+    val context = LocalContext.current
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -316,13 +331,18 @@ private fun CardPropostaStorica(proposta: Proposta, regola: Regola?) {
                 )
             }
             // Su quale regola era, com'è adesso. Una regola eliminata non c'è
-            // più nel patto: resta il solo confronto.
+            // più nel patto: resta il solo confronto. (v3) Di un altro
+            // dispositivo: "Regola sul computer: …".
             regola?.let {
+                LocalConfiguration.current
+                val frase = descrizioneRegolaSenzaDispositivo(context, it, contesto)
+                val su = TestoDispositivi.etichetta(it, contesto, paroleDispositivo(context))
                 Text(
-                    text = stringResource(
-                        R.string.proposta_regola,
-                        descrizioneRegola(it.tipo, it.parametri),
-                    ),
+                    text = if (su == null) {
+                        stringResource(R.string.proposta_regola, frase)
+                    } else {
+                        stringResource(R.string.proposta_regola_su, su, frase)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }

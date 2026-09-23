@@ -20,37 +20,53 @@
     <string name="onboarding_ricontrolla">Ho fatto, ricontrolla</string>
     <string name="onboarding_nota_avvio">Appena l\'accesso ai dati di utilizzo è attivo, Pactum parte da solo.</string>
 
-    <!-- Cosa vede tuo padre (redesign C6). Ricavato dai campi del contratto:
-         GET /api/finestra, più dichiarazioni, proposte e avvisi del genitore.
-         Se la finestra cambia, questo elenco cambia con lei. -->
+    <!-- Cosa vede tuo padre (redesign C6, aggiornato alla v3 del contratto).
+         Ricavato dai campi del contratto: GET /api/famiglia (dispositivi,
+         collegati, versione), GET /api/finestra con i suoi `dispositivi`
+         (regole, striscia, uso_recente, siti_recenti, medie, bonus,
+         stato_silenzio con spento), più dichiarazioni, proposte e avvisi del
+         genitore, e la sezione "Sul computer" dei Siti visitati. Se la finestra
+         cambia, questo elenco cambia con lei. -->
     <string name="cosa_vede_titolo">Cosa vede tuo padre</string>
     <string name="cosa_vede_intro">Qui c\'è tutto quello che arriva nella sua app, detto per intero. Niente di più, niente di nascosto.</string>
     <string name="cosa_vede_si_titolo">COSA VEDE</string>
     <string-array name="cosa_vede_si">
-        <item>Le tue regole, anche quelle che hai tolto: come sono cambiate, se le avete concordate e da quando le potrai allentare.</item>
-        <item>La striscia degli ultimi 8 giorni, la stessa che vedi tu in Oggi, anche regola per regola.</item>
+        <item>Ogni tuo dispositivo per conto suo: questo telefono e, se usi Pactum anche lì, gli altri telefoni e il computer. Ognuno con le sue regole, i suoi tempi, i suoi bonus e i suoi siti.</item>
+        <item>Quali dispositivi sono collegati al patto, come si chiamano e con quale versione di Pactum.</item>
+        <item>Le tue regole di ogni dispositivo, anche quelle che hai tolto: come sono cambiate, se le avete concordate e da quando le potrai allentare.</item>
+        <item>La striscia degli ultimi 8 giorni, la stessa che vedi tu in Oggi, anche dispositivo per dispositivo e regola per regola.</item>
         <item>I giorni fuori regola: su quale regola, di quanti minuti sei andato oltre e quando è stato registrato.</item>
-        <item>Le interruzioni nella registrazione, e quando. Per esempio telefono spento a lungo, permessi tolti, notifiche spente, osservazione dei siti spenta, ora del telefono cambiata a mano.</item>
-        <item>I bonus che ti dai: quanti minuti, su quale regola e il perché, se lo scrivi. E quanti minuti di bonus ti sei dato in ciascuno degli ultimi 8 giorni.</item>
+        <item>Le interruzioni nella registrazione, e quando. Per esempio telefono spento a lungo, permessi tolti, notifiche spente, osservazione dei siti spenta, ora cambiata a mano; sul computer anche il programma Pactum chiuso mentre il computer era acceso, e i siti che per un po\' non si riescono a leggere.</item>
+        <item>I bonus che ti dai: quanti minuti, su quale regola e il perché, se lo scrivi. E quanti minuti di bonus ti sei dato in ciascuno degli ultimi 8 giorni, dispositivo per dispositivo.</item>
         <item>Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.</item>
         <item>Le tue risposte alle sue proposte, con la tua motivazione se la scrivi.</item>
-        <item>Il tempo passato in TUTTE le app, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese.</item>
-        <item>I siti visitati, se hai acceso l\'osservazione: solo il nome del sito e quante volte al giorno. E se per una parte della giornata il telefono ha tenuto nascosti i nomi dei siti.</item>
-        <item>Quando l\'app ha inviato l\'ultimo aggiornamento, e se non ne invia da più di tre quarti d\'ora.</item>
+        <item>Il tempo passato in TUTTE le app del telefono, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese.</item>
+        <item>I siti visitati sul telefono, se hai acceso l\'osservazione: solo il nome del sito e quante volte al giorno. E se per una parte della giornata il telefono ha tenuto nascosti i nomi dei siti.</item>
+        <item>Sul computer: il tempo passato in ogni programma, giorno per giorno, anche per categoria, con la media della settimana e del mese; i siti, con quante volte e quanti minuti al giorno; se il computer è acceso o spento, e da quando è spento.</item>
+        <item>Per ogni dispositivo, quando ha inviato l\'ultimo aggiornamento, e se non ne invia da più di tre quarti d\'ora. Quando spegni il computer, lui vede che è spento: non conta come silenzio.</item>
         <item>Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, o quando c\'è un\'interruzione nella registrazione.</item>
     </string-array>
     <string name="cosa_vede_no_titolo">COSA RESTA FUORI</string>
     <string-array name="cosa_vede_no">
         <item>I messaggi e le chat.</item>
-        <item>Quello che guardi, leggi o ascolti dentro le app e i siti.</item>
-        <item>Le foto e i video.</item>
+        <item>Quello che guardi, leggi o ascolti dentro le app, i programmi e i siti.</item>
+        <item>Le foto, i video e i tuoi file.</item>
         <item>Quello che scrivi o cerchi.</item>
         <item>Gli indirizzi completi delle pagine: vede youtube.com, mai quale video.</item>
+        <item>I titoli delle pagine e delle finestre: sul computer non vengono mai letti.</item>
         <item>Dove sei: la posizione non viene mai letta.</item>
+    </string-array>
+    <!-- Contratto v3, "Siti visitati · Sul computer": la promessa del computer
+         è diversa da quella del telefono, e qui va detta chiara. -->
+    <string name="cosa_vede_computer_titolo">SUL COMPUTER</string>
+    <string-array name="cosa_vede_computer">
+        <item>Il programma legge l\'indirizzo nella barra del browser e tiene solo il nome del sito: l\'indirizzo completo non viene mai salvato né mandato.</item>
+        <item>È diverso dal telefono: sul telefono Pactum l\'indirizzo delle pagine non lo vede proprio. Sul computer il programma lo vede per un istante, ne tiene il nome del sito e butta il resto.</item>
+        <item>In cambio sul computer si contano anche i minuti passati su ogni sito, non solo quante volte ci vai. Sempre per giorno, mai l\'ora.</item>
     </string-array>
     <string name="cosa_vede_tuo_titolo">SOLO TUO</string>
     <string-array name="cosa_vede_tuo">
-        <item>La serie di giorni di fila e il tuo record: si calcolano sul tuo telefono e non partono mai.</item>
+        <item>La serie di giorni di fila e il tuo record: si calcolano sul tuo telefono (e sul computer, se usi Pactum anche lì) e non partono mai.</item>
     </string-array>
     <string name="cosa_vede_ho_capito">Ho capito</string>
 
@@ -83,6 +99,17 @@
         <item quantity="one">%1$d interruzione nella registrazione</item>
         <item quantity="other">%1$d interruzioni nella registrazione</item>
     </plurals>
+    <!-- (v3) Sotto la striscia del figlio, se ha più dispositivi: una riga per
+         ciascuno, contata dalla SUA striscia come la frase grande. -->
+    <string name="oggi_dispositivo_riga">%1$s: %2$d su %3$d</string>
+    <string name="oggi_dispositivo_riga_senza_dati">%1$s: ancora nessun dato</string>
+    <string name="oggi_questo_telefono">Questo telefono</string>
+    <string name="oggi_dispositivo_senza_nome">Dispositivo</string>
+    <!-- Scollegato dal genitore: la riga resta finché i suoi giorni sono negli 8. -->
+    <string name="oggi_dispositivo_scollegato">%1$s (non più collegato)</string>
+    <!-- (v3) Il telefono non è più collegato (401): revocato dal genitore, o
+         collegato di nuovo con un altro codice. -->
+    <string name="oggi_scollegato">Questo telefono non è più collegato al patto: chiedi al genitore un codice nuovo e inseriscilo nelle Impostazioni.</string>
     <string name="oggi_sezione_regole">LE TUE REGOLE OGGI</string>
     <string name="oggi_minuti_su_limite">%1$s su %2$s</string>
     <string name="oggi_oltre">%1$s oltre</string>
@@ -92,6 +119,8 @@
     <string name="oggi_fascia_non_oggi">oggi la fascia non c\'è</string>
     <string name="oggi_vita_reale_diario">Segna nel Diario</string>
     <string name="oggi_sezione_tempo">DOVE È FINITO IL TEMPO</string>
+    <!-- (v3) Con altri dispositivi: questo elenco è solo del telefono. -->
+    <string name="oggi_sezione_tempo_telefono">DOVE È FINITO IL TEMPO SUL TELEFONO</string>
     <string name="oggi_vuoto">Nessun uso registrato finora. Oggi il registro è pulito.</string>
     <string name="oggi_caricamento">Sto leggendo l\'uso di oggi…</string>
     <string name="azione_aggiorna">Aggiorna</string>
@@ -107,6 +136,8 @@
     <string name="oggi_bonus_restano">bonus di oggi: restano %1$d min</string>
     <string name="oggi_bonus_in_partenza">+%1$d min in partenza</string>
     <string name="oggi_bonus_tetti">Bonus: oggi ancora %1$d min su %2$d · questa settimana %3$d su %4$d</string>
+    <!-- (v3) I tetti dei bonus valgono per dispositivo: con altri dispositivi lo si dice. -->
+    <string name="oggi_bonus_tetti_telefono">Bonus su questo telefono: oggi ancora %1$d min su %2$d · questa settimana %3$d su %4$d</string>
     <string name="oggi_bonus_dato">Ti sei dato %1$d minuti su %2$s</string>
     <string name="oggi_bonus_aggiungi_perche">Aggiungi perché</string>
     <string name="oggi_perche_titolo">Perché?</string>
@@ -130,18 +161,37 @@
     <!-- Impostazioni -->
     <string name="impostazioni_titolo">Impostazioni</string>
     <string name="impostazioni_sezione_collegamento">Collegamento al patto</string>
-    <string name="impostazioni_descrizione">Indirizzo del server e codice del patto. Te li fornisce chi ha configurato il server.</string>
+    <string name="impostazioni_descrizione">Per collegare questo telefono: indirizzo del server e codice di 6 cifre.</string>
     <string name="impostazioni_server_url">Indirizzo del server</string>
     <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
-    <string name="impostazioni_token">Codice del patto</string>
-    <string name="impostazioni_salvate">Impostazioni salvate</string>
+    <string name="impostazioni_token">Codice lungo</string>
+    <string name="impostazioni_salvate">Codice lungo salvato</string>
     <string name="impostazioni_url_non_valido">Indirizzo del server non valido: controlla e riprova (es. https://pactum.esempio.it).</string>
     <string name="impostazioni_ultimo_battito">Ultimo aggiornamento inviato: %1$s</string>
     <string name="impostazioni_ultimo_battito_mai">mai</string>
     <string name="impostazioni_prova_adesso">Prova adesso</string>
     <string name="impostazioni_prova_ok">Aggiornamento inviato: il server risponde.</string>
-    <string name="impostazioni_prova_fallita">Invio fallito: controlla indirizzo, codice e connessione.</string>
-    <string name="impostazioni_config_incompleta">Prima salva indirizzo del server e codice del patto.</string>
+    <string name="impostazioni_prova_fallita">Invio fallito: controlla l\'indirizzo del server e la connessione.</string>
+    <string name="impostazioni_prova_scollegato">Il server risponde, ma questo telefono non è più collegato al patto: chiedi al genitore un codice nuovo.</string>
+    <string name="impostazioni_config_incompleta">Prima collega questo telefono: indirizzo del server e codice di 6 cifre.</string>
+
+    <!-- Collegamento con il codice di 6 cifre (contratto v3, POST /api/abbina) -->
+    <string name="collega_spiegazione">Il genitore crea il codice dalla sua app: 6 cifre, vale 15 minuti e si usa una volta sola.</string>
+    <string name="collega_codice">Codice di 6 cifre</string>
+    <string name="collega_azione">Collega</string>
+    <string name="collega_nuovo_codice">Collega con un codice nuovo</string>
+    <string name="collegato_come">Collegato come: %1$s</string>
+    <!-- "Telefono di Andrea": nome del dispositivo e nome del figlio -->
+    <string name="collegato_come_formato">%1$s di %2$s</string>
+    <string name="collega_riuscito">Collegamento riuscito.</string>
+    <string name="collega_codice_non_valido">Codice non valido: forse è sbagliato, è scaduto (vale 15 minuti) o è già stato usato. Chiedine uno nuovo al genitore.</string>
+    <string name="collega_troppi_tentativi">Troppi codici sbagliati: il server ne accetta di nuovo tra %1$s, anche quello giusto.</string>
+    <string name="collega_server_senza_codici">A questo indirizzo il server non riconosce i codici di 6 cifre. Controlla l\'indirizzo: se è giusto, il server va aggiornato.</string>
+    <string name="collega_senza_rete">Non riesco a raggiungere il server: controlla l\'indirizzo e la connessione, poi riprova.</string>
+    <string name="collega_errore">Il collegamento non è riuscito: riprova.</string>
+    <string name="collega_codice_lungo_apri">Hai un codice lungo?</string>
+    <string name="collega_codice_lungo_spiegazione">Per i telefoni collegati prima dei codici di 6 cifre: il codice lungo continua a funzionare.</string>
+    <string name="collega_codice_lungo_salva">Salva il codice lungo</string>
     <string name="impostazioni_sezione_serale">Com\'è andata oggi</string>
     <string name="impostazioni_serale_attiva">Ogni sera, una notifica</string>
     <string name="impostazioni_serale_ora">Ogni sera alle</string>
@@ -172,6 +222,25 @@
     <string name="regola_limite_tempo">%1$s: al massimo %2$s al giorno</string>
     <string name="regola_fascia_oraria">Niente telefono dalle %1$s alle %2$s (%3$s)</string>
     <string name="regola_vita_reale">%1$s — arbitro: %2$s, %3$s</string>
+    <!-- (v3) Una fascia oraria del computer -->
+    <string name="regola_fascia_oraria_computer">Niente computer dalle %1$s alle %2$s (%3$s)</string>
+    <!-- (v3) Una regola di un altro dispositivo: "Sul computer: youtube.com (sito)
+         al massimo 1 h al giorno". Dopo il nome del dispositivo la regola va
+         nella forma breve: niente due punti dopo il bersaglio, iniziale minuscola. -->
+    <string name="regola_con_dispositivo">%1$s: %2$s</string>
+    <string name="regola_limite_tempo_breve">%1$s al massimo %2$s al giorno</string>
+    <string name="regola_fascia_oraria_breve">niente telefono dalle %1$s alle %2$s (%3$s)</string>
+    <string name="regola_fascia_oraria_computer_breve">niente computer dalle %1$s alle %2$s (%3$s)</string>
+    <!-- (v3) Le chiavi del computer: exe:minecraft.exe → "Minecraft" (nome
+         leggibile dal server, sennò il file senza .exe); sito:youtube.com → questa. -->
+    <string name="chiave_sito">%1$s (sito)</string>
+    <!-- (v3) Su quale altro dispositivo sta una regola, dentro una frase -->
+    <string name="dispositivo_sul_computer">sul computer</string>
+    <string name="dispositivo_sul_computer_nome">sul computer “%1$s”</string>
+    <string name="dispositivo_sul_telefono_nome">sul telefono “%1$s”</string>
+    <string name="dispositivo_sull_altro_telefono">sull\'altro telefono</string>
+    <string name="dispositivo_su_nome">su “%1$s”</string>
+    <string name="dispositivo_su_altro">su un altro dispositivo</string>
 
     <!-- Attese in parole (lock dei 4 giorni) -->
     <string name="durata_un_giorno">un giorno</string>
@@ -185,8 +254,14 @@
     <!-- Regole -->
     <string name="regole_titolo">Le mie regole</string>
     <string name="regole_caricamento">Sto leggendo il patto…</string>
-    <string name="regole_config_mancante">Prima servono indirizzo del server e codice del patto: li trovi nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
+    <string name="regole_config_mancante">Prima collega questo telefono al patto: indirizzo del server e codice di 6 cifre, nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
     <string name="regole_vuoto">Il patto vuole almeno una regola: creane una con il pulsante +.</string>
+    <!-- (v3) Il figlio ha regole su altri dispositivi, non su questo telefono. -->
+    <string name="regole_vuoto_questo_telefono">Su questo telefono non ci sono ancora regole: puoi crearne una con il pulsante +.</string>
+    <plurals name="regole_altri_dispositivi">
+        <item quantity="one">Hai anche %1$d regola su un altro dispositivo: la vedi e la cambi da lì.</item>
+        <item quantity="other">Hai anche %1$d regole su altri dispositivi: le vedi e le cambi da lì.</item>
+    </plurals>
     <string name="regole_unica_regola">Questa è l\'unica regola del patto: puoi modificarla, ma non eliminarla.</string>
     <string name="regole_nuova">Nuova regola</string>
     <string name="regola_concordata">concordata</string>
@@ -234,8 +309,8 @@
     <string name="prima_regola_intro">Pactum è il tuo patto: le regole le scrivi tu. Per iniziare, dattene almeno una.</string>
     <string name="prima_regola_spiegazione">Un limite di tempo su un\'app, una fascia senza telefono, o un impegno di vita reale. Potrai aggiungerne altre e modificarle quando vuoi — e allentarle dopo qualche giorno.</string>
     <string name="prima_regola_crea">Crea la prima regola</string>
-    <string name="prima_regola_config_intro">Prima servono l\'indirizzo del server e il codice del patto: te li dà chi ha preparato il server. Inseriscili nelle Impostazioni, poi torna qui.</string>
-    <string name="prima_regola_apri_impostazioni">Apri impostazioni</string>
+    <!-- Come si ottiene il codice lo dice la riga sotto il campo (collega_spiegazione): qui non si ripete. -->
+    <string name="prima_regola_config_intro">Per prima cosa collega questo telefono al patto.</string>
 
     <!-- Proposte -->
     <string name="proposte_titolo">Proposte</string>
@@ -252,6 +327,12 @@
     <string name="proposta_regola_se_accetti">Se accetti: %1$s</string>
     <string name="proposta_regola_togliere">Propone di togliere la regola: %1$s</string>
     <string name="proposta_regola">Regola: %1$s</string>
+    <!-- (v3) La regola è di un altro dispositivo: la frase lo dice.
+         "Ora sul computer: youtube.com (sito) al massimo 1 h al giorno" -->
+    <string name="proposta_regola_ora_su">Ora %1$s: %2$s</string>
+    <string name="proposta_regola_togliere_su">Propone di togliere la regola %1$s: %2$s</string>
+    <string name="proposta_regola_su">Regola %1$s: %2$s</string>
+    <string name="proposta_accettata_ok_su">Proposta accettata: la regola %1$s è già aggiornata.</string>
     <string name="proposta_motivazione_genitore">Il genitore dice: %1$s</string>
     <string name="proposta_aggiungi_motivazione">aggiungi una motivazione</string>
     <string name="proposta_campo_motivazione">La tua motivazione (facoltativa)</string>
@@ -351,8 +432,10 @@
     <!-- Siti visitati (v2.3) -->
     <string name="siti_titolo">Siti visitati</string>
     <string name="siti_scorciatoia_titolo">Siti visitati</string>
-    <string name="siti_scorciatoia_testo">Solo i nomi dei siti, la stessa lista che vede il genitore.</string>
-    <string name="siti_tavola_rotonda">Questa è esattamente la lista che vede il genitore: nella sua app non c\'è nessun sito che tu non veda qui. Solo i nomi dei siti, mai le pagine, i contenuti o le ricerche.</string>
+    <string name="siti_scorciatoia_testo">Solo i nomi dei siti di questo telefono, la stessa lista che vede il genitore.</string>
+    <!-- (v3) Il genitore vede anche i siti degli altri dispositivi (il computer):
+         questa è la lista di QUESTO telefono, e va detto così per restare vero. -->
+    <string name="siti_tavola_rotonda">Questa è esattamente la lista di questo telefono che vede il genitore: nella sua app non c\'è nessun sito di questo telefono che tu non veda qui. Solo i nomi dei siti, mai le pagine, i contenuti o le ricerche.</string>
     <string name="siti_stato_attiva">Osservazione attiva</string>
     <string name="siti_stato_attiva_testo">Pactum annota il nome dei siti che il telefono chiede. Non blocca niente e non legge niente altro.</string>
     <string name="siti_stato_spenta">Osservazione spenta</string>
@@ -362,7 +445,7 @@
     <string name="siti_disattiva">Spegni l\'osservazione</string>
     <string name="siti_caricamento">Sto leggendo la lista dei siti…</string>
     <string name="siti_vuoto">Nessun dato sui siti è ancora arrivato al patto.</string>
-    <string name="siti_config_mancante">Prima servono indirizzo del server e codice del patto: li trovi nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
+    <string name="siti_config_mancante">Prima collega questo telefono al patto: indirizzo del server e codice di 6 cifre, nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
     <string name="siti_giorno_vuoto">Nessun dato ricevuto per questo giorno.</string>
     <string name="siti_giorno_totale">%1$d domini distinti</string>
     <string name="siti_giorno_tagliato">%1$d domini distinti (qui i primi %2$d)</string>

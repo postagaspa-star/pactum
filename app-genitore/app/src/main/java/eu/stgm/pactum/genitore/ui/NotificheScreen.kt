@@ -54,8 +54,14 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificheScreen(onChiudi: () -> Unit, vm: NotificheViewModel = viewModel()) {
+fun NotificheScreen(
+    onChiudi: () -> Unit,
+    vm: NotificheViewModel = viewModel(),
+    famigliaVm: FamigliaViewModel = viewModel(),
+) {
     val stato by vm.stato.collectAsStateWithLifecycle()
+    // (v3) Le notifiche sono di tutti i figli: la famiglia dice di chi è ciascuna.
+    val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val messaggioLettaFallita = stringResource(R.string.notifica_letta_fallita)
 
@@ -141,6 +147,7 @@ fun NotificheScreen(onChiudi: () -> Unit, vm: NotificheViewModel = viewModel()) 
                                 RigaNotifica(
                                     notifica = notifica,
                                     testo = testoNotifica(parole(), notifica, stato.regolePerId),
+                                    diChi = etichettaNotifica(notifica, famiglia.figli),
                                     onSegnaLetta = { vm.segnaLetta(notifica) },
                                 )
                             }
@@ -155,9 +162,16 @@ fun NotificheScreen(onChiudi: () -> Unit, vm: NotificheViewModel = viewModel()) 
 /**
  * Una notifica: icona del tipo, cosa è successo, quando — e il segno di "letta".
  * Il [testo] lo scrive l'app (testoNotifica, lo stesso della notifica di sistema).
+ * (v3) [diChi] = di quale figlio (e dispositivo), con più figli o più dispositivi:
+ * la stessa riga che la notifica di sistema mostra sopra il titolo.
  */
 @Composable
-private fun RigaNotifica(notifica: Notifica, testo: TestoNotifica, onSegnaLetta: () -> Unit) {
+private fun RigaNotifica(
+    notifica: Notifica,
+    testo: TestoNotifica,
+    diChi: String?,
+    onSegnaLetta: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
         verticalAlignment = Alignment.Top,
@@ -173,6 +187,14 @@ private fun RigaNotifica(notifica: Notifica, testo: TestoNotifica, onSegnaLetta:
                 .weight(1f)
                 .padding(start = Spazi.m),
         ) {
+            if (diChi != null) {
+                Text(
+                    text = diChi.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = Spazi.xs),
+                )
+            }
             Text(
                 text = testo.titolo,
                 style = MaterialTheme.typography.labelMedium,
@@ -200,5 +222,7 @@ private fun iconaTipo(tipo: String): Painter = when (tipo) {
     "modifica_regola" -> rememberVectorPainter(Icons.Outlined.Edit)
     "proposta_risposta", "proposta_annullata", "dichiarazione" ->
         painterResource(R.drawable.ic_scheda_turno)
+    // (v3) Il computer spento o riacceso.
+    "sospensione", "ripresa" -> painterResource(R.drawable.ic_dispositivo_computer)
     else -> painterResource(R.drawable.ic_notifica_binocolo)
 }

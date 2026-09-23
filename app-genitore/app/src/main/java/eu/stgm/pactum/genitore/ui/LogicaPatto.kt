@@ -216,9 +216,13 @@ fun regoleConPropostaInAttesa(proposte: List<Proposta>): Set<Long> =
 // --- Tempo: dentro il patto / il resto della giornata ---------------------------
 
 /**
- * Una voce dell'elenco del Tempo: un'app o una categoria, col limite se c'è.
+ * Una voce dell'elenco del Tempo: un'app (o un programma, o un sito sul
+ * computer) o una categoria, col limite se c'è.
  * [bonus] = minuti concessi quel giorno su quella regola (v2.4, 0 se nessuno o
  * server vecchio): il limite di quel giorno è `limite + bonus`, come per il figlio.
+ * [bonusNoto] = false quando il bonus di quella regola non si conosce (un limite
+ * su un sito, v3): allora "quanto oltre" non si calcola — meglio tacere che
+ * dire un numero sbagliato.
  */
 data class VoceTempo(
     val chiave: String,
@@ -227,6 +231,7 @@ data class VoceTempo(
     val limite: Int?,
     val categoria: Boolean,
     val bonus: Int = 0,
+    val bonusNoto: Boolean = true,
 ) {
     /** Il limite vero di quel giorno: base + bonus. null senza limite. */
     val limiteDelGiorno: Int? get() = limite?.let { it + bonus.coerceAtLeast(0) }
@@ -245,7 +250,12 @@ data class ElencoTempo(
     val massimoDelGiorno: Int,
 )
 
-fun elencoTempo(giorno: UsoGiorno): ElencoTempo {
+/**
+ * [altreNelPatto]: voci col limite che non stanno nella fotografia dei programmi
+ * (v3: i limiti sui siti di un computer, v. vociSitiNelPatto). Entrano in
+ * "dentro il patto" con le altre, stesso ordine.
+ */
+fun elencoTempo(giorno: UsoGiorno, altreNelPatto: List<VoceTempo> = emptyList()): ElencoTempo {
     val app = giorno.app.map {
         VoceTempo(it.chiave, it.nome, it.minuti, it.limite, categoria = false, bonus = it.bonus)
     }
@@ -255,7 +265,7 @@ fun elencoTempo(giorno: UsoGiorno): ElencoTempo {
         .filter { it.limite != null && it.minuti > 0 }
         .map { VoceTempo(it.chiave, null, it.minuti, it.limite, categoria = true, bonus = it.bonus) }
 
-    val dentro = (app.filter { it.limite != null } + categorie).sortedWith(
+    val dentro = (app.filter { it.limite != null } + categorie + altreNelPatto.filter { it.limite != null }).sortedWith(
         compareByDescending<VoceTempo> { vicinanzaAlLimite(it) }
             .thenByDescending { it.minuti }
             .thenBy { it.chiave },

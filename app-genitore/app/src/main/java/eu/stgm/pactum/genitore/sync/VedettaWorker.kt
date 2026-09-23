@@ -22,34 +22,46 @@ import androidx.work.WorkerParameters
 import eu.stgm.pactum.genitore.MainActivity
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.aggiornamento.Aggiornatore
+import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.SilenzioNoto
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
-import eu.stgm.pactum.genitore.dati.UsoGiorno
+import eu.stgm.pactum.genitore.dati.TipiDispositivo
+import eu.stgm.pactum.genitore.rete.EsitoFamiglia
 import eu.stgm.pactum.genitore.rete.PostinoClient
+import eu.stgm.pactum.genitore.ui.CambioSilenzio
+import eu.stgm.pactum.genitore.ui.FUSO_PATTO
+import eu.stgm.pactum.genitore.ui.SilenzioAttuale
+import eu.stgm.pactum.genitore.ui.TestoNotifica
+import eu.stgm.pactum.genitore.ui.cambioSilenzio
+import eu.stgm.pactum.genitore.ui.dispositiviDellaFinestra
+import eu.stgm.pactum.genitore.ui.etichettaDi
+import eu.stgm.pactum.genitore.ui.etichettaNotifica
 import eu.stgm.pactum.genitore.ui.istanteServer
 import eu.stgm.pactum.genitore.ui.oraOppureDataOra
 import eu.stgm.pactum.genitore.ui.paroleDi
-import eu.stgm.pactum.genitore.ui.testoDurata
+import eu.stgm.pactum.genitore.ui.silenzioDaSorvegliare
+import eu.stgm.pactum.genitore.ui.testoAvvisoSilenzio
+import eu.stgm.pactum.genitore.ui.testoDigest
 import eu.stgm.pactum.genitore.ui.testoNotifica
-import java.time.Duration
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
 /**
- * La vedetta: ogni ~15 minuti chiede al postino le notifiche non lette e
+ * La vedetta: ogni ~15 minuti chiede al server le notifiche non lette e
  * alza UNA notifica di sistema per ogni novità mai avvisata prima (gli id
  * già avvisati vivono in DataStore). NON segna niente come letta sul server:
  * "letta" è un gesto del genitore dentro l'app, non un effetto collaterale
  * del polling — altrimenti le novità sparirebbero prima di essere viste.
  *
- * Sorveglia anche il silenzio: legge la finestra e avvisa quando
- * `stato_silenzio.silente` passa da false a true (e, con tono tranquillo,
- * quando il contatto torna). È la promessa dei "silenzi" nelle stringhe.
+ * Sorveglia anche il silenzio: avvisa quando un dispositivo smette di mandare
+ * dati (e, con tono tranquillo, quando il contatto torna). (v3) Il silenzio è
+ * PER DISPOSITIVO, letto da GET /api/famiglia; un computer spento non è un
+ * silenzio e non allarma. Su un server 0.7 si guarda la finestra, come prima.
  */
 class VedettaWorker(appContext: Context, params: WorkerParameters) :
     CoroutineWorker(appContext, params) {
@@ -66,18 +78,31 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             ?: return Result.retry() // offline o server muto: si riprova col backoff
         impostazioni.registraVerificaRiuscita()
 
-        // Una lettura sola della finestra per i testi delle notifiche (il nome
-        // leggibile delle regole) e per le due sorveglianze (silenzio e digest):
-        // meglio sforzo — se non arriva, le notifiche partono lo stesso col
-        // messaggio del server e il resto si ritenta al giro dopo (niente
-        // Result.retry per questo).
-        val finestra = postino.leggiFinestra()
-        val regolePerId = finestra?.regole?.associateBy { it.id }.orEmpty()
+        // (v3) La famiglia: di chi è ogni avviso, e lo stato di ogni dispositivo.
+        // Meglio sforzo: se non arriva, le notifiche partono lo stesso (senza la
+        // riga "di chi è") e il silenzio si guarda al giro dopo.
+        val famiglia = postino.leggiFamiglia()
+        val figli = (famiglia as? EsitoFamiglia.Letta)?.famiglia?.figli.orEmpty()
+        val finestre = Finestre(postino)
 
-        avvisaNovitaDelPatto(context, impostazioni, notifiche, regolePerId)
+        avvisaNovitaDelPatto(context, impostazioni, notifiche, figli, finestre)
 
-        sorvegliaSilenzio(context, impostazioni, finestra)
-        inviaDigest(context, impostazioni, finestra)
+        when (famiglia) {
+            is EsitoFamiglia.Letta -> sorvegliaDispositivi(context, impostazioni, figli)
+            EsitoFamiglia.ServerVecchio -> sorvegliaSilenzioServerVecchio(context, impostazioni, finestre.di(null))
+            EsitoFamiglia.Fallita -> Unit // si ritenta al giro dopo
+        }
+
+        // Il digest: per figlio in v3, uno solo sul server 0.7. Con la famiglia
+        // non letta si aspetta il giro dopo: non si sa di quanti figli dirlo.
+        when (famiglia) {
+            is EsitoFamiglia.Letta -> figli.forEach { figlio ->
+                inviaDigest(context, impostazioni, chiave = figlio.id, figlio = figlio, figli = figli, finestre = finestre)
+            }
+            EsitoFamiglia.ServerVecchio ->
+                inviaDigest(context, impostazioni, chiave = 0L, figlio = null, figli = figli, finestre = finestre)
+            EsitoFamiglia.Fallita -> Unit
+        }
 
         // Auto-aggiornamento (tappa 6): best effort, non deve MAI far fallire il
         // giro della vedetta. Se il server ha una versione più nuova del binocolo,
@@ -88,11 +113,24 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         return Result.success()
     }
 
+    /**
+     * Le finestre lette in questo giro, una volta per figlio (null = server 0.7,
+     * nessun `figlio_id`): servono ai testi delle notifiche e al digest.
+     */
+    private class Finestre(private val postino: PostinoClient) {
+        private val lette = mutableMapOf<Long?, Finestra?>()
+        suspend fun di(figlioId: Long?): Finestra? {
+            if (figlioId !in lette) lette[figlioId] = postino.leggiFinestra(figlioId)
+            return lette[figlioId]
+        }
+    }
+
     private suspend fun avvisaNovitaDelPatto(
         context: Context,
         impostazioni: Impostazioni,
         notifiche: List<Notifica>,
-        regolePerId: Map<Long, RegolaFinestra>,
+        figli: List<Figlio>,
+        finestre: Finestre,
     ) {
         val giaAvvisate = impostazioni.leggiIdAvvisati()
         val nuove = notifiche.filter { it.id !in giaAvvisate }
@@ -102,13 +140,21 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         // arriva, il giro successivo recupera le novità arretrate.
         if (!puoAvvisare(context)) return
 
+        // Il nome leggibile delle regole viene dalla finestra DEL FIGLIO della
+        // notifica: gli id delle regole sono unici su tutto il server, quindi le
+        // regole di più figli stanno in una mappa sola.
+        val regolePerId = mutableMapOf<Long, RegolaFinestra>()
+        nuove.map { it.figlioId }.distinct().forEach { figlioId ->
+            finestre.di(figlioId)?.regole?.forEach { regolePerId[it.id] = it }
+        }
+
         creaCanale(context)
         val gestore = NotificationManagerCompat.from(context)
         nuove.forEach { notifica ->
             try {
                 gestore.notify(
                     notifica.id.toInt(),
-                    notificaDiSistema(context, notifica, regolePerId),
+                    notificaDiSistema(context, notifica, regolePerId, figli),
                 )
             } catch (e: SecurityException) {
                 return // permesso revocato tra il controllo e la notify
@@ -118,147 +164,171 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
     }
 
     /**
-     * Avvisa quando `silente` scatta a true e quando il contatto torna.
-     * Lo stato osservato (silente + battito su cui si basa) vive in DataStore
-     * per non ri-avvisare a ogni giro sullo stesso silenzio.
+     * (v3) Il silenzio di OGNI dispositivo di OGNI figlio, dai flag del server.
+     * Lo stato osservato (allarme + battito) vive in DataStore per dispositivo,
+     * per non riavvisare a ogni giro lo stesso silenzio. Non si sorvegliano i
+     * dispositivi non ancora collegati né quelli scollegati.
      */
-    private suspend fun sorvegliaSilenzio(
+    private suspend fun sorvegliaDispositivi(
+        context: Context,
+        impostazioni: Impostazioni,
+        figli: List<Figlio>,
+    ) {
+        val noti = impostazioni.leggiSilenziNoti()
+        val nuovi = mutableMapOf<Long, SilenzioNoto>()
+        val parole = paroleDi(context)
+        val gestore = NotificationManagerCompat.from(context)
+        figli.forEach { figlio ->
+            figlio.dispositivi.forEach dispositivo@{ dispositivo ->
+                val attuale = silenzioDaSorvegliare(
+                    dispositivo.tipo,
+                    dispositivo.abbinato,
+                    dispositivo.revocato,
+                    dispositivo.statoSilenzio,
+                )
+                if (attuale == null) {
+                    // Scollegato: un vecchio avviso di silenzio non ha più senso.
+                    if (dispositivo.revocato) gestore.cancel(idAvvisoSilenzio(dispositivo.id))
+                    return@dispositivo
+                }
+                val noto = noti[dispositivo.id]
+                val testo = testoAvvisoSilenzio(
+                    parole,
+                    cambioSilenzio(noto, attuale),
+                    computer = dispositivo.tipo == TipiDispositivo.COMPUTER,
+                    silenzio = dispositivo.statoSilenzio,
+                )
+                val avvisato = testo == null || avvisa(
+                    context,
+                    idAvvisoSilenzio(dispositivo.id),
+                    testo,
+                    sopra = etichettaDi(figlio.id, dispositivo.id, figli),
+                    figlioId = figlio.id,
+                )
+                // Senza permesso (o permesso tolto a metà) non si registra: il
+                // giro dopo ritrova il cambio e avvisa.
+                nuovi[dispositivo.id] = if (avvisato || noto == null) attuale.noto() else noto
+            }
+        }
+        impostazioni.salvaSilenziNoti(nuovi)
+    }
+
+    /**
+     * Server 0.7: un dispositivo solo, dal silenzio della finestra, coi testi di
+     * prima ("L'app del figlio non invia aggiornamenti dalle 15:10").
+     */
+    private suspend fun sorvegliaSilenzioServerVecchio(
         context: Context,
         impostazioni: Impostazioni,
         finestra: Finestra?,
     ) {
-        if (finestra == null) return
-        val attuale = finestra.statoSilenzio
-        val noto = impostazioni.leggiSilenzioNoto()
-
-        if (noto == null) {
-            // Prima osservazione (app appena configurata): si prende la base
-            // senza allarmare — un silenzio già in corso non è un "flip".
-            impostazioni.registraSilenzioNoto(attuale.silente, attuale.ultimoBattito)
-            return
+        val silenzio = finestra?.statoSilenzio ?: return
+        val attuale = SilenzioAttuale(
+            allarme = silenzio.silente,
+            spento = false,
+            ultimoBattito = silenzio.ultimoBattito,
+        )
+        val noti = impostazioni.leggiSilenziNoti()
+        val noto = noti[CHIAVE_SERVER_VECCHIO]
+        val testo = when (cambioSilenzio(noto, attuale)) {
+            CambioSilenzio.NUOVO_SILENZIO -> testoSilenzioServerVecchio(context, silenzio)
+            CambioSilenzio.CONTATTO_TORNATO -> testoContattoServerVecchio(context, silenzio)
+            else -> null
         }
+        val avvisato = testo == null || avvisa(
+            context,
+            idAvvisoSilenzio(CHIAVE_SERVER_VECCHIO),
+            testo,
+            sopra = null,
+            figlioId = null,
+        )
+        val registrato = if (avvisato || noto == null) attuale.noto() else noto
+        impostazioni.salvaSilenziNoti(mapOf(CHIAVE_SERVER_VECCHIO to registrato))
+    }
 
-        // Un silenzio è nuovo anche se il ritorno in contatto non si è mai
-        // visto: silente=true con un battito DIVERSO da quello osservato
-        // significa contatto ripreso e riperso tra due giri della vedetta.
-        val nuovoSilenzio = attuale.silente &&
-            (!noto.silente || noto.ultimoBattito != attuale.ultimoBattito)
-        val contattoTornato = !attuale.silente && noto.silente
-
-        if (!nuovoSilenzio && !contattoTornato) {
-            // Nessun flip: si aggiorna solo il battito su cui poggia lo stato.
-            impostazioni.registraSilenzioNoto(attuale.silente, attuale.ultimoBattito)
-            return
-        }
-
-        // Senza permesso non si avvisa E non si registra: il giro dopo recupera.
-        if (!puoAvvisare(context)) return
+    /** Alza un avviso sul canale del patto; false = senza permesso, non partito. */
+    private fun avvisa(
+        context: Context,
+        id: Int,
+        testo: TestoNotifica,
+        sopra: String?,
+        figlioId: Long?,
+    ): Boolean {
+        if (!puoAvvisare(context)) return false
         creaCanale(context)
-        val avviso = if (nuovoSilenzio) {
-            avvisoSilenzio(context, attuale)
-        } else {
-            avvisoContattoTornato(context, attuale)
-        }
-        try {
+        return try {
             // Stesso id per i due versi: "di nuovo in contatto" sostituisce
             // l'avviso di silenzio ormai superato invece di accodarsi.
-            NotificationManagerCompat.from(context).notify(ID_AVVISO_SILENZIO, avviso)
+            NotificationManagerCompat.from(context).notify(
+                id,
+                notificaBase(context, testo.titolo, testo.testo, MainActivity.DEST_FINESTRA, sopra, figlioId),
+            )
+            true
         } catch (e: SecurityException) {
-            return
+            false
         }
-        impostazioni.registraSilenzioNoto(attuale.silente, attuale.ultimoBattito)
     }
 
     /**
      * Il digest giornaliero (contratto v2.2 — comportamento dell'app genitore,
      * nessun endpoint nuovo): quando l'ora scelta dal genitore è passata e oggi
-     * il digest non è ancora partito, UNA notifica col totale di oggi e le prime
-     * app (col limite accanto dove esiste), costruita dall'`uso_recente` della
-     * finestra. Toccarla apre la sezione Tempo. Un oggi senza fotografia lo
-     * dice onestamente — MAI uno zero finto. Dedup per giorno locale: l'ultimo
-     * giorno inviato vive in DataStore.
+     * il digest di quel figlio non è ancora partito, UNA notifica col totale di
+     * oggi e le prime app (per dispositivo, se sono più d'uno). Toccarla apre il
+     * Tempo di quel figlio. Un oggi senza fotografia lo dice onestamente — MAI
+     * uno zero finto. Dedup per figlio e per giorno del patto.
      */
     private suspend fun inviaDigest(
         context: Context,
         impostazioni: Impostazioni,
-        finestra: Finestra?,
+        chiave: Long,
+        figlio: Figlio?,
+        figli: List<Figlio>,
+        finestre: Finestre,
     ) {
-        if (finestra == null) return // offline o server muto: si ritenta al giro dopo
         val config = impostazioni.leggiConfigDigest()
         if (!config.attivo) return
 
+        // (v3) Un figlio senza nessun dispositivo collegato (e non scollegato) non
+        // ha niente da raccontare: un "nessun dato" ogni sera sarebbe solo rumore.
+        if (figlio != null && figlio.dispositivi.none { it.abbinato && !it.revocato }) return
+
         if (LocalTime.now().hour < config.ora) return // l'ora scelta (fuso del genitore) non è ancora arrivata
+        // Già mandato per l'oggi del patto: non serve nemmeno leggere la finestra.
+        if (impostazioni.digestGiaInviato(chiave, LocalDate.now(FUSO_PATTO).toString())) return
+
+        // offline o server muto: si ritenta al giro dopo
+        val finestra = finestre.di(figlio?.id) ?: return
 
         // "Oggi" del patto = l'ultima voce di uso_recente: il server la etichetta
         // nel fuso del patto, così sia il digest sia il suo dedup restano allineati
         // ai dati e non dipendono dal fuso del telefono del genitore.
-        val oggiPatto = finestra.usoRecente.lastOrNull()
-        val giornoChiave = oggiPatto?.giorno ?: LocalDate.now().toString()
-        if (impostazioni.leggiDigestUltimoGiorno() == giornoChiave) return // già mandato oggi
+        val dispositivi = dispositiviDellaFinestra(finestra)
+        val giornoChiave = dispositivi.firstNotNullOfOrNull { it.usoRecente.lastOrNull()?.giorno }
+            ?: LocalDate.now(FUSO_PATTO).toString()
+        if (impostazioni.digestGiaInviato(chiave, giornoChiave)) return // già mandato oggi
 
         // Senza permesso non si manda E non si registra: appena il permesso
         // arriva, il giro successivo recupera il digest di oggi.
         if (!puoAvvisare(context)) return
         creaCanale(context)
 
-        val (titolo, testo) = testiDigest(context, oggiPatto)
+        val testo = testoDigest(paroleDi(context), dispositivi)
         try {
             NotificationManagerCompat.from(context).notify(
-                ID_DIGEST,
-                notificaBase(context, titolo, testo, MainActivity.DEST_TEMPO),
+                idDigest(chiave),
+                notificaBase(
+                    context,
+                    testo.titolo,
+                    testo.testo,
+                    MainActivity.DEST_TEMPO,
+                    sopra = figlio?.nome?.takeIf { figli.size > 1 && it.isNotBlank() },
+                    figlioId = figlio?.id,
+                ),
             )
         } catch (e: SecurityException) {
             return // permesso revocato tra il controllo e la notify
         }
-        impostazioni.registraDigestInviato(giornoChiave)
-    }
-
-    /** Titolo e testo del digest; [uso] null o senza totale = nessun dato di oggi. */
-    private fun testiDigest(context: Context, uso: UsoGiorno?): Pair<String, String> {
-        val totale = uso?.totaleMinuti
-            ?: return context.getString(R.string.digest_titolo_nessun_dato) to
-                context.getString(R.string.digest_testo_nessun_dato)
-
-        val parole = paroleDi(context)
-        val titolo = context.getString(
-            R.string.digest_titolo,
-            testoDurata(parole, totale.toLong()),
-        )
-        val prime = uso.app
-            .sortedByDescending { it.minuti }
-            .take(APP_NEL_DIGEST)
-            .joinToString(" · ") { app ->
-                val nome = app.nome ?: app.chiave
-                val durata = testoDurata(parole, app.minuti.toLong())
-                val limite = app.limite
-                if (limite != null) {
-                    context.getString(
-                        R.string.digest_app_con_limite,
-                        nome,
-                        durata,
-                        testoDurata(parole, limite.toLong()),
-                    )
-                } else {
-                    context.getString(R.string.digest_app, nome, durata)
-                }
-            }
-        val corpo = if (prime.isEmpty()) {
-            context.getString(R.string.digest_tocca)
-        } else {
-            context.getString(R.string.digest_testo, prime)
-        }
-        // Caveat di freschezza: se la fotografia è ferma da oltre 90 minuti, il
-        // totale è un parziale — dillo, non spacciarlo per il consuntivo di oggi
-        // (concept: il registro non mente, mai stantìo mostrato come corrente).
-        val istante = istanteServer(uso.aggiornatoTs)
-        val testo = if (istante != null &&
-            Duration.between(istante, Instant.now()).toMinutes() > SOGLIA_FRESCHEZZA_MIN
-        ) {
-            corpo + "\n" + context.getString(R.string.digest_freschezza, oraOppureDataOra(istante))
-        } else {
-            corpo
-        }
-        return titolo to testo
+        impostazioni.registraDigestInviato(chiave, giornoChiave)
     }
 
     /** Titolo e frase dalla stessa funzione della lista in app (testoNotifica, Testi.kt). */
@@ -266,6 +336,7 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         context: Context,
         notifica: Notifica,
         regolePerId: Map<Long, RegolaFinestra>,
+        figli: List<Figlio>,
     ): Notification {
         val testo = testoNotifica(paroleDi(context), notifica, regolePerId)
         return notificaBase(
@@ -273,10 +344,13 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             titolo = testo.titolo,
             testo = testo.testo,
             destinazione = destinazionePerTipo(notifica.tipo),
+            // (v3) Di quale figlio (e dispositivo): la stessa riga della lista in app.
+            sopra = etichettaNotifica(notifica, figli),
+            figlioId = notifica.figlioId,
         )
     }
 
-    private fun avvisoSilenzio(context: Context, stato: StatoSilenzio): Notification {
+    private fun testoSilenzioServerVecchio(context: Context, stato: StatoSilenzio): TestoNotifica {
         val quando = istanteServer(stato.ultimoBattito)?.let { oraOppureDataOra(it) }
         val testo = if (quando != null) {
             context.getString(R.string.notifica_silenzio_testo, quando)
@@ -284,41 +358,43 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             context.getString(R.string.notifica_silenzio_testo_mai)
         }
         // Il silenzio si guarda sulla finestra: la riga di stato è in cima.
-        return notificaBase(
-            context,
-            titolo = context.getString(R.string.notifica_silenzio_titolo),
-            testo = testo,
-            destinazione = MainActivity.DEST_FINESTRA,
-        )
+        return TestoNotifica(context.getString(R.string.notifica_silenzio_titolo), testo)
     }
 
-    private fun avvisoContattoTornato(context: Context, stato: StatoSilenzio): Notification {
+    private fun testoContattoServerVecchio(context: Context, stato: StatoSilenzio): TestoNotifica {
         val quando = istanteServer(stato.ultimoBattito)?.let { oraOppureDataOra(it) } ?: "—"
-        return notificaBase(
-            context,
-            titolo = context.getString(R.string.notifica_contatto_titolo),
-            testo = context.getString(R.string.notifica_contatto_testo, quando),
-            destinazione = MainActivity.DEST_FINESTRA,
+        return TestoNotifica(
+            context.getString(R.string.notifica_contatto_titolo),
+            context.getString(R.string.notifica_contatto_testo, quando),
         )
     }
 
+    /**
+     * [sopra] = la riga "di chi è" (figlio · dispositivo), mostrata sopra il
+     * titolo; [figlioId] = il figlio da scegliere quando si tocca la notifica.
+     */
     private fun notificaBase(
         context: Context,
         titolo: String,
         testo: String,
         destinazione: String? = null,
+        sopra: String? = null,
+        figlioId: Long? = null,
     ): Notification {
         val intent = Intent(context, MainActivity::class.java)
             .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         if (destinazione != null) {
             intent.putExtra(MainActivity.EXTRA_DESTINAZIONE, destinazione)
         }
-        // requestCode diverso per destinazione: con lo stesso PendingIntent
-        // Android riuserebbe l'extra del primo (le notifiche aprirebbero tutte
-        // la stessa scheda). L'extra cambia → serve un codice diverso.
+        if (figlioId != null) {
+            intent.putExtra(MainActivity.EXTRA_FIGLIO, figlioId)
+        }
+        // requestCode diverso per destinazione e figlio: con lo stesso
+        // PendingIntent Android riuserebbe gli extra del primo (le notifiche
+        // aprirebbero tutte la stessa scheda, sullo stesso figlio).
         val apriApp = PendingIntent.getActivity(
             context,
-            (destinazione ?: "").hashCode(),
+            "${destinazione.orEmpty()}|${figlioId ?: ""}".hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -326,6 +402,7 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             .setSmallIcon(R.drawable.ic_notifica_binocolo)
             .setContentTitle(titolo)
             .setContentText(testo)
+            .setSubText(sopra)
             .setStyle(NotificationCompat.BigTextStyle().bigText(testo))
             .setContentIntent(apriApp)
             .setAutoCancel(true)
@@ -336,18 +413,20 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         private const val NOME_LAVORO = "vedetta"
         const val CANALE_ID = "avvisi_patto"
 
-        /** Id fisso per l'avviso di silenzio/contatto, fuori dalla portata degli id del server. */
-        private const val ID_AVVISO_SILENZIO = 2_000_000_000
+        /** Il dispositivo unico del server 0.7, nei silenzi osservati. */
+        private const val CHIAVE_SERVER_VECCHIO = 0L
 
-        /** Id fisso per il digest giornaliero: quello di oggi sostituisce quello di ieri. */
-        private const val ID_DIGEST = 2_000_000_001
+        /**
+         * Id degli avvisi di silenzio/contatto, uno per dispositivo, fuori dalla
+         * portata degli id del server (0 = server 0.7: lo stesso id di prima).
+         */
+        private fun idAvvisoSilenzio(dispositivoId: Long): Int =
+            2_000_000_000 + (dispositivoId % 100_000_000).toInt()
 
-        /** Quante app entrano nel testo del digest (il dettaglio vive nella sezione Tempo). */
-        private const val APP_NEL_DIGEST = 3
+        /** Id del digest, uno per figlio: quello di oggi sostituisce quello di ieri. */
+        private fun idDigest(figlioId: Long): Int = 1_900_000_000 + (figlioId % 50_000_000).toInt()
 
-        // Oltre questi minuti dall'ultima fotografia, il totale del digest è un
-        // parziale e va etichettato come tale (il sync normale è ogni ~15 min).
-        private const val SOGLIA_FRESCHEZZA_MIN = 90L
+        private fun SilenzioAttuale.noto(): SilenzioNoto = SilenzioNoto(allarme, ultimoBattito, spento)
 
         /**
          * UPDATE: mantiene il ciclo dei 15 minuti già in corsa (niente riparti

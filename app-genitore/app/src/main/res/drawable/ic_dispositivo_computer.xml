@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dispositivo computer (v3): uno schermo col suo piede, stesso tratto delle altre icone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineJoin="round"
+        android:pathData="M4.8,4.5 L19.2,4.5 A1.8,1.8 0 0,1 21,6.3 L21,14.7 A1.8,1.8 0 0,1 19.2,16.5 L4.8,16.5 A1.8,1.8 0 0,1 3,14.7 L3,6.3 A1.8,1.8 0 0,1 4.8,4.5 Z" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M12,16.5 L12,19.6 M8.4,19.6 L15.6,19.6" />
+</vector>

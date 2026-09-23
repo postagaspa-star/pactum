@@ -11,12 +11,16 @@ import eu.stgm.pactum.genitore.dati.EsitiDichiarazione
 import eu.stgm.pactum.genitore.dati.EsitiRisposta
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.StatoSilenzio
+import eu.stgm.pactum.genitore.dati.TipiDispositivo
 import eu.stgm.pactum.genitore.dati.TipiRegola
+import eu.stgm.pactum.genitore.dati.UsoGiorno
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -80,7 +84,7 @@ fun parametroTesto(parametri: JsonObject, nome: String): String? = campo(paramet
 fun descrizioneRegola(regola: RegolaFinestra): String = descrizioneRegola(parole(), regola)
 
 fun descrizioneRegola(parole: Parole, regola: RegolaFinestra): String =
-    descrizioneRegola(parole, regola.tipo, regola.parametri, regola.nome)
+    descrizioneRegola(parole, regola.tipo, regola.parametri, regola.nome, regola.dispositivo?.tipo)
 
 /** Il tipo della regola come sopra-titolo della sua scheda ("LIMITE DI TEMPO"). */
 @Composable
@@ -98,12 +102,15 @@ fun etichettaTipoRegola(tipo: String): String = when (tipo) {
  *
  * `nomeApp` è il nome leggibile che la finestra allega alle limite_tempo su un
  * pacchetto ("TikTok"): se c'è, il genitore non legge mai com.zhiliaoapp.musically.
+ * `tipoDispositivo` (v3): una fascia oraria di un computer dice "Niente
+ * computer", non "Niente telefono".
  */
 fun descrizioneRegola(
     parole: Parole,
     tipo: String,
     parametri: JsonObject,
     nomeApp: String? = null,
+    tipoDispositivo: String? = null,
 ): String = when (tipo) {
     TipiRegola.LIMITE_TEMPO -> parole.testo(
         R.string.regola_limite_tempo,
@@ -112,7 +119,11 @@ fun descrizioneRegola(
     )
 
     TipiRegola.FASCIA_ORARIA -> parole.testo(
-        R.string.regola_fascia_oraria,
+        if (tipoDispositivo == TipiDispositivo.COMPUTER) {
+            R.string.regola_fascia_oraria_computer
+        } else {
+            R.string.regola_fascia_oraria
+        },
         campo(parametri, "dalle") ?: "?",
         campo(parametri, "alle") ?: "?",
         (parametri["giorni"] as? JsonArray)
@@ -143,13 +154,36 @@ fun descrizioneParametri(regola: RegolaFinestra, parametri: JsonObject): String 
 fun descrizioneParametri(parole: Parole, regola: RegolaFinestra, parametri: JsonObject): String {
     val stessaApp = campo(parametri, "app_o_categoria") ==
         campo(regola.parametri, "app_o_categoria")
-    return descrizioneRegola(parole, regola.tipo, parametri, regola.nome.takeIf { stessaApp })
+    return descrizioneRegola(
+        parole,
+        regola.tipo,
+        parametri,
+        regola.nome.takeIf { stessaApp },
+        regola.dispositivo?.tipo,
+    )
 }
 
-/** L'app o la categoria di una limite_tempo, col nome leggibile se c'è. */
+/** L'app, il programma, il sito o la categoria di una limite_tempo, col nome leggibile se c'è. */
 private fun nomeBersaglio(parametri: JsonObject, nomeApp: String?): String =
-    nomeApp?.takeIf { it.isNotBlank() }
-        ?: etichettaAppOCategoria(campo(parametri, "app_o_categoria") ?: "?")
+    nomeLeggibile(campo(parametri, "app_o_categoria") ?: "?", nomeApp)
+
+/**
+ * Il nome da mostrare per una chiave del contratto: il `nome` leggibile quando
+ * c'è ed è davvero un nome ("TikTok", "Minecraft"), altrimenti la chiave resa
+ * leggibile ([etichettaAppOCategoria]). Un `nome` che è la chiave stessa (il
+ * ripiego del server: "il pacchetto stesso") o una chiave con prefisso
+ * (`exe:…`, `sito:…`) non è un nome: il genitore non legge mai `exe:`.
+ */
+fun nomeLeggibile(chiave: String, nome: String?): String {
+    val pulito = nome?.trim()?.takeIf { candidato ->
+        candidato.isNotEmpty() &&
+            candidato != chiave &&
+            PREFISSI_TECNICI.none { candidato.startsWith(it) }
+    }
+    return pulito ?: etichettaAppOCategoria(chiave)
+}
+
+private val PREFISSI_TECNICI = listOf("exe:", "sito:", "categoria:")
 
 @Composable
 fun testoDurata(minuti: Long): String = testoDurata(parole(), minuti)
@@ -202,14 +236,105 @@ fun etichettaCategoria(chiave: String): String {
  * (es. `com.zhiliaoapp.musically`) resta com'è finché il server non allega un
  * nome risolto (S2). Così regole, sforamenti e storico non mostrano più la
  * chiave grezza `categoria:social` a un genitore che non l'ha mai vista.
+ *
+ * (v3) Sul computer: `sito:youtube.com` → "youtube.com (sito)" e
+ * `exe:minecraft.exe` → "minecraft.exe (programma)", quando il server non
+ * allega un nome. Come le categorie, sta qui e non in strings.xml.
  */
-fun etichettaAppOCategoria(chiave: String): String =
-    if (chiave.startsWith("categoria:")) etichettaCategoria(chiave) else chiave
+fun etichettaAppOCategoria(chiave: String): String = when {
+    chiave.startsWith("categoria:") -> etichettaCategoria(chiave)
+    chiave.startsWith("sito:") && chiave.length > "sito:".length ->
+        "${chiave.removePrefix("sito:")} (sito)"
+    chiave.startsWith("exe:") && chiave.length > "exe:".length ->
+        "${chiave.removePrefix("exe:")} (programma)"
+    else -> chiave
+}
 
 // --- Interruzioni nella registrazione -------------------------------------------
 
 @Composable
 fun descrizioneBuco(sottoTipo: String?): String = descrizioneBuco(parole(), sottoTipo)
+
+/** Un'interruzione raccontata coi suoi dettagli (v3: quando è stato chiuso Pactum sul computer). */
+@Composable
+fun descrizioneBuco(dettagli: JsonObject): String = descrizioneBuco(parole(), dettagli)
+
+/**
+ * Come [descrizioneBuco] per sotto-tipo, ma coi `dettagli` dell'evento: i
+ * sotto-tipi del computer (v3) portano con sé un intervallo.
+ * - `programma_chiuso` con `dal`/`al` (millisecondi): "Pactum è stato chiuso sul
+ *   computer (dalle 15:10 alle 15:40)"; chiuso dal suo menu (`volontario`), o
+ *   senza orari, una frase senza intervallo — mai un orario inventato;
+ * - `siti_non_leggibili`: il programma non è riuscito a leggere i siti.
+ * Gli orari si mostrano nel fuso del telefono, come ogni orario del registro.
+ */
+fun descrizioneBuco(
+    parole: Parole,
+    dettagli: JsonObject,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    val sottoTipo = campo(dettagli, "sotto_tipo")
+    val intervallo = intervalloOrario(
+        parole,
+        istanteMillisecondi(dettagli, "dal"),
+        istanteMillisecondi(dettagli, "al"),
+        zona,
+        oggi,
+    )
+    return when (sottoTipo) {
+        "programma_chiuso" -> when {
+            intervallo != null ->
+                parole.testo(R.string.manomissione_programma_chiuso_quando, intervallo)
+            campo(dettagli, "volontario")?.toBooleanStrictOrNull() == true ->
+                parole.testo(R.string.manomissione_programma_chiuso_volontario)
+            else -> parole.testo(R.string.manomissione_programma_chiuso)
+        }
+        "siti_non_leggibili" -> if (intervallo != null) {
+            parole.testo(R.string.manomissione_siti_non_leggibili_quando, intervallo)
+        } else {
+            parole.testo(R.string.manomissione_siti_non_leggibili)
+        }
+        else -> descrizioneBuco(parole, sottoTipo)
+    }
+}
+
+/** Un campo in millisecondi (epoch) come istante; null se manca o non è un numero. */
+private fun istanteMillisecondi(oggetto: JsonObject, nome: String): Instant? =
+    campo(oggetto, nome)?.toLongOrNull()?.takeIf { it > 0 }?.let(Instant::ofEpochMilli)
+
+/**
+ * "dalle 15:10 alle 15:40" (oggi), "il 22/09 dalle 15:10 alle 15:40" (un altro
+ * giorno), "dal 22/09 alle 22:10 al 23/09 alle 07:30" (a cavallo di due giorni).
+ * null se manca un estremo o la fine viene prima dell'inizio: un intervallo
+ * storto non si racconta.
+ */
+fun intervalloOrario(
+    parole: Parole,
+    dal: Instant?,
+    al: Instant?,
+    zona: ZoneId,
+    oggi: LocalDate,
+): String? {
+    if (dal == null || al == null || al.isBefore(dal)) return null
+    val inizio = dal.atZone(zona)
+    val fine = al.atZone(zona)
+    if (inizio.toLocalDate() != fine.toLocalDate()) {
+        return parole.testo(
+            R.string.intervallo_giorni_diversi,
+            formatoGiornoBreve.format(inizio),
+            formatoOra.format(inizio),
+            formatoGiornoBreve.format(fine),
+            formatoOra.format(fine),
+        )
+    }
+    val ore = parole.testo(R.string.intervallo_stesso_giorno, formatoOra.format(inizio), formatoOra.format(fine))
+    return if (inizio.toLocalDate() == oggi) {
+        ore
+    } else {
+        parole.testo(R.string.intervallo_altro_giorno, formatoGiornoBreve.format(inizio), ore)
+    }
+}
 
 /**
  * Un'interruzione nella registrazione (evento `manomissione`) detta per quello
@@ -231,8 +356,235 @@ fun descrizioneBuco(parole: Parole, sottoTipo: String?): String = when (sottoTip
     // (v2.3) La VPN locale dei siti spenta o revocata sul telefono del figlio.
     "osservazione_siti_interrotta" ->
         parole.testo(R.string.manomissione_osservazione_siti_interrotta)
+    // (v3) Dal computer, senza dettagli: la frase senza intervallo.
+    "programma_chiuso" -> parole.testo(R.string.manomissione_programma_chiuso)
+    "siti_non_leggibili" -> parole.testo(R.string.manomissione_siti_non_leggibili)
     else -> parole.testo(R.string.manomissione_generica, sottoTipo ?: "?")
 }
+
+// --- Dispositivi (v3) -----------------------------------------------------------
+
+/** "alle 15:10" se è oggi, "il 22/09 alle 15:10" un altro giorno — nel fuso del telefono. */
+fun alleQuando(
+    parole: Parole,
+    istante: Instant,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    val locale = istante.atZone(zona)
+    return if (locale.toLocalDate() == oggi) {
+        parole.testo(R.string.quando_alle_oggi, formatoOra.format(locale))
+    } else {
+        parole.testo(R.string.quando_alle_giorno, formatoGiornoBreve.format(locale), formatoOra.format(locale))
+    }
+}
+
+/** "dalle 15:10" se è oggi, "dal 22/09 alle 15:10" un altro giorno — nel fuso del telefono. */
+fun dalleQuando(
+    parole: Parole,
+    istante: Instant,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    val locale = istante.atZone(zona)
+    return if (locale.toLocalDate() == oggi) {
+        parole.testo(R.string.quando_dalle_oggi, formatoOra.format(locale))
+    } else {
+        parole.testo(R.string.quando_dal_giorno, formatoGiornoBreve.format(locale), formatoOra.format(locale))
+    }
+}
+
+/** Il nome di un dispositivo; senza nome, il suo tipo ("Telefono", "Computer"). */
+fun nomeDelDispositivo(parole: Parole, nome: String?, tipo: String): String =
+    nome?.trim()?.takeIf { it.isNotEmpty() }
+        ?: when (tipo) {
+            TipiDispositivo.COMPUTER -> parole.testo(R.string.dispositivo_computer)
+            TipiDispositivo.TELEFONO -> parole.testo(R.string.dispositivo_telefono)
+            else -> parole.testo(R.string.dispositivo_senza_nome)
+        }
+
+@Composable
+fun nomeDelDispositivo(dispositivo: VistaDispositivo): String =
+    nomeDelDispositivo(parole(), dispositivo.nome, dispositivo.tipo)
+
+/**
+ * La riga di stato di un dispositivo, dai flag del SERVER: "In contatto —
+ * ultimo aggiornamento alle 15:10", "Spento dalle 23:10", "Nessun
+ * aggiornamento dalle 15:10"… Un orario che non si legge non si inventa: si
+ * dice la frase senza orario.
+ */
+fun testoStatoCanale(
+    parole: Parole,
+    stato: StatoCanale,
+    silenzio: StatoSilenzio?,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    val battito = istanteServer(silenzio?.ultimoBattito)
+    return when (stato) {
+        StatoCanale.IN_CONTATTO -> battito
+            ?.let { parole.testo(R.string.dispositivo_in_contatto, alleQuando(parole, it, zona, oggi)) }
+            ?: parole.testo(R.string.dispositivo_in_contatto_senza_ora)
+        StatoCanale.SPENTO -> istanteServer(silenzio?.spentoDal)
+            ?.let { parole.testo(R.string.dispositivo_spento, dalleQuando(parole, it, zona, oggi)) }
+            ?: parole.testo(R.string.dispositivo_spento_senza_ora)
+        StatoCanale.SILENTE -> battito
+            ?.let { parole.testo(R.string.dispositivo_silente, dalleQuando(parole, it, zona, oggi)) }
+            ?: parole.testo(R.string.dispositivo_mai_sentito)
+        StatoCanale.MAI_SENTITO -> parole.testo(R.string.dispositivo_mai_sentito)
+        StatoCanale.DA_COLLEGARE -> parole.testo(R.string.dispositivo_da_collegare)
+        StatoCanale.SCOLLEGATO -> parole.testo(R.string.dispositivo_scollegato)
+        StatoCanale.SCONOSCIUTO -> parole.testo(R.string.dispositivo_stato_sconosciuto)
+    }
+}
+
+/**
+ * L'avviso di sistema della vedetta per UN dispositivo (v3). Di chi è lo dice la
+ * riga sopra il titolo ([etichettaDi]); qui il fatto, detto per il tipo di
+ * dispositivo. null = niente da avvisare ([CambioSilenzio.BASE], [CambioSilenzio.NESSUNO]).
+ */
+fun testoAvvisoSilenzio(
+    parole: Parole,
+    cambio: CambioSilenzio,
+    computer: Boolean,
+    silenzio: StatoSilenzio?,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): TestoNotifica? {
+    val battito = istanteServer(silenzio?.ultimoBattito)
+    return when (cambio) {
+        CambioSilenzio.BASE, CambioSilenzio.NESSUNO -> null
+        CambioSilenzio.NUOVO_SILENZIO -> TestoNotifica(
+            parole.testo(R.string.notifica_silenzio_titolo),
+            if (battito == null) {
+                parole.testo(R.string.notifica_silenzio_mai_dispositivo)
+            } else {
+                parole.testo(
+                    if (computer) R.string.notifica_silenzio_computer else R.string.notifica_silenzio_telefono,
+                    dalleQuando(parole, battito, zona, oggi),
+                )
+            },
+        )
+        CambioSilenzio.CONTATTO_TORNATO -> TestoNotifica(
+            parole.testo(R.string.notifica_contatto_titolo),
+            parole.testo(
+                if (computer) R.string.notifica_contatto_computer else R.string.notifica_contatto_telefono,
+                battito?.let { alleQuando(parole, it, zona, oggi) } ?: "—",
+            ),
+        )
+        CambioSilenzio.SPENTO_DOPO_SILENZIO -> TestoNotifica(
+            parole.testo(R.string.tipo_computer_spento),
+            istanteServer(silenzio?.spentoDal)
+                ?.let { parole.testo(R.string.notifica_spento_dopo_silenzio, dalleQuando(parole, it, zona, oggi)) }
+                ?: parole.testo(R.string.notifica_spento_dopo_silenzio_senza_ora),
+        )
+    }
+}
+
+// --- Il digest della sera ----------------------------------------------------------
+
+/** Oltre questi minuti dall'ultima fotografia, il totale del digest è un parziale e va detto. */
+const val SOGLIA_FRESCHEZZA_DIGEST_MIN = 90L
+
+/** Quante app (o programmi) entrano nel digest per dispositivo: il dettaglio vive nel Tempo. */
+private const val APP_NEL_DIGEST = 3
+
+/**
+ * Il digest giornaliero di UN figlio: titolo e testo, dalla fotografia di oggi
+ * di ciascun suo dispositivo (l'ultima voce di `uso_recente`).
+ *
+ * - Un telefono solo (o server 0.7): come la 0.7 — "Oggi: 3 h" e le prime app.
+ * - Più dispositivi, o un computer: il titolo mette in fila i totali
+ *   ("Oggi: Telefono 3 h · Computer 2 h"), il testo una riga per dispositivo.
+ * Un oggi senza fotografia lo dice, MAI uno zero finto; una fotografia ferma
+ * da più di 90 minuti è un parziale, e lo si scrive.
+ * I dispositivi scollegati o non ancora collegati non entrano: non mandano dati.
+ */
+fun testoDigest(parole: Parole, dispositivi: List<VistaDispositivo>, adesso: Instant = Instant.now()): TestoNotifica {
+    val attivi = dispositivi.filter { !it.revocato && it.abbinato }
+    val solo = attivi.singleOrNull()
+    if (attivi.isEmpty() || (solo != null && !solo.computer)) {
+        return digestUnTelefono(parole, solo?.usoRecente?.lastOrNull(), adesso)
+    }
+    val parti = attivi.map { dispositivo ->
+        val nome = nomeDelDispositivo(parole, dispositivo.nome, dispositivo.tipo)
+        val totale = dispositivo.usoRecente.lastOrNull()?.totaleMinuti
+        if (totale == null) {
+            parole.testo(R.string.digest_parte_dispositivo_nessun_dato, nome)
+        } else {
+            parole.testo(R.string.digest_parte_dispositivo, nome, testoDurata(parole, totale.toLong()))
+        }
+    }
+    val righe = attivi.map { dispositivo ->
+        val nome = nomeDelDispositivo(parole, dispositivo.nome, dispositivo.tipo)
+        val uso = dispositivo.usoRecente.lastOrNull()
+        if (uso?.totaleMinuti == null) {
+            parole.testo(R.string.digest_riga_dispositivo_nessun_dato, nome)
+        } else {
+            val prime = primeApp(parole, uso)
+            if (prime.isEmpty()) {
+                parole.testo(R.string.digest_parte_dispositivo, nome, testoDurata(parole, uso.totaleMinuti.toLong()))
+            } else {
+                parole.testo(R.string.digest_riga_dispositivo, nome, prime)
+            }
+        }
+    }
+    val freschezza = attivi.mapNotNull { dispositivo ->
+        val istante = istanteServer(dispositivo.usoRecente.lastOrNull()?.aggiornatoTs) ?: return@mapNotNull null
+        if (Duration.between(istante, adesso).toMinutes() <= SOGLIA_FRESCHEZZA_DIGEST_MIN) return@mapNotNull null
+        parole.testo(
+            R.string.digest_freschezza_dispositivo,
+            nomeDelDispositivo(parole, dispositivo.nome, dispositivo.tipo),
+            oraOppureDataOra(istante),
+        )
+    }
+    val testo = (righe + freschezza + parole.testo(R.string.digest_tocca)).joinToString("\n")
+    return TestoNotifica(parole.testo(R.string.digest_titolo, parti.joinToString(" · ")), testo)
+}
+
+/** Il digest della 0.7: un telefono, il totale nel titolo, le prime app nel testo. */
+private fun digestUnTelefono(parole: Parole, uso: UsoGiorno?, adesso: Instant): TestoNotifica {
+    val totale = uso?.totaleMinuti
+        ?: return TestoNotifica(
+            parole.testo(R.string.digest_titolo_nessun_dato),
+            parole.testo(R.string.digest_testo_nessun_dato),
+        )
+    val titolo = parole.testo(R.string.digest_titolo, testoDurata(parole, totale.toLong()))
+    val prime = primeApp(parole, uso)
+    val corpo = if (prime.isEmpty()) {
+        parole.testo(R.string.digest_tocca)
+    } else {
+        parole.testo(R.string.digest_testo, prime)
+    }
+    // Caveat di freschezza: se la fotografia è ferma da oltre 90 minuti, il
+    // totale è un parziale — dillo, non spacciarlo per il consuntivo di oggi
+    // (concept: il registro non mente, mai stantìo mostrato come corrente).
+    val istante = istanteServer(uso.aggiornatoTs)
+    val testo = if (istante != null &&
+        Duration.between(istante, adesso).toMinutes() > SOGLIA_FRESCHEZZA_DIGEST_MIN
+    ) {
+        corpo + "\n" + parole.testo(R.string.digest_freschezza, oraOppureDataOra(istante))
+    } else {
+        corpo
+    }
+    return TestoNotifica(titolo, testo)
+}
+
+/** "TikTok 1 h (limite 1 h) · YouTube 40 min": le app più usate del giorno, col limite dove c'è. */
+private fun primeApp(parole: Parole, uso: UsoGiorno): String =
+    uso.app
+        .sortedByDescending { it.minuti }
+        .take(APP_NEL_DIGEST)
+        .joinToString(" · ") { app ->
+            val nome = nomeLeggibile(app.chiave, app.nome)
+            val durata = testoDurata(parole, app.minuti.toLong())
+            val limite = app.limite
+            if (limite != null) {
+                parole.testo(R.string.digest_app_con_limite, nome, durata, testoDurata(parole, limite.toLong()))
+            } else {
+                parole.testo(R.string.digest_app, nome, durata)
+            }
+        }
 
 // --- Rifiuti del server (409) ---------------------------------------------------
 
@@ -248,6 +600,30 @@ fun messaggioRifiutoProposta(codice: String?): Int = when (codice) {
     PostinoClient.PARAMETRI_NON_VALIDI -> R.string.proposta_errore_parametri_non_validi
     else -> R.string.proposta_errore_generico
 }
+
+/**
+ * (v3) Che cosa dire quando il server rifiuta un gesto sulla famiglia (un
+ * figlio, un dispositivo, un codice). Ogni rifiuto col suo motivo vero; un
+ * codice che non si conosce dice solo che il server non ha accettato — non si
+ * inventa un perché. [secondi] vale per il 429: quanto aspettare.
+ */
+fun messaggioRifiutoFamiglia(parole: Parole, codice: String?, secondi: Long?): String = when (codice) {
+    CodiciErrore.TROPPI_TENTATIVI -> if (secondi != null && secondi > 0) {
+        parole.testo(R.string.famiglia_errore_troppi_tentativi_tra, attesaInMinuti(secondi))
+    } else {
+        parole.testo(R.string.famiglia_errore_troppi_tentativi)
+    }
+    CodiciErrore.NON_TROVATO -> parole.testo(R.string.famiglia_errore_non_trovato)
+    CodiciErrore.DISPOSITIVO_REVOCATO -> parole.testo(R.string.famiglia_errore_dispositivo_scollegato)
+    CodiciErrore.NOME_NON_VALIDO, PostinoClient.PARAMETRI_NON_VALIDI ->
+        parole.testo(R.string.famiglia_errore_nome, LUNGHEZZA_MASSIMA_NOME)
+    CodiciErrore.CODICE_NON_VALIDO -> parole.testo(R.string.famiglia_errore_codice_non_valido)
+    null -> parole.testo(R.string.famiglia_errore_rete)
+    else -> parole.testo(R.string.famiglia_errore_rifiutato)
+}
+
+/** I secondi d'attesa di un 429 in minuti interi, arrotondati per eccesso (mai "0 minuti"). */
+fun attesaInMinuti(secondi: Long): Long = ((secondi + 59) / 60).coerceAtLeast(1)
 
 /**
  * I rifiuti di una proposta che non si risolvono riprovando: la regola ha già
@@ -326,6 +702,9 @@ private fun etichettaTipoNotifica(tipo: String): Int = when (tipo) {
     "proposta_risposta" -> R.string.tipo_proposta_risposta
     "proposta_annullata" -> R.string.tipo_proposta_annullata
     "dichiarazione" -> R.string.tipo_dichiarazione
+    // (v3) Il computer che si spegne e si riaccende: non sono interruzioni.
+    "sospensione" -> R.string.tipo_computer_spento
+    "ripresa" -> R.string.tipo_computer_acceso
     else -> R.string.tipo_novita // tipo nuovo dal server: tolleranza evolutiva
 }
 
@@ -342,12 +721,17 @@ private fun fraseNotifica(
         // "Fuori regola" / "TikTok: al massimo 1 h al giorno".
         "sforamento" -> regola?.let { TestoNotifica(titolo, descrizioneRegola(parole, it)) }
 
-        // "Anomalia" / "Uso non registrato in questo periodo".
+        // "Anomalia" / "Uso non registrato in questo periodo"; (v3) "Pactum è
+        // stato chiuso sul computer (dalle 15:10 alle 15:40)".
         "manomissione" -> {
             val dettagli = payload["dettagli"] as? JsonObject ?: return null
-            val sottoTipo = campo(dettagli, "sotto_tipo") ?: return null
-            TestoNotifica(titolo, descrizioneBuco(parole, sottoTipo))
+            campo(dettagli, "sotto_tipo") ?: return null
+            TestoNotifica(titolo, descrizioneBuco(parole, dettagli))
         }
+
+        // (v3) Il computer spento o riacceso: una cosa normale, detta come tale.
+        "sospensione" -> fraseSospensione(parole, motivoEvento(payload))
+        "ripresa" -> fraseRipresa(parole, motivoEvento(payload))
 
         "bonus" -> {
             val minuti = campo(payload, "minuti")?.toLongOrNull() ?: return null
@@ -391,6 +775,45 @@ private fun fraseNotifica(
 
         else -> null
     }
+}
+
+/** Il `motivo` di un evento del computer: nei dettagli dell'evento, o in cima al payload. */
+private fun motivoEvento(payload: JsonObject): String? =
+    (payload["dettagli"] as? JsonObject)?.let { campo(it, "motivo") } ?: campo(payload, "motivo")
+
+/**
+ * `sospensione` (v3): il computer si spegne, va in sospensione o il figlio esce
+ * dall'account. Non è un'interruzione nella registrazione, e la frase lo dice.
+ */
+private fun fraseSospensione(parole: Parole, motivo: String?): TestoNotifica = when (motivo) {
+    "sospensione" -> TestoNotifica(
+        parole.testo(R.string.tipo_computer_in_sospensione),
+        parole.testo(R.string.notifica_computer_in_sospensione),
+    )
+    "disconnessione" -> TestoNotifica(
+        parole.testo(R.string.tipo_uscita_account),
+        parole.testo(R.string.notifica_uscita_account),
+    )
+    else -> TestoNotifica(
+        parole.testo(R.string.tipo_computer_spento),
+        parole.testo(R.string.notifica_computer_spento),
+    )
+}
+
+/** `ripresa` (v3): il computer riparte e Pactum riprende a registrare. */
+private fun fraseRipresa(parole: Parole, motivo: String?): TestoNotifica = when (motivo) {
+    "riattivazione" -> TestoNotifica(
+        parole.testo(R.string.tipo_computer_riattivato),
+        parole.testo(R.string.notifica_computer_riattivato),
+    )
+    "accesso" -> TestoNotifica(
+        parole.testo(R.string.tipo_accesso_account),
+        parole.testo(R.string.notifica_accesso_account),
+    )
+    else -> TestoNotifica(
+        parole.testo(R.string.tipo_computer_acceso),
+        parole.testo(R.string.notifica_computer_acceso),
+    )
 }
 
 /**

@@ -18,9 +18,13 @@ data class Finestra(
     @SerialName("sforamenti_recenti") val sforamentiRecenti: List<EventoFinestra> = emptyList(),
     @SerialName("manomissioni_recenti") val manomissioniRecenti: List<EventoFinestra> = emptyList(),
     @SerialName("storico_modifiche") val storicoModifiche: List<ModificaStorico> = emptyList(),
-    val bonus: StatoBonus,
+    // (v3) bonus e silenzio di primo livello valgono per il PRIMO dispositivo del
+    // figlio: un figlio appena creato, senza dispositivi, può non averli. Nullable
+    // perché un campo mancante non faccia sembrare "server irraggiungibile" una
+    // finestra buona.
+    val bonus: StatoBonus? = null,
     @SerialName("bonus_giornalieri") val bonusGiornalieri: List<BonusGiorno> = emptyList(),
-    @SerialName("stato_silenzio") val statoSilenzio: StatoSilenzio,
+    @SerialName("stato_silenzio") val statoSilenzio: StatoSilenzio? = null,
     @SerialName("uso_recente") val usoRecente: List<UsoGiorno> = emptyList(),
     // Medie settimanale/mensile del tempo d'uso (contratto-api.md, GET /api/finestra).
     // Nullable per tolleranza: un server più vecchio non manda il campo → l'app
@@ -44,7 +48,110 @@ data class Finestra(
     // (v2.4) Il genitore ha già mandato il segno oggi (fuso del patto). Assente
     // su un server vecchio: false, e sarà il server a dire di no se serve.
     @SerialName("segno_oggi") val segnoOggi: Boolean = false,
+    // (v3) Tutto quello che è PER DISPOSITIVO (tempi, siti, bonus, silenzio,
+    // striscia del dispositivo), revocati compresi. Vuota = server 0.7: valgono i
+    // campi di primo livello, come prima.
+    val dispositivi: List<DispositivoFinestra> = emptyList(),
 )
+
+// --- v3: famiglia, figli e dispositivi ----------------------------------------
+// La famiglia ha uno o più figli; ogni figlio ha uno o più dispositivi (telefono
+// o computer) con regole, tempi, bonus e registro separati. Vita reale e
+// striscia restano del figlio (contratto-api.md, "v3 — Famiglia, figli e
+// dispositivi"). Un server 0.7 non conosce GET /api/famiglia (404): l'app
+// resta com'era, un figlio e un dispositivo.
+
+object TipiDispositivo {
+    const val TELEFONO = "telefono"
+    const val COMPUTER = "computer"
+}
+
+/** GET /api/famiglia: i figli in ordine di id, ciascuno coi suoi dispositivi. */
+@Serializable
+data class Famiglia(val figli: List<Figlio> = emptyList())
+
+@Serializable
+data class Figlio(
+    val id: Long,
+    val nome: String = "",
+    val striscia: List<QuadrettoSemaforo> = emptyList(),
+    val riepilogo: RiepilogoFinestra? = null,
+    @SerialName("notifiche_non_lette") val notificheNonLette: Int = 0,
+    val dispositivi: List<Dispositivo> = emptyList(),
+)
+
+/** Un dispositivo come lo racconta GET /api/famiglia (revocati compresi). */
+@Serializable
+data class Dispositivo(
+    val id: Long,
+    val nome: String = "",
+    val tipo: String = TipiDispositivo.TELEFONO,
+    val abbinato: Boolean = true,
+    val revocato: Boolean = false,
+    @SerialName("versione_app") val versioneApp: String? = null,
+    @SerialName("stato_silenzio") val statoSilenzio: StatoSilenzio? = null,
+)
+
+/** Il dispositivo come lo allegano regole e codici: solo chi è. */
+@Serializable
+data class RiferimentoDispositivo(
+    val id: Long,
+    val nome: String = "",
+    val tipo: String = TipiDispositivo.TELEFONO,
+)
+
+/**
+ * (v3) Un dispositivo dentro GET /api/finestra, con tutto quello che è suo:
+ * tempi, siti, medie, bonus, la sua striscia e il suo stato di silenzio.
+ */
+@Serializable
+data class DispositivoFinestra(
+    val id: Long,
+    val nome: String = "",
+    val tipo: String = TipiDispositivo.TELEFONO,
+    val abbinato: Boolean = true,
+    val revocato: Boolean = false,
+    @SerialName("stato_silenzio") val statoSilenzio: StatoSilenzio? = null,
+    val striscia: List<QuadrettoSemaforo> = emptyList(),
+    @SerialName("uso_recente") val usoRecente: List<UsoGiorno> = emptyList(),
+    // Stessa distinzione della finestra: null = niente siti da questo server.
+    @SerialName("siti_recenti") val sitiRecenti: List<SitiGiorno>? = null,
+    val medie: Medie? = null,
+    val bonus: StatoBonus? = null,
+    @SerialName("bonus_giornalieri") val bonusGiornalieri: List<BonusGiorno> = emptyList(),
+)
+
+/** Risposta di POST /api/figli e PATCH /api/figli/{id}. */
+@Serializable
+data class FiglioRisposta(
+    val id: Long,
+    val nome: String = "",
+    @SerialName("creato_ts") val creatoTs: String? = null,
+)
+
+/** Corpo di POST /api/figli e PATCH /api/figli/{id}: il nome, 1-40 caratteri. */
+@Serializable
+data class CorpoNomeFiglio(val nome: String)
+
+/** Corpo di POST /api/figli/{id}/dispositivi. */
+@Serializable
+data class CorpoNuovoDispositivo(val nome: String, val tipo: String)
+
+/**
+ * Il codice di 6 cifre per collegare un dispositivo: vale 15 minuti, una volta
+ * sola. Risposta di POST /api/figli/{id}/dispositivi e di
+ * POST /api/dispositivi/{id}/codice.
+ */
+@Serializable
+data class CodiceAbbinamento(
+    val dispositivo: RiferimentoDispositivo? = null,
+    val codice: String,
+    @SerialName("scade_ts") val scadeTs: String? = null,
+)
+
+/** Corpo di POST /api/segno in v3: il segno va a UN figlio. */
+@Serializable
+data class CorpoSegno(@SerialName("figlio_id") val figlioId: Long)
 
 /** (v2.4) Il `riepilogo` della finestra: giorni fuori regola e interruzioni negli 8 giorni. */
 @Serializable
@@ -62,6 +169,15 @@ object CodiciErrore {
     const val REGOLA_NON_VALIDA = "regola_non_valida"
     const val DICHIARAZIONE_NON_IN_ATTESA = "dichiarazione_non_in_attesa"
     const val SEGNO_GIA_MANDATO = "segno_gia_mandato"
+
+    // (v3) Abbinamento e famiglia.
+    const val CODICE_NON_VALIDO = "codice_non_valido"
+    const val TROPPI_TENTATIVI = "troppi_tentativi"
+    const val DISPOSITIVO_REVOCATO = "dispositivo_revocato"
+    const val NOME_NON_VALIDO = "nome_non_valido"
+
+    /** Coniato qui per il 404 (figlio o dispositivo che non esiste più): il 404 non porta un codice. */
+    const val NON_TROVATO = "non_trovato"
 }
 
 /** Risposta di POST /api/segno (v2.4): il riconoscimento a testo fisso è partito. */
@@ -97,11 +213,16 @@ data class SitiGiorno(
     val domini: List<SitoVisitato> = emptyList(),
 )
 
-/** Un sito del giorno: il dominio registrabile e quante volte è stato richiesto. */
+/**
+ * Un sito del giorno: il dominio registrabile e quante volte è stato richiesto.
+ * (v3) Sui computer anche i `minuti` passati con quel sito in primo piano; sui
+ * telefoni il campo non c'è (null): il telefono vede le richieste, non il tempo.
+ */
 @Serializable
 data class SitoVisitato(
     val dominio: String,
     val visite: Int = 0,
+    val minuti: Int? = null,
 )
 
 // --- Medie (settimana / mese) ------------------------------------------------
@@ -178,6 +299,10 @@ data class RegolaFinestra(
     @SerialName("ultima_modifica_ts") val ultimaModificaTs: String = "",
     @SerialName("allentabile_dal") val allentabileDal: String? = null,
     val semaforo: List<QuadrettoSemaforo> = emptyList(),
+    // (v3) Di quale dispositivo è la regola; null per la vita reale (è del
+    // figlio) e sui server 0.7.
+    @SerialName("dispositivo_id") val dispositivoId: Long? = null,
+    val dispositivo: RiferimentoDispositivo? = null,
 )
 
 object TipiRegola {
@@ -203,6 +328,8 @@ data class EventoFinestra(
     val dettagli: JsonObject = JsonObject(emptyMap()),
     @SerialName("ts_device") val tsDevice: Long? = null,
     @SerialName("ts_server") val tsServer: String,
+    // (v3) Il dispositivo che l'ha mandato; null sui server 0.7.
+    @SerialName("dispositivo_id") val dispositivoId: Long? = null,
 )
 
 @Serializable
@@ -230,6 +357,11 @@ data class BonusGiorno(val giorno: String, val minuti: Int)
 data class StatoSilenzio(
     @SerialName("ultimo_battito") val ultimoBattito: String? = null,
     val silente: Boolean,
+    // (v3) Solo i computer: dopo una `sospensione` (spegnimento, sospensione,
+    // uscita dall'account) il silenzio NON è un'interruzione. Il server manda
+    // silente=false, spento=true e da quando. Sui telefoni resta false.
+    val spento: Boolean = false,
+    @SerialName("spento_dal") val spentoDal: String? = null,
 )
 
 @Serializable
@@ -239,6 +371,10 @@ data class Notifica(
     val messaggio: String,
     val payload: JsonObject = JsonObject(emptyMap()),
     @SerialName("ts_server") val tsServer: String,
+    // (v3) Di quale figlio e di quale dispositivo (null = del figlio intero o
+    // server 0.7). Il genitore riceve quelle di tutti i figli.
+    @SerialName("figlio_id") val figlioId: Long? = null,
+    @SerialName("dispositivo_id") val dispositivoId: Long? = null,
 )
 
 @Serializable
@@ -275,12 +411,17 @@ data class RispostaProposta(
 @Serializable
 data class PaccoProposte(val proposte: List<Proposta> = emptyList())
 
-/** Corpo di POST /api/proposte. Per l'eliminazione, `parametriProposti` è il marcatore. */
+/**
+ * Corpo di POST /api/proposte. Per l'eliminazione, `parametriProposti` è il
+ * marcatore. (v3) `figlioId` va nel corpo; null (server 0.7) non si scrive
+ * affatto: i default non si codificano.
+ */
 @Serializable
 data class NuovaProposta(
     @SerialName("regola_id") val regolaId: Long,
     @SerialName("parametri_proposti") val parametriProposti: JsonObject,
     val motivazione: String? = null,
+    @SerialName("figlio_id") val figlioId: Long? = null,
 )
 
 object StatiProposta {
@@ -333,11 +474,12 @@ data class Verdetto(
 @Serializable
 data class PaccoDichiarazioni(val dichiarazioni: List<Dichiarazione> = emptyList())
 
-/** Corpo di POST /api/dichiarazioni/{id}/verdetto. */
+/** Corpo di POST /api/dichiarazioni/{id}/verdetto ((v3) col figlio, se noto). */
 @Serializable
 data class CorpoVerdetto(
     val verdetto: String,
     val nota: String? = null,
+    @SerialName("figlio_id") val figlioId: Long? = null,
 )
 
 object StatiDichiarazione {

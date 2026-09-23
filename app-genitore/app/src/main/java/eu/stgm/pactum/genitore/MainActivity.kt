@@ -47,6 +47,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.sync.VedettaWorker
+import eu.stgm.pactum.genitore.ui.FamigliaViewModel
 import eu.stgm.pactum.genitore.ui.FinestraScreen
 import eu.stgm.pactum.genitore.ui.ImpostazioniScreen
 import eu.stgm.pactum.genitore.ui.NotificheScreen
@@ -63,6 +64,10 @@ class MainActivity : ComponentActivity() {
     // quando l'app è già viva. null = avvio normale, si parte dalla finestra.
     private val destinazioneRichiesta = mutableStateOf<String?>(null)
 
+    // (v3) Il figlio di cui parla la notifica toccata: si sceglie lui in cima,
+    // così l'avviso su Luca apre il patto di Luca. null = nessuna richiesta.
+    private val figlioRichiesto = mutableStateOf<Long?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // La destinazione vale solo per un tocco VERO sulla notifica. Due casi in
@@ -76,14 +81,18 @@ class MainActivity : ComponentActivity() {
             ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
         if (savedInstanceState == null && !daiRecenti) {
             destinazioneRichiesta.value = intent?.getStringExtra(EXTRA_DESTINAZIONE)
+            figlioRichiesto.value = intent?.figlioDellaNotifica()
         }
-        // Consumato comunque: una rotazione non deve rileggerlo nello stesso processo.
+        // Consumati comunque: una rotazione non deve rileggerli nello stesso processo.
         intent?.removeExtra(EXTRA_DESTINAZIONE)
+        intent?.removeExtra(EXTRA_FIGLIO)
         setContent {
             PactumTheme {
                 GenitoreRoot(
                     destinazioneRichiesta = destinazioneRichiesta.value,
                     onDestinazioneConsumata = { destinazioneRichiesta.value = null },
+                    figlioRichiesto = figlioRichiesto.value,
+                    onFiglioConsumato = { figlioRichiesto.value = null },
                 )
             }
         }
@@ -93,13 +102,19 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         destinazioneRichiesta.value = intent.getStringExtra(EXTRA_DESTINAZIONE)
-        // Consumato subito, come in onCreate: evita che una rotazione successiva
-        // rilegga l'extra e ri-salti alla scheda della notifica.
+        figlioRichiesto.value = intent.figlioDellaNotifica()
+        // Consumati subito, come in onCreate: evita che una rotazione successiva
+        // rilegga gli extra e ri-salti alla scheda della notifica.
         intent.removeExtra(EXTRA_DESTINAZIONE)
+        intent.removeExtra(EXTRA_FIGLIO)
     }
+
+    private fun Intent.figlioDellaNotifica(): Long? =
+        if (hasExtra(EXTRA_FIGLIO)) getLongExtra(EXTRA_FIGLIO, -1L).takeIf { it >= 0 } else null
 
     companion object {
         const val EXTRA_DESTINAZIONE = "destinazione_iniziale"
+        const val EXTRA_FIGLIO = "figlio"
         const val DEST_FINESTRA = "finestra"
         const val DEST_TEMPO = "tempo"
         const val DEST_TURNO = "turno"
@@ -137,6 +152,8 @@ private val ALTEZZA_BARRA_MATERIAL = 80.dp
 private fun GenitoreRoot(
     destinazioneRichiesta: String?,
     onDestinazioneConsumata: () -> Unit,
+    figlioRichiesto: Long?,
+    onFiglioConsumato: () -> Unit,
 ) {
     var destinazione by rememberSaveable { mutableStateOf(Destinazione.FINESTRA) }
     var notificheAperte by rememberSaveable { mutableStateOf(false) }
@@ -146,14 +163,25 @@ private fun GenitoreRoot(
     val notificheVm: NotificheViewModel = viewModel()
     val statoNotifiche by notificheVm.stato.collectAsStateWithLifecycle()
     val nonLette = statoNotifiche.notifiche.size
+    // (v3) La famiglia, condivisa da tutte le schermate: si rilegge insieme al
+    // badge, così i figli, i loro dispositivi e i loro numeri restano freschi.
+    val famigliaVm: FamigliaViewModel = viewModel()
     val cicloVita = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(cicloVita) {
         cicloVita.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 notificheVm.aggiorna()
+                famigliaVm.aggiorna()
                 delay(INTERVALLO_NON_LETTE_MS)
             }
         }
+    }
+
+    // Arrivo da una notifica su un figlio: si sceglie lui, una volta sola.
+    LaunchedEffect(figlioRichiesto) {
+        if (figlioRichiesto == null) return@LaunchedEffect
+        famigliaVm.scegli(figlioRichiesto)
+        onFiglioConsumato()
     }
 
     RichiestaPermessoNotifiche()

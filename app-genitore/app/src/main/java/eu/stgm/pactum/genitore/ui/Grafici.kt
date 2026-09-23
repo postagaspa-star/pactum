@@ -417,6 +417,10 @@ fun BarraOrizzontale(
  * a destra, la barra proporzionale sotto — la stessa lettura delle app, così il
  * genitore legge le due liste con lo stesso occhio.
  *
+ * (v3) Sul computer ([minuti] non null) a destra c'è prima il tempo e poi le
+ * visite ("42 min · 7 visite"), e la barra è sui minuti: [riferimento] è allora
+ * il sito con più minuti del giorno.
+ *
  * Il nome è un DOMINIO e basta (`instagram.com`), mai una pagina: quello che sta
  * dopo il nome del sito non lo vede nemmeno il telefono del figlio.
  */
@@ -426,7 +430,9 @@ fun RigaBarraSito(
     visite: Int,
     riferimento: Int,
     modifier: Modifier = Modifier,
+    minuti: Int? = null,
 ) {
+    val testoVisite = pluralStringResource(R.plurals.siti_visite, visite, visite)
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -437,14 +443,18 @@ fun RigaBarraSito(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = pluralStringResource(R.plurals.siti_visite, visite, visite),
+                text = if (minuti != null) {
+                    stringResource(R.string.siti_minuti_e_visite, testoDurata(minuti.toLong()), testoVisite)
+                } else {
+                    testoVisite
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = Spazi.s),
             )
         }
         BarraOrizzontale(
-            quantita = visite,
+            quantita = minuti ?: visite,
             riferimento = riferimento,
             colore = MaterialTheme.colorScheme.primary,
         )

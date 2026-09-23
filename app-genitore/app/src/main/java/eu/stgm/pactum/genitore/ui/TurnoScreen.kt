@@ -2,9 +2,11 @@ package eu.stgm.pactum.genitore.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -51,24 +53,32 @@ import kotlinx.coroutines.launch
 fun TurnoScreen(
     proposteVm: ProposteViewModel = viewModel(),
     verdettiVm: VerdettiViewModel = viewModel(),
+    famigliaVm: FamigliaViewModel = viewModel(),
 ) {
     val proposte by proposteVm.stato.collectAsStateWithLifecycle()
     val verdetti by verdettiVm.stato.collectAsStateWithLifecycle()
+    val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    // (v3) Tutto è del figlio scelto in cima: letture e scritture.
+    val figlioId = famiglia.figlioId
 
     // rememberSaveable: una rotazione non deve buttare via la proposta in corso né
     // il confronto appena ricevuto. Della regola scelta si salva l'id (Long,
     // salvabile) e la si risale dall'elenco corrente.
     var regolaSceltaId by rememberSaveable { mutableStateOf<Long?>(null) }
     var confrontoInviato by rememberSaveable { mutableStateOf<String?>(null) }
-    val regolaScelta = regolaSceltaId?.let { id -> proposte.regoleAttive.firstOrNull { it.id == id } }
+    val regolaScelta = regolaSceltaId?.let { id ->
+        proposte.regoleAttive.firstOrNull { it.id == id }.takeIf { proposte.di(figlioId) }
+    }
 
     val aggiornaTutto = {
-        proposteVm.aggiorna()
-        verdettiVm.aggiorna()
+        proposteVm.aggiorna(figlioId)
+        verdettiVm.aggiorna(figlioId)
     }
-    LifecycleResumeEffect(Unit) {
-        aggiornaTutto()
+    // A ogni ritorno in primo piano e a ogni cambio di figlio, quando si sa
+    // di quale figlio (famiglia pronta).
+    LifecycleResumeEffect(figlioId, famiglia.pronta) {
+        if (famiglia.pronta) aggiornaTutto()
         onPauseOrDispose { }
     }
 
@@ -91,7 +101,7 @@ fun TurnoScreen(
                 // non serve. Via il dialogo, e si rilegge com'è davvero.
                 if (rifiutoPropostaDefinitivo(evento.codice)) {
                     regolaSceltaId = null
-                    proposteVm.aggiorna()
+                    proposteVm.aggiorna(figlioId)
                 }
                 val messaggio = parole.testo(messaggioRifiutoProposta(evento.codice))
                 ambito.launch { snackbarHostState.showSnackbar(messaggio) }
@@ -108,7 +118,7 @@ fun TurnoScreen(
             is VerdettiViewModel.Evento.Errore -> {
                 // Qualcuno ha già risposto (l'arbitro, l'altro genitore): si
                 // rilegge, così la dichiarazione esce da "DA CONFERMARE".
-                if (evento.codice == CodiciErrore.DICHIARAZIONE_NON_IN_ATTESA) verdettiVm.aggiorna()
+                if (evento.codice == CodiciErrore.DICHIARAZIONE_NON_IN_ATTESA) verdettiVm.aggiorna(figlioId)
                 parole.testo(messaggioRifiutoVerdetto(evento.codice))
             }
         }
@@ -121,7 +131,12 @@ fun TurnoScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.turno_titolo)) },
                 actions = {
-                    IconButton(onClick = aggiornaTutto) {
+                    IconButton(
+                        onClick = {
+                            famigliaVm.aggiorna()
+                            if (famiglia.pronta) aggiornaTutto()
+                        },
+                    ) {
                         Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
                     }
                 },
@@ -129,51 +144,56 @@ fun TurnoScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
+        // Solo i dati DI QUESTO figlio: finché non arrivano, la rotella.
+        val delFiglio = proposte.di(figlioId) && verdetti.di(figlioId)
         // "Niente in mano": né regole, né proposte, né dichiarazioni lette finora.
         val nienteInMano = proposte.proposte.isEmpty() &&
             proposte.regoleAttive.isEmpty() &&
             verdetti.dichiarazioni.isEmpty()
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                nienteInMano && (proposte.caricamento || verdetti.caricamento) ->
-                    Caricamento(stringResource(R.string.turno_caricamento))
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            IntestazioneFiglio(famiglia, onScegli = famigliaVm::scegli)
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    !delFiglio || (nienteInMano && (proposte.caricamento || verdetti.caricamento)) ->
+                        Caricamento(stringResource(R.string.turno_caricamento))
 
-                proposte.configurazioneMancante || verdetti.configurazioneMancante -> Centro {
-                    StatoPrimaApertura(
-                        titolo = stringResource(R.string.config_mancante_titolo),
-                        testo = stringResource(R.string.turno_config_mancante),
-                        centrato = true,
-                        modifier = Modifier.padding(horizontal = Spazi.xxl),
-                    )
-                }
-
-                nienteInMano && (proposte.errore || verdetti.errore) -> Centro {
-                    TestoCentrato(stringResource(R.string.turno_errore))
-                }
-
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(Spazi.l),
-                    verticalArrangement = Arrangement.spacedBy(Spazi.m),
-                ) {
-                    // Un aggiornamento fallito con i dati già in mano: si dice
-                    // che sono vecchi, invece di spacciarli per freschi.
-                    if (proposte.errore || verdetti.errore) {
-                        item { RigaDatiVecchi(stringResource(R.string.turno_dati_vecchi)) }
+                    proposte.configurazioneMancante || verdetti.configurazioneMancante -> Centro {
+                        StatoPrimaApertura(
+                            titolo = stringResource(R.string.config_mancante_titolo),
+                            testo = stringResource(R.string.turno_config_mancante),
+                            centrato = true,
+                            modifier = Modifier.padding(horizontal = Spazi.xxl),
+                        )
                     }
-                    sezioneProposte(
-                        regoleAttive = proposte.regoleAttive,
-                        proposte = proposte.proposte,
-                        onProponi = { regolaSceltaId = it.id },
-                    )
-                    sezioneDichiarazioni(
-                        dichiarazioni = verdetti.dichiarazioni,
-                        regolePerId = verdetti.regolePerId,
-                        invioInCorso = verdetti.invioInCorso,
-                        onVerdetto = { id, verdetto, nota ->
-                            verdettiVm.emettiVerdetto(id, verdetto, nota)
-                        },
-                    )
+
+                    nienteInMano && (proposte.errore || verdetti.errore) -> Centro {
+                        TestoCentrato(stringResource(R.string.turno_errore))
+                    }
+
+                    else -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(Spazi.l),
+                        verticalArrangement = Arrangement.spacedBy(Spazi.m),
+                    ) {
+                        // Un aggiornamento fallito con i dati già in mano: si dice
+                        // che sono vecchi, invece di spacciarli per freschi.
+                        if (proposte.errore || verdetti.errore) {
+                            item { RigaDatiVecchi(stringResource(R.string.turno_dati_vecchi)) }
+                        }
+                        sezioneProposte(
+                            regoleAttive = proposte.regoleAttive,
+                            proposte = proposte.proposte,
+                            onProponi = { regolaSceltaId = it.id },
+                        )
+                        sezioneDichiarazioni(
+                            dichiarazioni = verdetti.dichiarazioni,
+                            regolePerId = verdetti.regolePerId,
+                            invioInCorso = verdetti.invioInCorso,
+                            onVerdetto = { id, verdetto, nota ->
+                                verdettiVm.emettiVerdetto(figlioId, id, verdetto, nota)
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -185,7 +205,7 @@ fun TurnoScreen(
             invioInCorso = proposte.invioInCorso,
             onAnnulla = { regolaSceltaId = null },
             onInvia = { parametri, motivazione ->
-                proposteVm.creaProposta(regola.id, parametri, motivazione)
+                proposteVm.creaProposta(figlioId, regola.id, parametri, motivazione)
             },
         )
     }

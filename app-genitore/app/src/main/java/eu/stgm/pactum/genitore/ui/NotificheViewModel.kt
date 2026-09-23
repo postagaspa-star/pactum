@@ -78,19 +78,29 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
      * riconta ogni minuto: senza novità non si scarica la finestra ogni volta.
      * Se la finestra non arriva, si tengono le regole di prima e i testi che
      * non si possono scrivere ripiegano sul messaggio del server.
+     *
+     * (v3) Le notifiche sono di tutti i figli: si legge la finestra DEL FIGLIO di
+     * ciascuna (una volta per figlio). Gli id delle regole sono unici su tutto il
+     * server, quindi una mappa sola le tiene tutte.
      */
     private suspend fun regoleAggiornate(
         postino: PostinoClient,
         notifiche: List<Notifica>,
         prima: StatoNotifiche,
     ): Map<Long, RegolaFinestra> {
-        val citate = notifiche.mapNotNull(::regolaIdNotifica)
-        if (citate.isEmpty()) return prima.regolePerId
+        val conRegola = notifiche.filter { regolaIdNotifica(it) != null }
+        if (conRegola.isEmpty()) return prima.regolePerId
         val giaViste = prima.notifiche.map { it.id }.toSet()
-        val novita = notifiche.any { it.id !in giaViste } ||
-            citate.any { it !in prima.regolePerId }
-        if (!novita) return prima.regolePerId
-        return postino.leggiFinestra()?.regole?.associateBy { it.id } ?: prima.regolePerId
+        val daRileggere = conRegola
+            .filter { it.id !in giaViste || regolaIdNotifica(it) !in prima.regolePerId }
+            .map { it.figlioId }
+            .distinct()
+        if (daRileggere.isEmpty()) return prima.regolePerId
+        val regole = prima.regolePerId.toMutableMap()
+        daRileggere.forEach { figlioId ->
+            postino.leggiFinestra(figlioId)?.regole?.forEach { regole[it.id] = it }
+        }
+        return regole
     }
 
     fun segnaLetta(notifica: Notifica) {
@@ -111,5 +121,11 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun consumaLettaFallita() {
         _stato.value = _stato.value.copy(lettaFallita = false)
+    }
+
+    /** Dopo un cambio di server: notifiche e regole di prima sono di un altro server. */
+    fun dimentica() {
+        _stato.value = StatoNotifiche()
+        aggiorna()
     }
 }

@@ -36,7 +36,50 @@
     <string name="silenzio_allarme">Nessun aggiornamento dalle %1$s — l\'app del figlio non sta inviando dati</string>
     <string name="silenzio_mai">Nessun aggiornamento — l\'app del figlio non ha ancora inviato dati</string>
     <string name="silenzio_spiega">Può essere la batteria, la rete o l\'app chiusa. C\'è un\'interruzione nella registrazione.</string>
+    <string name="silenzio_spiega_computer">Può essere la rete, la corrente staccata o Pactum chiuso sul computer. C\'è un\'interruzione nella registrazione.</string>
     <string name="finestra_aggiornata_alle">Aggiornato alle %1$s</string>
+
+    <!-- v3: la famiglia. In cima a Panoramica, Tempo e "Proposte e conferme" la
+         scelta del figlio (con un figlio solo, il suo nome). -->
+    <string name="figlio_senza_nome">Figlio senza nome</string>
+    <string name="figlio_scelta_descrizione">Scegli di quale figlio vedere il patto</string>
+    <plurals name="figlio_notifiche_non_lette">
+        <item quantity="one">%1$d notifica non letta</item>
+        <item quantity="other">%1$d notifiche non lette</item>
+    </plurals>
+
+    <!-- v3: i dispositivi nella Panoramica (una riga ciascuno, sotto la scheda del patto) -->
+    <string name="dispositivi_titolo">DISPOSITIVI</string>
+    <string name="dispositivo_senza_nome">Dispositivo</string>
+    <string name="dispositivo_telefono">Telefono</string>
+    <string name="dispositivo_computer">Computer</string>
+    <string name="dispositivo_in_contatto">In contatto — ultimo aggiornamento %1$s</string>
+    <string name="dispositivo_in_contatto_senza_ora">In contatto</string>
+    <string name="dispositivo_spento">Spento %1$s</string>
+    <string name="dispositivo_spento_senza_ora">Spento</string>
+    <string name="dispositivo_silente">Nessun aggiornamento %1$s</string>
+    <string name="dispositivo_mai_sentito">Collegato, ma non ha ancora mandato dati</string>
+    <string name="dispositivo_da_collegare">Da collegare: il codice si crea nelle Impostazioni, sezione Famiglia</string>
+    <string name="dispositivo_scollegato">Scollegato: non manda più dati. La sua storia resta.</string>
+    <string name="dispositivo_stato_sconosciuto">Stato non disponibile</string>
+    <string name="dispositivo_chip_scollegato">%1$s (scollegato)</string>
+    <!-- "alle 15:10" oggi, "il 22/09 alle 15:10" un altro giorno; idem "dalle"/"dal" -->
+    <string name="quando_alle_oggi">alle %1$s</string>
+    <string name="quando_alle_giorno">il %1$s alle %2$s</string>
+    <string name="quando_dalle_oggi">dalle %1$s</string>
+    <string name="quando_dal_giorno">dal %1$s alle %2$s</string>
+    <!-- La card del silenzio in cima, per UN dispositivo: "Telefono: nessun aggiornamento dalle 15:10" -->
+    <string name="silenzio_dispositivo_titolo">%1$s: nessun aggiornamento %2$s</string>
+    <string name="nessun_dispositivo_titolo">Nessun dispositivo collegato</string>
+    <string name="nessun_dispositivo">Per cominciare, aggiungi il telefono o il computer del figlio nelle Impostazioni, sezione Famiglia: lì crei il codice per collegarlo.</string>
+    <!-- Le regole raggruppate: un blocco per dispositivo, poi gli impegni di vita reale -->
+    <string name="gruppo_impegni">IMPEGNI</string>
+    <string name="gruppo_altre_regole">ALTRE REGOLE</string>
+    <string name="regole_nessuna_sul_dispositivo">Nessuna regola su questo dispositivo.</string>
+    <plurals name="striscia_descrizione_dispositivo">
+        <item quantity="one">%1$d giorno su %2$d dentro le regole di questo dispositivo</item>
+        <item quantity="other">%1$d giorni su %2$d dentro le regole di questo dispositivo</item>
+    </plurals>
 
     <!-- La scheda del patto (l\'eroe della Panoramica) -->
     <string name="patto_ultimi_giorni">ULTIMI 8 GIORNI</string>
@@ -81,13 +124,14 @@
 
     <string name="sezione_regole">Le regole</string>
     <string name="regole_vuoto_titolo">Ancora nessuna regola</string>
-    <string name="regole_vuoto">Il patto nasce sul telefono del figlio: appena si dà la prima regola, la vedi qui.</string>
+    <string name="regole_vuoto">Il patto nasce sui dispositivi del figlio: appena si dà la prima regola, la vedi qui.</string>
     <string name="regola_eliminata">non più attiva</string>
     <string name="regola_tipo_limite_tempo">LIMITE DI TEMPO</string>
     <string name="regola_tipo_fascia_oraria">FASCIA ORARIA</string>
     <string name="regola_tipo_vita_reale">VITA REALE</string>
     <string name="regola_limite_tempo">%1$s: al massimo %2$s al giorno</string>
     <string name="regola_fascia_oraria">Niente telefono dalle %1$s alle %2$s (%3$s)</string>
+    <string name="regola_fascia_oraria_computer">Niente computer dalle %1$s alle %2$s (%3$s)</string>
     <string name="regola_vita_reale">%1$s — arbitro: %2$s, %3$s</string>
 
     <!-- I bonus sono contatori GLOBALI, non di una regola: si dicono una volta
@@ -118,7 +162,18 @@
     <string name="manomissione_permesso_revocato">Accesso ai dati di utilizzo revocato</string>
     <string name="manomissione_notifiche_disattivate">Notifiche di Pactum disattivate sul telefono del figlio</string>
     <string name="manomissione_osservazione_siti_interrotta">Osservazione dei siti spenta</string>
+    <!-- v3, dal computer -->
+    <string name="manomissione_programma_chiuso">Pactum è stato chiuso sul computer</string>
+    <string name="manomissione_programma_chiuso_quando">Pactum è stato chiuso sul computer (%1$s)</string>
+    <string name="manomissione_programma_chiuso_volontario">Pactum è stato chiuso sul computer con «Chiudi Pactum»</string>
+    <string name="manomissione_siti_non_leggibili">Sul computer il programma non è riuscito a leggere i siti per un periodo</string>
+    <string name="manomissione_siti_non_leggibili_quando">Sul computer il programma non è riuscito a leggere i siti (%1$s)</string>
     <string name="manomissione_generica">Anomalia: %1$s</string>
+    <!-- Un intervallo di tempo: "dalle 15:10 alle 15:40", "il 22/09 dalle 15:10 alle 15:40",
+         "dal 22/09 alle 22:10 al 23/09 alle 07:30" -->
+    <string name="intervallo_stesso_giorno">dalle %1$s alle %2$s</string>
+    <string name="intervallo_altro_giorno">il %1$s %2$s</string>
+    <string name="intervallo_giorni_diversi">dal %1$s alle %2$s al %3$s alle %4$s</string>
 
     <!-- Durate: "45 min", "1 h", "2 h 30 min" (mai "1 h 0 min") -->
     <string name="formato_minuti">%1$d min</string>
@@ -151,6 +206,19 @@
     <string name="tipo_proposta_risposta">Risposta a una proposta</string>
     <string name="tipo_proposta_annullata">Proposta annullata</string>
     <string name="tipo_dichiarazione">Dichiarazione del figlio</string>
+    <!-- v3: il computer che si spegne e si riaccende. Non sono interruzioni. -->
+    <string name="tipo_computer_spento">Computer spento</string>
+    <string name="tipo_computer_in_sospensione">Computer in sospensione</string>
+    <string name="tipo_uscita_account">Uscita dall\'account</string>
+    <string name="tipo_computer_acceso">Computer acceso</string>
+    <string name="tipo_computer_riattivato">Computer riattivato</string>
+    <string name="tipo_accesso_account">Accesso all\'account</string>
+    <string name="notifica_computer_spento">Il computer è stato spento. Non è un\'interruzione nella registrazione.</string>
+    <string name="notifica_computer_in_sospensione">Il computer è andato in sospensione. Non è un\'interruzione nella registrazione.</string>
+    <string name="notifica_uscita_account">Il figlio è uscito dal suo account sul computer. Non è un\'interruzione nella registrazione.</string>
+    <string name="notifica_computer_acceso">Il computer è stato acceso e Pactum ha ripreso a registrare.</string>
+    <string name="notifica_computer_riattivato">Il computer è uscito dalla sospensione e Pactum ha ripreso a registrare.</string>
+    <string name="notifica_accesso_account">Il figlio è entrato nel suo account sul computer e Pactum ha ripreso a registrare.</string>
 
     <!-- Le frasi delle notifiche: le scrive l'app da tipo e payload, non il
          server. Le stesse nella lista e nelle notifiche di sistema. -->
@@ -173,6 +241,14 @@
     <string name="notifica_silenzio_testo_mai">L\'app del figlio non ha ancora inviato aggiornamenti.</string>
     <string name="notifica_contatto_titolo">Aggiornamenti ripresi</string>
     <string name="notifica_contatto_testo">L\'app del figlio ha ripreso a inviare aggiornamenti alle %1$s. Tutto a posto.</string>
+    <!-- v3: gli stessi avvisi per UN dispositivo (di chi è lo dice la riga sopra il titolo) -->
+    <string name="notifica_silenzio_telefono">Il telefono non invia aggiornamenti %1$s.</string>
+    <string name="notifica_silenzio_computer">Il computer non invia aggiornamenti %1$s.</string>
+    <string name="notifica_silenzio_mai_dispositivo">Non ha ancora inviato aggiornamenti.</string>
+    <string name="notifica_contatto_telefono">Il telefono ha ripreso a inviare aggiornamenti %1$s. Tutto a posto.</string>
+    <string name="notifica_contatto_computer">Il computer ha ripreso a inviare aggiornamenti %1$s. Tutto a posto.</string>
+    <string name="notifica_spento_dopo_silenzio">Il computer risulta spento %1$s: non è un\'interruzione nella registrazione.</string>
+    <string name="notifica_spento_dopo_silenzio_senza_ora">Il computer risulta spento: non è un\'interruzione nella registrazione.</string>
 
     <!-- Impostazioni: tre blocchi (connessione, digest, aggiornamenti) -->
     <string name="impostazioni_titolo">Impostazioni</string>
@@ -194,6 +270,60 @@
     <string name="azione_annulla">Annulla</string>
     <string name="azione_ok">Va bene</string>
 
+    <!-- v3: Impostazioni, sezione Famiglia (figli, dispositivi, codici di 6 cifre) -->
+    <string name="famiglia_titolo">Famiglia</string>
+    <string name="famiglia_descrizione">I figli e i loro dispositivi. Ogni telefono o computer si collega con un codice di 6 cifre che crei qui.</string>
+    <string name="famiglia_server_vecchio">Il server del patto non gestisce ancora più figli e dispositivi: questa sezione si attiva quando il server viene aggiornato.</string>
+    <string name="famiglia_non_letta">Non riesco a leggere la famiglia dal server. Controlla la connessione o riprova.</string>
+    <string name="famiglia_config_mancante">Prima salva qui sopra l\'indirizzo del server e il codice d\'accesso.</string>
+    <string name="famiglia_riprova">Riprova</string>
+    <string name="famiglia_caricamento">Sto leggendo la famiglia…</string>
+    <string name="famiglia_aggiungi_figlio">Aggiungi un figlio</string>
+    <string name="famiglia_rinomina">Rinomina</string>
+    <string name="famiglia_aggiungi_dispositivo">Aggiungi un dispositivo</string>
+    <string name="famiglia_nuovo_codice">Nuovo codice</string>
+    <string name="famiglia_scollega">Scollega</string>
+    <string name="famiglia_nessun_dispositivo">Nessun dispositivo ancora.</string>
+    <string name="famiglia_stato_collegato">collegato</string>
+    <string name="famiglia_stato_da_collegare">da collegare</string>
+    <string name="famiglia_stato_scollegato">scollegato</string>
+    <string name="famiglia_stato_con_versione">%1$s · versione %2$s</string>
+    <string name="famiglia_nuovo_figlio_titolo">Nuovo figlio</string>
+    <string name="famiglia_rinomina_titolo">Nuovo nome per %1$s</string>
+    <string name="famiglia_nome_figlio">Nome del figlio</string>
+    <string name="famiglia_nuovo_dispositivo_titolo">Nuovo dispositivo di %1$s</string>
+    <string name="famiglia_nome_dispositivo">Nome del dispositivo</string>
+    <string name="famiglia_nome_dispositivo_esempio">Per esempio: Telefono, Computer di camera</string>
+    <string name="famiglia_nome_lunghezza">Da 1 a %1$d caratteri</string>
+    <string name="famiglia_tipo_scegli">Che cosa colleghi</string>
+    <string name="famiglia_crea_codice">Crea il codice</string>
+    <string name="famiglia_figlio_aggiunto">Figlio aggiunto.</string>
+    <string name="famiglia_figlio_rinominato">Nome cambiato.</string>
+    <string name="famiglia_dispositivo_scollegato">Dispositivo scollegato.</string>
+    <!-- Il codice di abbinamento: 6 cifre, 15 minuti, una volta sola -->
+    <string name="codice_titolo">Codice per «%1$s»</string>
+    <string name="codice_scrivilo">Scrivilo sul dispositivo da collegare</string>
+    <string name="codice_scade_tra">Scade tra %1$s</string>
+    <string name="codice_una_volta">Vale 15 minuti, una volta sola.</string>
+    <string name="codice_scaduto">Codice scaduto: creane uno nuovo.</string>
+    <string name="codice_dove_computer">Il programma per il computer si scarica da %1$s</string>
+    <string name="codice_dove_telefono">L\'app per il telefono del figlio si scarica da %1$s</string>
+    <string name="codice_ricollegamento">Quando il codice viene usato, il collegamento di prima smette di funzionare. La storia del dispositivo continua.</string>
+    <string name="codice_fatto">Fatto</string>
+    <!-- Scollegare = revocare: la conferma dice la verità -->
+    <string name="scollega_titolo">Scollegare «%1$s»?</string>
+    <string name="scollega_testo">Il dispositivo smette di mandare dati. Niente di quello che ha registrato si cancella.</string>
+    <string name="scollega_conferma">Scollega</string>
+    <!-- I rifiuti del server sui gesti della famiglia, ciascuno col suo motivo -->
+    <string name="famiglia_errore_troppi_tentativi">Troppi tentativi: riprova tra qualche minuto.</string>
+    <string name="famiglia_errore_troppi_tentativi_tra">Troppi tentativi: riprova tra %1$d min.</string>
+    <string name="famiglia_errore_non_trovato">Non trovo più questo figlio o questo dispositivo: ho riletto la famiglia.</string>
+    <string name="famiglia_errore_dispositivo_scollegato">Questo dispositivo è scollegato: per usarlo di nuovo aggiungilo come dispositivo nuovo.</string>
+    <string name="famiglia_errore_nome">Il nome deve avere da 1 a %1$d caratteri.</string>
+    <string name="famiglia_errore_codice_non_valido">Il codice non è valido o è scaduto: creane uno nuovo.</string>
+    <string name="famiglia_errore_rete">Non riesco a raggiungere il server: riprova.</string>
+    <string name="famiglia_errore_rifiutato">Il server non ha accettato la richiesta: aggiorna e riprova.</string>
+
     <!-- Sezione Tempo (contratto v2.2, uso_recente) -->
     <string name="tempo_titolo">Tempo</string>
     <string name="tempo_caricamento">Sto leggendo i tempi…</string>
@@ -214,6 +344,10 @@
     <string name="tempo_resto_della_giornata">IL RESTO DELLA GIORNATA</string>
     <string name="tempo_limite">limite %1$s</string>
     <string name="tempo_oltre">%1$s oltre</string>
+    <!-- v3, computer: stessi testi, detti del computer -->
+    <string name="tempo_nessuna_fotografia_computer">Il computer non ha ancora inviato i dati di utilizzo.</string>
+    <string name="tempo_nessun_dato_spiega_computer">Il computer non ha inviato i dati di questo giorno. Non significa zero utilizzo: i dati semplicemente non sono arrivati.</string>
+    <string name="tempo_app_vuoto_computer">Nessun programma registrato in questo giorno.</string>
 
     <!-- Siti visitati (contratto v2.3, siti_recenti): solo i domini, mai le pagine.
          Il genitore vede, non blocca; la stessa lista compare identica al figlio. -->
@@ -234,6 +368,14 @@
         <item quantity="one">…e %1$d altro sito non elencato: qui compaiono solo i più visitati.</item>
         <item quantity="other">…e altri %1$d siti non elencati: qui compaiono solo i più visitati.</item>
     </plurals>
+    <!-- v3, computer: il sito si legge dalla barra del browser per un istante; si tiene
+         solo il nome, e anche il tempo. Va detto al padre (contratto, "Sul computer"). -->
+    <string name="siti_contesto_computer">Sul computer Pactum legge l\'indirizzo nella barra del browser solo per un istante e ne tiene il nome del sito: le pagine aperte, i contenuti e le ricerche non si registrano mai. Pactum non blocca nessun sito: questa lista serve per parlarne.</string>
+    <string name="siti_contesto_numeri_computer">I minuti sono il tempo passato con quel sito in primo piano; le visite, quante volte ci è tornato.</string>
+    <string name="siti_stessa_lista_computer">Il figlio vede questa stessa lista, identica, sul suo computer.</string>
+    <string name="siti_dns_cifrato_computer">Per una parte di questo giorno il programma non è riuscito a leggere i siti: quelli di quel periodo non si vedono.</string>
+    <string name="siti_nessun_dato_spiega_computer">Il computer non ha inviato i siti di questo giorno. Non significa zero siti visitati: i dati semplicemente non sono arrivati.</string>
+    <string name="siti_minuti_e_visite">%1$s · %2$s</string>
 
     <!-- Grafici (anello delle categorie, barre degli 8 giorni) -->
     <string name="grafico_ultimi_giorni">ULTIMI 8 GIORNI</string>
@@ -258,6 +400,12 @@
     <string name="digest_testo">%1$s — tocca per il dettaglio</string>
     <string name="digest_tocca">Tocca per il dettaglio.</string>
     <string name="digest_freschezza">Ultimo aggiornamento alle %1$s — da allora il telefono del figlio non invia dati.</string>
+    <!-- v3: il digest di un figlio con più dispositivi, una riga per dispositivo -->
+    <string name="digest_parte_dispositivo">%1$s %2$s</string>
+    <string name="digest_parte_dispositivo_nessun_dato">%1$s nessun dato</string>
+    <string name="digest_riga_dispositivo">%1$s: %2$s</string>
+    <string name="digest_riga_dispositivo_nessun_dato">%1$s: nessun dato ricevuto oggi</string>
+    <string name="digest_freschezza_dispositivo">%1$s: ultimo aggiornamento alle %2$s.</string>
 
     <!-- Aggiornamenti (tappa 6) -->
     <string name="impostazioni_aggiornamenti_titolo">Aggiornamenti</string>
@@ -284,7 +432,7 @@
     <string name="proposte_da_mandare">DA MANDARE</string>
     <string name="proposte_in_attesa">IN ATTESA DI RISPOSTA</string>
     <string name="proposte_come_sono_andate">COME SONO ANDATE</string>
-    <string name="proposte_nessuna_regola_attiva">Nessuna regola attiva su cui proporre: le regole nascono sul telefono del figlio.</string>
+    <string name="proposte_nessuna_regola_attiva">Nessuna regola attiva su cui proporre: le regole nascono sui dispositivi del figlio.</string>
     <string name="proposte_bottone_proponi">Proponi una modifica</string>
     <string name="proposte_gia_in_attesa">Su questa regola c\'è già una proposta in attesa di risposta.</string>
     <string name="proposte_elenco_vuoto">Nessuna proposta ancora.</string>
@@ -312,6 +460,7 @@
     <string name="proposta_modalita_modifica">Modifica i parametri</string>
     <string name="proposta_modalita_elimina">Proponi di eliminare la regola</string>
     <string name="proposta_campo_app">App o categoria</string>
+    <string name="proposta_bersaglio">Su: %1$s</string>
     <string name="proposta_app_non_modificabile">Si propone un nuovo limite, non l\'app della regola.</string>
     <string name="proposta_campo_minuti">Minuti al giorno</string>
     <string name="proposta_minuti_range">Da 1 a 1440 minuti</string>

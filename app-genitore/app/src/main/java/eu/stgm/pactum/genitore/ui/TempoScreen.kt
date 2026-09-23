@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,20 +51,25 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.BarraUso
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Medie
 import eu.stgm.pactum.genitore.dati.SitiGiorno
-import eu.stgm.pactum.genitore.dati.SitoVisitato
 import eu.stgm.pactum.genitore.dati.UsoGiorno
 import kotlinx.coroutines.delay
 import java.time.Instant
 
-// Tempo risponde a una domanda sola: quanto ha usato il telefono. L'eroe è il
-// totale del giorno; sotto, i grafici; poi l'elenco in due blocchi — prima le
-// promesse (dentro il patto), poi il contesto (il resto della giornata).
+// Tempo risponde a una domanda sola: quanto ha usato il telefono (o il
+// computer). L'eroe è il totale del giorno; sotto, i grafici; poi l'elenco in
+// due blocchi — prima le promesse (dentro il patto), poi il contesto (il resto
+// della giornata).
 // Niente terracotta qui dentro: il colore del patto vive SOLO nella striscia
 // degli 8 giorni. Andare oltre un limite si dice a parole ("20 min oltre"), e i
 // minuti restano `onSurface`: la colpa, se c'è, è la differenza da una promessa
 // che il figlio si è dato, non il totale.
+//
+// (v3) I tempi sono PER DISPOSITIVO: con più dispositivi si sceglie quale
+// guardare. Per un computer le voci sono i programmi (col nome leggibile) e i
+// siti hanno i minuti, in ordine di minuti.
 
 /** Ogni quanto si rileggono i tempi mentre la schermata è in primo piano. */
 private const val INTERVALLO_RILETTURA_MS = 60_000L
@@ -79,16 +85,22 @@ private const val INTERVALLO_RILETTURA_MS = 60_000L
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TempoScreen(vm: FinestraViewModel = viewModel()) {
+fun TempoScreen(
+    vm: FinestraViewModel = viewModel(),
+    famigliaVm: FamigliaViewModel = viewModel(),
+) {
     val stato by vm.stato.collectAsStateWithLifecycle()
+    val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
+    val figlioId = famiglia.figlioId
 
-    // Come la finestra: prima lettura a ogni ritorno in primo piano, poi
-    // rilettura periodica finché la schermata resta visibile.
+    // Come la finestra: prima lettura a ogni ritorno in primo piano (e a ogni
+    // cambio di figlio), poi rilettura periodica finché la schermata resta visibile.
     val cicloVita = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(cicloVita) {
+    LaunchedEffect(cicloVita, figlioId, famiglia.pronta) {
+        if (!famiglia.pronta) return@LaunchedEffect
         cicloVita.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
-                vm.aggiorna()
+                vm.aggiorna(figlioId)
                 delay(INTERVALLO_RILETTURA_MS)
             }
         }
@@ -100,39 +112,46 @@ fun TempoScreen(vm: FinestraViewModel = viewModel()) {
             TopAppBar(
                 title = { Text(stringResource(R.string.tempo_titolo)) },
                 actions = {
-                    IconButton(onClick = { vm.aggiorna() }) {
+                    IconButton(
+                        onClick = {
+                            famigliaVm.aggiorna()
+                            if (famiglia.pronta) vm.aggiorna(figlioId)
+                        },
+                    ) {
                         Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
                     }
                 },
             )
         },
     ) { padding ->
-        val finestra = stato.finestra
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                stato.caricamento && finestra == null ->
-                    Caricamento(stringResource(R.string.tempo_caricamento))
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            IntestazioneFiglio(famiglia, onScegli = famigliaVm::scegli)
+            val finestra = stato.finestra.takeIf { stato.di(figlioId) }
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    !stato.di(figlioId) || (stato.caricamento && finestra == null) ->
+                        Caricamento(stringResource(R.string.tempo_caricamento))
 
-                stato.configurazioneMancante -> Centro {
-                    StatoPrimaApertura(
-                        titolo = stringResource(R.string.config_mancante_titolo),
-                        testo = stringResource(R.string.tempo_config_mancante),
-                        centrato = true,
-                        modifier = Modifier.padding(horizontal = Spazi.xxl),
+                    stato.configurazioneMancante -> Centro {
+                        StatoPrimaApertura(
+                            titolo = stringResource(R.string.config_mancante_titolo),
+                            testo = stringResource(R.string.tempo_config_mancante),
+                            centrato = true,
+                            modifier = Modifier.padding(horizontal = Spazi.xxl),
+                        )
+                    }
+
+                    finestra == null -> Centro {
+                        TestoCentrato(stringResource(R.string.tempo_errore))
+                    }
+
+                    else -> ContenutoTempo(
+                        finestra = finestra,
+                        figlioId = figlioId,
+                        mostraErrore = stato.errore,
+                        ricevutaAlle = stato.ricevutaAlle,
                     )
                 }
-
-                finestra == null -> Centro {
-                    TestoCentrato(stringResource(R.string.tempo_errore))
-                }
-
-                else -> ContenutoTempo(
-                    usoRecente = finestra.usoRecente,
-                    sitiRecenti = finestra.sitiRecenti,
-                    medie = finestra.medie,
-                    mostraErrore = stato.errore,
-                    ricevutaAlle = stato.ricevutaAlle,
-                )
             }
         }
     }
@@ -140,12 +159,28 @@ fun TempoScreen(vm: FinestraViewModel = viewModel()) {
 
 @Composable
 private fun ContenutoTempo(
-    usoRecente: List<UsoGiorno>,
-    sitiRecenti: List<SitiGiorno>?,
-    medie: Medie?,
+    finestra: Finestra,
+    figlioId: Long?,
     mostraErrore: Boolean,
     ricevutaAlle: Instant?,
 ) {
+    // (v3) Il dispositivo da guardare: quello scelto, se c'è ancora; altrimenti il
+    // primo non scollegato. Su un server 0.7 ce n'è uno solo.
+    val dispositivi = remember(finestra) { dispositiviDellaFinestra(finestra) }
+    var dispositivoScelto by rememberSaveable(figlioId) { mutableStateOf<Long?>(null) }
+    val dispositivo = dispositivoEffettivo(dispositivi, dispositivoScelto) ?: return
+    val usoRecente = dispositivo.usoRecente
+    val sitiRecenti = dispositivo.sitiRecenti
+    val computer = dispositivo.computer
+    // Le regole di questo dispositivo: servono ai limiti sui siti del computer.
+    val regoleDelDispositivo = remember(finestra, dispositivo.id) {
+        if (dispositivo.id == null) {
+            emptyList()
+        } else {
+            finestra.regole.filter { (it.dispositivoId ?: it.dispositivo?.id) == dispositivo.id }
+        }
+    }
+
     // Il giorno scelto dal selettore; null = oggi (l'ultima voce: il contratto
     // ordina dal più vecchio a oggi). Se la voce scelta sparisce al cambio di
     // giornata, si ricade su oggi invece di restare su un giorno fantasma.
@@ -164,6 +199,16 @@ private fun ContenutoTempo(
                     ricevutaAlle?.let {
                         stringResource(R.string.dati_fermi_alle, oraOppureDataOra(it))
                     } ?: stringResource(R.string.tempo_dati_vecchi),
+                )
+            }
+        }
+
+        if (dispositivi.size > 1) {
+            item {
+                SelettoreDispositivi(
+                    dispositivi = dispositivi,
+                    scelto = dispositivo,
+                    onScelta = { dispositivoScelto = it },
                 )
             }
         }
@@ -188,7 +233,13 @@ private fun ContenutoTempo(
             item {
                 StatoPrimaApertura(
                     titolo = stringResource(R.string.tempo_nessuna_fotografia_titolo),
-                    testo = stringResource(R.string.tempo_nessuna_fotografia),
+                    testo = stringResource(
+                        if (computer) {
+                            R.string.tempo_nessuna_fotografia_computer
+                        } else {
+                            R.string.tempo_nessuna_fotografia
+                        },
+                    ),
                     modifier = Modifier.padding(vertical = Spazi.l),
                 )
             }
@@ -202,7 +253,13 @@ private fun ContenutoTempo(
             }
 
             // L'eroe: il totale del giorno scelto, e sotto come si divide.
-            item { SchedaGiorno(giorno = selezionato, oggi = selezionato == usoRecente.last()) }
+            item {
+                SchedaGiorno(
+                    giorno = selezionato,
+                    oggi = selezionato == usoRecente.last(),
+                    computer = computer,
+                )
+            }
 
             // Gli otto giorni (si toccano per cambiare giorno) e le medie.
             item {
@@ -210,14 +267,25 @@ private fun ContenutoTempo(
                     giorni = usoRecente,
                     selezionato = selezionato.giorno,
                     onScelta = { giornoScelto = it },
-                    medie = medie,
+                    medie = dispositivo.medie,
                 )
             }
 
             if (selezionato.totaleMinuti != null) {
-                val elenco = elencoTempo(selezionato)
+                // (v3) I limiti sui siti di un computer stanno nei siti del giorno.
+                val sitiNelPatto = vociSitiNelPatto(
+                    regoleDelDispositivo = regoleDelDispositivo,
+                    giorno = selezionato,
+                    siti = sitiRecenti?.firstOrNull { it.giorno == selezionato.giorno },
+                    bonusDelGiorno = bonusDelGiorno(dispositivo.bonusGiornalieri, selezionato.giorno),
+                )
+                val elenco = elencoTempo(selezionato, sitiNelPatto)
                 if (elenco.dentroIlPatto.isEmpty() && elenco.restoDellaGiornata.isEmpty()) {
-                    item { RigaVuota(stringResource(R.string.tempo_app_vuoto)) }
+                    item {
+                        RigaVuota(
+                            stringResource(if (computer) R.string.tempo_app_vuoto_computer else R.string.tempo_app_vuoto),
+                        )
+                    }
                 }
                 if (elenco.dentroIlPatto.isNotEmpty()) {
                     item {
@@ -248,6 +316,43 @@ private fun ContenutoTempo(
                 siti = sitiRecenti.firstOrNull { it.giorno == giornoSiti },
                 giorno = giornoSiti,
                 oggi = giornoSiti == ultimoGiorno,
+                computer = computer,
+            )
+        }
+    }
+}
+
+/**
+ * (v3) Quale dispositivo guardare: un chip per dispositivo, con l'icona del tipo.
+ * Uno scollegato resta sceglibile (la sua storia c'è) e lo dice.
+ */
+@Composable
+private fun SelettoreDispositivi(
+    dispositivi: List<VistaDispositivo>,
+    scelto: VistaDispositivo,
+    onScelta: (Long?) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(Spazi.s),
+    ) {
+        dispositivi.forEach { dispositivo ->
+            val nome = nomeDelDispositivo(dispositivo)
+            FilterChip(
+                selected = dispositivo.id == scelto.id,
+                onClick = { onScelta(dispositivo.id) },
+                leadingIcon = { IconaDispositivo(dispositivo.tipo, modifier = Modifier) },
+                label = {
+                    Text(
+                        if (dispositivo.revocato) {
+                            stringResource(R.string.dispositivo_chip_scollegato, nome)
+                        } else {
+                            nome
+                        },
+                    )
+                },
             )
         }
     }
@@ -262,21 +367,24 @@ private fun BloccoElenco(titolo: String, righe: @Composable () -> Unit) {
     }
 }
 
+/** Il nome di una voce: la categoria in italiano, l'app o il programma col nome leggibile. */
 private fun nomeVoce(voce: VoceTempo): String =
-    if (voce.categoria) etichettaCategoria(voce.chiave) else voce.nome ?: voce.chiave
+    if (voce.categoria) etichettaCategoria(voce.chiave) else nomeLeggibile(voce.chiave, voce.nome)
 
 /**
  * Una voce DENTRO IL PATTO: la barra è sul limite — l'unica scala che il ragazzo
  * si è dato — e resta `primary` anche oltre. Quanto oltre, lo dice il chip.
  * "Oltre" e barra contano sul limite di QUEL giorno (base + bonus concessi),
  * come li conta il figlio; il chip del limite resta quello base della regola.
+ * Se il bonus di quella regola non si conosce (un sito, v3) "oltre" non si
+ * calcola: meglio tacere che dire un numero sbagliato.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RigaDentroIlPatto(voce: VoceTempo) {
     val limite = voce.limite ?: return
     val limiteDelGiorno = voce.limiteDelGiorno ?: limite
-    val oltre = minutiOltre(voce.minuti, limite, voce.bonus)
+    val oltre = if (voce.bonusNoto) minutiOltre(voce.minuti, limite, voce.bonus) else 0
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -332,57 +440,70 @@ private fun RigaRestoDellaGiornata(voce: VoceTempo, massimoDelGiorno: Int) {
     }
 }
 
-// --- Siti visitati (contratto v2.3) ------------------------------------------
+// --- Siti visitati (contratto v2.3; v3 per il computer) ---------------------------
 // Il genitore vede QUALI siti, mai cosa ci fa dentro. Tre leggi che questa
 // sezione non può violare (contratto-api.md, "Siti visitati — limiti e patto
 // etico"): solo domini; l'assenza di dati non diventa mai uno zero; la cecità
 // dichiarata (`dns_cifrato`) è un DATO, quindi non è colorata come un guasto.
 // E niente blocchi: qui non c'è, e non ci sarà, nessun bottone per vietare un
 // sito — se un sito è un problema, se ne parla.
+// (v3) Sul computer il programma legge la barra degli indirizzi per un istante e
+// tiene solo il dominio, con i minuti: la sezione lo dice al padre, e la lista va
+// in ordine di minuti.
 
-private fun LazyListScope.sezioneSiti(siti: SitiGiorno?, giorno: String, oggi: Boolean) {
+private fun LazyListScope.sezioneSiti(
+    siti: SitiGiorno?,
+    giorno: String,
+    oggi: Boolean,
+    computer: Boolean,
+) {
     item {
         Column(
             modifier = Modifier.padding(top = Spazi.s),
             verticalArrangement = Arrangement.spacedBy(Spazi.xs),
         ) {
             SopraTitolo(stringResource(R.string.siti_sezione_titolo))
-            RigaContestoSiti()
+            RigaContestoSiti(computer)
         }
     }
 
     // La confessione di cecità viene PRIMA della lista: spiega i buchi di quello
     // che si sta per leggere. Neutra, mai rossa: non è un errore, è un dato.
     if (siti?.dnsCifrato == true) {
-        item { RigaNotaNeutra(stringResource(R.string.siti_dns_cifrato)) }
+        item {
+            RigaNotaNeutra(
+                stringResource(if (computer) R.string.siti_dns_cifrato_computer else R.string.siti_dns_cifrato),
+            )
+        }
     }
 
     // `totale_domini: null` (o il giorno che manca del tutto) = nessuna
     // fotografia. "Non lo so" non si traveste da "zero siti".
     val totale = siti?.totaleDomini
     if (siti == null || totale == null) {
-        item { SitiSenzaDati(giorno = giorno, oggi = oggi) }
+        item { SitiSenzaDati(giorno = giorno, oggi = oggi, computer = computer) }
         return
     }
 
-    // L'ordine è già garantito dal contratto (visite decrescenti, poi dominio in
-    // ordine alfabetico): lo si riapplica lo stesso, con la STESSA regola, così
-    // una fotografia disordinata non cambia la lista che il figlio vede.
-    val domini = siti.domini.sortedWith(
-        compareByDescending<SitoVisitato> { it.visite }.thenBy { it.dominio },
-    )
+    // L'ordine è già garantito dal contratto (visite decrescenti, o minuti sul
+    // computer, poi dominio in ordine alfabetico): lo si riapplica lo stesso,
+    // con la STESSA regola, così una fotografia disordinata non cambia la lista
+    // che il figlio vede.
+    val domini = sitiOrdinati(siti)
+    val perMinuti = sitiConMinuti(siti)
     if (domini.isEmpty()) {
         item { RigaVuota(stringResource(R.string.siti_vuoto)) }
     } else {
-        // Il riferimento della barra è il sito più richiesto del giorno: un
-        // confronto tra pari dentro la giornata, mai una soglia da rispettare.
-        val riferimento = domini.first().visite
+        // Il riferimento della barra è il sito più richiesto (o più usato) del
+        // giorno: un confronto tra pari dentro la giornata, mai una soglia.
+        val riferimento = if (perMinuti) domini.first().minuti ?: 0 else domini.first().visite
         item {
             ListaRighe(domini) {
                 RigaBarraSito(
                     dominio = it.dominio,
                     visite = it.visite,
                     riferimento = riferimento,
+                    minuti = if (perMinuti) it.minuti ?: 0 else null,
                     modifier = Modifier.padding(vertical = Spazi.s),
                 )
             }
@@ -418,22 +539,24 @@ private fun LazyListScope.sezioneSiti(siti: SitiGiorno?, giorno: String, oggi: B
 
 /** Cosa si vede e cosa no: la riga che tiene la sezione dentro il patto. */
 @Composable
-private fun RigaContestoSiti() {
+private fun RigaContestoSiti(computer: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
         Text(
-            text = stringResource(R.string.siti_contesto),
+            text = stringResource(if (computer) R.string.siti_contesto_computer else R.string.siti_contesto),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = stringResource(R.string.siti_contesto_numeri),
+            text = stringResource(
+                if (computer) R.string.siti_contesto_numeri_computer else R.string.siti_contesto_numeri,
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         // Tavola rotonda: niente esiste nella finestra del genitore che il figlio
         // non veda identico. Dirlo qui è metà del patto.
         Text(
-            text = stringResource(R.string.siti_stessa_lista),
+            text = stringResource(if (computer) R.string.siti_stessa_lista_computer else R.string.siti_stessa_lista),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -443,7 +566,7 @@ private fun RigaContestoSiti() {
 /**
  * Una nota di contesto su fondo neutro (`surfaceVariant`), MAI `errorContainer`:
  * il DNS cifrato non è un guasto e non è una colpa — è il registro che dichiara
- * di non aver potuto vedere. Stessa grammatica della riga "dati fermi".
+ * di non aver potuto vedere. Stessa grammatica della riga "dati non aggiornati".
  */
 @Composable
 private fun RigaNotaNeutra(testo: String) {
@@ -452,7 +575,7 @@ private fun RigaNotaNeutra(testo: String) {
 
 /** Giorno senza fotografia dei siti: si dice "nessun dato", mai zero. */
 @Composable
-private fun SitiSenzaDati(giorno: String, oggi: Boolean) {
+private fun SitiSenzaDati(giorno: String, oggi: Boolean, computer: Boolean) {
     Column(modifier = Modifier.fillMaxWidth()) {
         RigaVuota(
             if (oggi) {
@@ -462,7 +585,9 @@ private fun SitiSenzaDati(giorno: String, oggi: Boolean) {
             },
         )
         Text(
-            text = stringResource(R.string.siti_nessun_dato_spiega),
+            text = stringResource(
+                if (computer) R.string.siti_nessun_dato_spiega_computer else R.string.siti_nessun_dato_spiega,
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = Spazi.xs),
@@ -509,7 +634,7 @@ private fun SelettoreGiorni(
  * zero finto, mai una ciambella vuota che sembra "zero minuti".
  */
 @Composable
-private fun SchedaGiorno(giorno: UsoGiorno, oggi: Boolean) {
+private fun SchedaGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
     // Con la fetta "resto" (non categorizzato) la legenda somma sempre al totale.
     val fette = fetteConResto(giorno.categorie, giorno.totaleMinuti)
     Card(
@@ -521,7 +646,7 @@ private fun SchedaGiorno(giorno: UsoGiorno, oggi: Boolean) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(Spazi.l)) {
-            TotaleGiorno(giorno = giorno, oggi = oggi)
+            TotaleGiorno(giorno = giorno, oggi = oggi, computer = computer)
             val totale = giorno.totaleMinuti
             if (totale != null) {
                 Spacer(modifier = Modifier.height(Spazi.l))
@@ -549,7 +674,7 @@ private fun SchedaGiorno(giorno: UsoGiorno, oggi: Boolean) {
  * racconta la serata. Senza fotografia lo si dice, esplicito.
  */
 @Composable
-private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean) {
+private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
     SopraTitolo(
         if (oggi) {
             stringResource(R.string.tempo_etichetta_oggi)
@@ -565,7 +690,9 @@ private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean) {
             modifier = Modifier.padding(top = Spazi.xs),
         )
         Text(
-            text = stringResource(R.string.tempo_nessun_dato_spiega),
+            text = stringResource(
+                if (computer) R.string.tempo_nessun_dato_spiega_computer else R.string.tempo_nessun_dato_spiega,
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = Spazi.xs),

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -115,6 +116,30 @@ internal fun LazyListScope.sezioneProposte(
 }
 
 /**
+ * (v3) Il sopra-titolo di una regola: il tipo, e di quale dispositivo è
+ * ("LIMITE DI TEMPO · COMPUTER DI CAMERA"). La vita reale è del figlio: solo il tipo.
+ */
+@Composable
+private fun SopraTitoloRegola(regola: RegolaFinestra) {
+    val tipo = etichettaTipoRegola(regola.tipo)
+    val dispositivo = regola.dispositivo
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (dispositivo != null) {
+            IconaDispositivo(dispositivo.tipo, tinta = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.width(Spazi.xs))
+        }
+        SopraTitolo(
+            testo = if (dispositivo != null) {
+                "$tipo · ${nomeDelDispositivo(parole(), dispositivo.nome, dispositivo.tipo).uppercase()}"
+            } else {
+                tipo
+            },
+            colore = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+/**
  * Una regola attiva su cui proporre. Con una proposta già in attesa il pulsante
  * non c'è: il server rifiuterebbe la seconda (409 `proposta_gia_pendente`), e
  * al suo posto una riga dice perché.
@@ -127,10 +152,7 @@ private fun CardRegolaProponibile(
 ) {
     CardContenuto {
         Column(modifier = Modifier.padding(Spazi.l)) {
-            SopraTitolo(
-                testo = etichettaTipoRegola(regola.tipo),
-                colore = MaterialTheme.colorScheme.primary,
-            )
+            SopraTitoloRegola(regola)
             Text(
                 text = descrizioneRegola(regola),
                 style = MaterialTheme.typography.bodyLarge,
@@ -172,10 +194,16 @@ private fun CardPropostaPendente(proposta: Proposta, regola: RegolaFinestra?) {
                     modifier = Modifier.padding(top = Spazi.s),
                 )
             }
-            // Su quale regola: il confronto da solo non lo dice.
+            // Su quale regola (e di quale dispositivo): il confronto da solo non lo dice.
             if (regola != null) {
+                val dispositivo = regola.dispositivo
+                val descrizione = descrizioneRegola(regola)
                 Text(
-                    text = descrizioneRegola(regola),
+                    text = if (dispositivo != null) {
+                        "${nomeDelDispositivo(parole(), dispositivo.nome, dispositivo.tipo)} · $descrizione"
+                    } else {
+                        descrizione
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = Spazi.xs),
@@ -307,9 +335,10 @@ internal fun DialogoNuovaProposta(
     // una ricreazione si ripristina invece ciò che il genitore stava scrivendo.
     var elimina by rememberSaveable { mutableStateOf(false) }
     var motivazione by rememberSaveable { mutableStateOf("") }
-    var app by rememberSaveable {
-        mutableStateOf(parametroTesto(regola.parametri, "app_o_categoria") ?: "")
-    }
+    // Il bersaglio NON si cambia: si propone un nuovo limite, non un'altra app
+    // (contratto v2.1: la chiave nasce da un selettore, mai da testo libero). Sul
+    // computer poi sarebbe un `exe:` o un `sito:` da scrivere a mano.
+    val app = parametroTesto(regola.parametri, "app_o_categoria") ?: ""
     var minuti by rememberSaveable {
         mutableStateOf(parametroTesto(regola.parametri, "minuti_al_giorno") ?: "")
     }
@@ -377,6 +406,8 @@ internal fun DialogoNuovaProposta(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Spazi.m),
             ) {
+                // (v3) Di quale dispositivo è la regola: la proposta vale lì.
+                if (regola.dispositivo != null) SopraTitoloRegola(regola)
                 Text(
                     text = stringResource(
                         R.string.proposta_crea_regola,
@@ -390,7 +421,20 @@ internal fun DialogoNuovaProposta(
                 if (!elimina) {
                     when (regola.tipo) {
                         TipiRegola.LIMITE_TEMPO -> {
-                            CampoTesto(app, { app = it }, R.string.proposta_campo_app)
+                            Column {
+                                Text(
+                                    text = stringResource(
+                                        R.string.proposta_bersaglio,
+                                        nomeLeggibile(app, regola.nome),
+                                    ),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                                Text(
+                                    text = stringResource(R.string.proposta_app_non_modificabile),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             CampoMinuti(minuti) { minuti = it }
                         }
                         TipiRegola.FASCIA_ORARIA -> {

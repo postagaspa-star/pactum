@@ -2,6 +2,8 @@ package eu.stgm.pactum.genitore.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -10,13 +12,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -26,9 +31,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.dati.TipiDispositivo
 
 // I mattoni comuni alle schermate del genitore: stessi titoli, stesse righe,
 // stessi stati vuoti ovunque. Tre livelli di peso (tavola rotonda §3.3): la
@@ -209,6 +221,93 @@ fun TestoOrario(tsServer: String?, modifier: Modifier = Modifier) {
 
 /** Il numero dentro un badge: oltre 99 non serve contare. */
 fun testoBadge(quante: Int): String = if (quante > 99) "99+" else quante.toString()
+
+// --- Famiglia (v3) ---------------------------------------------------------------
+
+/** L'icona del tipo di dispositivo: telefono o computer. Mai un colore d'allarme. */
+@Composable
+fun IconaDispositivo(
+    tipo: String,
+    modifier: Modifier = Modifier,
+    tinta: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    descrizione: String? = null,
+) {
+    Icon(
+        painter = painterResource(
+            if (tipo == TipiDispositivo.COMPUTER) {
+                R.drawable.ic_dispositivo_computer
+            } else {
+                R.drawable.ic_dispositivo_telefono
+            },
+        ),
+        contentDescription = descrizione,
+        tint = tinta,
+        modifier = modifier.size(20.dp),
+    )
+}
+
+/**
+ * In cima a Panoramica, Tempo e "Proposte e conferme" (v3). Con più figli, un
+ * chip per figlio (la scelta resta ricordata) col numero delle sue notifiche non
+ * lette; con un figlio solo, il suo nome e basta. Sul server 0.7 (o finché la
+ * famiglia non si conosce) non c'è niente: l'app è quella di prima.
+ */
+@Composable
+fun IntestazioneFiglio(famiglia: FamigliaViewModel.StatoFamiglia, onScegli: (Long) -> Unit) {
+    if (famiglia.serverVecchio || famiglia.figli.isEmpty()) return
+    val scelto = famiglia.figlioScelto
+    if (!famiglia.piuFigli) {
+        val nome = scelto?.nome?.trim().orEmpty()
+        if (nome.isEmpty()) return
+        Text(
+            text = nome,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = Spazi.l, end = Spazi.l, top = Spazi.s),
+        )
+        return
+    }
+    val descrizione = stringResource(R.string.figlio_scelta_descrizione)
+    val senzaNome = stringResource(R.string.figlio_senza_nome)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = Spazi.l)
+            .semantics { contentDescription = descrizione },
+        horizontalArrangement = Arrangement.spacedBy(Spazi.s),
+    ) {
+        famiglia.figli.forEach { figlio ->
+            val nonLette = figlio.notificheNonLette
+            val etichettaNonLette = if (nonLette > 0) {
+                pluralStringResource(R.plurals.figlio_notifiche_non_lette, nonLette, nonLette)
+            } else {
+                null
+            }
+            FilterChip(
+                selected = figlio.id == scelto?.id,
+                onClick = { onScegli(figlio.id) },
+                label = { Text(figlio.nome.ifBlank { senzaNome }) },
+                trailingIcon = if (etichettaNonLette != null) {
+                    {
+                        // Il blu dell'app, come il badge della campanella: mai il
+                        // rosso `error` (il rosso vive solo nella striscia).
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.semantics { contentDescription = etichettaNonLette },
+                        ) {
+                            Text(testoBadge(nonLette))
+                        }
+                    }
+                } else {
+                    null
+                },
+            )
+        }
+    }
+}
 
 @Composable
 fun Centro(contenuto: @Composable () -> Unit) {

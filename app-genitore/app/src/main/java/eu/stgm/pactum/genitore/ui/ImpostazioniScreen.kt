@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.BuildConfig
 import eu.stgm.pactum.genitore.R
@@ -50,16 +51,26 @@ import java.time.Instant
 import java.util.Locale
 
 /**
- * Impostazioni del binocolo, in tre blocchi: la connessione (indirizzo del
- * server e codice d'accesso del genitore), il digest giornaliero, gli
- * aggiornamenti dell'app.
+ * Impostazioni del binocolo, in quattro blocchi: la connessione (indirizzo del
+ * server e codice d'accesso del genitore), la famiglia (v3: figli, dispositivi,
+ * codici per collegarli), il digest giornaliero, gli aggiornamenti dell'app.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ImpostazioniScreen() {
+fun ImpostazioniScreen(
+    famigliaVm: FamigliaViewModel = viewModel(),
+    finestraVm: FinestraViewModel = viewModel(),
+    proposteVm: ProposteViewModel = viewModel(),
+    verdettiVm: VerdettiViewModel = viewModel(),
+    notificheVm: NotificheViewModel = viewModel(),
+) {
     val context = LocalContext.current
     val ambito = rememberCoroutineScope()
     val impostazioni = remember { Impostazioni(context.applicationContext) }
+    val configurazioneSalvata by impostazioni.configurazione.collectAsState(initial = null)
+
+    // La famiglia si rilegge entrando qui: è il posto dove si cambia.
+    LaunchedEffect(Unit) { famigliaVm.aggiorna() }
 
     var serverUrl by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
@@ -143,6 +154,14 @@ fun ImpostazioniScreen() {
                         serverUrl = urlNormalizzato
                         ambito.launch {
                             impostazioni.salvaConfigurazione(urlNormalizzato, token)
+                            // Un altro server (o un altro codice) è un'altra famiglia:
+                            // niente di quello che si ricorda del server di prima
+                            // deve finire sotto il nome di un figlio di adesso.
+                            famigliaVm.ricomincia()
+                            finestraVm.dimentica()
+                            proposteVm.dimentica()
+                            verdettiVm.dimentica()
+                            notificheVm.dimentica()
                             snackbarHostState.showSnackbar(messaggioSalvato)
                         }
                     }
@@ -207,6 +226,19 @@ fun ImpostazioniScreen() {
             ) {
                 Text(stringResource(R.string.impostazioni_prova_adesso))
             }
+
+            // (v3) La famiglia: figli, dispositivi e i codici per collegarli.
+            HorizontalDivider(
+                modifier = Modifier.padding(top = Spazi.s),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+            SezioneFamiglia(
+                famigliaVm = famigliaVm,
+                indirizzoServer = configurazioneSalvata?.serverUrl?.takeIf { it.isNotBlank() },
+                mostraMessaggio = { messaggio ->
+                    ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+                },
+            )
 
             // Digest giornaliero: l'ora scelta e l'interruttore. Si salva al
             // gesto, senza pulsante: è una preferenza, non una configurazione.

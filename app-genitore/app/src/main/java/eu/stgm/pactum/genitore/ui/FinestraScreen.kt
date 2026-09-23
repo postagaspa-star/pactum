@@ -1,5 +1,6 @@
 package eu.stgm.pactum.genitore.ui
 
+import androidx.annotation.PluralsRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -39,7 +40,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.annotation.PluralsRes
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,6 +50,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -67,6 +68,7 @@ import eu.stgm.pactum.design.contaGiorni
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.BonusGiorno
 import eu.stgm.pactum.genitore.dati.EventoFinestra
+import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.ModificaStorico
@@ -88,6 +90,11 @@ import java.time.LocalDate
 //  3. la storia — dietro un tocco, chiusa di default.
 // I colori del patto vivono in core-design (`ColoriPatto`): un solo rosso, in un
 // solo posto — dentro la striscia degli 8 giorni.
+//
+// (v3) Il patto è del FIGLIO scelto in cima. Sotto la scheda del patto, una riga
+// per dispositivo (telefono o computer) col suo stato; le regole raggruppate per
+// dispositivo, poi gli Impegni della vita reale. Su un server 0.7 la finestra
+// non ha `dispositivi` e tutto resta com'era.
 
 /** Ogni quanto si rilegge la finestra mentre la schermata è in primo piano. */
 private const val INTERVALLO_RILETTURA_MS = 60_000L
@@ -98,18 +105,24 @@ fun FinestraScreen(
     notificheNonLette: Int,
     onApriNotifiche: () -> Unit,
     vm: FinestraViewModel = viewModel(),
+    famigliaVm: FamigliaViewModel = viewModel(),
 ) {
     val stato by vm.stato.collectAsStateWithLifecycle()
+    val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val figlioId = famiglia.figlioId
 
-    // Prima lettura a ogni ritorno in primo piano, poi rilettura periodica
-    // finché la schermata resta visibile: "in contatto" non può restare fermo
-    // per ore su un telefono lasciato acceso.
+    // Prima lettura a ogni ritorno in primo piano (e a ogni cambio di figlio),
+    // poi rilettura periodica finché la schermata resta visibile: "in contatto"
+    // non può restare fermo per ore su un telefono lasciato acceso. Si aspetta
+    // di sapere di quale figlio (famiglia pronta): mai una finestra di un figlio
+    // sotto il nome di un altro.
     val cicloVita = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(cicloVita) {
+    LaunchedEffect(cicloVita, figlioId, famiglia.pronta) {
+        if (!famiglia.pronta) return@LaunchedEffect
         cicloVita.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
-                vm.aggiorna()
+                vm.aggiorna(figlioId)
                 delay(INTERVALLO_RILETTURA_MS)
             }
         }
@@ -139,7 +152,12 @@ fun FinestraScreen(
                 title = { Text(stringResource(R.string.finestra_titolo)) },
                 actions = {
                     PulsanteNotifiche(notificheNonLette, onApriNotifiche)
-                    IconButton(onClick = { vm.aggiorna() }) {
+                    IconButton(
+                        onClick = {
+                            famigliaVm.aggiorna()
+                            if (famiglia.pronta) vm.aggiorna(figlioId)
+                        },
+                    ) {
                         Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
                     }
                 },
@@ -147,37 +165,42 @@ fun FinestraScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        val finestra = stato.finestra
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                stato.caricamento && finestra == null ->
-                    Caricamento(stringResource(R.string.finestra_caricamento))
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            IntestazioneFiglio(famiglia, onScegli = famigliaVm::scegli)
+            // Solo i dati DI QUESTO figlio: finché non arrivano, la rotella.
+            val finestra = stato.finestra.takeIf { stato.di(figlioId) }
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    !stato.di(figlioId) || (stato.caricamento && finestra == null) ->
+                        Caricamento(stringResource(R.string.finestra_caricamento))
 
-                stato.configurazioneMancante -> Centro {
-                    StatoPrimaApertura(
-                        titolo = stringResource(R.string.config_mancante_titolo),
-                        testo = stringResource(R.string.finestra_config_mancante),
-                        centrato = true,
-                        modifier = Modifier.padding(horizontal = Spazi.xxl),
+                    stato.configurazioneMancante -> Centro {
+                        StatoPrimaApertura(
+                            titolo = stringResource(R.string.config_mancante_titolo),
+                            testo = stringResource(R.string.finestra_config_mancante),
+                            centrato = true,
+                            modifier = Modifier.padding(horizontal = Spazi.xxl),
+                        )
+                    }
+
+                    finestra == null -> Centro {
+                        TestoCentrato(stringResource(R.string.finestra_errore_nessun_dato))
+                    }
+
+                    else -> ContenutoFinestra(
+                        finestra = finestra,
+                        figlio = famiglia.figlioScelto.takeIf { !famiglia.serverVecchio },
+                        mostraErrore = stato.errore,
+                        ricevutaAlle = stato.ricevutaAlle,
+                        segnoSpento = segnoGiaMandato(
+                            finestra.segnoOggi,
+                            stato.segnoMandatoIl,
+                            LocalDate.now(),
+                        ),
+                        invioSegno = stato.invioSegno,
+                        onMandaSegno = { vm.mandaSegno(figlioId) },
                     )
                 }
-
-                finestra == null -> Centro {
-                    TestoCentrato(stringResource(R.string.finestra_errore_nessun_dato))
-                }
-
-                else -> ContenutoFinestra(
-                    finestra = finestra,
-                    mostraErrore = stato.errore,
-                    ricevutaAlle = stato.ricevutaAlle,
-                    segnoSpento = segnoGiaMandato(
-                        finestra.segnoOggi,
-                        stato.segnoMandatoIl,
-                        LocalDate.now(),
-                    ),
-                    invioSegno = stato.invioSegno,
-                    onMandaSegno = { vm.mandaSegno() },
-                )
             }
         }
     }
@@ -217,6 +240,7 @@ private fun PulsanteNotifiche(nonLette: Int, onClick: () -> Unit) {
 @Composable
 private fun ContenutoFinestra(
     finestra: Finestra,
+    figlio: Figlio?,
     mostraErrore: Boolean,
     ricevutaAlle: Instant?,
     segnoSpento: Boolean,
@@ -227,6 +251,12 @@ private fun ContenutoFinestra(
     // le regole (anche eliminate), quindi la mappa è completa.
     val regolePerId = finestra.regole.associateBy { it.id }
     val giorni = remember(finestra.striscia) { giorniDaQuadretti(finestra.striscia) }
+    // (v3) La finestra per dispositivo; su un server 0.7 uno solo, senza nome.
+    val perDispositivo = finestraPerDispositivo(finestra)
+    val dispositivi = remember(finestra) { dispositiviDellaFinestra(finestra) }
+    val piuDispositivi = perDispositivo && dispositivi.size > 1
+    // Un figlio v3 senza nessun dispositivo: si dice come si comincia.
+    val senzaDispositivi = figlio != null && figlio.dispositivi.isEmpty() && !perDispositivo
     // I giorni si contano nel fuso del patto, non in quello di chi legge.
     val riepilogo = remember(finestra) {
         riepilogoPatto(
@@ -246,6 +276,9 @@ private fun ContenutoFinestra(
             zona = FUSO_PATTO,
             oggi = LocalDate.now(FUSO_PATTO),
         )
+    }
+    val gruppi = remember(finestra) {
+        if (perDispositivo) raggruppaRegole(finestra.regole, dispositivi) else emptyList()
     }
 
     // "Ho capito" vale per sempre: sta in DataStore, non nello stato della
@@ -273,7 +306,22 @@ private fun ContenutoFinestra(
             }
         }
 
-        item { RigaStato(finestra.statoSilenzio, ricevutaAlle) }
+        if (perDispositivo) {
+            // (v3) L'anomalia occupa spazio: un dispositivo che tace ha la sua
+            // card in cima. Lo stato di tutti sta sotto la scheda del patto.
+            val silenti = dispositivi.filter { statoCanale(it) == StatoCanale.SILENTE }
+            items(silenti, key = { "silenzio-${it.id}" }) { CardSilenzioDispositivo(it) }
+            if (ricevutaAlle != null) item { RigaEta(ricevutaAlle) }
+        } else {
+            // Un figlio senza dispositivi non "tace": non ha niente con cui parlare.
+            // Il server gli manda comunque silente=true; qui si dice come si comincia.
+            val silenzio = finestra.statoSilenzio.takeIf { !senzaDispositivi }
+            if (silenzio != null) {
+                item { RigaStato(silenzio, ricevutaAlle) }
+            } else if (ricevutaAlle != null) {
+                item { RigaEta(ricevutaAlle) }
+            }
+        }
 
         // La cornice: cos'è Pactum e perché non impone lui le regole.
         // Richiudibile: dopo averla letta non ingombra più, nemmeno dopo.
@@ -283,20 +331,33 @@ private fun ContenutoFinestra(
             }
         }
 
-        // --- 1. Il patto --------------------------------------------------------
-        if (finestra.regole.isEmpty()) {
+        if (senzaDispositivi) {
             item {
                 StatoPrimaApertura(
-                    titolo = stringResource(R.string.regole_vuoto_titolo),
-                    testo = stringResource(R.string.regole_vuoto),
+                    titolo = stringResource(R.string.nessun_dispositivo_titolo),
+                    testo = stringResource(R.string.nessun_dispositivo),
                     modifier = Modifier.padding(vertical = Spazi.l),
                 )
+            }
+        }
+
+        // --- 1. Il patto --------------------------------------------------------
+        if (finestra.regole.isEmpty()) {
+            if (!senzaDispositivi) {
+                item {
+                    StatoPrimaApertura(
+                        titolo = stringResource(R.string.regole_vuoto_titolo),
+                        testo = stringResource(R.string.regole_vuoto),
+                        modifier = Modifier.padding(vertical = Spazi.l),
+                    )
+                }
             }
         } else {
             item {
                 SchedaPatto(
                     giorni = giorni,
                     riepilogo = riepilogo,
+                    strisceDispositivi = if (perDispositivo) strisceDeiDispositivi(dispositivi) else emptyList(),
                     // POST /api/segno è v2.4 come la striscia: senza striscia il
                     // server è più vecchio, e il pulsante porterebbe a un errore.
                     mostraSegno = finestra.striscia.isNotEmpty(),
@@ -307,20 +368,32 @@ private fun ContenutoFinestra(
                     modifier = Modifier.padding(bottom = Spazi.xxl - Spazi.m),
                 )
             }
+        }
+
+        // (v3) Una riga per dispositivo: chi è, che tipo, com'è il contatto.
+        if (perDispositivo) {
+            item { BloccoDispositivi(dispositivi) }
+        }
+
+        if (finestra.regole.isNotEmpty()) {
             item { TitoloSezione(stringResource(R.string.sezione_regole)) }
-            items(finestra.regole, key = { "regola-${it.id}" }) { SchedaRegola(it) }
-            // I bonus sono globali, non di una regola: si dicono UNA volta, in
-            // coda alle regole. I residui solo se c'è una limite_tempo attiva
-            // (il bonus allunga solo quelle), la striscia solo se negli 8
-            // giorni ce n'è stato almeno uno.
-            val residui = finestra.regole.any { it.attiva && it.tipo == TipiRegola.LIMITE_TEMPO }
-            val striscia = finestra.bonusGiornalieri.any { it.minuti > 0 }
-            if (residui || striscia) {
-                item {
-                    SezioneBonus(
-                        bonus = finestra.bonus.takeIf { residui },
-                        bonusGiornalieri = finestra.bonusGiornalieri.takeIf { striscia },
-                    )
+            if (perDispositivo) {
+                gruppi.forEach { gruppo -> gruppoDiRegole(gruppo) }
+            } else {
+                items(finestra.regole, key = { "regola-${it.id}" }) { SchedaRegola(it) }
+                // Server 0.7: i bonus sono di tutto il patto, detti UNA volta in
+                // coda alle regole. I residui solo se c'è una limite_tempo attiva
+                // (il bonus allunga solo quelle), la striscia solo se negli 8
+                // giorni ce n'è stato almeno uno.
+                val residui = finestra.regole.any { it.attiva && it.tipo == TipiRegola.LIMITE_TEMPO }
+                val strisciaBonus = finestra.bonusGiornalieri.any { it.minuti > 0 }
+                if ((residui && finestra.bonus != null) || strisciaBonus) {
+                    item {
+                        SezioneBonus(
+                            bonus = finestra.bonus.takeIf { residui },
+                            bonusGiornalieri = finestra.bonusGiornalieri.takeIf { strisciaBonus },
+                        )
+                    }
                 }
             }
         }
@@ -335,7 +408,18 @@ private fun ContenutoFinestra(
                 daGuardare.take(VOCI_DA_GUARDARE_VISIBILI)
             }
             item {
-                ListaRighe(visibili) { RigaDaGuardare(it, regolePerId) }
+                ListaRighe(visibili) { voce ->
+                    RigaDaGuardare(
+                        voce = voce,
+                        regolePerId = regolePerId,
+                        // Con più dispositivi si dice da quale viene il fatto.
+                        dispositivo = if (piuDispositivi) {
+                            nomeDispositivo(voce.evento.dispositivoId ?: dispositivoDellaRegola(voce.evento, regolePerId), dispositivi)
+                        } else {
+                            null
+                        },
+                    )
+                }
             }
             val nascoste = daGuardare.size - VOCI_DA_GUARDARE_VISIBILI
             if (nascoste > 0) {
@@ -371,9 +455,74 @@ private fun ContenutoFinestra(
             }
             if (storiaAperta) {
                 item {
-                    ListaRighe(finestra.storicoModifiche) { RigaStorico(it, regolePerId) }
+                    ListaRighe(finestra.storicoModifiche) {
+                        RigaStorico(it, regolePerId, mostraDispositivo = piuDispositivi)
+                    }
                 }
             }
+        }
+    }
+}
+
+/** Il dispositivo della regola di uno sforamento, se l'evento non lo dice da sé. */
+private fun dispositivoDellaRegola(evento: EventoFinestra, regolePerId: Map<Long, RegolaFinestra>): Long? =
+    campoLong(evento.dettagli, "regola_id")
+        ?.let { regolePerId[it] }
+        ?.let { it.dispositivoId ?: it.dispositivo?.id }
+
+/**
+ * Un gruppo di regole (v3): il dispositivo (icona + nome) o gli Impegni, le sue
+ * regole ciascuna con la sua striscia piccola, e i bonus DI QUEL dispositivo —
+ * dalla v3 i bonus sono per dispositivo.
+ */
+private fun androidx.compose.foundation.lazy.LazyListScope.gruppoDiRegole(gruppo: GruppoRegole) {
+    val chiave = when (gruppo.genere) {
+        GenereGruppo.DISPOSITIVO -> "gruppo-${gruppo.dispositivo?.id}"
+        GenereGruppo.IMPEGNI -> "gruppo-impegni"
+        GenereGruppo.ALTRE -> "gruppo-altre"
+    }
+    item(key = chiave) { IntestazioneGruppo(gruppo) }
+    if (gruppo.regole.isEmpty()) {
+        item(key = "$chiave-vuoto") { RigaVuota(stringResource(R.string.regole_nessuna_sul_dispositivo)) }
+    }
+    items(gruppo.regole, key = { "regola-${it.id}" }) { SchedaRegola(it) }
+    val dispositivo = gruppo.dispositivo ?: return
+    val residui = gruppo.regole.any { it.attiva && it.tipo == TipiRegola.LIMITE_TEMPO } &&
+        dispositivo.bonus != null && !dispositivo.revocato
+    val strisciaBonus = dispositivo.bonusGiornalieri.any { it.minuti > 0 }
+    if (residui || strisciaBonus) {
+        item(key = "$chiave-bonus") {
+            SezioneBonus(
+                bonus = dispositivo.bonus.takeIf { residui },
+                bonusGiornalieri = dispositivo.bonusGiornalieri.takeIf { strisciaBonus },
+            )
+        }
+    }
+}
+
+/** Il sopra-titolo di un gruppo: l'icona e il nome del dispositivo, o IMPEGNI. */
+@Composable
+private fun IntestazioneGruppo(gruppo: GruppoRegole) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = Spazi.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val dispositivo = gruppo.dispositivo
+        when {
+            gruppo.genere == GenereGruppo.DISPOSITIVO && dispositivo != null -> {
+                IconaDispositivo(dispositivo.tipo)
+                val nome = nomeDelDispositivo(dispositivo)
+                SopraTitolo(
+                    testo = if (dispositivo.revocato) {
+                        stringResource(R.string.dispositivo_chip_scollegato, nome).uppercase()
+                    } else {
+                        nome.uppercase()
+                    },
+                    modifier = Modifier.padding(start = Spazi.s),
+                )
+            }
+            gruppo.genere == GenereGruppo.IMPEGNI -> SopraTitolo(stringResource(R.string.gruppo_impegni))
+            else -> SopraTitolo(stringResource(R.string.gruppo_altre_regole))
         }
     }
 }
@@ -413,8 +562,19 @@ private fun CardIntro(onChiudi: () -> Unit) {
     }
 }
 
+/** L'età del dato, una riga sottovoce: "Aggiornato alle 15:12". */
+@Composable
+private fun RigaEta(ricevutaAlle: Instant) {
+    Text(
+        text = stringResource(R.string.finestra_aggiornata_alle, oraOppureDataOra(ricevutaAlle)),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 /**
- * Lo stato del canale col figlio, deciso dal flag `silente` del SERVER.
+ * Lo stato del canale col figlio, deciso dal flag `silente` del SERVER (server
+ * 0.7: un dispositivo solo).
  *
  * La normalità non grida: "in contatto" è UNA riga (pallino + testo + età del
  * dato), niente card. L'anomalia occupa spazio: solo il silenzio è una Card
@@ -431,45 +591,15 @@ private fun RigaStato(statoSilenzio: StatoSilenzio, ricevutaAlle: Instant?) {
     }
 
     if (statoSilenzio.silente) {
-        val inchiostro = ColoriPatto.InchiostroSuSilenzio
-        Card(
-            colors = CardDefaults.cardColors(containerColor = ColoriPatto.Silenzio),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(modifier = Modifier.padding(Spazi.l)) {
-                Icon(
-                    imageVector = Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = inchiostro,
-                    modifier = Modifier.size(24.dp),
-                )
-                Column(modifier = Modifier.padding(start = Spazi.m)) {
-                    Text(
-                        text = if (istante != null) {
-                            stringResource(R.string.silenzio_allarme, oraOppureDataOra(istante))
-                        } else {
-                            stringResource(R.string.silenzio_mai)
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        color = inchiostro,
-                    )
-                    Text(
-                        text = stringResource(R.string.silenzio_spiega),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = inchiostro,
-                        modifier = Modifier.padding(top = Spazi.xs),
-                    )
-                    if (eta != null) {
-                        Text(
-                            text = eta,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = inchiostro,
-                            modifier = Modifier.padding(top = Spazi.xs),
-                        )
-                    }
-                }
-            }
-        }
+        CardSilenzio(
+            titolo = if (istante != null) {
+                stringResource(R.string.silenzio_allarme, oraOppureDataOra(istante))
+            } else {
+                stringResource(R.string.silenzio_mai)
+            },
+            spiegazione = stringResource(R.string.silenzio_spiega),
+            eta = eta,
+        )
     } else {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -503,10 +633,137 @@ private fun RigaStato(statoSilenzio: StatoSilenzio, ricevutaAlle: Instant?) {
 }
 
 /**
+ * (v3) La card del silenzio per UN dispositivo che tace: "Computer di camera:
+ * nessun aggiornamento dalle 15:10". Un computer spento non arriva mai qui:
+ * spento non è silente.
+ */
+@Composable
+private fun CardSilenzioDispositivo(dispositivo: VistaDispositivo) {
+    val p = parole()
+    val nome = nomeDelDispositivo(dispositivo)
+    val istante = istanteServer(dispositivo.statoSilenzio?.ultimoBattito)
+    CardSilenzio(
+        titolo = if (istante != null) {
+            stringResource(R.string.silenzio_dispositivo_titolo, nome, dalleQuando(p, istante))
+        } else {
+            stringResource(R.string.silenzio_dispositivo_titolo, nome, "—")
+        },
+        spiegazione = stringResource(
+            if (dispositivo.computer) R.string.silenzio_spiega_computer else R.string.silenzio_spiega,
+        ),
+        eta = null,
+    )
+}
+
+/** La card piena del canale muto: grigio-blu, mai rosso. */
+@Composable
+private fun CardSilenzio(titolo: String, spiegazione: String, eta: String?) {
+    val inchiostro = ColoriPatto.InchiostroSuSilenzio
+    Card(
+        colors = CardDefaults.cardColors(containerColor = ColoriPatto.Silenzio),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(modifier = Modifier.padding(Spazi.l)) {
+            Icon(
+                imageVector = Icons.Filled.Warning,
+                contentDescription = null,
+                tint = inchiostro,
+                modifier = Modifier.size(24.dp),
+            )
+            Column(modifier = Modifier.padding(start = Spazi.m)) {
+                Text(
+                    text = titolo,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = inchiostro,
+                )
+                Text(
+                    text = spiegazione,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = inchiostro,
+                    modifier = Modifier.padding(top = Spazi.xs),
+                )
+                if (eta != null) {
+                    Text(
+                        text = eta,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = inchiostro,
+                        modifier = Modifier.padding(top = Spazi.xs),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * (v3) I dispositivi del figlio, una riga ciascuno: icona del tipo, nome, e lo
+ * stato del contatto detto a parole ("In contatto — ultimo aggiornamento alle
+ * 15:10", "Spento dalle 23:10", "Nessun aggiornamento dalle 15:10"). Il
+ * pallino è blu quando c'è contatto, grigio-blu quando tace, neutro altrimenti.
+ */
+@Composable
+private fun BloccoDispositivi(dispositivi: List<VistaDispositivo>) {
+    val p = parole()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        SopraTitolo(stringResource(R.string.dispositivi_titolo))
+        ListaRighe(dispositivi) { dispositivo ->
+            val stato = statoCanale(dispositivo)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconaDispositivo(dispositivo.tipo)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = Spazi.m),
+                ) {
+                    Text(
+                        text = nomeDelDispositivo(dispositivo),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (dispositivo.revocato) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                    // Il pallino sta sulla prima riga (bodyMedium: 20sp di riga),
+                    // anche quando la frase va a capo.
+                    Row(verticalAlignment = Alignment.Top) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 6.dp)
+                                .size(8.dp)
+                                .background(colorePallino(stato), CircleShape),
+                        )
+                        Text(
+                            text = testoStatoCanale(p, stato, dispositivo.statoSilenzio),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = Spazi.s),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun colorePallino(stato: StatoCanale): Color = when (stato) {
+    StatoCanale.IN_CONTATTO -> MaterialTheme.colorScheme.primary
+    StatoCanale.SILENTE -> ColoriPatto.Silenzio
+    else -> MaterialTheme.colorScheme.outlineVariant
+}
+
+/**
  * La scheda EROE: com'è andata la parola data negli ultimi 8 giorni.
  * Il numero grande è il conteggio dei fatti ("6 su 7"), la stessa striscia che
  * vede il figlio, e una riga che dice a parole ciò che la striscia disegna.
  * Nessuna serie: la serie è del figlio, non di chi guarda (tavola rotonda C6).
+ *
+ * (v3) Con più dispositivi, sotto la striscia del figlio c'è quella di ciascun
+ * dispositivo ([strisceDispositivi]), piccola: la grande resta del figlio.
  *
  * Senza `striscia` (server vecchio) la scheda non va in errore: resta la riga
  * di riepilogo, e il segno si nasconde ([mostraSegno] false) perché quel server
@@ -516,6 +773,7 @@ private fun RigaStato(statoSilenzio: StatoSilenzio, ricevutaAlle: Instant?) {
 private fun SchedaPatto(
     giorni: List<GiornoPatto>,
     riepilogo: RiepilogoPatto,
+    strisceDispositivi: List<VistaDispositivo>,
     mostraSegno: Boolean,
     segnoSpento: Boolean,
     invioSegno: Boolean,
@@ -579,6 +837,11 @@ private fun SchedaPatto(
                 style = MaterialTheme.typography.bodyMedium,
             )
 
+            // (v3) Accanto alla striscia del figlio, quella di ciascun dispositivo.
+            strisceDispositivi.forEach { dispositivo ->
+                StrisciaDispositivo(dispositivo, modifier = Modifier.padding(top = Spazi.m))
+            }
+
             // Il gesto non poliziesco: un riconoscimento a testo fisso, uno al
             // giorno. Il genitore sa prima che cosa arriva al figlio.
             if (mostraSegno) {
@@ -605,11 +868,44 @@ private fun SchedaPatto(
     }
 }
 
+/** La striscia piccola di un dispositivo, col suo "5 su 7": un dettaglio, non un verdetto. */
+@Composable
+private fun StrisciaDispositivo(dispositivo: VistaDispositivo, modifier: Modifier = Modifier) {
+    val giorni = giorniDaQuadretti(dispositivo.striscia)
+    val (mantenuti, conDati) = contaGiorni(giorni)
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconaDispositivo(dispositivo.tipo)
+            Text(
+                text = nomeDelDispositivo(dispositivo),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = Spazi.s),
+            )
+            if (conDati > 0) {
+                Text(
+                    text = stringResource(R.string.patto_su, mantenuti, conDati),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.height(Spazi.xs))
+        StrisciaGiorni(
+            giorni = giorni,
+            lato = 20.dp,
+            mostraNumero = false,
+            descrizione = descrizioneStriscia(giorni, R.plurals.striscia_descrizione_dispositivo),
+        )
+    }
+}
+
 /**
  * La frase che TalkBack legge al posto dei singoli quadretti. [frase] dice di
- * chi è la striscia: tutte le regole (la scheda del patto) o una sola.
- * Senza nessun giorno con dati si dicono solo i giorni senza dati: "0 giorni
- * su 0" non vuol dire niente.
+ * chi è la striscia: tutte le regole (la scheda del patto), un dispositivo o una
+ * sola regola. Senza nessun giorno con dati si dicono solo i giorni senza dati:
+ * "0 giorni su 0" non vuol dire niente.
  */
 @Composable
 private fun descrizioneStriscia(giorni: List<GiornoPatto>, @PluralsRes frase: Int): String {
@@ -642,7 +938,7 @@ private fun testoRiepilogo(riepilogo: RiepilogoPatto): String {
 /**
  * Una regola (§3.4): il tipo come sopra-titolo, la frase, la sua striscia
  * piccola da 20dp — un dettaglio, non un verdetto: il verdetto sta in cima.
- * Niente bonus qui: sono contatori di tutto il patto, non di questa regola.
+ * Niente bonus qui: sono contatori del dispositivo, non di questa regola.
  */
 @Composable
 private fun SchedaRegola(regola: RegolaFinestra) {
@@ -676,9 +972,10 @@ private fun SchedaRegola(regola: RegolaFinestra) {
 }
 
 /**
- * I bonus di tutto il patto, detti una volta sola: quanti minuti restano oggi
- * e in settimana ([bonus], null se non c'è una limite_tempo attiva) e i minuti
- * bonus di ciascuno degli 8 giorni ([bonusGiornalieri], null se sono tutti zero).
+ * I bonus, detti una volta sola: quanti minuti restano oggi e in settimana
+ * ([bonus], null se non c'è una limite_tempo attiva) e i minuti bonus di
+ * ciascuno degli 8 giorni ([bonusGiornalieri], null se sono tutti zero).
+ * Server 0.7: di tutto il patto; v3: di un dispositivo.
  */
 @Composable
 private fun SezioneBonus(bonus: StatoBonus?, bonusGiornalieri: List<BonusGiorno>?) {
@@ -704,7 +1001,7 @@ private fun SezioneBonus(bonus: StatoBonus?, bonusGiornalieri: List<BonusGiorno>
     }
 }
 
-/** I minuti bonus di ciascuno degli 8 giorni (globali, non per regola). */
+/** I minuti bonus di ciascuno degli 8 giorni (non per regola). */
 @Composable
 private fun StrisciaBonus(bonusGiornalieri: List<BonusGiorno>) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -761,15 +1058,23 @@ private fun StrisciaBonus(bonusGiornalieri: List<BonusGiorno>) {
 /**
  * Una riga di "Da guardare insieme": che cosa, e quando. Uno sforamento col
  * `giorno` nei dettagli mostra QUEL giorno ("14/09"), non l'ora in cui è
- * arrivato al server: è il giorno che la striscia colora.
+ * arrivato al server: è il giorno che la striscia colora. (v3) Con più
+ * dispositivi, sopra si dice da quale ([dispositivo]).
  */
 @Composable
-private fun RigaDaGuardare(voce: VoceDaGuardare, regolePerId: Map<Long, RegolaFinestra>) {
+private fun RigaDaGuardare(
+    voce: VoceDaGuardare,
+    regolePerId: Map<Long, RegolaFinestra>,
+    dispositivo: String?,
+) {
     val titolo = when (voce.genere) {
         GenereVoce.FUORI_REGOLA -> testoFuoriRegola(voce.evento, regolePerId)
         GenereVoce.INTERRUZIONE -> testoBuco(voce.evento)
     }
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
+        if (dispositivo != null) {
+            SopraTitolo(dispositivo.uppercase(), modifier = Modifier.padding(bottom = Spazi.xs))
+        }
         Text(text = titolo, style = MaterialTheme.typography.bodyLarge)
         if (voce.giornoDichiarato) {
             Text(
@@ -794,13 +1099,17 @@ private fun testoFuoriRegola(evento: EventoFinestra, regolePerId: Map<Long, Rego
     }
 }
 
-// La stessa frase della notifica di quel buco (Testi.kt).
+// La stessa frase della notifica di quell'interruzione (Testi.kt), coi dettagli:
+// (v3) "Pactum è stato chiuso sul computer (dalle 15:10 alle 15:40)".
 @Composable
-private fun testoBuco(evento: EventoFinestra): String =
-    descrizioneBuco(campoTesto(evento.dettagli, "sotto_tipo"))
+private fun testoBuco(evento: EventoFinestra): String = descrizioneBuco(evento.dettagli)
 
 @Composable
-private fun RigaStorico(modifica: ModificaStorico, regolePerId: Map<Long, RegolaFinestra>) {
+private fun RigaStorico(
+    modifica: ModificaStorico,
+    regolePerId: Map<Long, RegolaFinestra>,
+    mostraDispositivo: Boolean,
+) {
     val titolo = when (modifica.azione) {
         "creazione" -> stringResource(R.string.storico_creazione)
         "modifica" -> if (modifica.direzione == "stringe") {
@@ -817,6 +1126,10 @@ private fun RigaStorico(modifica: ModificaStorico, regolePerId: Map<Long, Regola
     val parametri = modifica.dopo ?: modifica.prima
     val regola = regolePerId[modifica.regolaId]
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
+        val nomeDispositivo = regola?.dispositivo?.nome?.takeIf { mostraDispositivo && it.isNotBlank() }
+        if (nomeDispositivo != null) {
+            SopraTitolo(nomeDispositivo.uppercase(), modifier = Modifier.padding(bottom = Spazi.xs))
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = titolo,
@@ -840,6 +1153,3 @@ private fun RigaStorico(modifica: ModificaStorico, regolePerId: Map<Long, Regola
 
 private fun campoLong(oggetto: JsonObject, nome: String): Long? =
     (oggetto[nome] as? JsonPrimitive)?.content?.toLongOrNull()
-
-private fun campoTesto(oggetto: JsonObject, nome: String): String? =
-    (oggetto[nome] as? JsonPrimitive)?.content

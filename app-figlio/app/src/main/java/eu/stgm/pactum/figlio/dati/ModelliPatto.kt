@@ -348,10 +348,16 @@ data class PaccoProposte(val proposte: List<Proposta> = emptyList())
 @Serializable
 data class PaccoRegole(val regole: List<Regola> = emptyList())
 
-/** (v3) POST /api/abbina: il codice di 6 cifre che il genitore ha generato. */
+/**
+ * (v3) POST /api/abbina: il codice di 6 cifre che il genitore ha generato.
+ * (v3.1) `tipo` senza valore di ripiego, di proposito: il client non scrive i
+ * valori uguali al ripiego (`encodeDefaults = false`), e il tipo deve partire
+ * sempre. Lo mette Abbinamento.richiesta.
+ */
 @Serializable
 data class AbbinaIn(
     val codice: String,
+    val tipo: String,
     @SerialName("versione_app") val versioneApp: String,
 )
 
@@ -415,6 +421,9 @@ data class DettaglioErrore(
     @SerialName("residuo_settimana") val residuoSettimana: Int? = null,
     // (v3) 429 troppi_tentativi dell'abbinamento: fra quanto si può riprovare.
     @SerialName("riprova_tra_secondi") val riprovaTraSecondi: Long? = null,
+    // (v3.1) 409 tipo_non_corrispondente dell'abbinamento: per che tipo di
+    // dispositivo è il codice (es. "computer").
+    @SerialName("tipo_atteso") val tipoAtteso: String? = null,
 )
 
 private val jsonErrori = Json { ignoreUnknownKeys = true }

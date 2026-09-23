@@ -1,7 +1,11 @@
 package eu.stgm.pactum.figlio.dati
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -100,6 +104,41 @@ class AbbinamentoTest {
     }
 
     @Test
+    fun `il codice di un computer non e' un codice non valido`() {
+        assertEquals(
+            EsitoAbbinamento.TipoNonCorrispondente(tipoAtteso = "computer"),
+            Abbinamento.esito(false, 409, """{ "errore": "tipo_non_corrispondente", "tipo_atteso": "computer" }"""),
+        )
+        assertEquals(
+            EsitoAbbinamento.TipoNonCorrispondente(tipoAtteso = "computer"),
+            Abbinamento.esito(
+                false, 409, """{ "detail": { "errore": "tipo_non_corrispondente", "tipo_atteso": " Computer " } }""",
+            ),
+        )
+        // Senza il tipo atteso resta un codice di un altro tipo, non "non valido".
+        assertEquals(
+            EsitoAbbinamento.TipoNonCorrispondente(tipoAtteso = null),
+            Abbinamento.esito(false, 409, """{ "detail": { "errore": "tipo_non_corrispondente" } }"""),
+        )
+        assertEquals(
+            EsitoAbbinamento.TipoNonCorrispondente(tipoAtteso = null),
+            Abbinamento.esito(false, 409, """{ "errore": "tipo_non_corrispondente", "tipo_atteso": "" }"""),
+        )
+    }
+
+    @Test
+    fun `il telefono dice sempre che e' un telefono, anche senza scrivere i valori di ripiego`() {
+        val richiesta = Abbinamento.richiesta("483920", "0.8.0")
+        assertEquals(AbbinaIn(codice = "483920", tipo = "telefono", versioneApp = "0.8.0"), richiesta)
+        // Come il client: i valori uguali al ripiego non si scrivono. Il tipo deve partire lo stesso.
+        val json = Json { encodeDefaults = false }
+        val corpo = json.parseToJsonElement(json.encodeToString(AbbinaIn.serializer(), richiesta)).jsonObject
+        assertEquals("telefono", corpo["tipo"]?.jsonPrimitive?.content)
+        assertEquals("483920", corpo["codice"]?.jsonPrimitive?.content)
+        assertEquals("0.8.0", corpo["versione_app"]?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `niente rete, server senza codici, tutto il resto`() {
         assertEquals(EsitoAbbinamento.SenzaRete, Abbinamento.esito(false, 0, null))
         // Nessuna pagina /api/abbina: non è il codice a essere sbagliato.
@@ -149,5 +188,103 @@ class AbbinamentoTest {
         assertTrue(Abbinamento.stessoFiglio(true, server, server, figlioPrima = 1, figlioDopo = 1))
         assertTrue(Abbinamento.stessoFiglio(true, server, server, figlioPrima = null, figlioDopo = 1))
         assertFalse(Abbinamento.stessoFiglio(true, server, server, figlioPrima = 1, figlioDopo = 2))
+    }
+
+    // --- Gli sforamenti in coda -----------------------------------------------
+
+    private val altroServer = "http://192.168.1.50:8100"
+
+    @Test
+    fun `stesso server anche con la barra in fondo, un altro indirizzo no`() {
+        assertTrue(Abbinamento.stessoServer(server, "$server/"))
+        assertTrue(Abbinamento.stessoServer(" $server ", server))
+        assertFalse(Abbinamento.stessoServer(server, altroServer))
+    }
+
+    @Test
+    fun `col codice di sei cifre la coda va via se cambia il dispositivo o il server`() {
+        assertTrue(Abbinamento.scartaSforamentiInCoda(true, server, server, stessoDispositivo = false))
+        assertTrue(Abbinamento.scartaSforamentiInCoda(true, server, altroServer, stessoDispositivo = false))
+        assertFalse(Abbinamento.scartaSforamentiInCoda(true, server, server, stessoDispositivo = true))
+    }
+
+    @Test
+    fun `col codice lungo la coda va via solo se cambia il server`() {
+        // Un altro server: i numeri delle regole sono quelli del server vecchio.
+        assertTrue(Abbinamento.scartaSforamentiInCoda(true, server, altroServer, stessoDispositivo = null))
+        // Stesso server: non si sa di che dispositivo è, niente buttato per un sospetto.
+        assertFalse(Abbinamento.scartaSforamentiInCoda(true, server, "$server/", stessoDispositivo = null))
+    }
+
+    @Test
+    fun `un telefono mai collegato non ha sforamenti da buttare`() {
+        assertFalse(Abbinamento.scartaSforamentiInCoda(false, "", server, stessoDispositivo = false))
+        assertFalse(Abbinamento.scartaSforamentiInCoda(false, "", server, stessoDispositivo = null))
+    }
+
+    // --- Collegato a un dispositivo diverso da prima --------------------------
+
+    private val telefono = Dispositivo(id = 1, nome = "Telefono", tipo = "telefono")
+    private val nuovo = Dispositivo(id = 3, nome = "Telefono di Andrea", tipo = "telefono")
+
+    @Test
+    fun `aggiungi dispositivo al posto di nuovo codice, il telefono lo dice`() {
+        assertEquals(
+            CambioDispositivo(nomeNuovo = "Telefono di Andrea", nomePrima = "Telefono", primaScollegato = false),
+            Abbinamento.cambioDispositivo(true, stessoServer = true, prima = telefono, dopo = nuovo),
+        )
+    }
+
+    @Test
+    fun `primo collegamento o stesso dispositivo, niente avviso`() {
+        assertNull(Abbinamento.cambioDispositivo(false, stessoServer = false, prima = null, dopo = nuovo))
+        assertNull(Abbinamento.cambioDispositivo(true, stessoServer = true, prima = nuovo, dopo = nuovo))
+        // Il server non dice quale dispositivo: non si sa, non si dice.
+        assertNull(Abbinamento.cambioDispositivo(true, stessoServer = true, prima = telefono, dopo = null))
+        assertNull(Abbinamento.cambioDispositivo(true, true, telefono, Dispositivo(id = 0, nome = "X")))
+    }
+
+    @Test
+    fun `lo stesso dispositivo con un altro indirizzo non e' un dispositivo nuovo`() {
+        assertNull(Abbinamento.cambioDispositivo(true, stessoServer = false, prima = telefono, dopo = telefono))
+    }
+
+    @Test
+    fun `mai saputo chi era col codice lungo, era il dispositivo 1`() {
+        assertNull(Abbinamento.cambioDispositivo(true, stessoServer = true, prima = null, dopo = telefono))
+        // Il nome di prima si prende dal patto appena letto.
+        assertEquals(
+            CambioDispositivo("Telefono di Andrea", "Telefono", primaScollegato = false),
+            Abbinamento.cambioDispositivo(true, true, prima = null, dopo = nuovo, dispositiviDopo = listOf(telefono, nuovo)),
+        )
+        // Senza patto non si sa come si chiamava.
+        assertEquals(
+            CambioDispositivo("Telefono di Andrea", "", primaScollegato = false),
+            Abbinamento.cambioDispositivo(true, true, prima = null, dopo = nuovo),
+        )
+    }
+
+    @Test
+    fun `il nome di adesso e lo scollegamento vengono dal patto appena letto`() {
+        val rinominato = telefono.copy(nome = "Vecchio telefono")
+        assertEquals(
+            CambioDispositivo("Telefono di Andrea", "Vecchio telefono", primaScollegato = false),
+            Abbinamento.cambioDispositivo(true, true, telefono, nuovo, listOf(rinominato, nuovo)),
+        )
+        // Scollegato dal genitore: non riceve più codici, il consiglio non si darà.
+        assertEquals(
+            CambioDispositivo("Telefono di Andrea", "Telefono", primaScollegato = true),
+            Abbinamento.cambioDispositivo(true, true, telefono, nuovo, listOf(telefono.copy(revocato = true), nuovo)),
+        )
+    }
+
+    @Test
+    fun `su un altro server lo stesso numero e' un altro dispositivo`() {
+        // Il dispositivo 1 del server nuovo non è il "Telefono" di prima: non se ne prende niente.
+        val altroUno = Dispositivo(id = 1, nome = "Tablet", revocato = true)
+        assertEquals(
+            CambioDispositivo("Telefono di Andrea", "Telefono", primaScollegato = false),
+            Abbinamento.cambioDispositivo(true, stessoServer = false, prima = telefono, dopo = nuovo, dispositiviDopo = listOf(altroUno)),
+        )
     }
 }

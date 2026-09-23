@@ -25,7 +25,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,10 +39,12 @@ import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.Abbinamento
 import eu.stgm.pactum.figlio.dati.Collegamento
+import eu.stgm.pactum.figlio.dati.CorsaCollegamento
 import eu.stgm.pactum.figlio.dati.EsitoAbbinamento
+import eu.stgm.pactum.figlio.dati.EsitoCollegamento
 import eu.stgm.pactum.figlio.dati.Identita
 import eu.stgm.pactum.figlio.dati.Impostazioni
-import kotlinx.coroutines.launch
+import eu.stgm.pactum.figlio.dati.TipiDispositivo
 
 /**
  * Il collegamento di questo telefono al patto (contratto v3, "Abbinamento con
@@ -54,6 +56,11 @@ import kotlinx.coroutines.launch
  * server si dicono in una riga neutra, mai in rosso: un codice scaduto non è
  * un errore del ragazzo. Il rosso di sistema resta al solo indirizzo scritto
  * male (validazione del campo).
+ *
+ * Il collegamento non gira qui ma in Collegamento, fuori dalla schermata: una
+ * rotazione, una pausa o l'uscita dalle Impostazioni non lo interrompono più
+ * (il codice sarebbe bruciato). Questa schermata ne segue lo stato e ne prende
+ * l'esito, anche se è stata ricreata nel frattempo.
  */
 @Composable
 fun ModuloCollegamento(
@@ -63,7 +70,6 @@ fun ModuloCollegamento(
     giaCollegato: Boolean = false,
 ) {
     val context = LocalContext.current
-    val ambito = rememberCoroutineScope()
     val impostazioni = remember { Impostazioni(context.applicationContext) }
 
     var server by rememberSaveable { mutableStateOf("") }
@@ -73,7 +79,9 @@ fun ModuloCollegamento(
     var lungoAperto by rememberSaveable { mutableStateOf(false) }
     var urlNonValido by rememberSaveable { mutableStateOf(false) }
     var messaggio by rememberSaveable { mutableStateOf<String?>(null) }
-    var inCorso by remember { mutableStateOf(false) }
+    val stato by Collegamento.stato.collectAsState()
+    val inCorso = stato is CorsaCollegamento.Stato.InCorso
+    val onCollegatoAttuale by rememberUpdatedState(onCollegato)
 
     LaunchedEffect(Unit) {
         if (!caricato) {
@@ -84,29 +92,43 @@ fun ModuloCollegamento(
         }
     }
 
-    val pronto = server.isNotBlank() && Abbinamento.codiceCompleto(codice) && !inCorso
-    val collega: () -> Unit = {
-        ambito.launch {
-            inCorso = true
-            messaggio = null
-            try {
-                when (val esito = Collegamento.conCodice(context, server, codice)) {
-                    null -> urlNonValido = true
-                    is EsitoAbbinamento.Collegato -> {
-                        server = impostazioni.leggiConfigurazione().serverUrl
-                        token = impostazioni.leggiConfigurazione().token
-                        codice = ""
-                        // Il "Collegato come: …" lo dice la riga in cima (RigaCollegatoCome):
-                        // qui sotto basta l'esito, senza ripeterlo.
-                        messaggio = context.getString(R.string.collega_riuscito)
-                        onCollegato()
-                    }
-                    else -> messaggio = testoEsitoAbbinamento(context, esito)
-                }
-            } finally {
-                inCorso = false
+    // L'esito di un collegamento finito, anche partito da un'altra schermata (la
+    // stessa prima di una rotazione, o le Impostazioni chiuse a metà). Il
+    // messaggio resta in rememberSaveable: sopravvive a una rotazione dopo.
+    LaunchedEffect(stato) {
+        val finito = stato as? CorsaCollegamento.Stato.Finito ?: return@LaunchedEffect
+        var collegato = false
+        when (val esito = finito.esito) {
+            EsitoCollegamento.IndirizzoNonValido -> urlNonValido = true
+            EsitoCollegamento.CodiceLungoSalvato -> {
+                server = impostazioni.leggiConfigurazione().serverUrl
+                messaggio = context.getString(R.string.impostazioni_salvate)
+                collegato = true
+            }
+            is EsitoCollegamento.ConCodice -> if (esito.esito is EsitoAbbinamento.Collegato) {
+                val attuale = impostazioni.leggiConfigurazione()
+                server = attuale.serverUrl
+                token = attuale.token
+                codice = ""
+                // Il "Collegato come: …" lo dice la riga in cima (RigaCollegatoCome):
+                // qui sotto basta l'esito, senza ripeterlo. Se però il telefono è
+                // passato a un ALTRO dispositivo, lo si dice chiaro.
+                messaggio = esito.cambio
+                    ?.let { testoCambioDispositivo(it, paroleCambioDispositivo(context)) }
+                    ?: context.getString(R.string.collega_riuscito)
+                collegato = true
+            } else {
+                messaggio = testoEsitoAbbinamento(context, esito.esito)
             }
         }
+        Collegamento.consuma(finito)
+        if (collegato) onCollegatoAttuale()
+    }
+
+    val pronto = server.isNotBlank() && Abbinamento.codiceCompleto(codice) && !inCorso
+    val collega: () -> Unit = {
+        messaggio = null
+        Collegamento.avviaConCodice(context, server, codice)
     }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spazi.m)) {
@@ -185,23 +207,8 @@ fun ModuloCollegamento(
             OutlinedButton(
                 enabled = server.isNotBlank() && token.isNotBlank() && !inCorso,
                 onClick = {
-                    ambito.launch {
-                        inCorso = true
-                        messaggio = null
-                        try {
-                            // Un indirizzo scritto male e accettato in silenzio = un'app
-                            // che non consegna mai niente senza dirlo: si rifiuta subito.
-                            if (Collegamento.conCodiceLungo(context, server, token)) {
-                                server = impostazioni.leggiConfigurazione().serverUrl
-                                messaggio = context.getString(R.string.impostazioni_salvate)
-                                onCollegato()
-                            } else {
-                                urlNonValido = true
-                            }
-                        } finally {
-                            inCorso = false
-                        }
-                    }
+                    messaggio = null
+                    Collegamento.avviaConCodiceLungo(context, server, token)
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -263,6 +270,10 @@ fun testoEsitoAbbinamento(context: Context, esito: EsitoAbbinamento): String = w
     is EsitoAbbinamento.TroppiTentativi -> context.getString(
         R.string.collega_troppi_tentativi,
         testoAttesa(context, esito.riprovaTraSecondi ?: ATTESA_TROPPI_TENTATIVI_S),
+    )
+    // (v3.1) Il codice di un computer scritto sul telefono: il server non l'ha consumato.
+    is EsitoAbbinamento.TipoNonCorrispondente -> context.getString(
+        if (esito.tipoAtteso == TipiDispositivo.COMPUTER) R.string.collega_tipo_computer else R.string.collega_tipo_altro,
     )
     EsitoAbbinamento.ServerSenzaCodici -> context.getString(R.string.collega_server_senza_codici)
     EsitoAbbinamento.SenzaRete -> context.getString(R.string.collega_senza_rete)

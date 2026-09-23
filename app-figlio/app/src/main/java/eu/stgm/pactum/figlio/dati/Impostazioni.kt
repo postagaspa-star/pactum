@@ -116,6 +116,11 @@ class Impostazioni(private val context: Context) {
         val DISPOSITIVO_TIPO = stringPreferencesKey("dispositivo_tipo")
         val FIGLIO_ID = longPreferencesKey("figlio_id")
         val FIGLIO_NOME = stringPreferencesKey("figlio_nome")
+
+        // v3 — quante regole ha il figlio sugli altri dispositivi, l'ultima volta
+        // che si è saputo, e con quale collegamento (impronta): la riserva senza rete.
+        val REGOLE_ALTROVE = intPreferencesKey("regole_altrove")
+        val REGOLE_ALTROVE_CON = stringPreferencesKey("regole_altrove_con")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -221,6 +226,28 @@ class Impostazioni(private val context: Context) {
         p.remove(Chiavi.DISPOSITIVO_TIPO)
         p.remove(Chiavi.FIGLIO_ID)
         p.remove(Chiavi.FIGLIO_NOME)
+    }
+
+    // --- Regole sugli altri dispositivi (v3) --------------------------------
+
+    /**
+     * L'ultimo conteggio delle regole del figlio sugli ALTRI suoi dispositivi
+     * (GET /api/regole), con l'impronta del collegamento con cui è stato letto.
+     * Senza rete fa da riserva (RegoleAltrove.ultimoNoto): chi ha regole solo
+     * sul computer non deve vedersi chiedere "Crea la prima regola".
+     */
+    suspend fun salvaRegoleAltrove(conteggio: Int, configurazione: ConfigurazionePostino) {
+        context.dataStore.edit { p ->
+            p[Chiavi.REGOLE_ALTROVE] = conteggio
+            p[Chiavi.REGOLE_ALTROVE_CON] = configurazione.impronta
+        }
+    }
+
+    /** L'ultimo conteggio salvato, null = mai saputo. */
+    suspend fun leggiRegoleAltrove(): RegoleAltroveSalvate? {
+        val p = context.dataStore.data.first()
+        val conteggio = p[Chiavi.REGOLE_ALTROVE] ?: return null
+        return RegoleAltroveSalvate(conteggio, p[Chiavi.REGOLE_ALTROVE_CON].orEmpty())
     }
 
     suspend fun leggiAncoraTempo(): AncoraTempo? {

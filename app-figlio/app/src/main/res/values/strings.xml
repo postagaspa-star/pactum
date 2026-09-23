@@ -184,6 +184,18 @@
     <!-- "Telefono di Andrea": nome del dispositivo e nome del figlio -->
     <string name="collegato_come_formato">%1$s di %2$s</string>
     <string name="collega_riuscito">Collegamento riuscito.</string>
+    <!-- Collegato, ma a un dispositivo DIVERSO da quello di prima (il genitore ha
+         usato "Aggiungi un dispositivo" invece di "Nuovo codice"). Il collegamento
+         resta valido. %1$s = il dispositivo nuovo, %2$s = quello di prima. -->
+    <string name="collega_altro_dispositivo">Questo telefono ora è collegato come «%1$s», un dispositivo nuovo: le regole e la storia di «%2$s» restano lì.</string>
+    <string name="collega_altro_dispositivo_senza_nomi">Questo telefono ora è collegato a un dispositivo nuovo: le regole e la storia del dispositivo di prima restano lì.</string>
+    <!-- Segue la frase qui sopra, solo se il dispositivo di prima non è stato scollegato
+         (a un dispositivo scollegato il genitore non può più dare un codice). -->
+    <string name="collega_altro_dispositivo_consiglio">Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga di «%1$s».</string>
+    <string name="collega_altro_dispositivo_consiglio_senza_nome">Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga del dispositivo di prima.</string>
+    <!-- (v3.1) Il codice è di un dispositivo di un altro tipo: il server non l'ha consumato. -->
+    <string name="collega_tipo_computer">Questo codice è per un computer, non per questo telefono: chiedi a tuo padre il codice giusto.</string>
+    <string name="collega_tipo_altro">Questo codice non è per questo telefono: chiedi a tuo padre il codice giusto.</string>
     <string name="collega_codice_non_valido">Codice non valido: forse è sbagliato, è scaduto (vale 15 minuti) o è già stato usato. Chiedine uno nuovo al genitore.</string>
     <string name="collega_troppi_tentativi">Troppi codici sbagliati: il server ne accetta di nuovo tra %1$s, anche quello giusto.</string>
     <string name="collega_server_senza_codici">A questo indirizzo il server non riconosce i codici di 6 cifre. Controlla l\'indirizzo: se è giusto, il server va aggiornato.</string>

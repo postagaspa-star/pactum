@@ -8,6 +8,7 @@ import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.ModificaRegolaIn
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.Regola
+import eu.stgm.pactum.figlio.dati.RegoleAltrove
 import eu.stgm.pactum.figlio.dati.StatiProposta
 import eu.stgm.pactum.figlio.dati.leggiDettaglioErrore
 import eu.stgm.pactum.figlio.rete.PostinoClient
@@ -39,6 +40,12 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
 
     data class StatoRegole(
         val caricamento: Boolean = true,
+        /**
+         * Almeno una lettura è finita (dal server, dalla copia o "non
+         * collegato"). Il cancello della prima regola aspetta solo la prima:
+         * le riletture non lo tolgono di mezzo mentre il ragazzo ci scrive.
+         */
+        val letto: Boolean = false,
         /** (v3) Le regole di QUESTO telefono e quelle di vita reale del figlio. */
         val regole: List<Regola> = emptyList(),
         /**
@@ -69,21 +76,26 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
             val impostazioni = Impostazioni(getApplication())
             val configurazione = impostazioni.leggiConfigurazione()
             if (!configurazione.completa) {
-                _stato.value = StatoRegole(caricamento = false, configurazioneMancante = true)
+                _stato.value = StatoRegole(caricamento = false, letto = true, configurazioneMancante = true)
                 return@launch
             }
             val postino = PostinoClient(configurazione)
             val patto = postino.leggiPatto()
             if (patto == null) {
                 // Offline o server muto: si mostra la copia locale sotto l'avviso.
+                // (v3) Le regole sugli altri dispositivi: l'ultimo numero saputo con
+                // questo collegamento. Senza, chi ha regole solo sul computer si
+                // vedrebbe chiedere "Crea la prima regola" appena manca la rete.
                 val copia = PattoLocale(getApplication())
                 val locale = copia.leggi()
                 _stato.value = _stato.value.copy(
                     caricamento = false,
+                    letto = true,
                     configurazioneMancante = false,
                     errore = true,
                     datiFermiAlle = copia.aggiornatoIl(),
                     regole = locale?.regoleDiQuestoDispositivo() ?: _stato.value.regole,
+                    regoleAltrove = RegoleAltrove.ultimoNoto(impostazioni.leggiRegoleAltrove(), configurazione.impronta),
                 )
                 return@launch
             }
@@ -92,16 +104,14 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
 
             // (v3) Le regole del figlio sugli altri dispositivi: solo contate,
             // qui non si mostrano (si cambiano da lì). Quelle di un dispositivo
-            // scollegato dal genitore non contano più: da lì non si cambiano. Senza
-            // risposta si tiene l'ultimo numero saputo: meglio vecchio che uno zero finto.
+            // scollegato dal genitore non contano più: da lì non si cambiano. Il
+            // numero si ricorda per quando manca la rete; senza risposta si tiene
+            // l'ultimo saputo con questo collegamento: meglio vecchio che uno zero finto.
             val scollegati = patto.dispositivi.filter { it.revocato }.map { it.id }.toSet()
-            val regoleAltrove = postino.leggiRegole()
-                ?.let { tutte ->
-                    tutte.count { r ->
-                        r.attiva && qui.none { it.id == r.id } && r.idDispositivo !in scollegati
-                    }
-                }
-                ?: _stato.value.regoleAltrove
+            val letteAltrove = postino.leggiRegole()?.let { RegoleAltrove.conta(it, qui, scollegati) }
+            if (letteAltrove != null) impostazioni.salvaRegoleAltrove(letteAltrove, configurazione)
+            val regoleAltrove = letteAltrove
+                ?: RegoleAltrove.ultimoNoto(impostazioni.leggiRegoleAltrove(), configurazione.impronta)
 
             // Badge "concordata": una modifica nata da proposta accettata applica
             // ESATTAMENTE i parametri proposti (contratto) — quindi la regola è
@@ -122,6 +132,7 @@ class RegoleViewModel(application: Application) : AndroidViewModel(application) 
 
             _stato.value = _stato.value.copy(
                 caricamento = false,
+                letto = true,
                 configurazioneMancante = false,
                 errore = false,
                 regole = qui,

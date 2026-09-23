@@ -22,6 +22,13 @@ sealed interface EsitoAbbinamento {
     /** Troppi codici sbagliati sul server: si aspetta, anche con il codice giusto. */
     data class TroppiTentativi(val riprovaTraSecondi: Long?) : EsitoAbbinamento
 
+    /**
+     * (v3.1) Il codice è di un dispositivo di un altro tipo ([tipoAtteso], di
+     * solito `computer`): il server non l'ha consumato, il genitore deve dare
+     * quello giusto. null = il server non ha detto quale tipo aspettava.
+     */
+    data class TipoNonCorrispondente(val tipoAtteso: String?) : EsitoAbbinamento
+
     /** A quell'indirizzo non c'è un server che conosca i codici (indirizzo sbagliato o server vecchio). */
     data object ServerSenzaCodici : EsitoAbbinamento
 
@@ -31,6 +38,17 @@ sealed interface EsitoAbbinamento {
     /** Qualsiasi altra cosa: si riprova. */
     data object Errore : EsitoAbbinamento
 }
+
+/**
+ * Il telefono si è collegato a un dispositivo del patto diverso da quello di
+ * prima: come si chiamano i due (vuoto = non si sa) e se quello di prima è
+ * stato scollegato dal genitore (allora non riceve più codici nuovi).
+ */
+data class CambioDispositivo(
+    val nomeNuovo: String,
+    val nomePrima: String,
+    val primaScollegato: Boolean = false,
+)
 
 object Abbinamento {
 
@@ -56,6 +74,15 @@ object Abbinamento {
         codice.length == CIFRE && codice.all { it in '0'..'9' }
 
     /**
+     * Il corpo di POST /api/abbina. (v3.1) Questa app dice sempre che è un
+     * telefono: così il codice di un computer, scritto qui per sbaglio, non fa
+     * prendere a questo telefono il posto del computer (il server risponde
+     * `tipo_non_corrispondente` e non consuma il codice).
+     */
+    fun richiesta(codice: String, versioneApp: String): AbbinaIn =
+        AbbinaIn(codice = codice, tipo = TipiDispositivo.TELEFONO, versioneApp = versioneApp)
+
+    /**
      * La risposta del server tradotta in un esito. L'errore si legge dal corpo
      * sia nella forma del contratto (`{"errore": …}`) sia in quella che FastAPI
      * dà agli errori (`{"detail": {"errore": …}}`); se il corpo non si legge,
@@ -78,6 +105,11 @@ object Abbinamento {
         return when {
             dettaglio?.errore == ERRORE_TROPPI || codiceHttp == 429 ->
                 EsitoAbbinamento.TroppiTentativi(dettaglio?.riprovaTraSecondi?.takeIf { it > 0 })
+            // Prima del 409 generico: anche questo è un 409, ma il codice è buono
+            // (per un altro dispositivo) e non va detto "non valido".
+            dettaglio?.errore == ERRORE_TIPO -> EsitoAbbinamento.TipoNonCorrispondente(
+                dettaglio.tipoAtteso?.trim()?.lowercase()?.takeIf { it.isNotEmpty() },
+            )
             dettaglio?.errore == ERRORE_CODICE || codiceHttp == 409 -> EsitoAbbinamento.CodiceNonValido
             codiceHttp == 0 -> EsitoAbbinamento.SenzaRete
             // Nessuna pagina /api/abbina: indirizzo che non è Pactum, o server
@@ -125,8 +157,73 @@ object Abbinamento {
         storico: Long,
     ): Boolean {
         if (!eraCollegato || idDopo == null || idDopo <= 0) return false
-        if (serverPrima.trim().trimEnd('/') != serverDopo.trim().trimEnd('/')) return false
+        if (!stessoServer(serverPrima, serverDopo)) return false
         return (idPrima?.takeIf { it > 0 } ?: storico) == idDopo
+    }
+
+    /**
+     * Stesso indirizzo del server. Tutti e due sono già normalizzati
+     * (normalizzaUrlServer, anche nella 0.7): basta la "/" in fondo.
+     */
+    fun stessoServer(serverPrima: String, serverDopo: String): Boolean =
+        serverPrima.trim().trimEnd('/') == serverDopo.trim().trimEnd('/')
+
+    /**
+     * Gli sforamenti ancora in coda si buttano quando portano i numeri delle
+     * regole di un altro patto: mandati col collegamento nuovo finirebbero su
+     * regole che non sono le loro. Succede con un altro server (anche col
+     * codice lungo: i numeri delle regole sono quelli del server vecchio) e con
+     * un altro dispositivo. Col codice lungo sullo stesso server non si sa di
+     * che dispositivo sia ([stessoDispositivo] null): la coda resta, niente
+     * sforamenti buttati per un sospetto.
+     */
+    fun scartaSforamentiInCoda(
+        eraCollegato: Boolean,
+        serverPrima: String,
+        serverDopo: String,
+        stessoDispositivo: Boolean?,
+    ): Boolean {
+        if (!eraCollegato) return false
+        if (!stessoServer(serverPrima, serverDopo)) return true
+        return stessoDispositivo == false
+    }
+
+    /**
+     * Il collegamento riuscito ha portato questo telefono su un dispositivo del
+     * patto DIVERSO da quello di prima? Caso tipico: per un telefono che c'era
+     * già, il genitore ha usato "Aggiungi un dispositivo" invece di "Nuovo
+     * codice". Il collegamento resta valido; il telefono però lo dice chiaro,
+     * invece di "Collegamento riuscito". null = niente da dire (primo
+     * collegamento, stesso dispositivo, o il server non dice quale).
+     *
+     * Si confrontano i dispositivi, non gli indirizzi: lo stesso dispositivo
+     * raggiunto con un altro indirizzo non è "un dispositivo nuovo". Un telefono
+     * di cui non si è mai saputo il dispositivo (vecchio codice lungo) è il
+     * dispositivo 1, come in [stessoDispositivo].
+     *
+     * [dispositiviDopo] sono i dispositivi del figlio nel patto letto subito
+     * dopo il collegamento (vuoto se la lettura non è riuscita): sullo stesso
+     * server dicono il nome di adesso di quello di prima e se il genitore l'ha
+     * scollegato. Su un altro server lo stesso numero è un altro dispositivo, e
+     * non si guardano.
+     */
+    fun cambioDispositivo(
+        eraCollegato: Boolean,
+        stessoServer: Boolean,
+        prima: Dispositivo?,
+        dopo: Dispositivo?,
+        dispositiviDopo: List<Dispositivo> = emptyList(),
+    ): CambioDispositivo? {
+        if (!eraCollegato || dopo == null || dopo.id <= 0) return null
+        val noto = prima?.takeIf { it.id > 0 }
+        val idPrima = noto?.id ?: DISPOSITIVO_STORICO
+        if (idPrima == dopo.id) return null
+        val adesso = if (stessoServer) dispositiviDopo.firstOrNull { it.id == idPrima } else null
+        return CambioDispositivo(
+            nomeNuovo = dopo.nome.trim(),
+            nomePrima = (adesso?.nome?.trim()?.takeIf { it.isNotEmpty() } ?: noto?.nome?.trim()).orEmpty(),
+            primaScollegato = adesso?.revocato == true,
+        )
     }
 
     /** Il dettaglio d'errore nelle due forme possibili, null se il corpo non è JSON. */
@@ -140,5 +237,6 @@ object Abbinamento {
 
     private const val ERRORE_CODICE = "codice_non_valido"
     private const val ERRORE_TROPPI = "troppi_tentativi"
+    private const val ERRORE_TIPO = "tipo_non_corrispondente"
     private val json = Json { ignoreUnknownKeys = true }
 }

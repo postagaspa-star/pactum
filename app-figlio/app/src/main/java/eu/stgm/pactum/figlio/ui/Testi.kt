@@ -172,6 +172,14 @@ fun paroleDispositivo(context: Context) = ParoleDispositivo(
     suAltro = context.getString(R.string.dispositivo_su_altro),
 )
 
+/** Le frasi dell'avviso "collegato a un dispositivo diverso da prima" (testoCambioDispositivo). */
+fun paroleCambioDispositivo(context: Context) = ParoleCambioDispositivo(
+    conNomi = context.getString(R.string.collega_altro_dispositivo),
+    senzaNomi = context.getString(R.string.collega_altro_dispositivo_senza_nomi),
+    consiglio = context.getString(R.string.collega_altro_dispositivo_consiglio),
+    consiglioSenzaNome = context.getString(R.string.collega_altro_dispositivo_consiglio_senza_nome),
+)
+
 /** Le frasi della proposta (TestoProposta), da strings.xml. */
 fun paroleProposta(context: Context) = ParoleProposta(
     senzaConfronto = context.getString(R.string.proposta_senza_confronto),

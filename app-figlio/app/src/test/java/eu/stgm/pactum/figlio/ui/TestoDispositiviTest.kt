@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.ui
 
+import eu.stgm.pactum.figlio.dati.CambioDispositivo
 import eu.stgm.pactum.figlio.dati.ContestoDispositivi
 import eu.stgm.pactum.figlio.dati.Dispositivo
 import eu.stgm.pactum.figlio.dati.GiornoStriscia
@@ -259,5 +260,48 @@ class TestoDispositiviTest {
         assertEquals("Andrea", collegatoCome("", "Andrea", formato))
         assertNull(collegatoCome(null, null, formato))
         assertNull(collegatoCome(" ", "", formato))
+    }
+
+    // --- Collegato a un dispositivo diverso da prima --------------------------
+
+    // Le frasi di strings.xml.
+    private val paroleCambio = ParoleCambioDispositivo(
+        conNomi = "Questo telefono ora è collegato come «%1\$s», un dispositivo nuovo: " +
+            "le regole e la storia di «%2\$s» restano lì.",
+        senzaNomi = "Questo telefono ora è collegato a un dispositivo nuovo: " +
+            "le regole e la storia del dispositivo di prima restano lì.",
+        consiglio = "Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga di «%1\$s».",
+        consiglioSenzaNome = "Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» " +
+            "sulla riga del dispositivo di prima.",
+    )
+
+    @Test
+    fun `dispositivo diverso, cosa e' successo e come tornare indietro`() {
+        assertEquals(
+            "Questo telefono ora è collegato come «Telefono di Andrea», un dispositivo nuovo: " +
+                "le regole e la storia di «Telefono» restano lì. " +
+                "Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga di «Telefono».",
+            testoCambioDispositivo(CambioDispositivo(" Telefono di Andrea ", "Telefono "), paroleCambio),
+        )
+    }
+
+    @Test
+    fun `quello di prima scollegato, niente consiglio`() {
+        // A un dispositivo scollegato il genitore non può più dare un codice.
+        assertEquals(
+            "Questo telefono ora è collegato come «Telefono di Andrea», un dispositivo nuovo: " +
+                "le regole e la storia di «Telefono» restano lì.",
+            testoCambioDispositivo(CambioDispositivo("Telefono di Andrea", "Telefono", primaScollegato = true), paroleCambio),
+        )
+    }
+
+    @Test
+    fun `con un nome che manca la frase senza nomi, mai virgolette vuote`() {
+        val senzaNomi = "Questo telefono ora è collegato a un dispositivo nuovo: " +
+            "le regole e la storia del dispositivo di prima restano lì. " +
+            "Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga del dispositivo di prima."
+        assertEquals(senzaNomi, testoCambioDispositivo(CambioDispositivo("Telefono di Andrea", ""), paroleCambio))
+        assertEquals(senzaNomi, testoCambioDispositivo(CambioDispositivo(" ", "Telefono"), paroleCambio))
+        assertFalse(testoCambioDispositivo(CambioDispositivo("", "", primaScollegato = true), paroleCambio).contains("«»"))
     }
 }

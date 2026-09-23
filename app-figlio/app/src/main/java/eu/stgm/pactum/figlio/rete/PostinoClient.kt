@@ -21,6 +21,7 @@ import eu.stgm.pactum.figlio.dati.Proposta
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.RispostaPropostaIn
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
@@ -306,10 +307,16 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
          * sull'emulatore: il primo "Accetto" falliva, il secondo andava. Una
          * connessione nuova per ogni mutazione costa un giro in più, e le
          * mutazioni sono rare.
+         *
+         * Prima gli indirizzi IPv4 ([DnsPrimaIpv4]): senza ritentativo OkHttp
+         * prova SOLO il primo indirizzo del server, che ne ha IPv4 e IPv6. Su
+         * una rete con l'IPv6 rotto ogni modifica fallirebbe, mentre le letture
+         * (che ritentano sull'indirizzo dopo) vanno. Il ritentativo resta spento.
          */
         private val httpMutazioni: OkHttpClient = http.newBuilder()
             .retryOnConnectionFailure(false)
             .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
+            .dns(DnsPrimaIpv4())
             .build()
 
         /**
@@ -318,9 +325,13 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
          * volta sola, e un secondo invio dopo una risposta persa riceverebbe
          * "codice non valido" al posto del collegamento riuscito. [serverUrl] è
          * già normalizzato (normalizzaUrlServer).
+         *
+         * [NonCancellable]: il token arriva una volta sola. Se chi chiama
+         * venisse annullato mentre la richiesta è in viaggio, la risposta
+         * andrebbe persa con il codice già consumato dal server.
          */
         suspend fun abbina(serverUrl: String, corpo: AbbinaIn): RispostaHttp =
-            withContext(Dispatchers.IO) {
+            withContext(NonCancellable + Dispatchers.IO) {
                 try {
                     val richiesta = Request.Builder()
                         .url("$serverUrl/api/abbina")

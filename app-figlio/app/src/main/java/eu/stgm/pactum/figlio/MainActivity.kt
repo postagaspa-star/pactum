@@ -50,6 +50,8 @@ import eu.stgm.pactum.figlio.ui.RegoleScreen
 import eu.stgm.pactum.figlio.ui.RegoleViewModel
 import eu.stgm.pactum.figlio.ui.SitiScreen
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -199,6 +201,16 @@ private fun PactumRoot(
         proposteVm.aggiorna()
         onPauseOrDispose { }
     }
+    // Dopo un collegamento (codice di 6 cifre o codice lungo) regole e proposte
+    // sono di un altro collegamento: si rileggono appena cambia, anche se chi
+    // l'aveva avviato non c'è più (Impostazioni chiuse a metà, schermata
+    // ricreata). Il primo valore è quello di adesso: non conta come cambio.
+    LaunchedEffect(Unit) {
+        impostazioni.configurazione.distinctUntilChanged().drop(1).collect {
+            regoleVm.aggiorna()
+            proposteVm.aggiorna()
+        }
+    }
 
     // "Cosa vede tuo padre" dalle Impostazioni: sopra a tutto, torna indietro
     // alle Impostazioni.
@@ -233,9 +245,14 @@ private fun PactumRoot(
     // l'ultima, così il gate non torna; offline la copia locale già sincronizzata
     // basta a superarlo. Il gate è anche il posto dove un telefono nuovo si
     // collega col codice di 6 cifre. (v3) Il patto è del figlio: se ha già
-    // regole su un altro dispositivo (il computer), il gate non serve.
+    // regole su un altro dispositivo (il computer), il gate non serve; senza
+    // rete vale l'ultimo numero saputo (RegoleViewModel), non uno zero finto.
+    //
+    // La rotella solo alla PRIMA lettura. Una rilettura (a ogni ritorno in primo
+    // piano) che sostituisse il gate con la rotella lo toglierebbe di mezzo: via
+    // l'indirizzo e il codice appena scritti, via la regola a metà nel dialogo.
     if (statoRegole.regole.isEmpty() && statoRegole.regoleAltrove == 0) {
-        if (statoRegole.caricamento) {
+        if (!statoRegole.letto) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }

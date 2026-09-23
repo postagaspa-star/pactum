@@ -1,6 +1,7 @@
 package eu.stgm.pactum.figlio.ui
 
 import eu.stgm.pactum.design.contaGiorni
+import eu.stgm.pactum.figlio.dati.CambioDispositivo
 import eu.stgm.pactum.figlio.dati.ContestoDispositivi
 import eu.stgm.pactum.figlio.dati.Dispositivo
 import eu.stgm.pactum.figlio.dati.GiornoStriscia
@@ -175,6 +176,35 @@ object RigheDispositivi {
         val (mantenuti, conDati) = contaGiorni(striscia.inGiorniPatto())
         return RigaDispositivo(d.id, d.nome.trim(), questo, mantenuti, conDati, revocato = d.revocato)
     }
+}
+
+/** Le frasi dell'avviso "collegato a un dispositivo diverso da prima", da strings.xml. */
+data class ParoleCambioDispositivo(
+    /** "Questo telefono ora è collegato come «%1$s», un dispositivo nuovo: le regole e la storia di «%2$s» restano lì." */
+    val conNomi: String,
+    /** La stessa frase senza nomi ("… del dispositivo di prima …"). */
+    val senzaNomi: String,
+    /** "Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga di «%1$s»." */
+    val consiglio: String,
+    /** Lo stesso consiglio senza il nome ("… sulla riga del dispositivo di prima."). */
+    val consiglioSenzaNome: String,
+)
+
+/**
+ * L'avviso al posto di "Collegamento riuscito" quando il telefono è passato a
+ * un dispositivo diverso da prima: cosa è successo e, se quello di prima c'è
+ * ancora, come tornarci ("Nuovo codice" sulla sua riga). A un dispositivo
+ * scollegato il genitore non può più dare un codice: allora il consiglio non
+ * si dà. Se manca uno dei due nomi, la frase senza nomi: niente «» vuote.
+ */
+fun testoCambioDispositivo(cambio: CambioDispositivo, parole: ParoleCambioDispositivo): String {
+    val nuovo = cambio.nomeNuovo.trim()
+    val prima = cambio.nomePrima.trim()
+    val conNomi = nuovo.isNotEmpty() && prima.isNotEmpty()
+    val fatto = if (conNomi) parole.conNomi.format(nuovo, prima) else parole.senzaNomi
+    if (cambio.primaScollegato) return fatto
+    val consiglio = if (conNomi) parole.consiglio.format(prima) else parole.consiglioSenzaNome
+    return "$fatto $consiglio"
 }
 
 /**

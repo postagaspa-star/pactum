@@ -399,7 +399,7 @@ La forma della v2.4 resta, riferita al figlio indicato:
 - Le notifiche portano `figlio_id` e `dispositivo_id` (o `null`). Il genitore riceve quelle di tutti i figli. Un dispositivo riceve quelle del suo figlio che hanno `dispositivo_id` uguale al suo o `null`.
   - Quelle su una regola di un dispositivo (proposta, verdetto su regola del dispositivo) hanno il suo `dispositivo_id`.
   - Quelle del figlio (proposte e verdetti sulla vita reale, `segno`) hanno `null`.
-  - Marcarne una come letta la marca per tutti.
+  - **Lettura per dispositivo** (correzione v3.1): per le notifiche del figlio, `POST /api/notifiche/{id}/letta` marca la notifica come letta **solo per il dispositivo che chiama**, e `GET /api/notifiche` restituisce le notifiche non ancora lette **da quel dispositivo**. Così una notifica per tutto il figlio (`dispositivo_id: null`, come il `segno`) arriva sia al telefono sia al computer, anche se il telefono l'ha già mostrata. Le notifiche del genitore restano condivise: marcarne una come letta la marca per tutti i genitori.
 - `POST /api/segno { "figlio_id" }`: un segno al giorno **per figlio**, notificato a tutti i suoi dispositivi.
 
 ### Computer: cosa cambia nel registro

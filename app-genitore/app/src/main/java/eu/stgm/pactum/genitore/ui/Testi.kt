@@ -7,6 +7,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.CodiciErrore
+import eu.stgm.pactum.genitore.dati.Dispositivo
 import eu.stgm.pactum.genitore.dati.EsitiDichiarazione
 import eu.stgm.pactum.genitore.dati.EsitiRisposta
 import eu.stgm.pactum.genitore.dati.Notifica
@@ -412,6 +413,11 @@ fun nomeDelDispositivo(dispositivo: VistaDispositivo): String =
  * ultimo aggiornamento alle 15:10", "Spento dalle 23:10", "Nessun
  * aggiornamento dalle 15:10"… Un orario che non si legge non si inventa: si
  * dice la frase senza orario.
+ *
+ * Un computer "spento" da più di 24 ore ([spentoALungo]) non si dice spento:
+ * "Nessun dato dal computer dal 23/09 alle 22:10: spento, oppure Pactum non è
+ * partito". Da quando: dallo spegnimento, o, se il server non lo dice,
+ * dall'ultimo battito.
  */
 fun testoStatoCanale(
     parole: Parole,
@@ -419,15 +425,23 @@ fun testoStatoCanale(
     silenzio: StatoSilenzio?,
     zona: ZoneId = ZoneId.systemDefault(),
     oggi: LocalDate = LocalDate.now(zona),
+    adesso: Instant = Instant.now(),
 ): String {
     val battito = istanteServer(silenzio?.ultimoBattito)
     return when (stato) {
         StatoCanale.IN_CONTATTO -> battito
             ?.let { parole.testo(R.string.dispositivo_in_contatto, alleQuando(parole, it, zona, oggi)) }
             ?: parole.testo(R.string.dispositivo_in_contatto_senza_ora)
-        StatoCanale.SPENTO -> istanteServer(silenzio?.spentoDal)
-            ?.let { parole.testo(R.string.dispositivo_spento, dalleQuando(parole, it, zona, oggi)) }
-            ?: parole.testo(R.string.dispositivo_spento_senza_ora)
+        StatoCanale.SPENTO -> {
+            val dal = istanteServer(silenzio?.spentoDal)
+            val ultimoSegno = dal ?: battito
+            when {
+                ultimoSegno != null && spentoALungo(ultimoSegno, adesso) ->
+                    parole.testo(R.string.dispositivo_spento_a_lungo, dalleQuando(parole, ultimoSegno, zona, oggi))
+                dal != null -> parole.testo(R.string.dispositivo_spento, dalleQuando(parole, dal, zona, oggi))
+                else -> parole.testo(R.string.dispositivo_spento_senza_ora)
+            }
+        }
         StatoCanale.SILENTE -> battito
             ?.let { parole.testo(R.string.dispositivo_silente, dalleQuando(parole, it, zona, oggi)) }
             ?: parole.testo(R.string.dispositivo_mai_sentito)
@@ -442,6 +456,8 @@ fun testoStatoCanale(
  * L'avviso di sistema della vedetta per UN dispositivo (v3). Di chi è lo dice la
  * riga sopra il titolo ([etichettaDi]); qui il fatto, detto per il tipo di
  * dispositivo. null = niente da avvisare ([CambioSilenzio.BASE], [CambioSilenzio.NESSUNO]).
+ * Un computer che risulta spento da più di 24 ore ([spentoALungo]) non si dice
+ * spento, né "non è un'interruzione": non lo si sa.
  */
 fun testoAvvisoSilenzio(
     parole: Parole,
@@ -450,6 +466,7 @@ fun testoAvvisoSilenzio(
     silenzio: StatoSilenzio?,
     zona: ZoneId = ZoneId.systemDefault(),
     oggi: LocalDate = LocalDate.now(zona),
+    adesso: Instant = Instant.now(),
 ): TestoNotifica? {
     val battito = istanteServer(silenzio?.ultimoBattito)
     return when (cambio) {
@@ -472,13 +489,56 @@ fun testoAvvisoSilenzio(
                 battito?.let { alleQuando(parole, it, zona, oggi) } ?: "—",
             ),
         )
-        CambioSilenzio.SPENTO_DOPO_SILENZIO -> TestoNotifica(
-            parole.testo(R.string.tipo_computer_spento),
-            istanteServer(silenzio?.spentoDal)
-                ?.let { parole.testo(R.string.notifica_spento_dopo_silenzio, dalleQuando(parole, it, zona, oggi)) }
-                ?: parole.testo(R.string.notifica_spento_dopo_silenzio_senza_ora),
-        )
+        CambioSilenzio.SPENTO_DOPO_SILENZIO -> {
+            val dal = istanteServer(silenzio?.spentoDal)
+            val ultimoSegno = dal ?: battito
+            if (ultimoSegno != null && spentoALungo(ultimoSegno, adesso)) {
+                TestoNotifica(
+                    parole.testo(R.string.notifica_spento_a_lungo_titolo),
+                    parole.testo(R.string.notifica_spento_a_lungo, dalleQuando(parole, ultimoSegno, zona, oggi)),
+                )
+            } else {
+                TestoNotifica(
+                    parole.testo(R.string.tipo_computer_spento),
+                    dal?.let { parole.testo(R.string.notifica_spento_dopo_silenzio, dalleQuando(parole, it, zona, oggi)) }
+                        ?: parole.testo(R.string.notifica_spento_dopo_silenzio_senza_ora),
+                )
+            }
+        }
     }
+}
+
+/**
+ * La riga del dialogo "Nuovo dispositivo" quando il figlio ha già un dispositivo
+ * attivo di quel tipo ([presenti], v. dispositiviDelloStessoTipo): "Andrea ha
+ * già «Telefono». Se è lo stesso telefono da ricollegare, usa «Nuovo codice»
+ * sulla sua riga: così regole e storia restano insieme." null se non ne ha.
+ * Non impedisce niente: un secondo telefono vero si aggiunge lo stesso.
+ */
+fun avvisoDispositivoGiaPresente(
+    parole: Parole,
+    nomeFiglio: String,
+    tipo: String,
+    presenti: List<Dispositivo>,
+): String? {
+    if (presenti.isEmpty()) return null
+    val nomi = elencoTraVirgolette(parole, presenti.map { nomeDelDispositivo(parole, it.nome, it.tipo) })
+    return parole.testo(
+        if (tipo == TipiDispositivo.COMPUTER) {
+            R.string.famiglia_gia_presente_computer
+        } else {
+            R.string.famiglia_gia_presente_telefono
+        },
+        nomeFiglio,
+        nomi,
+    )
+}
+
+/** «Telefono» · «Telefono» e «Vecchio» · «A», «B» e «C». */
+fun elencoTraVirgolette(parole: Parole, nomi: List<String>): String {
+    val tra = nomi.map { parole.testo(R.string.elenco_nome, it) }
+    if (tra.size <= 1) return tra.firstOrNull().orEmpty()
+    return parole.testo(R.string.elenco_ultimo, tra.dropLast(1).joinToString(", "), tra.last())
 }
 
 // --- Il digest della sera ----------------------------------------------------------
@@ -618,6 +678,9 @@ fun messaggioRifiutoFamiglia(parole: Parole, codice: String?, secondi: Long?): S
     CodiciErrore.NOME_NON_VALIDO, PostinoClient.PARAMETRI_NON_VALIDI ->
         parole.testo(R.string.famiglia_errore_nome, LUNGHEZZA_MASSIMA_NOME)
     CodiciErrore.CODICE_NON_VALIDO -> parole.testo(R.string.famiglia_errore_codice_non_valido)
+    // La rete è caduta su una creazione e la famiglia non si è potuta rileggere:
+    // riprovare alla cieca potrebbe fare un doppione.
+    CodiciErrore.ESITO_INCERTO -> parole.testo(R.string.famiglia_errore_esito_incerto)
     null -> parole.testo(R.string.famiglia_errore_rete)
     else -> parole.testo(R.string.famiglia_errore_rifiutato)
 }

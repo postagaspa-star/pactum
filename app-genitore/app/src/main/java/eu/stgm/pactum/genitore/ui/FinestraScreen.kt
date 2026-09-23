@@ -868,16 +868,21 @@ private fun SchedaPatto(
     }
 }
 
-/** La striscia piccola di un dispositivo, col suo "5 su 7": un dettaglio, non un verdetto. */
+/**
+ * La striscia piccola di un dispositivo, col suo "5 su 7": un dettaglio, non un
+ * verdetto. Uno scollegato c'è finché i suoi giorni contano (strisceDeiDispositivi),
+ * e lo dice accanto al nome.
+ */
 @Composable
 private fun StrisciaDispositivo(dispositivo: VistaDispositivo, modifier: Modifier = Modifier) {
     val giorni = giorniDaQuadretti(dispositivo.striscia)
     val (mantenuti, conDati) = contaGiorni(giorni)
+    val nome = nomeDelDispositivo(dispositivo)
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconaDispositivo(dispositivo.tipo)
             Text(
-                text = nomeDelDispositivo(dispositivo),
+                text = if (dispositivo.revocato) stringResource(R.string.dispositivo_chip_scollegato, nome) else nome,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier
                     .weight(1f)

@@ -1,5 +1,7 @@
 package eu.stgm.pactum.genitore.ui
 
+import eu.stgm.pactum.genitore.dati.CodiciErrore
+import eu.stgm.pactum.genitore.dati.Dispositivo
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.RiferimentoDispositivo
@@ -683,29 +685,86 @@ class TestiTest {
     private fun ts(giorno: Int, ora: Int, minuto: Int): String =
         LocalDate.of(2026, 9, giorno).atTime(ora, minuto).atZone(roma).toOffsetDateTime().toString()
 
+    private fun istante(giorno: Int, ora: Int, minuto: Int): Instant =
+        LocalDate.of(2026, 9, giorno).atTime(ora, minuto).atZone(roma).toInstant()
+
+    // "Adesso" nei test: il 24/09 alle 16:00, ora di Roma (mai l'orologio vero).
+    private val adesso24 = istante(24, 16, 0)
+
     @Test
     fun `lo stato del dispositivo a parole, oggi e un altro giorno`() {
         val contatto = StatoSilenzio(ultimoBattito = ts(24, 15, 10), silente = false)
         assertEquals(
             "In contatto — ultimo aggiornamento alle 15:10",
-            testoStatoCanale(p, StatoCanale.IN_CONTATTO, contatto, roma, oggi24),
+            testoStatoCanale(p, StatoCanale.IN_CONTATTO, contatto, roma, oggi24, adesso24),
         )
         val spento = StatoSilenzio(ultimoBattito = ts(23, 23, 0), silente = false, spento = true, spentoDal = ts(23, 23, 10))
-        assertEquals("Spento dal 23/09 alle 23:10", testoStatoCanale(p, StatoCanale.SPENTO, spento, roma, oggi24))
+        assertEquals("Spento dal 23/09 alle 23:10", testoStatoCanale(p, StatoCanale.SPENTO, spento, roma, oggi24, adesso24))
         val spentoOggi = spento.copy(spentoDal = ts(24, 0, 5))
-        assertEquals("Spento dalle 00:05", testoStatoCanale(p, StatoCanale.SPENTO, spentoOggi, roma, oggi24))
+        assertEquals("Spento dalle 00:05", testoStatoCanale(p, StatoCanale.SPENTO, spentoOggi, roma, oggi24, adesso24))
         val muto = StatoSilenzio(ultimoBattito = ts(24, 9, 0), silente = true)
-        assertEquals("Nessun aggiornamento dalle 09:00", testoStatoCanale(p, StatoCanale.SILENTE, muto, roma, oggi24))
+        assertEquals("Nessun aggiornamento dalle 09:00", testoStatoCanale(p, StatoCanale.SILENTE, muto, roma, oggi24, adesso24))
         assertEquals(
             "Da collegare: il codice si crea nelle Impostazioni, sezione Famiglia",
-            testoStatoCanale(p, StatoCanale.DA_COLLEGARE, null, roma, oggi24),
+            testoStatoCanale(p, StatoCanale.DA_COLLEGARE, null, roma, oggi24, adesso24),
         )
         assertEquals(
             "Scollegato: non manda più dati. La sua storia resta.",
-            testoStatoCanale(p, StatoCanale.SCOLLEGATO, null, roma, oggi24),
+            testoStatoCanale(p, StatoCanale.SCOLLEGATO, null, roma, oggi24, adesso24),
         )
-        // Spento senza orario: la frase senza orario, mai un orario inventato.
-        assertEquals("Spento", testoStatoCanale(p, StatoCanale.SPENTO, spento.copy(spentoDal = null), roma, oggi24))
+        // Spento senza orario: la frase senza orario, mai un orario inventato
+        // (nemmeno quello dell'ultimo battito, che non è l'ora dello spegnimento).
+        assertEquals("Spento", testoStatoCanale(p, StatoCanale.SPENTO, spento.copy(spentoDal = null), roma, oggi24, adesso24))
+        assertEquals(
+            "Spento",
+            testoStatoCanale(p, StatoCanale.SPENTO, spento.copy(spentoDal = null, ultimoBattito = null), roma, oggi24, adesso24),
+        )
+    }
+
+    @Test
+    fun `un computer spento da piu di 24 ore non si dice spento`() {
+        // Spento il 23/09 alle 15:00: alle 16:00 del 24 sono 25 ore.
+        val daIeri = StatoSilenzio(ultimoBattito = ts(23, 14, 55), silente = false, spento = true, spentoDal = ts(23, 15, 0))
+        assertEquals(
+            "Nessun dato dal computer dal 23/09 alle 15:00: spento, oppure Pactum non è partito",
+            testoStatoCanale(p, StatoCanale.SPENTO, daIeri, roma, oggi24, adesso24),
+        )
+        // 23 ore: è ancora un computer spento.
+        val daIeriSera = daIeri.copy(spentoDal = ts(23, 17, 0))
+        assertEquals("Spento dal 23/09 alle 17:00", testoStatoCanale(p, StatoCanale.SPENTO, daIeriSera, roma, oggi24, adesso24))
+        // Esattamente 24 ore: ancora spento; un minuto dopo, no.
+        val esatte = daIeri.copy(spentoDal = ts(23, 16, 0))
+        assertEquals("Spento dal 23/09 alle 16:00", testoStatoCanale(p, StatoCanale.SPENTO, esatte, roma, oggi24, adesso24))
+        assertEquals(
+            "Nessun dato dal computer dal 23/09 alle 16:00: spento, oppure Pactum non è partito",
+            testoStatoCanale(p, StatoCanale.SPENTO, esatte, roma, oggi24, adesso24.plusSeconds(60)),
+        )
+        // Senza l'ora dello spegnimento conta l'ultimo battito.
+        val senzaOra = daIeri.copy(spentoDal = null, ultimoBattito = ts(21, 22, 10))
+        assertEquals(
+            "Nessun dato dal computer dal 21/09 alle 22:10: spento, oppure Pactum non è partito",
+            testoStatoCanale(p, StatoCanale.SPENTO, senzaOra, roma, oggi24, adesso24),
+        )
+    }
+
+    @Test
+    fun `l'avviso dopo un silenzio non dice spento se lo e da piu di 24 ore`() {
+        val daTreGiorni = StatoSilenzio(ultimoBattito = ts(21, 22, 0), silente = false, spento = true, spentoDal = ts(21, 22, 10))
+        assertEquals(
+            TestoNotifica(
+                "Nessun dato dal computer",
+                "Il computer non manda dati dal 21/09 alle 22:10: è spento, oppure Pactum non è partito.",
+            ),
+            testoAvvisoSilenzio(
+                p,
+                CambioSilenzio.SPENTO_DOPO_SILENZIO,
+                computer = true,
+                silenzio = daTreGiorni,
+                zona = roma,
+                oggi = oggi24,
+                adesso = adesso24,
+            ),
+        )
     }
 
     @Test
@@ -736,10 +795,44 @@ class TestiTest {
                 "Computer spento",
                 "Il computer risulta spento dalle 15:10: non è un'interruzione nella registrazione.",
             ),
-            testoAvvisoSilenzio(p, CambioSilenzio.SPENTO_DOPO_SILENZIO, computer = true, silenzio = spento, zona = roma, oggi = oggi24),
+            testoAvvisoSilenzio(
+                p,
+                CambioSilenzio.SPENTO_DOPO_SILENZIO,
+                computer = true,
+                silenzio = spento,
+                zona = roma,
+                oggi = oggi24,
+                adesso = adesso24,
+            ),
         )
         assertNull(testoAvvisoSilenzio(p, CambioSilenzio.BASE, computer = true, silenzio = muto))
         assertNull(testoAvvisoSilenzio(p, CambioSilenzio.NESSUNO, computer = false, silenzio = muto))
+    }
+
+    @Test
+    fun `aggiungere un telefono che c'e gia - la riga dice dove ricollegarlo`() {
+        val telefono = Dispositivo(id = 1, nome = "Telefono", tipo = "telefono")
+        assertEquals(
+            "Andrea ha già «Telefono». Se è lo stesso telefono da ricollegare, usa «Nuovo codice» sulla sua riga: " +
+                "così regole e storia restano insieme.",
+            avvisoDispositivoGiaPresente(p, "Andrea", "telefono", listOf(telefono)),
+        )
+        val pc = Dispositivo(id = 2, nome = "", tipo = "computer")
+        assertEquals(
+            "Luca ha già «Computer». Se è lo stesso computer da ricollegare, usa «Nuovo codice» sulla sua riga: " +
+                "così regole e storia restano insieme.",
+            avvisoDispositivoGiaPresente(p, "Luca", "computer", listOf(pc)),
+        )
+        // Nessuno di quel tipo: niente riga.
+        assertNull(avvisoDispositivoGiaPresente(p, "Andrea", "computer", emptyList()))
+    }
+
+    @Test
+    fun `un elenco di nomi si legge in italiano`() {
+        assertEquals("", elencoTraVirgolette(p, emptyList()))
+        assertEquals("«Telefono»", elencoTraVirgolette(p, listOf("Telefono")))
+        assertEquals("«Telefono» e «Vecchio»", elencoTraVirgolette(p, listOf("Telefono", "Vecchio")))
+        assertEquals("«A», «B» e «C»", elencoTraVirgolette(p, listOf("A", "B", "C")))
     }
 
     @Test
@@ -783,6 +876,11 @@ class TestiTest {
             messaggioRifiutoFamiglia(p, "codice_non_valido", null),
         )
         assertEquals("Non riesco a raggiungere il server: riprova.", messaggioRifiutoFamiglia(p, null, null))
+        // Una creazione senza risposta e la famiglia non riletta: prima di riprovare, guardare.
+        assertEquals(
+            "Il server non ha risposto e non so se la richiesta è arrivata: prima di riprovare, guarda se nella lista c'è già.",
+            messaggioRifiutoFamiglia(p, CodiciErrore.ESITO_INCERTO, null),
+        )
         // Un codice che non si conosce: si dice che il server non ha accettato, senza inventare un perché.
         assertEquals(
             "Il server non ha accettato la richiesta: aggiorna e riprova.",

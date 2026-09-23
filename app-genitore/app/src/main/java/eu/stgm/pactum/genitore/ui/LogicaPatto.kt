@@ -223,6 +223,11 @@ fun regoleConPropostaInAttesa(proposte: List<Proposta>): Set<Long> =
  * [bonusNoto] = false quando il bonus di quella regola non si conosce (un limite
  * su un sito, v3): allora "quanto oltre" non si calcola — meglio tacere che
  * dire un numero sbagliato.
+ * [minutiNoti] = false quando i minuti di quel giorno non si sanno (un sito che
+ * il programma del computer non è riuscito a leggere, v3): niente numero,
+ * niente barra, niente "oltre" — [minuti] allora non vale niente.
+ * [parziale] = per una parte del giorno il dato non si è potuto leggere: i
+ * minuti mostrati possono essere di più, e la UI lo dice.
  */
 data class VoceTempo(
     val chiave: String,
@@ -232,6 +237,8 @@ data class VoceTempo(
     val categoria: Boolean,
     val bonus: Int = 0,
     val bonusNoto: Boolean = true,
+    val minutiNoti: Boolean = true,
+    val parziale: Boolean = false,
 ) {
     /** Il limite vero di quel giorno: base + bonus. null senza limite. */
     val limiteDelGiorno: Int? get() = limite?.let { it + bonus.coerceAtLeast(0) }
@@ -280,9 +287,13 @@ fun elencoTempo(giorno: UsoGiorno, altreNelPatto: List<VoceTempo> = emptyList())
     )
 }
 
-/** Minuti usati sul limite del giorno (base + bonus): 1.0 = raggiunto, oltre 1 = oltre. */
+/**
+ * Minuti usati sul limite del giorno (base + bonus): 1.0 = raggiunto, oltre 1 =
+ * oltre. Una voce senza minuti noti non è vicina a niente: 0, in fondo al blocco.
+ */
 fun vicinanzaAlLimite(voce: VoceTempo): Double {
     val limite = voce.limiteDelGiorno ?: return 0.0
+    if (!voce.minutiNoti) return 0.0
     return voce.minuti.toDouble() / limite.coerceAtLeast(1)
 }
 

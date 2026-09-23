@@ -18,6 +18,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.InetAddress
+import java.time.Instant
 
 /**
  * Come l'app legge le risposte del postino. Il server è FastAPI: i 409 arrivano
@@ -243,6 +245,33 @@ class PostinoClientTest {
         assertEquals(5L, esito.dato.dispositivo?.id)
         assertEquals("computer", esito.dato.dispositivo?.tipo)
         assertEquals("2026-09-24T10:15:00+00:00", esito.dato.scadeTs)
+    }
+
+    // --- v3: le creazioni, senza ritentativi -------------------------------------------
+
+    @Test
+    fun `senza ritentativi si prova prima un indirizzo IPv4, poi gli altri nell'ordine del sistema`() {
+        val ipv6a = InetAddress.getByAddress("server", ByteArray(16) { if (it == 15) 1 else 0 })
+        val ipv4a = InetAddress.getByAddress("server", byteArrayOf(100, 64, 0, 1))
+        val ipv6b = InetAddress.getByAddress("server", ByteArray(16) { if (it == 15) 2 else 0 })
+        val ipv4b = InetAddress.getByAddress("server", byteArrayOf(100, 64, 0, 2))
+        assertEquals(
+            listOf(ipv4a, ipv4b, ipv6a, ipv6b),
+            PostinoClient.primaIpv4(listOf(ipv6a, ipv4a, ipv6b, ipv4b)),
+        )
+        assertEquals(listOf(ipv6a), PostinoClient.primaIpv4(listOf(ipv6a)))
+        assertEquals(emptyList<InetAddress>(), PostinoClient.primaIpv4(emptyList()))
+    }
+
+    @Test
+    fun `l'ora del server si legge dall'header Date, e se non si legge non si inventa`() {
+        assertEquals(
+            Instant.parse("2026-09-24T10:00:00Z"),
+            PostinoClient.oraDalHeader("Thu, 24 Sep 2026 10:00:00 GMT"),
+        )
+        assertNull(PostinoClient.oraDalHeader(null))
+        assertNull(PostinoClient.oraDalHeader(""))
+        assertNull(PostinoClient.oraDalHeader("ieri sera"))
     }
 
     // --- v3: i rifiuti sulla famiglia --------------------------------------------------

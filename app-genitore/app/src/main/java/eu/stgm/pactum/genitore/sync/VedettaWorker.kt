@@ -32,18 +32,26 @@ import eu.stgm.pactum.genitore.dati.StatoSilenzio
 import eu.stgm.pactum.genitore.dati.TipiDispositivo
 import eu.stgm.pactum.genitore.rete.EsitoFamiglia
 import eu.stgm.pactum.genitore.rete.PostinoClient
+import eu.stgm.pactum.genitore.ui.CHIAVE_SERVER_VECCHIO
 import eu.stgm.pactum.genitore.ui.CambioSilenzio
 import eu.stgm.pactum.genitore.ui.FUSO_PATTO
+import eu.stgm.pactum.genitore.ui.ID_AVVISO_UNICO
+import eu.stgm.pactum.genitore.ui.ID_DIGEST_07
 import eu.stgm.pactum.genitore.ui.SilenzioAttuale
 import eu.stgm.pactum.genitore.ui.TestoNotifica
 import eu.stgm.pactum.genitore.ui.cambioSilenzio
+import eu.stgm.pactum.genitore.ui.digestDopoAggiornamento
 import eu.stgm.pactum.genitore.ui.dispositiviDellaFinestra
 import eu.stgm.pactum.genitore.ui.etichettaDi
 import eu.stgm.pactum.genitore.ui.etichettaNotifica
+import eu.stgm.pactum.genitore.ui.idAvvisoSilenzio
+import eu.stgm.pactum.genitore.ui.idDigest
 import eu.stgm.pactum.genitore.ui.istanteServer
 import eu.stgm.pactum.genitore.ui.oraOppureDataOra
 import eu.stgm.pactum.genitore.ui.paroleDi
+import eu.stgm.pactum.genitore.ui.partenzaSilenzi
 import eu.stgm.pactum.genitore.ui.silenzioDaSorvegliare
+import eu.stgm.pactum.genitore.ui.silenzioDelServerVecchio
 import eu.stgm.pactum.genitore.ui.testoAvvisoSilenzio
 import eu.stgm.pactum.genitore.ui.testoDigest
 import eu.stgm.pactum.genitore.ui.testoNotifica
@@ -95,12 +103,41 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
 
         // Il digest: per figlio in v3, uno solo sul server 0.7. Con la famiglia
         // non letta si aspetta il giro dopo: non si sa di quanti figli dirlo.
+        // Prima, una volta: il digest già mandato dalla versione di prima passa
+        // al figlio che quella conosceva (l'id più basso; 0 sul server 0.7), se
+        // no il giorno dell'aggiornamento il padre lo riceverebbe due volte.
         when (famiglia) {
-            is EsitoFamiglia.Letta -> figli.forEach { figlio ->
-                inviaDigest(context, impostazioni, chiave = figlio.id, figlio = figlio, figli = figli, finestre = finestre)
+            is EsitoFamiglia.Letta -> {
+                val erede = figli.minOfOrNull { it.id }
+                if (erede != null) {
+                    impostazioni.passaggioDigest { inviati, giorno07 -> digestDopoAggiornamento(inviati, giorno07, erede) }
+                }
+                figli.forEach { figlio ->
+                    inviaDigest(
+                        context,
+                        impostazioni,
+                        chiave = figlio.id,
+                        figlio = figlio,
+                        figli = figli,
+                        finestre = finestre,
+                        erede = figlio.id == erede,
+                    )
+                }
             }
-            EsitoFamiglia.ServerVecchio ->
-                inviaDigest(context, impostazioni, chiave = 0L, figlio = null, figli = figli, finestre = finestre)
+            EsitoFamiglia.ServerVecchio -> {
+                impostazioni.passaggioDigest { inviati, giorno07 ->
+                    digestDopoAggiornamento(inviati, giorno07, CHIAVE_SERVER_VECCHIO)
+                }
+                inviaDigest(
+                    context,
+                    impostazioni,
+                    chiave = CHIAVE_SERVER_VECCHIO,
+                    figlio = null,
+                    figli = figli,
+                    finestre = finestre,
+                    erede = true,
+                )
+            }
             EsitoFamiglia.Fallita -> Unit
         }
 
@@ -168,16 +205,27 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
      * Lo stato osservato (allarme + battito) vive in DataStore per dispositivo,
      * per non riavvisare a ogni giro lo stesso silenzio. Non si sorvegliano i
      * dispositivi non ancora collegati né quelli scollegati.
+     *
+     * Al primo giro per dispositivo (appena aggiornata dalla 0.7) lo stato della
+     * 0.7 passa al dispositivo che la 0.7 guardava, e il suo avviso — con l'id di
+     * un dispositivo solo, che nessuno aggiornerebbe più — si toglie
+     * (partenzaSilenzi).
      */
     private suspend fun sorvegliaDispositivi(
         context: Context,
         impostazioni: Impostazioni,
         figli: List<Figlio>,
     ) {
-        val noti = impostazioni.leggiSilenziNoti()
+        val partenza = partenzaSilenzi(
+            salvati = impostazioni.leggiSilenziNoti(),
+            versioneVecchia = impostazioni.leggiSilenzioDellaVersioneVecchia(),
+            figli = figli,
+        )
+        val noti = partenza.noti
         val nuovi = mutableMapOf<Long, SilenzioNoto>()
         val parole = paroleDi(context)
         val gestore = NotificationManagerCompat.from(context)
+        if (partenza.togliAvvisoUnico) gestore.cancel(ID_AVVISO_UNICO)
         figli.forEach { figlio ->
             figlio.dispositivi.forEach dispositivo@{ dispositivo ->
                 val attuale = silenzioDaSorvegliare(
@@ -228,8 +276,12 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
             spento = false,
             ultimoBattito = silenzio.ultimoBattito,
         )
-        val noti = impostazioni.leggiSilenziNoti()
-        val noto = noti[CHIAVE_SERVER_VECCHIO]
+        // Appena aggiornata dalla 0.7 vale lo stato della 0.7: stesso dispositivo,
+        // stesso id dell'avviso.
+        val noto = silenzioDelServerVecchio(
+            impostazioni.leggiSilenziNoti(),
+            impostazioni.leggiSilenzioDellaVersioneVecchia(),
+        )
         val testo = when (cambioSilenzio(noto, attuale)) {
             CambioSilenzio.NUOVO_SILENZIO -> testoSilenzioServerVecchio(context, silenzio)
             CambioSilenzio.CONTATTO_TORNATO -> testoContattoServerVecchio(context, silenzio)
@@ -276,6 +328,8 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
      * oggi e le prime app (per dispositivo, se sono più d'uno). Toccarla apre il
      * Tempo di quel figlio. Un oggi senza fotografia lo dice onestamente — MAI
      * uno zero finto. Dedup per figlio e per giorno del patto.
+     * [erede] = il figlio che conosceva la 0.7 (l'id più basso): il suo digest
+     * prende il posto di quello della 0.7, che aveva un id suo.
      */
     private suspend fun inviaDigest(
         context: Context,
@@ -284,6 +338,7 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         figlio: Figlio?,
         figli: List<Figlio>,
         finestre: Finestre,
+        erede: Boolean,
     ) {
         val config = impostazioni.leggiConfigDigest()
         if (!config.attivo) return
@@ -313,8 +368,12 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         creaCanale(context)
 
         val testo = testoDigest(paroleDi(context), dispositivi)
+        val gestore = NotificationManagerCompat.from(context)
+        // "Quello di oggi sostituisce quello di ieri" anche a cavallo
+        // dell'aggiornamento: il digest della 0.7 aveva un altro id.
+        if (erede) gestore.cancel(ID_DIGEST_07)
         try {
-            NotificationManagerCompat.from(context).notify(
+            gestore.notify(
                 idDigest(chiave),
                 notificaBase(
                     context,
@@ -413,18 +472,8 @@ class VedettaWorker(appContext: Context, params: WorkerParameters) :
         private const val NOME_LAVORO = "vedetta"
         const val CANALE_ID = "avvisi_patto"
 
-        /** Il dispositivo unico del server 0.7, nei silenzi osservati. */
-        private const val CHIAVE_SERVER_VECCHIO = 0L
-
-        /**
-         * Id degli avvisi di silenzio/contatto, uno per dispositivo, fuori dalla
-         * portata degli id del server (0 = server 0.7: lo stesso id di prima).
-         */
-        private fun idAvvisoSilenzio(dispositivoId: Long): Int =
-            2_000_000_000 + (dispositivoId % 100_000_000).toInt()
-
-        /** Id del digest, uno per figlio: quello di oggi sostituisce quello di ieri. */
-        private fun idDigest(figlioId: Long): Int = 1_900_000_000 + (figlioId % 50_000_000).toInt()
+        // Gli id degli avvisi (silenzio per dispositivo, digest per figlio) e la
+        // chiave del server 0.7 stanno in LogicaFamiglia.kt, provati da JUnit.
 
         private fun SilenzioAttuale.noto(): SilenzioNoto = SilenzioNoto(allarme, ultimoBattito, spento)
 

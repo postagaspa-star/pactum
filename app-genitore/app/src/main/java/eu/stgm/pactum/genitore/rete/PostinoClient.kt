@@ -27,6 +27,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import okhttp3.ConnectionPool
+import okhttp3.Dns
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -36,6 +38,12 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.io.IOException
+import java.net.Inet4Address
+import java.net.InetAddress
+import java.time.Instant
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -59,6 +67,14 @@ sealed interface EsitoScrittura<out T> {
 
     data object Fallito : EsitoScrittura<Nothing>
 }
+
+/**
+ * Un codice di abbinamento appena arrivato, con l'ora del server scritta nella
+ * stessa risposta (header `Date`): la scadenza si conta da lì e dall'orologio
+ * monotono del telefono, mai dall'ora del telefono (v. validitaCodice).
+ * [oraServer] null = header assente o illeggibile.
+ */
+data class CodiceRicevuto(val codice: CodiceAbbinamento, val oraServer: Instant?)
 
 /**
  * L'esito di GET /api/famiglia (v3). Un server 0.7 non la conosce e risponde
@@ -195,11 +211,15 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     }
 
     // --- La famiglia (v3) ---------------------------------------------------------
+    // Le tre creazioni (figlio, dispositivo, codice) passano da [httpCreazioni]:
+    // niente ritentativi automatici. Dopo un `Fallito` chi chiama rilegge la
+    // famiglia prima di proporre di riprovare (FamigliaViewModel).
 
     /** POST /api/figli: un figlio nuovo, col nome (1-40 caratteri). */
     suspend fun creaFiglio(nome: String): EsitoScrittura<FiglioRisposta> {
         val corpo = json.encodeToString(CorpoNomeFiglio.serializer(), CorpoNomeFiglio(nome))
-        val risposta = scrivi("POST", "/api/figli", corpo) ?: return EsitoScrittura.Fallito
+        val risposta = richiedi("POST", "/api/figli", corpo.toRequestBody(JSON_MEDIA_TYPE), httpCreazioni)
+            ?: return EsitoScrittura.Fallito
         return interpreta(risposta, FiglioRisposta.serializer())
     }
 
@@ -219,25 +239,37 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         figlioId: Long,
         nome: String,
         tipo: String,
-    ): EsitoScrittura<CodiceAbbinamento> {
+    ): EsitoScrittura<CodiceRicevuto> {
         val corpo = json.encodeToString(
             CorpoNuovoDispositivo.serializer(),
             CorpoNuovoDispositivo(nome, tipo),
         )
-        val risposta = scrivi("POST", "/api/figli/$figlioId/dispositivi", corpo)
-            ?: return EsitoScrittura.Fallito
-        return interpreta(risposta, CodiceAbbinamento.serializer())
+        val risposta = richiedi(
+            "POST",
+            "/api/figli/$figlioId/dispositivi",
+            corpo.toRequestBody(JSON_MEDIA_TYPE),
+            httpCreazioni,
+        ) ?: return EsitoScrittura.Fallito
+        return codiceDa(risposta)
     }
 
     /**
      * POST /api/dispositivi/{id}/codice: un codice nuovo per un dispositivo non
      * ancora collegato o da ricollegare. Annulla il codice precedente.
      */
-    suspend fun nuovoCodice(dispositivoId: Long): EsitoScrittura<CodiceAbbinamento> {
-        val risposta = richiedi("POST", "/api/dispositivi/$dispositivoId/codice", CORPO_VUOTO)
+    suspend fun nuovoCodice(dispositivoId: Long): EsitoScrittura<CodiceRicevuto> {
+        val risposta = richiedi("POST", "/api/dispositivi/$dispositivoId/codice", CORPO_VUOTO, httpCreazioni)
             ?: return EsitoScrittura.Fallito
-        return interpreta(risposta, CodiceAbbinamento.serializer())
+        return codiceDa(risposta)
     }
+
+    /** Il codice della risposta, con l'ora del server della stessa risposta. */
+    private fun codiceDa(risposta: RispostaHttp): EsitoScrittura<CodiceRicevuto> =
+        when (val esito = interpreta(risposta, CodiceAbbinamento.serializer())) {
+            is EsitoScrittura.Riuscito -> EsitoScrittura.Riuscito(CodiceRicevuto(esito.dato, risposta.oraServer))
+            is EsitoScrittura.Rifiutato -> esito
+            EsitoScrittura.Fallito -> EsitoScrittura.Fallito
+        }
 
     /**
      * DELETE /api/dispositivi/{id}: la REVOCA. Il dispositivo smette di mandare
@@ -260,18 +292,24 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
 
     /**
      * Una richiesta qualunque: codice HTTP + corpo (letto sempre, anche sui
-     * rifiuti: il codice `errore` sta lì), null se la rete cade o l'indirizzo
-     * salvato non è un URL.
+     * rifiuti: il codice `errore` sta lì) + l'ora del server (header `Date`),
+     * null se la rete cade o l'indirizzo salvato non è un URL. [client]: quello
+     * di tutti, o [httpCreazioni] per le creazioni.
      */
-    private suspend fun richiedi(metodo: String, percorso: String, corpo: RequestBody?): RispostaHttp? {
+    private suspend fun richiedi(
+        metodo: String,
+        percorso: String,
+        corpo: RequestBody?,
+        client: OkHttpClient = http,
+    ): RispostaHttp? {
         if (!configurazione.completa) return null
         return withContext(Dispatchers.IO) {
             try {
                 val richiesta = richiesta(percorso)
                     .method(metodo, corpo)
                     .build()
-                http.newCall(richiesta).execute().use { risposta ->
-                    RispostaHttp(risposta.code, risposta.body?.string())
+                client.newCall(richiesta).execute().use { risposta ->
+                    RispostaHttp(risposta.code, risposta.body?.string(), oraDalHeader(risposta.header("Date")))
                 }
             } catch (e: IOException) {
                 null
@@ -296,8 +334,8 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         .url(configurazione.serverUrl + percorso)
         .header("Authorization", "Bearer ${configurazione.token}")
 
-    /** Codice HTTP + corpo grezzo di una risposta. */
-    private data class RispostaHttp(val codice: Int, val corpo: String?)
+    /** Codice HTTP + corpo grezzo di una risposta + l'ora del server, se l'ha scritta. */
+    private data class RispostaHttp(val codice: Int, val corpo: String?, val oraServer: Instant? = null)
 
     companion object {
         // Codice d'errore sintetico per il 422 di validazione del server: non è
@@ -446,6 +484,46 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             .build()
 
         /**
+         * Le creazioni (figlio, dispositivo, codice) NON si ritentano da sole.
+         * Con il ritentativo di OkHttp, una connessione caduta dopo che il server
+         * ha già ricevuto il POST lo rimanderebbe in silenzio: due figli, o due
+         * dispositivi, al posto di uno. Il dubbio dopo una risposta persa lo
+         * risolve chi chiama rileggendo la famiglia, non la rete. (Come le
+         * mutazioni dell'app del figlio, `httpMutazioni`.)
+         *
+         * Pool proprio, senza connessioni tenute aperte: senza ritentativo, una
+         * connessione rimasta ferma e già chiusa dal server (uvicorn la chiude
+         * dopo 5 s) farebbe fallire il primo invio dopo ogni pausa. E prima gli
+         * indirizzi IPv4 ([DnsPrimaIpv4]): senza ritentativo OkHttp non prova
+         * l'indirizzo successivo quando il primo non risponde, e su una rete con
+         * IPv6 rotto un indirizzo IPv6 in testa farebbe fallire ogni creazione.
+         */
+        private val httpCreazioni: OkHttpClient = http.newBuilder()
+            .retryOnConnectionFailure(false)
+            .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
+            .dns(DnsPrimaIpv4)
+            .build()
+
+        /**
+         * L'ora del server da un header `Date` (RFC 1123: "Thu, 24 Sep 2026
+         * 10:00:00 GMT"), null se manca o non si legge.
+         */
+        internal fun oraDalHeader(valore: String?): Instant? {
+            if (valore.isNullOrBlank()) return null
+            return try {
+                ZonedDateTime.parse(valore.trim(), DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()
+            } catch (e: DateTimeParseException) {
+                null
+            }
+        }
+
+        /** Gli indirizzi con gli IPv4 in testa, poi gli altri; dentro ciascun gruppo l'ordine del sistema. */
+        internal fun primaIpv4(indirizzi: List<InetAddress>): List<InetAddress> {
+            val (ipv4, altri) = indirizzi.partition { it is Inet4Address }
+            return ipv4 + altri
+        }
+
+        /**
          * Normalizza e valida l'indirizzo del server prima del salvataggio:
          * aggiunge https:// se manca lo schema e valida con okhttp3.HttpUrl
          * (che accetta SOLO http/https: tutto il resto viene rifiutato).
@@ -473,4 +551,10 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             return base.toString().trimEnd('/')
         }
     }
+}
+
+/** Il DNS del sistema, con gli indirizzi IPv4 prima degli altri (v. httpCreazioni). */
+private object DnsPrimaIpv4 : Dns {
+    override fun lookup(hostname: String): List<InetAddress> =
+        PostinoClient.primaIpv4(Dns.SYSTEM.lookup(hostname))
 }

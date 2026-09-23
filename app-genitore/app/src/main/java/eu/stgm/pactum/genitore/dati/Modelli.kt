@@ -178,6 +178,13 @@ object CodiciErrore {
 
     /** Coniato qui per il 404 (figlio o dispositivo che non esiste più): il 404 non porta un codice. */
     const val NON_TROVATO = "non_trovato"
+
+    /**
+     * Coniato qui: una creazione è rimasta senza risposta e nemmeno la famiglia si
+     * è potuta rileggere. Non si sa se il server l'ha ricevuta: prima di riprovare
+     * va guardata la lista, o si fa un doppione.
+     */
+    const val ESITO_INCERTO = "esito_incerto"
 }
 
 /** Risposta di POST /api/segno (v2.4): il riconoscimento a testo fisso è partito. */

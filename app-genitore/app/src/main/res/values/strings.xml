@@ -57,6 +57,9 @@
     <string name="dispositivo_in_contatto_senza_ora">In contatto</string>
     <string name="dispositivo_spento">Spento %1$s</string>
     <string name="dispositivo_spento_senza_ora">Spento</string>
+    <!-- Oltre 24 ore "spento" può non essere vero (Pactum tolto dall\'avvio automatico):
+         si dice quello che si sa. Non è un allarme. -->
+    <string name="dispositivo_spento_a_lungo">Nessun dato dal computer %1$s: spento, oppure Pactum non è partito</string>
     <string name="dispositivo_silente">Nessun aggiornamento %1$s</string>
     <string name="dispositivo_mai_sentito">Collegato, ma non ha ancora mandato dati</string>
     <string name="dispositivo_da_collegare">Da collegare: il codice si crea nelle Impostazioni, sezione Famiglia</string>
@@ -249,6 +252,8 @@
     <string name="notifica_contatto_computer">Il computer ha ripreso a inviare aggiornamenti %1$s. Tutto a posto.</string>
     <string name="notifica_spento_dopo_silenzio">Il computer risulta spento %1$s: non è un\'interruzione nella registrazione.</string>
     <string name="notifica_spento_dopo_silenzio_senza_ora">Il computer risulta spento: non è un\'interruzione nella registrazione.</string>
+    <string name="notifica_spento_a_lungo_titolo">Nessun dato dal computer</string>
+    <string name="notifica_spento_a_lungo">Il computer non manda dati %1$s: è spento, oppure Pactum non è partito.</string>
 
     <!-- Impostazioni: tre blocchi (connessione, digest, aggiornamenti) -->
     <string name="impostazioni_titolo">Impostazioni</string>
@@ -297,13 +302,22 @@
     <string name="famiglia_nome_lunghezza">Da 1 a %1$d caratteri</string>
     <string name="famiglia_tipo_scegli">Che cosa colleghi</string>
     <string name="famiglia_crea_codice">Crea il codice</string>
+    <!-- "Aggiungi un dispositivo" per un telefono che il figlio ha già: la strada
+         giusta è «Nuovo codice» sulla sua riga. Si dice, non si impedisce. -->
+    <string name="famiglia_gia_presente_telefono">%1$s ha già %2$s. Se è lo stesso telefono da ricollegare, usa «Nuovo codice» sulla sua riga: così regole e storia restano insieme.</string>
+    <string name="famiglia_gia_presente_computer">%1$s ha già %2$s. Se è lo stesso computer da ricollegare, usa «Nuovo codice» sulla sua riga: così regole e storia restano insieme.</string>
+    <!-- Un elenco di nomi dentro una frase: «Telefono», «Telefono» e «Vecchio» -->
+    <string name="elenco_nome">«%1$s»</string>
+    <string name="elenco_ultimo">%1$s e %2$s</string>
     <string name="famiglia_figlio_aggiunto">Figlio aggiunto.</string>
     <string name="famiglia_figlio_rinominato">Nome cambiato.</string>
     <string name="famiglia_dispositivo_scollegato">Dispositivo scollegato.</string>
+    <string name="famiglia_dispositivo_aggiunto_senza_codice">Il dispositivo è stato aggiunto, ma il codice non è arrivato: tocca «Nuovo codice» sulla sua riga.</string>
     <!-- Il codice di abbinamento: 6 cifre, 15 minuti, una volta sola -->
     <string name="codice_titolo">Codice per «%1$s»</string>
     <string name="codice_scrivilo">Scrivilo sul dispositivo da collegare</string>
     <string name="codice_scade_tra">Scade tra %1$s</string>
+    <string name="codice_collegato">Collegato ✓</string>
     <string name="codice_una_volta">Vale 15 minuti, una volta sola.</string>
     <string name="codice_scaduto">Codice scaduto: creane uno nuovo.</string>
     <string name="codice_dove_computer">Il programma per il computer si scarica da %1$s</string>
@@ -322,6 +336,7 @@
     <string name="famiglia_errore_nome">Il nome deve avere da 1 a %1$d caratteri.</string>
     <string name="famiglia_errore_codice_non_valido">Il codice non è valido o è scaduto: creane uno nuovo.</string>
     <string name="famiglia_errore_rete">Non riesco a raggiungere il server: riprova.</string>
+    <string name="famiglia_errore_esito_incerto">Il server non ha risposto e non so se la richiesta è arrivata: prima di riprovare, guarda se nella lista c\'è già.</string>
     <string name="famiglia_errore_rifiutato">Il server non ha accettato la richiesta: aggiorna e riprova.</string>
 
     <!-- Sezione Tempo (contratto v2.2, uso_recente) -->
@@ -348,6 +363,9 @@
     <string name="tempo_nessuna_fotografia_computer">Il computer non ha ancora inviato i dati di utilizzo.</string>
     <string name="tempo_nessun_dato_spiega_computer">Il computer non ha inviato i dati di questo giorno. Non significa zero utilizzo: i dati semplicemente non sono arrivati.</string>
     <string name="tempo_app_vuoto_computer">Nessun programma registrato in questo giorno.</string>
+    <!-- Un limite su un sito, in un giorno in cui il programma non è riuscito a
+         leggere i siti per un po\': mai "0 min" su un dato che non c\'è. -->
+    <string name="tempo_sito_non_leggibile">Non leggibile per una parte del giorno</string>
 
     <!-- Siti visitati (contratto v2.3, siti_recenti): solo i domini, mai le pagine.
          Il genitore vede, non blocca; la stessa lista compare identica al figlio. -->

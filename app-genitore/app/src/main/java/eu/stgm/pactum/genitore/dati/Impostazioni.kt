@@ -46,10 +46,17 @@ class Impostazioni(private val context: Context) {
         val NOTIFICHE_AVVISATE = stringSetPreferencesKey("notifiche_avvisate")
         val RICHIESTA_NOTIFICHE_FATTA = booleanPreferencesKey("richiesta_notifiche_fatta")
 
-        // Il silenzio della 0.7 (un dispositivo solo): non si legge più, si
-        // cancella solo quando cambia il server. Il posto nuovo è SILENZI_NOTI.
+        // Il silenzio della 0.7 (un dispositivo solo). Il posto nuovo è
+        // SILENZI_NOTI: questo si legge solo finché SILENZI_NOTI non esiste, al
+        // primo giro della vedetta dopo l'aggiornamento (v. partenzaSilenzi), e
+        // si cancella quando cambia il server.
         val SILENZIO_NOTO = booleanPreferencesKey("silenzio_noto")
         val SILENZIO_BATTITO = stringPreferencesKey("silenzio_battito")
+
+        // Il giorno dell'ultimo digest della 0.7 (un figlio solo). Il posto
+        // nuovo è DIGEST_INVIATI: questo si legge solo finché DIGEST_INVIATI non
+        // esiste (v. passaggioDigest).
+        val DIGEST_ULTIMO_GIORNO_07 = stringPreferencesKey("digest_ultimo_giorno")
 
         // L'ultimo versionCode per cui è già stato tentato l'auto-aggiornamento:
         // evita di riscaricare l'APK e ripresentare il dialogo a ogni giro.
@@ -123,9 +130,13 @@ class Impostazioni(private val context: Context) {
         }
     }
 
-    /** Il silenzio osservato per ciascun dispositivo (chiave: id, 0 = server 0.7). */
-    suspend fun leggiSilenziNoti(): Map<Long, SilenzioNoto> {
-        val grezzo = context.dataStore.data.first()[Chiavi.SILENZI_NOTI] ?: return emptyMap()
+    /**
+     * Il silenzio osservato per ciascun dispositivo (chiave: id, 0 = server 0.7).
+     * null = mai salvato: primo giro della vedetta dopo l'aggiornamento dalla
+     * 0.7 (o app nuova), quando vale lo stato della 0.7 ([leggiSilenzioDellaVersioneVecchia]).
+     */
+    suspend fun leggiSilenziNoti(): Map<Long, SilenzioNoto>? {
+        val grezzo = context.dataStore.data.first()[Chiavi.SILENZI_NOTI] ?: return null
         return try {
             jsonSilenzi.decodeFromString(MappaSilenzi.serializer(), grezzo)
                 .perDispositivo
@@ -144,6 +155,29 @@ class Impostazioni(private val context: Context) {
             MappaSilenzi(silenzi.mapKeys { it.key.toString() }),
         )
         context.dataStore.edit { p -> p[Chiavi.SILENZI_NOTI] = grezzo }
+    }
+
+    /**
+     * Lo stato di silenzio che aveva osservato la 0.7 (`silenzio_noto` e il suo
+     * battito), null se non ne ha mai osservato uno.
+     */
+    suspend fun leggiSilenzioDellaVersioneVecchia(): SilenzioNoto? {
+        val p = context.dataStore.data.first()
+        val silente = p[Chiavi.SILENZIO_NOTO] ?: return null
+        return SilenzioNoto(silente = silente, ultimoBattito = p[Chiavi.SILENZIO_BATTITO])
+    }
+
+    /**
+     * (0.7 → 0.8) Il digest già mandato dalla versione di prima, in una
+     * transazione sola: [passaggio] riceve i digest della 0.8 ("figlio|giorno",
+     * null = mai salvati) e l'ultimo giorno della 0.7, e restituisce i digest da
+     * salvare (null = niente da cambiare). La logica è in digestDopoAggiornamento.
+     */
+    suspend fun passaggioDigest(passaggio: (inviati: Set<String>?, ultimoGiorno07: String?) -> Set<String>?) {
+        context.dataStore.edit { p ->
+            passaggio(p[Chiavi.DIGEST_INVIATI], p[Chiavi.DIGEST_ULTIMO_GIORNO_07])
+                ?.let { p[Chiavi.DIGEST_INVIATI] = it }
+        }
     }
 
     /** true = il digest di [giorno] per [figlioId] è già partito (0 = server 0.7). */

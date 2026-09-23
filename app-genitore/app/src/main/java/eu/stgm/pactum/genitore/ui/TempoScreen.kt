@@ -378,13 +378,16 @@ private fun nomeVoce(voce: VoceTempo): String =
  * come li conta il figlio; il chip del limite resta quello base della regola.
  * Se il bonus di quella regola non si conosce (un sito, v3) "oltre" non si
  * calcola: meglio tacere che dire un numero sbagliato.
+ * (v3) Un sito che il programma del computer non è riuscito a leggere per una
+ * parte del giorno: senza minuti noti niente numero e niente barra (una barra
+ * vuota direbbe zero); con minuti noti ma parziali, i minuti e la frase che lo dice.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RigaDentroIlPatto(voce: VoceTempo) {
     val limite = voce.limite ?: return
     val limiteDelGiorno = voce.limiteDelGiorno ?: limite
-    val oltre = if (voce.bonusNoto) minutiOltre(voce.minuti, limite, voce.bonus) else 0
+    val oltre = if (voce.bonusNoto && voce.minutiNoti) minutiOltre(voce.minuti, limite, voce.bonus) else 0
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -394,14 +397,18 @@ private fun RigaDentroIlPatto(voce: VoceTempo) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = testoDurata(voce.minuti.toLong()),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(start = Spazi.s),
-            )
+            if (voce.minutiNoti) {
+                Text(
+                    text = testoDurata(voce.minuti.toLong()),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(start = Spazi.s),
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(Spazi.s))
-        BarraUso(minuti = voce.minuti, limite = limiteDelGiorno, massimoDelGiorno = limiteDelGiorno)
+        if (voce.minutiNoti) {
+            Spacer(modifier = Modifier.height(Spazi.s))
+            BarraUso(minuti = voce.minuti, limite = limiteDelGiorno, massimoDelGiorno = limiteDelGiorno)
+        }
         Spacer(modifier = Modifier.height(Spazi.s))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(Spazi.s),
@@ -411,6 +418,14 @@ private fun RigaDentroIlPatto(voce: VoceTempo) {
             if (oltre > 0) {
                 Etichetta(stringResource(R.string.tempo_oltre, testoDurata(oltre.toLong())))
             }
+        }
+        if (voce.parziale) {
+            Text(
+                text = stringResource(R.string.tempo_sito_non_leggibile),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Spazi.xs),
+            )
         }
     }
 }

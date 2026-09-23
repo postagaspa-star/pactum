@@ -1,5 +1,6 @@
 package eu.stgm.pactum.genitore.ui
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -32,14 +34,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Dispositivo
 import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.TipiDispositivo
 import kotlinx.coroutines.delay
-import java.time.Instant
 
 // Impostazioni, sezione "Famiglia" (v3): i figli e i loro dispositivi. Qui il
 // genitore aggiunge un figlio, gli cambia nome, aggiunge un telefono o un
@@ -47,6 +51,9 @@ import java.time.Instant
 // o scollega un dispositivo. Scollegare è una REVOCA: il dispositivo smette di
 // mandare dati, e niente di quello che ha registrato si cancella — lo dice la
 // conferma, con queste parole.
+
+/** Ogni quanto, col dialogo del codice aperto, si guarda se il dispositivo si è collegato. */
+private const val INTERVALLO_CONTROLLO_CODICE_MS = 5_000L
 
 /**
  * La sezione Famiglia, dentro la colonna delle Impostazioni. [indirizzoServer]
@@ -195,8 +202,25 @@ fun SezioneFamiglia(
     }
 
     stato.codice?.let { codice ->
+        val collegato = codiceUsato(stato.figli, codice.dispositivoId, codice.ricollegamento)
+        // Finché il dialogo è aperto, il codice vale ancora e il dispositivo non
+        // risulta collegato, si rilegge la famiglia ogni 5 secondi: quando il
+        // figlio scrive il codice, il dialogo lo dice. Solo con l'app davanti.
+        // Un ricollegamento non si vede dalla famiglia (il dispositivo era già
+        // collegato): lì non si rilegge niente e resta il conto alla rovescia.
+        val cicloVita = LocalLifecycleOwner.current.lifecycle
+        LaunchedEffect(codice, collegato) {
+            if (collegato || codice.ricollegamento || codice.dispositivoId == null) return@LaunchedEffect
+            cicloVita.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (codice.rimasti() > 0) {
+                    delay(INTERVALLO_CONTROLLO_CODICE_MS)
+                    famigliaVm.rileggiSeLibera()
+                }
+            }
+        }
         DialogoCodice(
             codice = codice,
+            collegato = collegato,
             indirizzoServer = indirizzoServer,
             occupato = stato.lavoroInCorso,
             onNuovoCodice = {
@@ -355,6 +379,11 @@ private fun DialogoNome(
  * Un dispositivo nuovo: il nome e che cosa è (telefono o computer). Il nome
  * parte dal tipo ("Telefono"): se il genitore sceglie "Computer" senza averlo
  * cambiato, segue il tipo.
+ *
+ * Se il figlio ha già un dispositivo attivo di quel tipo, prima della conferma
+ * una riga lo dice: forse è lo stesso telefono da ricollegare, e allora la
+ * strada giusta è "Nuovo codice" sulla sua riga (regole e storia restano
+ * insieme). Non si impedisce niente: un secondo telefono vero si aggiunge.
  */
 @Composable
 private fun DialogoNuovoDispositivo(
@@ -371,15 +400,12 @@ private fun DialogoNuovoDispositivo(
         tipo = nuovo
     }
     val troppoLungo = nome.trim().length > LUNGHEZZA_MASSIMA_NOME
+    val nomeFiglio = figlio.nome.ifBlank { stringResource(R.string.figlio_senza_nome) }
+    val giaPresente = avvisoDispositivoGiaPresente(p, nomeFiglio, tipo, dispositiviDelloStessoTipo(figlio, tipo))
     AlertDialog(
         onDismissRequest = onAnnulla,
         title = {
-            Text(
-                stringResource(
-                    R.string.famiglia_nuovo_dispositivo_titolo,
-                    figlio.nome.ifBlank { stringResource(R.string.figlio_senza_nome) },
-                ),
-            )
+            Text(stringResource(R.string.famiglia_nuovo_dispositivo_titolo, nomeFiglio))
         },
         text = {
             Column(
@@ -402,6 +428,8 @@ private fun DialogoNuovoDispositivo(
                         )
                     }
                 }
+                // Neutra, come le altre note: un'informazione, non un errore.
+                if (giaPresente != null) RigaDatiVecchi(giaPresente)
                 OutlinedTextField(
                     value = nome,
                     onValueChange = { nome = it },
@@ -432,24 +460,30 @@ private fun DialogoNuovoDispositivo(
  * frase che dice cosa farne. Per un computer, anche dove si scarica il
  * programma. Scaduto, lo dice e offre un codice nuovo. Il codice si può
  * selezionare e copiare (per mandarlo al figlio).
+ *
+ * Il conto alla rovescia usa la validità decisa dall'orologio del server e il
+ * tempo passato sull'orologio monotono del telefono: l'ora del telefono non
+ * entra. Quando il dispositivo risulta collegato ([collegato]), al posto del
+ * conto alla rovescia c'è "Collegato ✓".
  */
 @Composable
 private fun DialogoCodice(
     codice: FamigliaViewModel.CodiceMostrato,
+    collegato: Boolean,
     indirizzoServer: String?,
     occupato: Boolean,
     onNuovoCodice: () -> Unit,
     onChiudi: () -> Unit,
 ) {
-    var adesso by remember { mutableStateOf(Instant.now()) }
+    var adessoMs by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(codice) {
         while (true) {
-            adesso = Instant.now()
+            adessoMs = SystemClock.elapsedRealtime()
             delay(1_000)
         }
     }
-    val rimasti = secondiRimasti(codice.scadenza, adesso)
-    val scaduto = rimasti <= 0
+    val rimasti = codice.rimasti(adessoMs)
+    val scaduto = rimasti <= 0 && !collegato
     val scarica = indirizzoServer?.takeIf { it.isNotBlank() }?.let { "$it/scarica" }
 
     AlertDialog(
@@ -471,7 +505,8 @@ private fun DialogoCodice(
                         text = codiceADueGruppi(codice.codice),
                         style = MaterialTheme.typography.displayMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (scaduto) {
+                        // Scaduto o già usato: il codice non serve più, si spegne.
+                        color = if (scaduto || collegato) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
                             MaterialTheme.colorScheme.onSurface
@@ -480,10 +515,10 @@ private fun DialogoCodice(
                     )
                 }
                 Text(
-                    text = if (scaduto) {
-                        stringResource(R.string.codice_scaduto)
-                    } else {
-                        stringResource(R.string.codice_scade_tra, testoContoAllaRovescia(rimasti))
+                    text = when {
+                        collegato -> stringResource(R.string.codice_collegato)
+                        scaduto -> stringResource(R.string.codice_scaduto)
+                        else -> stringResource(R.string.codice_scade_tra, testoContoAllaRovescia(rimasti))
                     },
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,

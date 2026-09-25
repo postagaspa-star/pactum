@@ -18,6 +18,10 @@ TETTO_BONUS_GIORNO_DEFAULT = 30
 TETTO_BONUS_SETTIMANA_DEFAULT = 90
 TIMEZONE_DEFAULT = "Europe/Rome"
 
+# (v3.2) La cartella della copia notturna del registro: in Docker /backup, montata
+# su server/backup del NAS (quella che si vede dal gestore file del NAS).
+BACKUP_DIR_DEFAULT = "/backup"
+
 # (v3) Abbinamento con codice: 6 cifre, valido 15 minuti, una volta sola. Contro
 # chi prova i codici a caso: 10 tentativi falliti in 10 minuti (su tutto il
 # server) bloccano ogni abbinamento per 10 minuti.
@@ -60,6 +64,9 @@ class Settings:
     db_path: str
     versioni_path: str
     apk_dir: str
+    backup_dir: str = BACKUP_DIR_DEFAULT
+    # (v3.2) Il nome di una copia da rimettere al posto del registro all'avvio.
+    ripristina: str = ""
 
 
 def carica_settings() -> Settings:
@@ -70,6 +77,8 @@ def carica_settings() -> Settings:
         db_path=os.environ.get("PACTUM_DB", "pactum.db"),
         versioni_path=os.environ.get("PACTUM_VERSIONI", VERSIONI_PATH_DEFAULT),
         apk_dir=os.environ.get("PACTUM_APK_DIR", APK_DIR_DEFAULT),
+        backup_dir=os.environ.get("PACTUM_BACKUP_DIR", BACKUP_DIR_DEFAULT),
+        ripristina=os.environ.get("PACTUM_RIPRISTINA", "").strip(),
     )
 
 
@@ -124,7 +133,8 @@ def riassunto_config(settings: Settings) -> str:
     esporre i token (solo il loro stato: dev-default / forte / debole)."""
     return (
         f"env={settings.env} db_path={settings.db_path} apk_dir={settings.apk_dir} "
-        f"versioni_path={settings.versioni_path} timezone={nome_fuso()} "
+        f"versioni_path={settings.versioni_path} backup_dir={settings.backup_dir} "
+        f"timezone={nome_fuso()} "
         f"token_figlio={_stato_token(settings.token_figlio, TOKEN_FIGLIO_DEV)} "
         f"token_genitore={_stato_token(settings.token_genitore, TOKEN_GENITORE_DEV)}"
     )

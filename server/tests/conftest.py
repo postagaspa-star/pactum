@@ -40,6 +40,15 @@ def orologio(monkeypatch):
     return o
 
 
+@pytest.fixture(autouse=True)
+def copie_spente(monkeypatch, tmp_path_factory):
+    """(v3.2) Nessun test scrive nella cartella vera delle copie (il default /backup)
+    ne' ripristina per sbaglio: la copia notturna resta spenta, salvo nei test che la
+    accendono con una cartella loro."""
+    monkeypatch.setenv("PACTUM_BACKUP_DIR", str(tmp_path_factory.getbasetemp() / "copie-spente"))
+    monkeypatch.delenv("PACTUM_RIPRISTINA", raising=False)
+
+
 @pytest.fixture
 def db_path(tmp_path):
     return str(tmp_path / "pactum-test.db")

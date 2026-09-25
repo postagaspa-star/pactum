@@ -1,8 +1,10 @@
+import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import db
+from . import copie, db
 from .config import (
     TETTO_BONUS_GIORNO_DEFAULT,
     TETTO_BONUS_SETTIMANA_DEFAULT,
@@ -43,6 +45,23 @@ def _db_ok(db_path: str) -> bool:
         return False
 
 
+@asynccontextmanager
+async def _ciclo_di_vita(app: FastAPI):
+    """(v3.2) La copia notturna gira finche' gira il server. Allo spegnimento il
+    compito si ferma subito; una copia a meta' la si lascia finire (dura poco)."""
+    copia = app.state.copia_notturna
+    if copia is None:
+        yield
+        return
+    ferma = asyncio.Event()
+    compito = asyncio.create_task(copia.gira(ferma))
+    try:
+        yield
+    finally:
+        ferma.set()
+        await compito
+
+
 def create_app() -> FastAPI:
     settings = carica_settings()
     # Log della config effettiva (senza segreti) PRIMA della validazione: se prod
@@ -50,6 +69,9 @@ def create_app() -> FastAPI:
     log.info("Pactum avvio: %s", riassunto_config(settings))
     valida_produzione(settings)
     assicura_cartella_db(settings.db_path)
+    # (v3.2) Il ripristino chiesto con PACTUM_RIPRISTINA avviene PRIMA di aprire il
+    # database: una copia vecchia (anche v2) viene poi migrata come le altre.
+    copie.ripristina_se_chiesto(settings)
     # (v3) I due token d'ambiente restano quelli del genitore 1 e del dispositivo 1
     # (le app 0.7 installate): init_db li registra come hash, e al primo avvio
     # migra il database a figli e dispositivi.
@@ -61,8 +83,9 @@ def create_app() -> FastAPI:
         token_genitore=settings.token_genitore,
     )
 
-    app = FastAPI(title="Pactum — postino", version=VERSIONE)
+    app = FastAPI(title="Pactum — postino", version=VERSIONE, lifespan=_ciclo_di_vita)
     app.state.settings = settings
+    app.state.copia_notturna = copie.prepara_copia_notturna(settings)
 
     @app.get("/api/salute")
     def salute():
@@ -71,6 +94,7 @@ def create_app() -> FastAPI:
             "versione": VERSIONE,
             "env": settings.env,
             "db_ok": _db_ok(settings.db_path),
+            "backup": copie.stato_copie(settings.backup_dir),
         }
 
     app.include_router(regole.router, prefix="/api")

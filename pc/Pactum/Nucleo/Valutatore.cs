@@ -192,6 +192,25 @@ public sealed class RegistroSforamenti
         if (!ids.Contains(regolaId)) ids.Add(regolaId);
     }
 
+    /// <summary>
+    /// Gli sforamenti ancora in coda sono già segnalati: all'avvio si rimettono qui, così un
+    /// sforamenti.json che non si era riuscito a scrivere non fa ripartire, lo stesso giorno, lo stesso
+    /// sforamento e lo stesso avviso. Restituisce quanti ne ha aggiunti.
+    /// </summary>
+    public int Ricorda(IEnumerable<Evento> inCoda)
+    {
+        int aggiunti = 0;
+        foreach (var e in inCoda)
+        {
+            if (e.Tipo != TipiEvento.Sforamento) continue;
+            if (Json.Intero(e.Dettagli["regola_id"]) is not long id || Json.Testo(e.Dettagli["giorno"]) is not string giorno) continue;
+            if (Contiene(id, giorno)) continue;
+            Aggiungi(id, giorno);
+            aggiunti++;
+        }
+        return aggiunti;
+    }
+
     /// <summary>Dimentica i giorni più vecchi di <paramref name="primoDaTenere"/>.</summary>
     public void Pota(DateOnly primoDaTenere)
     {

@@ -119,8 +119,19 @@ public class FormeJsonTest
     {
         var b = Eventi.Battito(1_790_000_000_000, 123_456, null);
         Assert.Equal(new[] { "elapsed_realtime", "ts_device", "versione_app" }, Chiavi(b));
-        Assert.Equal("0.8.0", Json.Testo(b["versione_app"]));
+        Assert.Equal(Versione.Nome, Json.Testo(b["versione_app"]));
         Assert.Equal(87, Json.Intero(Eventi.Battito(1, 1, 87)["batteria"]));
+    }
+
+    [Fact]
+    public void La_versione_e_la_stessa_nel_programma_e_nel_file()
+    {
+        Assert.Equal("0.9.0", Versione.Nome);
+        Assert.Equal(9, Versione.Codice);
+        var assembly = typeof(Versione).Assembly;
+        Assert.Equal(new Version(0, 9, 0, 0), assembly.GetName().Version);
+        var file = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
+        Assert.Equal("0.9.0.0", file.FileVersion);
     }
 
     [Fact]
@@ -197,7 +208,7 @@ public class FormeJsonTest
         Assert.False(Json.Booleano(s["abbinato"]));
         Assert.Null(s["figlio"]);
         Assert.Null(s["dispositivo"]);
-        Assert.Equal("0.8.0", Json.Testo(s["versione"]));
+        Assert.Equal("0.9.0", Json.Testo(s["versione"]));
     }
 
     [Theory]

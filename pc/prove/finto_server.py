@@ -2,7 +2,8 @@
 Finto server Pactum v3, solo libreria standard: serve a provare il programma
 per il computer finché il server vero della v3 non è pronto.
 
-Implementa le chiamate che il computer usa (docs/contratto-api.md, v3):
+Implementa le chiamate che il computer usa (docs/contratto-api.md, v3, e la
+chiave "totale" della v3.3):
 abbina, battito, eventi, patto, notifiche, bonus, regole, proposte,
 dichiarazioni, versione. Gli errori escono alla FastAPI ({"detail": {...}}),
 come dal server vero. In più, per le prove, /prova/*: nuovo codice di
@@ -220,7 +221,8 @@ def errore(stato, codice, **altro):
 def chiave_valida_computer(chiave):
     if not isinstance(chiave, str) or chiave != chiave.strip().lower():
         return False
-    if chiave in CATEGORIE:
+    # (v3.3) "totale": tutto il tempo del dispositivo nel giorno.
+    if chiave == "totale" or chiave in CATEGORIE:
         return True
     if chiave.startswith("exe:") and len(chiave) > 4:
         return True

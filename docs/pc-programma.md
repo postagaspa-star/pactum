@@ -1,8 +1,10 @@
-# Pactum per il computer (v0.8)
+# Pactum per il computer (v0.9)
 
 Il programma per Windows 10/11 che fa sul computer quello che l'app del figlio fa sul telefono: misura, registra, avvisa, e mostra al figlio il suo patto. **Non blocca niente**, come tutto Pactum.
 
 Decisioni di Andrea (23/09/2026): il computer misura **programmi e siti**; il figlio gestisce le regole del computer **anche dal computer**, con una finestra completa; i siti si leggono **dalla barra degli indirizzi**, tenendo solo il dominio (v. `contratto-api.md`, "Sul computer"). Il protocollo col server è la **v3** del contratto.
+
+Decisioni di Andrea (30/09/2026, versione 0.9): un limite di tempo può valere su **tutto il computer** (contratto **v3.3**, `app_o_categoria = "totale"`), e quando si va oltre una regola, oltre al fumetto, si apre un **avviso a tutto schermo** che si chiude sempre.
 
 ## Come è fatto
 
@@ -41,10 +43,11 @@ Decisioni di Andrea (23/09/2026): il computer misura **programmi e siti**; il fi
   - una visita = il dominio in primo piano cambia e diventa quello;
   - se per un browser la lettura fallisce per più di un minuto, il giorno diventa `dns_cifrato: true` ("siti non leggibili").
 - **Categorie** (`social`, `giochi`, `video`, `musica`, `altro`): una tabella interna di programmi e siti comuni, per esempio:
-  - `discord.exe` e `instagram.com` → social;
+  - `discord.exe`, `instagram.com` e (dal 30/09) `youtube.com` → social;
   - `steam.exe`, `minecraft.windows.exe`, `roblox.com` → giochi;
-  - `youtube.com`, `netflix.com`, `twitch.tv` → video;
+  - `netflix.com`, `twitch.tv` → video;
   - `spotify.exe` → musica.
+  - (0.9, decisione di Andrea del 30/09) i programmi e i siti di **messaggi** (`whatsapp.exe`, `whatsapp.root.exe`, `telegram.exe`, `signal.exe`, `messenger.exe`, `skype.exe`; `whatsapp.com`, `telegram.org`, `messenger.com`, `signal.org`) non stanno in nessuna categoria della tabella: come ogni programma o sito non elencato, il loro tempo va in `altro`, mai in `social`. Discord, Instagram e gli altri social veri restano `social`.
   - Il tempo nel browser va nella categoria del sito, se il sito ne ha una (contratto v3).
 - **Giorno**: il giorno locale del computer.
 
@@ -70,11 +73,32 @@ Decisioni di Andrea (23/09/2026): il computer misura **programmi e siti**; il fi
 
 ## Regole valutate sul computer
 
-- `limite_tempo`: i minuti di oggi su `exe:`, `sito:` o `categoria:` contro `minuti_al_giorno` + bonus di oggi su quella regola. Oltre il limite:
+- `limite_tempo`: i minuti di oggi su `exe:`, `sito:`, `categoria:` o (v3.3) `totale` contro `minuti_al_giorno` + bonus di oggi su quella regola. Oltre il limite:
   - **un** evento `sforamento` al giorno per regola, con `giorno`, `limite_efficace`, `minuti_oltre`;
   - avviso "Oggi sei andato oltre".
 - `fascia_oraria`: tempo attivo dentro la fascia → uno `sforamento` per occorrenza, ancorato al giorno in cui la fascia parte (come il telefono).
+- (0.9, contratto v3.3) `totale` = **tutto il computer**: tutto il tempo attivo del giorno, cioè lo stesso `totale_minuti` che parte nella fotografia `uso_giornaliero` (anche il tempo sul desktop o in Pactum stesso). Il nome leggibile, ovunque, è **"Tutto il computer"**; per una regola `totale` di un telefono (per esempio in una proposta) è "Tutto il telefono". Bonus, sforamento e deduplica come per le altre regole.
+- **Quando si valuta**: ogni 15 secondi e dopo ogni lettura del patto. In più, (0.9) **a mezzanotte** il giorno che si chiude si valuta fino al suo ultimo secondo, prima di passare al nuovo (uno sforamento negli ultimi secondi resta di quel giorno); e **a sospensione, spegnimento, uscita dall'account e "Chiudi Pactum"** si valuta un'ultima volta. In questi casi parte solo l'evento `sforamento`: niente fumetto e niente avviso a schermo ("oggi sei andato oltre" a mezzanotte non sarebbe più vero, e lo schermo sta per spegnersi).
+- **Disco al meglio possibile** (0.9): gli sforamenti nuovi stanno sempre nella coda in memoria e partono col giro di rete anche se `coda.json` non si riesce a scrivere (disco pieno, antivirus); il file si riscrive appena si può. Se `sforamenti.json` non si scrive, si riprova a ogni valutazione finché non ci riesce. Un errore sul disco non ferma mai fumetto e avviso. All'avvio gli sforamenti ancora in coda contano come già segnalati: un riavvio lo stesso giorno non ripete né l'evento né l'avviso.
 - Nessun blocco. Mai.
+
+### L'avviso a tutto schermo (0.9)
+
+- Quando il valutatore trova uno sforamento **nuovo** (un limite, o una fascia), oltre al fumetto vicino all'orologio si apre una finestra **a tutto schermo, sopra tutto, sullo schermo della finestra in primo piano** (cioè dove si sta guardando; se non c'è una finestra in primo piano, sul monitor principale). Se cambiano la scala o gli schermi (un monitor staccato, una risoluzione nuova) si rifanno posizione e misure.
+- Dice quale regola ("Tutto il computer", "Minecraft", "youtube.com", "Social", "Niente computer dalle 22:00 alle 07:00"), quanto hai usato ("2 h 10 min su 2 h", la barra piena, "10 min oltre") e il limite che ti sei dato ("Il limite che ti sei dato: 2 h al giorno, più 15 min di bonus oggi."); per una fascia: "Oggi 20 min di computer dentro questa fascia.". Poi la frase dei fumetti: **"Nessun blocco: è il tuo patto."**
+- Due pulsanti: **"Ho capito"** chiude (anche Invio, Esc, Alt+F4); **"Apri Pactum"** chiude e apre la finestra del programma. **Si chiude sempre: non è un blocco.** Solo nei primi 0,7 secondi i pulsanti non rispondono, così un tasto premuto mentre si giocava o si scriveva non la chiude prima che la si veda. Se le regole sono tante e non ci stanno, scorre il contenuto: pulsanti e riga qui sotto restano in vista.
+- **Tastiera e giochi, cosa succede davvero.** Windows non lascia a un programma in sottofondo il "primo piano" di un altro: se l'avviso compare mentre si usa un altro programma (tipicamente un gioco), la finestra si vede sopra tutto e il mouse funziona subito, ma **la tastiera resta al gioco** finché non si fa clic sull'avviso. Per questo sotto i pulsanti c'è una riga piccola: **"Se i tasti non rispondono, fai clic qui."** Dopo quel clic (o un clic qualsiasi sull'avviso) Invio ed Esc funzionano. Pactum non usa trucchi per rubare il primo piano.
+- Quasi tutti i giochi su Windows 10/11 girano "a schermo intero" senza esclusiva (finestra senza bordi, o con le ottimizzazioni per lo schermo intero): lì l'avviso compare sopra il gioco. Un gioco in **esclusiva vera DirectX** invece tiene lo schermo per sé: nessuna finestra ci può comparire sopra, e l'avviso **si vede appena si esce dal gioco** (Alt+Tab, tasto Windows, gioco chiuso). Anche il fumetto, di solito, Windows lo tiene da parte mentre si gioca a schermo intero e lo mette nelle notifiche. L'evento `sforamento` parte comunque, subito. (Non provato con un gioco in esclusiva vera: è il comportamento di Windows.)
+- **Mai sotto una domanda del programma.** "Chiudi Pactum" chiude prima l'avviso e poi fa la sua domanda; mentre la domanda è aperta gli avvisi nuovi aspettano e compaiono dopo, se Pactum resta aperto. (Prima la domanda finiva sotto l'avviso sempre in primo piano, che lei stessa disabilitava: lo schermo sembrava bloccato.)
+- **Aprire Pactum chiude l'avviso**, da qualunque parte (menu dell'icona, doppio clic, clic sul fumetto, secondo avvio), come fa già il suo pulsante "Apri Pactum".
+- **Una volta per regola per giorno**, con la stessa deduplica dei fumetti e degli eventi `sforamento` (per le fasce, per giorno di ancoraggio): gli sforamenti già segnalati non riaprono l'avviso, nemmeno dopo un bonus o un riavvio. Se l'avviso è già aperto, le regole nuove si aggiungono lì; se nel frattempo era stato coperto o ridotto a icona, torna com'era e in cima, senza rubare la tastiera. Se l'apertura della finestra fallisce a metà, la finestra rotta si libera subito: non ne resta una invisibile.
+- È una finestra WinForms, non una pagina della WebView2: compare subito, non dipende da WebView2 e i pulsanti ci sono sempre (una pagina che non carica lascerebbe uno schermo vuoto, che sembrerebbe un blocco). Colori, caratteri e misure sono quelli di `stile.css`; col contrasto elevato di Windows usa i colori di sistema.
+- Resta tutto sul computer: il server riceve lo `sforamento` di sempre, niente di nuovo.
+- Per le prove sul PC di qualcuno, `--prova-avvisi <cartella>` manda fumetti e avvisi in quella cartella (testo e immagine) invece che sullo schermo.
+
+### Le opzioni di prova (0.9)
+
+`--prova-avvisi`, `--siti-solo`, `--prova-finestra`, `--esci-dopo` e `--esci-dopo-autoprova` servono solo alle prove: **valgono solo insieme a `--dati` con una cartella diversa da quella vera** (`%LOCALAPPDATA%\Pactum`). Senza, il programma le ignora e il diario lo scrive ("opzioni di prova ignorate…"): così nessuno le può aggiungere all'avvio per falsare quello che il programma misura o mostra, o per farlo chiudere da solo con una chiusura "pulita". Con `--dati` sulla cartella vera l'istanza resta quella del programma vero (non se ne apre una seconda sugli stessi dati). La prova rapida di `crea-pacchetto.ps1` (`--dati` in una cartella temporanea) funziona come prima.
 
 ## Abbinamento
 
@@ -93,7 +117,7 @@ Decisioni di Andrea (23/09/2026): il computer misura **programmi e siti**; il fi
 
 | Chiamata | Cosa fa | Risposta |
 |---|---|---|
-| `GET /locale/stato` | Stato del programma | `{ "abbinato": bool, "server": "https://…", "figlio": {id, nome} \| null, "dispositivo": {id, nome, tipo} \| null, "versione": "0.8.0", "ultimo_invio_ok": ISO \| null, "rete_ok": bool, "patto_aggiornato": ISO \| null }` |
+| `GET /locale/stato` | Stato del programma | `{ "abbinato": bool, "server": "https://…", "figlio": {id, nome} \| null, "dispositivo": {id, nome, tipo} \| null, "versione": "0.9.0", "ultimo_invio_ok": ISO \| null, "rete_ok": bool, "patto_aggiornato": ISO \| null }` |
 | `POST /locale/abbina` | Corpo `{ "server": "https://…", "codice": "123456" }` | `{ "ok": true, "figlio", "dispositivo" }` oppure `{ "ok": false, "errore": "codice_non_valido" \| "troppi_tentativi" \| "rete" \| "indirizzo_non_valido" }` |
 | `GET /locale/oggi` | Misura locale di oggi | Vedi sotto |
 | `GET /locale/visti` | Per scegliere il bersaglio di una regola: programmi e siti visti negli ultimi 30 giorni | `{ "programmi": [ {"chiave": "exe:…", "nome": "…"} ], "siti": [ "youtube.com", … ] }` |
@@ -111,6 +135,8 @@ Risposta di `GET /locale/oggi`:
   "fasce": { "13": { "attiva_ora": false, "prossimo_inizio": "22:00", "fine": "07:00" } },
   "siti_non_leggibili": false }
 ```
+
+(0.9) In `regole` ci sono anche le regole su tutto il computer (`app_o_categoria = "totale"`): per loro `minuti` è `totale_minuti`. L'interfaccia le chiama "Tutto il computer" e, nella creazione di un limite di tempo, "Tutto il computer" è il primo dei bersagli, prima di programma, sito e categoria. Come sul telefono nessuno è già scelto: finché il figlio non sceglie, "Salva" risponde "Scegli su cosa vale il limite."
 
 ### Verso il server
 

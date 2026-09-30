@@ -326,7 +326,7 @@
     const no = (campo, msg) => ({ errori: [{ loc: ['body', 'parametri', campo], msg }] });
     if (tipo === 'limite_tempo') {
       const k = String(p.app_o_categoria || '').trim().toLowerCase();
-      const buona = /^exe:[a-z0-9 ._()+-]+\.exe$/.test(k) ||
+      const buona = k === T.TOTALE || /^exe:[a-z0-9 ._()+-]+\.exe$/.test(k) ||
         /^sito:[a-z0-9.-]+\.[a-z0-9-]{2,}$/.test(k) ||
         /^categoria:(social|giochi|video|musica|altro)$/.test(k);
       if (!buona) return no('app_o_categoria', 'chiave non valida per un computer');
@@ -360,13 +360,16 @@
     }
     const k = regola.parametri.app_o_categoria;
     let minutiOggi = 0;
-    if (k.startsWith('exe:')) {
+    if (k === T.TOTALE) {
+      // Tutto il computer: il totale del giorno, come nel motore.
+      minutiOggi = S.oggi.totale_minuti;
+    } else if (k.startsWith('exe:')) {
       minutiOggi = S.oggi.programmi.filter((p) => p.chiave === k).reduce((s, p) => s + p.minuti, 0);
     } else if (k.startsWith('sito:')) {
       minutiOggi = S.oggi.siti.filter((s) => s.dominio === k.slice(5)).reduce((s, x) => s + x.minuti, 0);
     } else {
       const categoria = k.slice('categoria:'.length);
-      const siti = { 'youtube.com': 'video', 'instagram.com': 'social', 'twitch.tv': 'video', 'reddit.com': 'social' };
+      const siti = { 'youtube.com': 'social', 'instagram.com': 'social', 'twitch.tv': 'video', 'reddit.com': 'social' };
       minutiOggi = S.oggi.programmi.filter((p) => p.categoria === categoria && p.chiave !== 'exe:chrome.exe')
         .reduce((s, p) => s + p.minuti, 0) +
         S.oggi.siti.filter((s) => siti[s.dominio] === categoria).reduce((s, x) => s + x.minuti, 0);
@@ -401,7 +404,7 @@
       server: S.server,
       figlio: S.abbinato ? S.figlio : null,
       dispositivo: S.abbinato ? S.computer : null,
-      versione: '0.8.0',
+      versione: '0.9.0',
       ultimo_invio_ok: S.abbinato ? isoTs(S.ultimoInvio) : null,
       rete_ok: opzioni.rete,
       patto_aggiornato: S.abbinato ? isoTs(S.pattoAggiornato) : null,

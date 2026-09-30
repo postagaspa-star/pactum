@@ -65,6 +65,87 @@ public class ValutatoreTest
         Assert.Equal(new long[] { 1, 3 }, sforamenti.Select(s => s.RegolaId).OrderBy(x => x));
     }
 
+    // ---------- (v3.3) Tutto il computer: app_o_categoria = "totale" ----------
+
+    private static Giornata GiornoCon(int minutiAttivi, params (string Chiave, int Minuti)[] programmi)
+    {
+        var g = Giornata.Nuova("2026-09-30");
+        g.MsAttivi = minutiAttivi * 60_000L + 59_000; // i secondi in più non fanno un minuto
+        foreach (var (chiave, minuti) in programmi) g.Programmi[chiave] = new VoceProgramma { Nome = chiave, Ms = minuti * 60_000L };
+        return g;
+    }
+
+    [Fact]
+    public void Tutto_il_computer_e_lo_stesso_totale_della_fotografia()
+    {
+        // 130 minuti attivi, di cui solo 100 con un programma riconosciuto (il resto: desktop, Pactum stesso).
+        var oggi = GiornoCon(130, ("exe:minecraft.exe", 60), ("exe:chrome.exe", 40));
+        Assert.Equal(130, oggi.MinutiDi("totale"));
+        Assert.Equal(oggi.MinutiTotali, oggi.MinutiDi("totale"));
+        Assert.Equal(Json.Intero(Fotografie.DettagliUso(oggi)["totale_minuti"]), oggi.MinutiDi("totale"));
+        // Tollerante come le altre chiavi: spazi e maiuscole non cambiano niente.
+        Assert.Equal(130, oggi.MinutiDi(" Totale "));
+    }
+
+    [Fact]
+    public void Oltre_il_limite_sul_totale_e_uno_sforamento_come_gli_altri()
+    {
+        var oggi = GiornoCon(130, ("exe:minecraft.exe", 60));
+        var s = Assert.Single(Valuta(new[] { Limite(7, "totale", 120) }, oggi.MinutiDi, oggi.MinutiNellIntervallo, "2026-09-30T21:00:00"));
+        Assert.Equal(7, s.RegolaId);
+        Assert.Equal(TipiRegola.LimiteTempo, s.Tipo);
+        Assert.Equal(120, s.LimiteEfficace);
+        Assert.Equal(10, s.MinutiOltre);
+        Assert.Null(s.GiornoAncora);
+        var d = Valutatore.DettagliSforamento(s, "2026-09-30");
+        Assert.Equal(new[] { "giorno", "limite_efficace", "minuti_oltre", "regola_id" }, d.Select(p => p.Key).OrderBy(k => k, StringComparer.Ordinal));
+        Assert.Equal("2026-09-30", Json.Testo(d["giorno"]));
+        Assert.Equal(10, Json.Intero(d["minuti_oltre"]));
+    }
+
+    [Fact]
+    public void Sul_totale_arrivare_al_limite_non_e_andare_oltre()
+    {
+        var oggi = GiornoCon(120);
+        Assert.Empty(Valuta(new[] { Limite(7, "totale", 120) }, oggi.MinutiDi, oggi.MinutiNellIntervallo, "2026-09-30T21:00:00"));
+    }
+
+    [Fact]
+    public void Il_bonus_di_oggi_allunga_anche_il_totale()
+    {
+        var regola = Limite(7, "totale", 120);
+        var bonus = new Dictionary<string, int> { ["7"] = 15, ["8"] = 30 };
+        Assert.Equal(135, Valutatore.LimiteEfficace(regola, bonus));
+        Assert.Empty(Valuta(new[] { regola }, GiornoCon(130).MinutiDi, (_, _) => 0, "2026-09-30T21:00:00", bonus));
+        var s = Assert.Single(Valuta(new[] { regola }, GiornoCon(140).MinutiDi, (_, _) => 0, "2026-09-30T21:00:00", bonus));
+        Assert.Equal(135, s.LimiteEfficace);
+        Assert.Equal(5, s.MinutiOltre);
+    }
+
+    [Fact]
+    public void Il_totale_non_si_confonde_con_un_programma_o_una_categoria()
+    {
+        // Un programma che si chiama "totale" resta un programma: conta solo il suo tempo.
+        var oggi = GiornoCon(200, ("exe:totale.exe", 5));
+        oggi.MsPerCategoria["categoria:altro"] = 5 * 60_000;
+        var regole = new[] { Limite(1, "exe:totale.exe", 10), Limite(2, "categoria:altro", 10), Limite(3, "totale", 180) };
+        var sforamenti = Valuta(regole, oggi.MinutiDi, oggi.MinutiNellIntervallo, "2026-09-30T21:00:00");
+        Assert.Equal(3, Assert.Single(sforamenti).RegolaId);
+        Assert.Equal(20, sforamenti[0].MinutiOltre);
+    }
+
+    [Fact]
+    public void Il_totale_e_anche_nella_risposta_di_oggi_per_l_interfaccia()
+    {
+        var oggi = GiornoCon(130, ("exe:minecraft.exe", 60));
+        var regole = new[] { Limite(7, "totale", 120) };
+        var o = Pactum.Motore.Risposte.Oggi(oggi, regole, new Dictionary<string, int> { ["7"] = 5 }, Fuso.Ms("2026-09-30T21:00:00"), Fuso.Roma);
+        var r7 = o["regole"]!["7"]!;
+        Assert.Equal(Json.Intero(o["totale_minuti"]), Json.Intero(r7["minuti"]));
+        Assert.Equal(125, Json.Intero(r7["limite_efficace"]));
+        Assert.Equal(5, Json.Intero(r7["oltre"]));
+    }
+
     [Fact]
     public void Una_regola_non_attiva_non_si_valuta()
     {

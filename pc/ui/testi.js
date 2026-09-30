@@ -130,9 +130,9 @@
   // --- Regole -----------------------------------------------------------------
 
   const CATEGORIE = [
-    { chiave: 'categoria:social', nome: 'Social', esempi: 'Discord, Instagram…' },
+    { chiave: 'categoria:social', nome: 'Social', esempi: 'Discord, Instagram, YouTube…' },
     { chiave: 'categoria:giochi', nome: 'Giochi', esempi: 'Steam, Minecraft, Roblox…' },
-    { chiave: 'categoria:video', nome: 'Video', esempi: 'YouTube, Netflix, Twitch…' },
+    { chiave: 'categoria:video', nome: 'Video', esempi: 'Netflix, Twitch…' },
     { chiave: 'categoria:musica', nome: 'Musica', esempi: 'Spotify…' },
     { chiave: 'categoria:altro', nome: 'Altro', esempi: 'tutto quello che non sta nelle altre' },
   ];
@@ -170,11 +170,28 @@
     'com.android.chrome': 'Chrome',
   };
 
-  /** Il bersaglio di un limite detto per nome: "Minecraft", "youtube.com", "Social". */
-  function nomeBersaglio(chiave, nomi) {
+  /**
+   * (v3.3) La chiave del limite su tutto il dispositivo: tutto il tempo del
+   * giorno, lo stesso totale di «Dove è finito il tempo» e della fotografia
+   * che arriva al genitore.
+   */
+  const TOTALE = 'totale';
+
+  /** "Tutto il computer" o, per una regola del telefono, "Tutto il telefono". */
+  function nomeTotale(tipoDispositivo) {
+    return tipoDispositivo === 'telefono' ? 'Tutto il telefono' : 'Tutto il computer';
+  }
+
+  /**
+   * Il bersaglio di un limite detto per nome: "Minecraft", "youtube.com",
+   * "Social", "Tutto il computer". `tipoDispositivo` = di che dispositivo è la
+   * regola (conta solo per "totale"; se manca, è questo computer).
+   */
+  function nomeBersaglio(chiave, nomi, tipoDispositivo) {
     if (chiave == null || chiave === '') return '?';
     const k = String(chiave).trim();
     const minuscola = k.toLowerCase();
+    if (minuscola === TOTALE) return nomeTotale(tipoDispositivo);
     if (minuscola.startsWith('categoria:')) {
       const c = CATEGORIE.find((x) => x.chiave === minuscola);
       return c ? c.nome : k.slice('categoria:'.length);
@@ -187,9 +204,10 @@
     return APP_TELEFONO[k] || k;
   }
 
-  /** Che cosa è il bersaglio: programma, sito, categoria o app del telefono. */
+  /** Che cosa è il bersaglio: tutto il dispositivo, programma, sito, categoria o app del telefono. */
   function tipoBersaglio(chiave) {
-    const k = String(chiave || '').toLowerCase();
+    const k = String(chiave || '').trim().toLowerCase();
+    if (k === TOTALE) return 'totale';
     if (k.startsWith('exe:')) return 'programma';
     if (k.startsWith('sito:')) return 'sito';
     if (k.startsWith('categoria:')) return 'categoria';
@@ -211,19 +229,25 @@
     return scelti.length ? scelti.join(', ') : '?';
   }
 
+  /** Di che dispositivo è la regola: quello che dice la regola, altrimenti `opzioni.tipoDispositivo`, altrimenti computer. */
+  function tipoDispositivoDi(regola, opzioni) {
+    return (regola && regola.dispositivo && regola.dispositivo.tipo) || (opzioni && opzioni.tipoDispositivo) || 'computer';
+  }
+
   /**
    * La regola in italiano semplice, da tipo e parametri (contratto-api.md).
    * `opzioni.nomi`: i nomi leggibili dei programmi (chiave exe: → nome).
-   * Le fasce dicono "telefono" o "computer" secondo il dispositivo della regola.
+   * Le fasce e il limite su tutto il dispositivo dicono "telefono" o
+   * "computer" secondo il dispositivo della regola.
    */
   function descrizioneRegola(regola, opzioni) {
     const o = opzioni || {};
     const p = (regola && regola.parametri) || {};
     switch (regola && regola.tipo) {
       case 'limite_tempo':
-        return nomeBersaglio(p.app_o_categoria, o.nomi) + ': al massimo ' + durata(p.minuti_al_giorno) + ' al giorno';
+        return nomeBersaglio(p.app_o_categoria, o.nomi, tipoDispositivoDi(regola, o)) + ': al massimo ' + durata(p.minuti_al_giorno) + ' al giorno';
       case 'fascia_oraria': {
-        const tipo = (regola.dispositivo && regola.dispositivo.tipo) || o.tipoDispositivo || 'computer';
+        const tipo = tipoDispositivoDi(regola, o);
         const cosa = tipo === 'telefono' ? 'telefono' : 'computer';
         return 'Niente ' + cosa + ' dalle ' + (p.dalle || '?') + ' alle ' + (p.alle || '?') + ' (' + testoGiorni(p.giorni) + ')';
       }
@@ -634,7 +658,7 @@
     plurale, numero, durata, visite,
     segnale, contaGiorni, fraseConteggio, fraseStriscia, conteggioBreve, fraseRiepilogo,
     serieDiGiorni, testoSerie, rigaDispositivo,
-    CATEGORIE, APP_TELEFONO, nomeBersaglio, tipoBersaglio,
+    CATEGORIE, APP_TELEFONO, TOTALE, nomeTotale, nomeBersaglio, tipoBersaglio, tipoDispositivoDi,
     GIORNI, GIORNI_INTERI, testoGiorni, descrizioneRegola, etichettaTipo, ordinaRegole,
     oraValida, momentoFascia, testoMomento,
     isoGiorno, giornoDaIso, spostaIso, oggiNelFuso, giornoBreve, giornoEsteso,

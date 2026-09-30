@@ -40,6 +40,13 @@ public sealed class Opzioni
     /// <summary>Apre da solo, dopo N secondi, la stessa conferma di "Chiudi Pactum" (collaudo del menu).</summary>
     public int? ProvaChiudiDopoSecondi { get; private set; }
 
+    /// <summary>
+    /// Solo per le prove sul PC di qualcuno: i fumetti e l'avviso a tutto schermo non escono sullo
+    /// schermo, finiscono in questa cartella (il testo in file .txt, l'avviso anche come immagine .png).
+    /// Così la prova non copre lo schermo di chi sta usando il PC.
+    /// </summary>
+    public string? CartellaProvaAvvisi { get; private set; }
+
     public static Opzioni Da(string[] args)
     {
         var o = new Opzioni();
@@ -69,14 +76,68 @@ public sealed class Opzioni
                 case "--prova-finestra": o.ProvaPidFinestra = int.Parse(Prossimo(), CultureInfo.InvariantCulture); break;
                 case "--intervallo-rete": o.IntervalloReteSecondi = int.Parse(Prossimo(), CultureInfo.InvariantCulture); break;
                 case "--prova-chiudi-dopo": o.ProvaChiudiDopoSecondi = int.Parse(Prossimo(), CultureInfo.InvariantCulture); break;
+                case "--prova-avvisi": o.CartellaProvaAvvisi = Path.GetFullPath(Prossimo()); break;
             }
         }
+        o.TogliProveFuoriCartella();
         return o;
     }
 
-    /// <summary>Con una cartella dati diversa (prove) serve un'istanza diversa.</summary>
+    /// <summary>
+    /// Vero solo con <c>--dati</c> su una cartella diversa da quella vera (<c>%LOCALAPPDATA%\Pactum</c>): è una prova.
+    /// </summary>
+    public bool CartellaDiProva => CartellaDatiPersonale && !StessaCartella(CartellaDati, Percorsi.Predefinita);
+
+    /// <summary>Le opzioni di prova date senza una cartella di prova: ignorate, e il diario lo dice.</summary>
+    public IReadOnlyList<string> OpzioniIgnorate { get; private set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Le opzioni di prova che potrebbero falsare il programma vero (misurare solo certi siti o una
+    /// finestra scelta, tenere gli avvisi fuori dallo schermo, chiudersi da solo come fosse una chiusura
+    /// pulita) valgono solo insieme a una cartella di prova. Senza, si ignorano.
+    /// </summary>
+    private void TogliProveFuoriCartella()
+    {
+        if (CartellaDiProva) return;
+        var ignorate = new List<string>();
+        if (CartellaProvaAvvisi != null)
+        {
+            ignorate.Add("--prova-avvisi");
+            CartellaProvaAvvisi = null;
+        }
+        if (SitiSolo != null)
+        {
+            ignorate.Add("--siti-solo");
+            SitiSolo = null;
+        }
+        if (ProvaPidFinestra != null)
+        {
+            ignorate.Add("--prova-finestra");
+            ProvaPidFinestra = null;
+        }
+        if (EsciDopoSecondi != null)
+        {
+            ignorate.Add("--esci-dopo");
+            EsciDopoSecondi = null;
+        }
+        if (EsciDopoAutoprova)
+        {
+            // Come --esci-dopo: si chiuderebbe da solo con una chiusura "pulita", senza interruzione nel registro.
+            ignorate.Add("--esci-dopo-autoprova");
+            EsciDopoAutoprova = false;
+        }
+        OpzioniIgnorate = ignorate;
+    }
+
+    internal static bool StessaCartella(string a, string b) =>
+        string.Equals(Normalizzata(a), Normalizzata(b), StringComparison.OrdinalIgnoreCase);
+
+    private static string Normalizzata(string cartella) =>
+        Path.GetFullPath(cartella).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    /// <summary>Con una cartella di prova serve un'istanza diversa; sulla cartella vera l'istanza resta una sola.</summary>
     public string SuffissoIstanza =>
-        CartellaDatiPersonale ? "." + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(CartellaDati.ToLowerInvariant())))[..12] : "";
+        CartellaDiProva ? "." + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Normalizzata(CartellaDati).ToLowerInvariant())))[..12] : "";
 }
 
 internal static class Program
@@ -135,6 +196,10 @@ internal static class Program
         }
 
         using var motore = new Motore.Motore(new Percorsi(opzioni.CartellaDati));
+        if (opzioni.OpzioniIgnorate.Count > 0)
+        {
+            Log.Avviso($"opzioni di prova ignorate (valgono solo con --dati su una cartella di prova): {string.Join(", ", opzioni.OpzioniIgnorate)}");
+        }
         if (opzioni.IntervalloReteSecondi is int secondi) motore.IntervalloRete = TimeSpan.FromSeconds(Math.Max(10, secondi));
         motore.SitiSolo = opzioni.SitiSolo;
         motore.ProvaPidFinestra = opzioni.ProvaPidFinestra;

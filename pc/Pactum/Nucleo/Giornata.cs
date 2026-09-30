@@ -44,11 +44,14 @@ public sealed class Giornata
 
     /// <summary>
     /// I minuti di oggi su una chiave di regola <c>app_o_categoria</c> (match esatto, contratto v3):
-    /// <c>exe:…</c>, <c>sito:…</c> o <c>categoria:…</c>. Stesso conto per lo sforamento e per "48 min su 1 h".
+    /// <c>exe:…</c>, <c>sito:…</c>, <c>categoria:…</c> o (v3.3) <c>totale</c>, tutto il computer.
+    /// Stesso conto per lo sforamento e per "48 min su 1 h".
     /// </summary>
     public long MinutiDi(string chiave)
     {
         var k = chiave.Trim().ToLowerInvariant();
+        // Tutto il computer: lo stesso totale_minuti che parte nella fotografia uso_giornaliero.
+        if (k == Bersagli.Totale) return MinutiTotali;
         if (k.StartsWith(Categorie.Prefisso, StringComparison.Ordinal))
             return Minuti(MsPerCategoria.TryGetValue(k, out var c) ? c : 0);
         if (k.StartsWith(Programma.PrefissoSito, StringComparison.Ordinal))

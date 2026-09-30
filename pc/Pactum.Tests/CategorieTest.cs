@@ -7,6 +7,7 @@ public class CategorieTest
     [Theory]
     [InlineData("exe:discord.exe", "social")]
     [InlineData("Discord.exe", "social")]
+    [InlineData("exe:instagram.exe", "social")]
     [InlineData("exe:steam.exe", "giochi")]
     [InlineData("exe:minecraft.windows.exe", "giochi")]
     [InlineData("exe:robloxplayerbeta.exe", "giochi")]
@@ -22,8 +23,9 @@ public class CategorieTest
     [Theory]
     [InlineData("instagram.com", "social")]
     [InlineData("tiktok.com", "social")]
+    [InlineData("discord.com", "social")]
+    [InlineData("youtube.com", "social")] // (30/09) YouTube è social, non video
     [InlineData("roblox.com", "giochi")]
-    [InlineData("youtube.com", "video")]
     [InlineData("netflix.com", "video")]
     [InlineData("twitch.tv", "video")]
     [InlineData("spotify.com", "musica")]
@@ -33,10 +35,39 @@ public class CategorieTest
         Assert.Equal(categoria, Categorie.DiSito(dominio));
     }
 
+    /// <summary>
+    /// (30/09, decisione di Andrea) I messaggi non stanno in nessuna categoria della tabella: come ogni
+    /// programma o sito non elencato, il loro tempo va in "altro" (mai in social).
+    /// </summary>
+    [Theory]
+    [InlineData("exe:whatsapp.exe")]
+    [InlineData("exe:whatsapp.root.exe")]
+    [InlineData("exe:telegram.exe")]
+    [InlineData("exe:signal.exe")]
+    [InlineData("exe:messenger.exe")]
+    [InlineData("exe:skype.exe")]
+    public void I_programmi_di_messaggi_non_hanno_una_categoria(string programma)
+    {
+        Assert.Equal(Categorie.Altro, Categorie.DiProgramma(programma));
+    }
+
+    [Theory]
+    [InlineData("whatsapp.com")]
+    [InlineData("telegram.org")]
+    [InlineData("messenger.com")]
+    [InlineData("signal.org")]
+    public void I_siti_di_messaggi_non_hanno_una_categoria(string dominio)
+    {
+        Assert.Equal(Categorie.Altro, Categorie.DiSito(dominio));
+        // Nel browser, il tempo su un sito di messaggi resta nella categoria del browser.
+        Assert.Equal(Categorie.Altro, Categorie.DelTempo(Categorie.DiProgramma("exe:chrome.exe"), dominio));
+    }
+
     [Fact]
     public void Il_tempo_nel_browser_va_nella_categoria_del_sito_se_ne_ha_una()
     {
-        Assert.Equal("video", Categorie.DelTempo("altro", "youtube.com"));
+        Assert.Equal("social", Categorie.DelTempo("altro", "youtube.com"));
+        Assert.Equal("video", Categorie.DelTempo("altro", "netflix.com"));
         Assert.Equal("altro", Categorie.DelTempo("altro", "wikipedia.org"));
         Assert.Equal("giochi", Categorie.DelTempo("giochi", null));
     }

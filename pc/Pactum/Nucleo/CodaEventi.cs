@@ -25,6 +25,7 @@ public sealed class CodaEventi
     private readonly string percorso;
     private readonly object blocco = new();
     private List<Evento> eventi;
+    private bool daSalvare;
 
     public CodaEventi(string percorso)
     {
@@ -37,6 +38,31 @@ public sealed class CodaEventi
         get
         {
             lock (blocco) return eventi.Count;
+        }
+    }
+
+    /// <summary>
+    /// Il file non si è potuto scrivere (disco pieno, antivirus): la coda resta giusta in memoria e si
+    /// continua a mandarla; il file si riscrive al prossimo cambiamento o con <see cref="SalvaSeServe"/>.
+    /// Arriva una volta sola per ogni serie di scritture fallite (per il diario).
+    /// </summary>
+    public Action<Exception>? ScritturaFallita { get; set; }
+
+    /// <summary>In memoria c'è qualcosa che il file non ha ancora.</summary>
+    public bool DaSalvare
+    {
+        get
+        {
+            lock (blocco) return daSalvare;
+        }
+    }
+
+    /// <summary>Riprova a scrivere il file, se l'ultima volta non ci era riuscita.</summary>
+    public void SalvaSeServe()
+    {
+        lock (blocco)
+        {
+            if (daSalvare) Salva();
         }
     }
 
@@ -132,7 +158,20 @@ public sealed class CodaEventi
         if (eventi.Count > Massimo) eventi.RemoveRange(0, eventi.Count - Massimo);
     }
 
-    private void Salva() => Archivio.ScriviJson(percorso, eventi);
+    /// <summary>Al meglio possibile: un file che non si scrive non fa perdere l'evento e non ferma chi accoda.</summary>
+    private void Salva()
+    {
+        try
+        {
+            Archivio.ScriviJson(percorso, eventi);
+            daSalvare = false;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (!daSalvare) ScritturaFallita?.Invoke(e);
+            daSalvare = true;
+        }
+    }
 
     /// <summary>Una copia dei dettagli per chi vuole leggere la coda (test, diagnostica).</summary>
     public IReadOnlyList<JsonObject> Dettagli()

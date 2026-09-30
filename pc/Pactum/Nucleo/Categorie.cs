@@ -17,12 +17,14 @@ public static class Categorie
 
     public static readonly IReadOnlyList<string> Tutte = new[] { Social, Giochi, Video, Musica, Altro };
 
+    // (0.9, decisione di Andrea del 30/09) I programmi e i siti di MESSAGGI (WhatsApp, Telegram, Signal,
+    // Messenger, Skype) non stanno in nessuna categoria della tabella: come ogni programma non elencato,
+    // il loro tempo va in "altro". Discord, Instagram e gli altri social veri restano social.
     private static readonly Dictionary<string, string> Programmi = Tabella(new()
     {
         [Social] = new[]
         {
-            "discord.exe", "discordptb.exe", "discordcanary.exe", "telegram.exe", "whatsapp.exe",
-            "whatsapp.root.exe", "signal.exe", "messenger.exe", "skype.exe", "instagram.exe",
+            "discord.exe", "discordptb.exe", "discordcanary.exe", "instagram.exe",
             "facebook.exe", "tiktok.exe", "snapchat.exe", "threads.exe", "x.exe", "twitter.exe",
             "reddit.exe", "pinterest.exe",
         },
@@ -60,8 +62,10 @@ public static class Categorie
         [Social] = new[]
         {
             "instagram.com", "facebook.com", "tiktok.com", "x.com", "reddit.com", "snapchat.com",
-            "discord.com", "whatsapp.com", "telegram.org", "threads.net", "threads.com", "pinterest.com",
-            "tumblr.com", "bsky.app", "messenger.com", "bereal.com", "linkedin.com", "vk.com", "weibo.com",
+            "discord.com", "threads.net", "threads.com", "pinterest.com",
+            "tumblr.com", "bsky.app", "bereal.com", "linkedin.com", "vk.com", "weibo.com",
+            // (0.9, decisione di Andrea del 30/09) YouTube è social, non video.
+            "youtube.com",
         },
         [Giochi] = new[]
         {
@@ -72,7 +76,7 @@ public static class Categorie
         },
         [Video] = new[]
         {
-            "youtube.com", "netflix.com", "twitch.tv", "disneyplus.com", "primevideo.com", "vimeo.com",
+            "netflix.com", "twitch.tv", "disneyplus.com", "primevideo.com", "vimeo.com",
             "dailymotion.com", "crunchyroll.com", "raiplay.it", "mediaset.it", "la7.it", "dazn.com",
             "nowtv.it", "paramountplus.com", "plex.tv", "pluto.tv", "kick.com", "rumble.com",
             "bilibili.com", "discoveryplus.com", "max.com", "hbomax.com", "timvision.it", "tubi.tv",

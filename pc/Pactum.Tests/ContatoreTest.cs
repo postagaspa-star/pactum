@@ -155,7 +155,9 @@ public class ContatoreTest
         long t = Giri(c, Fuso.Ms("2026-09-23T15:00:00"), 120, Chrome("youtube.com"));
         t = Giri(c, t, 60, Chrome("wikipedia.org"));
         Giri(c, t, 60, new Osservazione(true, "exe:steam.exe", "Steam"));
-        Assert.Equal(2, c.Oggi.MinutiDi("categoria:video"));
+        // (30/09) YouTube è social: il tempo nel browser su youtube.com va in social, non in video.
+        Assert.Equal(2, c.Oggi.MinutiDi("categoria:social"));
+        Assert.Equal(0, c.Oggi.MinutiDi("categoria:video"));
         Assert.Equal(1, c.Oggi.MinutiDi("categoria:altro"));
         Assert.Equal(1, c.Oggi.MinutiDi("categoria:giochi"));
         Assert.Equal(3, c.Oggi.MinutiDi("exe:chrome.exe"));

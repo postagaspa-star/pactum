@@ -29,8 +29,13 @@ public sealed class ContestoPactum : ApplicationContext
     private readonly Queue<(string Titolo, string Testo, string? Url)> fumetti = new();
     private readonly System.Windows.Forms.Timer timerFumetti;
     private FinestraPactum? finestra;
+    private FinestraAvviso? finestraAvviso;
     private string? urlFumettoInMostra;
     private bool uscito;
+
+    // Una domanda del programma è aperta ("Chiudi Pactum?"): l'avviso a tutto schermo non le va sopra, aspetta.
+    private bool dialogoAperto;
+    private readonly List<Avviso> avvisiInAttesa = new();
 
     public ContestoPactum(MotorePactum motore, Opzioni opzioni, Istanza istanza)
     {
@@ -58,6 +63,7 @@ public sealed class ContestoPactum : ApplicationContext
         timerFumetti.Tick += (_, _) => ProssimoFumetto();
 
         motore.Fumetto += (titolo, testo) => SulFiloGrafico(() => AccodaFumetto(titolo, testo));
+        motore.AvvisoTuttoSchermo += avvisi => SulFiloGrafico(() => MostraAvviso(avvisi));
         motore.AvvisoAggiornamento += (titolo, testo, url) => SulFiloGrafico(() => AccodaFumetto(titolo, testo, url));
         schermo = new SentinellaSchermo(acceso => motore.SchermoAcceso(acceso));
 
@@ -82,6 +88,7 @@ public sealed class ContestoPactum : ApplicationContext
             t.Tick += async (_, _) =>
             {
                 t.Stop();
+                ChiudiAvviso();
                 Log.Info("chiusura confermata dal figlio (prova)");
                 await Task.Run(motore.ChiudiVolontariamenteAsync);
                 Esci(null);
@@ -121,6 +128,9 @@ public sealed class ContestoPactum : ApplicationContext
     private void Apri()
     {
         if (uscito) return;
+        // Chi apre Pactum (menu, doppio clic, fumetto, secondo avvio) ha visto l'avviso: si chiude,
+        // come fa il suo pulsante "Apri Pactum", e la finestra del programma non gli finisce sotto.
+        ChiudiAvviso();
         if (finestra == null || finestra.IsDisposed)
         {
             var cartellaUi = Path.Combine(AppContext.BaseDirectory, "ui");
@@ -152,15 +162,29 @@ public sealed class ContestoPactum : ApplicationContext
 
     private async Task ChiudiAsync()
     {
-        var scelta = MessageBox.Show(
-            "Se chiudi, tuo padre vedrà un'interruzione nella registrazione.\n\nChiudere Pactum?",
-            "Chiudi Pactum",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Warning,
-            MessageBoxDefaultButton.Button2);
+        // Nessuna domanda sotto l'avviso a tutto schermo (che resta sopra tutto, e che la domanda
+        // disabiliterebbe: sembrerebbe un blocco). L'avviso si chiude prima, e finché la domanda è
+        // aperta quelli nuovi aspettano: se Pactum resta aperto, compaiono dopo.
+        ChiudiAvviso();
+        DialogResult scelta;
+        dialogoAperto = true;
+        try
+        {
+            scelta = MessageBox.Show(
+                "Se chiudi, tuo padre vedrà un'interruzione nella registrazione.\n\nChiudere Pactum?",
+                "Chiudi Pactum",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+        }
+        finally
+        {
+            dialogoAperto = false;
+        }
         if (scelta != DialogResult.Yes)
         {
             Log.Info("chiusura annullata dal figlio");
+            MostraAvvisiInAttesa();
             return;
         }
         Log.Info("chiusura confermata dal figlio");
@@ -183,6 +207,7 @@ public sealed class ContestoPactum : ApplicationContext
         NetworkChange.NetworkAvailabilityChanged -= SuRete;
         timerFumetti.Stop();
         finestra?.Close();
+        ChiudiAvviso();
         icona.Visible = false;
         icona.Dispose();
         schermo.Dispose();
@@ -190,8 +215,129 @@ public sealed class ContestoPactum : ApplicationContext
         ExitThread();
     }
 
+    /// <summary>
+    /// (0.9) Uno sforamento nuovo: oltre al fumetto si apre l'avviso a tutto schermo, sullo schermo
+    /// della finestra in primo piano e sopra tutto. Se è già aperto, le regole nuove si aggiungono lì
+    /// e l'avviso torna in cima. Mai sopra una domanda del programma. Si chiude sempre.
+    /// </summary>
+    private void MostraAvviso(IReadOnlyList<Avviso> avvisi)
+    {
+        if (uscito || avvisi.Count == 0) return;
+        if (dialogoAperto)
+        {
+            // Una domanda del programma è aperta: l'avviso non le va sopra, aspetta che si chiuda.
+            avvisiInAttesa.AddRange(avvisi);
+            return;
+        }
+        if (opzioni.CartellaProvaAvvisi is string cartella)
+        {
+            SalvaAvvisoDiProva(cartella, avvisi);
+            return;
+        }
+        Icon? iconaNuova = null;
+        try
+        {
+            if (finestraAvviso == null || finestraAvviso.IsDisposed)
+            {
+                iconaNuova = CaricaIconaGrande();
+                var nuova = new FinestraAvviso(avvisi, iconaNuova);
+                iconaNuova = null; // ora è della finestra
+                finestraAvviso = nuova;
+                nuova.RichiestaApertura += () => SulFiloGrafico(Apri);
+                nuova.FormClosed += (_, _) =>
+                {
+                    if (ReferenceEquals(finestraAvviso, nuova)) finestraAvviso = null;
+                };
+                // Windows può non darle la tastiera (un programma in sottofondo non ruba il primo piano):
+                // resta comunque sopra tutto, e sotto i pulsanti c'è "Se i tasti non rispondono, fai clic qui".
+                nuova.Show();
+            }
+            else
+            {
+                // Già aperto, magari coperto o ridotto a icona: le regole nuove si aggiungono e torna in cima.
+                finestraAvviso.Aggiungi(avvisi);
+            }
+            Log.Info($"avviso a tutto schermo: {avvisi.Count} {(avvisi.Count == 1 ? "regola" : "regole")}");
+        }
+        catch (Exception e)
+        {
+            // Il fumetto è già partito e lo sforamento è in coda: manca solo la finestra.
+            Log.Errore("avviso a tutto schermo non aperto", e);
+            // Niente finestra a metà: una finestra rotta (magari invisibile) non deve ricevere gli avvisi dopo.
+            var rotta = finestraAvviso;
+            finestraAvviso = null;
+            try
+            {
+                rotta?.Dispose();
+                iconaNuova?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Log.Errore("avviso a tutto schermo non liberato", ex);
+            }
+        }
+    }
+
+    /// <summary>Chiude l'avviso a tutto schermo, se c'è (prima di aprire la finestra del programma o una domanda).</summary>
+    private void ChiudiAvviso()
+    {
+        var aperta = finestraAvviso;
+        finestraAvviso = null;
+        if (aperta == null || aperta.IsDisposed) return;
+        try
+        {
+            aperta.Close();
+        }
+        catch (Exception e)
+        {
+            Log.Errore("avviso a tutto schermo non chiuso", e);
+            aperta.Dispose();
+        }
+    }
+
+    /// <summary>Gli avvisi arrivati mentre una domanda era aperta: adesso che è chiusa, si mostrano.</summary>
+    private void MostraAvvisiInAttesa()
+    {
+        if (avvisiInAttesa.Count == 0) return;
+        var attesa = avvisiInAttesa.ToList();
+        avvisiInAttesa.Clear();
+        MostraAvviso(attesa);
+    }
+
+    /// <summary>Le prove (<c>--prova-avvisi</c>): l'avviso diventa un'immagine e un testo nella cartella, lo schermo resta libero.</summary>
+    private static void SalvaAvvisoDiProva(string cartella, IReadOnlyList<Avviso> avvisi)
+    {
+        try
+        {
+            Directory.CreateDirectory(cartella);
+            var nome = $"avviso-{DateTime.Now:HHmmss-fff}";
+            Archivio.ScriviTesto(Path.Combine(cartella, nome + ".txt"), Testi.TestoAvviso(avvisi));
+            FinestraAvviso.DisegnaImmagine(avvisi, Path.Combine(cartella, nome + ".png"));
+            Log.Info($"avviso a tutto schermo (prova, su file): {avvisi.Count} {(avvisi.Count == 1 ? "regola" : "regole")}");
+        }
+        catch (Exception e)
+        {
+            Log.Errore("avviso di prova non salvato", e);
+        }
+    }
+
     private void AccodaFumetto(string titolo, string testo, string? url = null)
     {
+        if (opzioni.CartellaProvaAvvisi is string cartella)
+        {
+            // Le prove non coprono lo schermo di chi usa il PC: il fumetto va in un file.
+            try
+            {
+                Directory.CreateDirectory(cartella);
+                File.AppendAllText(Path.Combine(cartella, "fumetti.txt"), titolo + Environment.NewLine + testo + Environment.NewLine + Environment.NewLine);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Log.Errore("fumetto di prova non salvato", e);
+            }
+            Log.Info($"fumetto (prova, su file): {titolo}");
+            return;
+        }
         fumetti.Enqueue((Taglia(titolo, 63), Taglia(testo, 255), url));
         if (!timerFumetti.Enabled)
         {

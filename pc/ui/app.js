@@ -268,6 +268,12 @@
     return T.descrizioneRegola(regola, { nomi: nomiPer(regola), tipoDispositivo: 'computer' });
   }
 
+  /** Il bersaglio di un limite di tempo per nome: "Minecraft", "Tutto il computer" (o "Tutto il telefono" per una regola del telefono). */
+  function nomeLimite(regola) {
+    const p = (regola && regola.parametri) || {};
+    return T.nomeBersaglio(p.app_o_categoria, nomiPer(regola), T.tipoDispositivoDi(regola, { tipoDispositivo: 'computer' }));
+  }
+
   function attive(regole) {
     return (regole || []).filter((r) => r && r.attiva !== false);
   }
@@ -357,11 +363,13 @@
       const oltre = T.numero(dalMotore.oltre) !== null ? T.numero(dalMotore.oltre) : Math.max(0, dalMotore.minuti - limite);
       return { minuti: T.numero(dalMotore.minuti), limite, oltre };
     }
-    // Il motore non l'ha ancora misurata (regola appena creata): per un
-    // programma o un sito i minuti sono quelli di oggi; per una categoria no.
-    const chiave = String(p.app_o_categoria || '').toLowerCase();
+    // Il motore non l'ha ancora misurata (regola appena creata): per tutto il
+    // computer, un programma o un sito i minuti sono quelli di oggi; per una categoria no.
+    const chiave = String(p.app_o_categoria || '').trim().toLowerCase();
     let minuti = null;
-    if (S.oggi && chiave.startsWith('exe:')) {
+    if (S.oggi && chiave === T.TOTALE) {
+      minuti = T.numero(S.oggi.totale_minuti);
+    } else if (S.oggi && chiave.startsWith('exe:')) {
       minuti = (S.oggi.programmi || []).filter((x) => String(x.chiave).toLowerCase() === chiave)
         .reduce((somma, x) => somma + (T.numero(x.minuti) || 0), 0);
     } else if (S.oggi && chiave.startsWith('sito:')) {
@@ -722,7 +730,7 @@
       sopratitolo('LE TUE REGOLE OGGI', 'titolo-regole-oggi'));
     if (!regole.length) {
       sezione.append(
-        h('p', { class: 'secondario' }, 'Su questo computer non ci sono ancora regole. Le scrivi tu: un limite su un programma o su un sito, una fascia senza computer, o un impegno di vita reale.'),
+        h('p', { class: 'secondario' }, 'Su questo computer non ci sono ancora regole. Le scrivi tu: un limite su tutto il computer, su un programma o su un sito, una fascia senza computer, o un impegno di vita reale.'),
         h('div', { class: 'azioni' }, h('button', {
           type: 'button', class: 'bottone primario con-icona', chiave: 'prima-regola',
           onclick: () => { vaiA('regole'); dialogoRegola(null); },
@@ -763,8 +771,7 @@
   }
 
   function rigaTempo(regola, patto) {
-    const p = regola.parametri || {};
-    const nome = T.nomeBersaglio(p.app_o_categoria, nomiPer(regola));
+    const nome = nomeLimite(regola);
     const misura = misuraRegola(regola);
     const residuo = residuoBonus();
     const bonusOggi = bonusOggiDi(regola);
@@ -1002,9 +1009,11 @@
       return 'Il patto vuole almeno una regola: creane un\'altra prima di eliminare questa.';
     }
     if (r.stato === 422) {
-      return JSON.stringify(r.dati || '').includes('app_o_categoria')
-        ? 'Questo limite non va bene per un computer: scegli un programma, un sito o una categoria.'
-        : 'Il server non ha accettato la regola: controlla i campi e riprova.';
+      if (!JSON.stringify(r.dati || '').includes('app_o_categoria')) return 'Il server non ha accettato la regola: controlla i campi e riprova.';
+      // Un server che non conosce ancora il limite su tutto il computer (contratto v3.3) lo rifiuta così.
+      return contesto && contesto.totale
+        ? 'Il server del patto non conosce ancora il limite su tutto il computer: va aggiornato. Intanto puoi scegliere un programma, un sito o una categoria.'
+        : 'Questo limite non va bene per un computer: scegli tutto il computer, un programma, un sito o una categoria.';
     }
     if (r.stato === 404) return 'Questa regola non c\'è più nel patto: la lista si aggiorna da sola.';
     if (r.stato === 401) return 'Il server non riconosce più questo computer: serve un codice nuovo per ricollegarlo.';
@@ -1654,7 +1663,8 @@
     const p = (regola && regola.parametri) || {};
     const f = {
       tipo: regola ? regola.tipo : 'limite_tempo',
-      bersaglio: 'programma',
+      // Nessun bersaglio già scelto, come sul telefono: lo sceglie il figlio (v3.3: "Tutto il computer" è il primo).
+      bersaglio: '',
       programma: '',
       sito: '',
       categoria: '',
@@ -1669,6 +1679,7 @@
     if (regola && regola.tipo === 'limite_tempo') {
       const chiave = String(p.app_o_categoria || '');
       const tipo = T.tipoBersaglio(chiave);
+      if (tipo === 'totale') f.bersaglio = 'totale';
       if (tipo === 'programma') { f.bersaglio = 'programma'; f.programma = chiave.toLowerCase(); }
       if (tipo === 'sito') { f.bersaglio = 'sito'; f.sito = chiave.slice('sito:'.length); }
       if (tipo === 'categoria') { f.bersaglio = 'categoria'; f.categoria = chiave.toLowerCase(); }
@@ -1698,7 +1709,7 @@
         function sceltaTipo() {
           const gruppo = h('fieldset', { class: 'gruppo-scelte' }, h('legend', { class: 'etichetta-campo' }, 'Che regola vuoi darti?'));
           [
-            ['limite_tempo', 'Limite di tempo', 'Al massimo tanti minuti al giorno su un programma, un sito o una categoria.'],
+            ['limite_tempo', 'Limite di tempo', 'Al massimo tanti minuti al giorno su tutto il computer, un programma, un sito o una categoria.'],
             ['fascia_oraria', 'Fascia oraria', 'Niente computer in certe ore.'],
             ['vita_reale', 'Vita reale', 'Un impegno fuori dallo schermo, con un arbitro che lo conferma.'],
           ].forEach(([valore, titolo, spiegazione]) => {
@@ -1731,7 +1742,7 @@
         function campiLimite() {
           const zonaBersaglio = h('div');
           const gruppo = h('fieldset', { class: 'gruppo-scelte gruppo-in-riga' }, h('legend', { class: 'etichetta-campo' }, 'Su cosa vale il limite?'));
-          [['programma', 'Un programma'], ['sito', 'Un sito'], ['categoria', 'Una categoria']].forEach(([valore, testo]) => {
+          [['totale', T.nomeTotale('computer')], ['programma', 'Un programma'], ['sito', 'Un sito'], ['categoria', 'Una categoria']].forEach(([valore, testo]) => {
             const id = 'bersaglio-' + valore;
             gruppo.append(h('label', { class: 'scelta-breve', for: id },
               h('input', {
@@ -1740,12 +1751,18 @@
               }), h('span', null, testo)));
           });
           function disegnaBersaglio() {
+            if (!f.bersaglio) zonaBersaglio.replaceChildren();
+            if (f.bersaglio === 'totale') zonaBersaglio.replaceChildren(aiutoTotale());
             if (f.bersaglio === 'programma') zonaBersaglio.replaceChildren(...campoProgramma());
             if (f.bersaglio === 'sito') zonaBersaglio.replaceChildren(...campoSito());
             if (f.bersaglio === 'categoria') zonaBersaglio.replaceChildren(campoCategoria());
           }
           disegnaBersaglio();
-          if (!S.visti) caricaVisti().then(() => { if (zonaBersaglio.isConnected && f.bersaglio !== 'categoria') disegnaBersaglio(); });
+          if (!S.visti) {
+            caricaVisti().then(() => {
+              if (zonaBersaglio.isConnected && (f.bersaglio === 'programma' || f.bersaglio === 'sito')) disegnaBersaglio();
+            });
+          }
 
           const aiutoMinuti = h('p', { class: 'aiuto', id: 'aiuto-minuti', 'aria-live': 'polite' }, testoMinuti(f.minuti));
           const minuti = h('input', {
@@ -1755,6 +1772,11 @@
           });
           return [gruppo, zonaBersaglio,
             h('div', { class: 'campo-gruppo' }, h('label', { class: 'etichetta-campo', for: 'campo-minuti' }, 'Minuti al giorno'), minuti, aiutoMinuti)];
+        }
+
+        /** (v3.3) Tutto il computer: che tempo conta, detto semplice. */
+        function aiutoTotale() {
+          return h('p', { class: 'aiuto' }, 'Conta tutto il tempo che passi al computer nel giorno, con qualsiasi programma o sito: lo stesso totale che vedi in Oggi e che vede il genitore.');
         }
 
         function testoMinuti(valore) {
@@ -1897,7 +1919,11 @@
         function parametri() {
           if (f.tipo === 'limite_tempo') {
             let chiave = null;
-            if (f.bersaglio === 'programma') {
+            if (!f.bersaglio) {
+              return { manca: 'Scegli su cosa vale il limite.', campo: 'bersaglio-totale' };
+            } else if (f.bersaglio === 'totale') {
+              chiave = T.TOTALE;
+            } else if (f.bersaglio === 'programma') {
               if (!f.programma) return { manca: 'Scegli il programma.', campo: 'campo-programma' };
               chiave = f.programma;
             } else if (f.bersaglio === 'sito') {
@@ -1963,7 +1989,7 @@
             aggiornaTutto();
             return;
           }
-          d.errore(testoErroreRegola(r, { regola, eliminazione: false }));
+          d.errore(testoErroreRegola(r, { regola, eliminazione: false, totale: esito.parametri.app_o_categoria === T.TOTALE }));
           if (r.stato === 404 || r.stato === 401) aggiornaTutto();
         }
       },

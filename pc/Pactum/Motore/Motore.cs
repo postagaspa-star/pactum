@@ -30,6 +30,10 @@ public sealed partial class Motore : IDisposable
     private readonly RegistroSforamenti registro;
     private readonly List<BonusLocale> bonusLocali = new();
 
+    // Il registro in memoria ha qualcosa che sforamenti.json non ha: si riprova a ogni valutazione.
+    private bool registroDaSalvare;
+    private bool registroNonScritto;
+
     private readonly object orologioBlocco = new();
     private readonly SentinellaOrologio orologio;
 
@@ -50,8 +54,13 @@ public sealed partial class Motore : IDisposable
         config = Archivio.LeggiJson<Configurazione>(percorsi.Config) ?? new Configurazione();
         token = Dpapi.Svela(config.TokenProtetto);
         if (config.TokenProtetto != null && token == null) Log.Avviso("token presente ma non decifrabile con l'utente attuale");
-        coda = new CodaEventi(percorsi.Coda);
+        coda = new CodaEventi(percorsi.Coda)
+        {
+            ScritturaFallita = e => Log.Errore("coda.json non scritta: la coda resta in memoria e si riscrive appena si può", e),
+        };
         registro = Archivio.LeggiJson<RegistroSforamenti>(percorsi.Sforamenti) ?? new RegistroSforamenti();
+        // Gli sforamenti ancora da mandare sono già segnalati, anche se sforamenti.json non li ha.
+        if (registro.Ricorda(coda.Prossimi(CodaEventi.Massimo)) > 0) registroDaSalvare = true;
         notifiche = Archivio.LeggiJson<StatoNotifiche>(percorsi.Notifiche) ?? new StatoNotifiche();
         memoriaSerie = Archivio.LeggiJson<MemoriaSerie>(percorsi.Serie) ?? new MemoriaSerie();
         var salvato = Archivio.LeggiJson<PattoSalvato>(percorsi.Patto);
@@ -70,6 +79,12 @@ public sealed partial class Motore : IDisposable
 
     /// <summary>Un fumetto per l'icona: titolo e testo. Arriva da un filo qualsiasi.</summary>
     public event Action<string, string>? Fumetto;
+
+    /// <summary>
+    /// (0.9) Sforamenti nuovi da mostrare anche a tutto schermo, oltre al fumetto: stesso dedup
+    /// (una volta per regola per giorno). Arriva da un filo qualsiasi.
+    /// </summary>
+    public event Action<IReadOnlyList<Avviso>>? AvvisoTuttoSchermo;
 
     public bool Abbinato
     {
@@ -106,6 +121,8 @@ public sealed partial class Motore : IDisposable
     public async Task ChiudiVolontariamenteAsync()
     {
         long adesso = Tempo.AdessoUtcMs();
+        // Gli ultimi secondi contano: uno sforamento appena successo parte con la chiusura (senza avvisi a schermo).
+        ValutaRegole(adesso, conAvvisi: false);
         if (Abbinato) coda.Accoda(Eventi.ChiusuraVolontaria(adesso));
         ImpostaChiusura(Chiusure.Volontaria);
         AccodaFotografie(adesso);
@@ -120,6 +137,8 @@ public sealed partial class Motore : IDisposable
     {
         sospeso = true;
         long adesso = Tempo.AdessoUtcMs();
+        // Prima di addormentarsi: gli sforamenti degli ultimi secondi vanno in coda (lo schermo si spegne: niente avvisi).
+        ValutaRegole(adesso, conAvvisi: false);
         if (Abbinato) coda.Accoda(Eventi.Sospensione("sospensione", adesso));
         lock (misura) SalvaGiorno(contatore.Oggi);
         ScriviVivo(null);
@@ -150,6 +169,8 @@ public sealed partial class Motore : IDisposable
         var motivo = spegnimento ? Chiusure.Spegnimento : Chiusure.Disconnessione;
         ImpostaChiusura(motivo);
         long adesso = Tempo.AdessoUtcMs();
+        // Prima di spegnersi: gli sforamenti degli ultimi secondi partono con l'ultimo invio (niente avvisi a schermo).
+        ValutaRegole(adesso, conAvvisi: false);
         if (Abbinato) coda.Accoda(Eventi.Sospensione(motivo, adesso));
         AccodaFotografie(adesso);
         lock (misura) SalvaGiorno(contatore.Oggi);
@@ -262,6 +283,10 @@ public sealed partial class Motore : IDisposable
         foreach (var chiuso in esito.GiorniChiusi)
         {
             Log.Info($"cambio di giorno: chiuso {chiuso.Giorno}");
+            // Il giorno che si chiude si valuta fino all'ultimo secondo, prima di passare al nuovo:
+            // uno sforamento negli ultimi secondi prima di mezzanotte resta di quel giorno. Solo l'evento:
+            // "oggi sei andato oltre" non sarebbe più vero.
+            ValutaRegole(UltimoMsDel(chiuso, zona, utc), chiuso, conAvvisi: false);
             lock (misura)
             {
                 SalvaGiorno(chiuso);
@@ -374,58 +399,93 @@ public sealed partial class Motore : IDisposable
 
     // ---------- Le regole: sforamenti, mai blocchi ----------
 
-    private void ValutaRegole(long adesso)
+    /// <summary>
+    /// Valuta le regole del computer su <paramref name="giorno"/> (se manca, oggi) all'istante
+    /// <paramref name="adesso"/>. La parte su disco è al meglio possibile e non lancia mai: gli
+    /// sforamenti nuovi stanno nella coda in memoria anche se coda.json non si scrive, e il registro,
+    /// se non si scrive, si riprova a ogni valutazione finché non ci riesce. Dopo la decisione partono
+    /// sempre fumetto e avviso a tutto schermo; con <paramref name="conAvvisi"/> false solo gli eventi
+    /// (mezzanotte, sospensione, spegnimento, chiusura: lo schermo non serve più).
+    /// </summary>
+    internal void ValutaRegole(long adesso, Giornata? giorno = null, bool conAvvisi = true)
     {
         var p = patto;
-        if (p == null || !Abbinato) return;
+        var regole = p != null && Abbinato ? p.RegoleDelComputer(IdDispositivo).ToList() : new List<Regola>();
+        var bonus = regole.Count > 0 ? BonusOggi(adesso) : new Dictionary<string, int>();
         var zona = TimeZoneInfo.Local;
-        var regole = p.RegoleDelComputer(IdDispositivo).ToList();
-        if (regole.Count == 0) return;
-        var bonus = BonusOggi(adesso);
 
-        List<Sforamento> nuovi;
-        Giornata oggi;
+        IReadOnlyList<Avviso> avvisi = Array.Empty<Avviso>();
         lock (misura)
         {
-            oggi = contatore.Oggi;
-            var tutti = Valutatore.Valuta(regole, bonus, oggi.MinutiDi, oggi.MinutiNellIntervallo, adesso, zona);
-            nuovi = registro.Nuovi(tutti, oggi.Giorno);
-            if (nuovi.Count == 0) return;
-            foreach (var s in nuovi) coda.Accoda(Eventi.Sforamento(s, oggi.Giorno, adesso));
-            registro.Pota(Tempo.DataDi(adesso, zona).AddDays(-14));
-            Archivio.ScriviJson(percorsi.Sforamenti, registro);
+            if (regole.Count > 0)
+            {
+                var g = giorno ?? contatore.Oggi;
+                var tutti = Valutatore.Valuta(regole, bonus, g.MinutiDi, g.MinutiNellIntervallo, adesso, zona);
+                // I nomi dei programmi si leggono qui, col blocco: il giro di misura li sta scrivendo.
+                var decisione = Segnalazioni.Decidi(tutti, g.Giorno, registro, regole, g);
+                if (decisione.Nuovi.Count > 0)
+                {
+                    // La coda li tiene in memoria anche se il file non si scrive: tutti, uno per regola.
+                    foreach (var s in decisione.Nuovi) coda.Accoda(Eventi.Sforamento(s, g.Giorno, adesso));
+                    registro.Pota(Tempo.DataDi(adesso, zona).AddDays(-14));
+                    registroDaSalvare = true;
+                    avvisi = decisione.ATuttoSchermo;
+                }
+            }
+            if (registroDaSalvare) registroDaSalvare = !SalvaRegistro();
+            coda.SalvaSeServe();
         }
-        foreach (var s in nuovi)
+
+        foreach (var a in avvisi) Log.Info($"sforamento della regola {a.RegolaId}{(conAvvisi ? "" : " (solo l'evento)")}");
+        if (!conAvvisi || avvisi.Count == 0) return;
+        try
         {
-            Log.Info($"sforamento della regola {s.RegolaId}");
-            var regola = regole.FirstOrDefault(r => r.Id == s.RegolaId);
-            if (s.Tipo == TipiRegola.FasciaOraria)
+            foreach (var a in avvisi)
             {
-                Fumetto?.Invoke("Hai usato il computer in una fascia che ti sei imposto",
-                    $"Hai usato il computer {s.MinutiOltre} min in una fascia che ti sei imposto ({regola?.Stringa("dalle") ?? "?"}–{regola?.Stringa("alle") ?? "?"}). Nessun blocco: è il tuo patto.");
+                var (titolo, testo) = Testi.Fumetto(a);
+                Fumetto?.Invoke(titolo, testo);
             }
-            else
-            {
-                var bersaglio = NomeBersaglio(regola?.Stringa("app_o_categoria"), oggi);
-                Fumetto?.Invoke("Oggi sei andato oltre",
-                    $"{bersaglio}: oggi sei andato {s.MinutiOltre} min oltre il limite che ti sei dato ({s.LimiteEfficace} min). Nessun blocco: è il tuo patto.");
-            }
+        }
+        catch (Exception e)
+        {
+            Log.Errore("fumetto dello sforamento non partito", e);
+        }
+        try
+        {
+            // (0.9) Oltre al fumetto, la finestra a tutto schermo: stessi sforamenti, stesso dedup.
+            AvvisoTuttoSchermo?.Invoke(avvisi);
+        }
+        catch (Exception e)
+        {
+            Log.Errore("avviso a tutto schermo non partito", e);
         }
     }
 
-    private static string NomeBersaglio(string? chiave, Giornata oggi)
+    /// <summary>sforamenti.json al meglio possibile. Nel diario il primo errore di una serie e la ripresa, non ogni tentativo.</summary>
+    private bool SalvaRegistro()
     {
-        if (chiave == null) return "?";
-        var k = chiave.Trim().ToLowerInvariant();
-        if (k.StartsWith(Categorie.Prefisso, StringComparison.Ordinal))
+        try
         {
-            var c = k[Categorie.Prefisso.Length..];
-            return c.Length > 0 ? char.ToUpper(c[0], CultureInfo.InvariantCulture) + c[1..] : c;
+            Archivio.ScriviJson(percorsi.Sforamenti, registro);
+            if (registroNonScritto) Log.Info("sforamenti.json di nuovo scritto");
+            registroNonScritto = false;
+            return true;
         }
-        if (k.StartsWith(Programma.PrefissoSito, StringComparison.Ordinal)) return k[Programma.PrefissoSito.Length..];
-        if (oggi.Programmi.TryGetValue(k, out var voce)) return voce.Nome;
-        return Programma.NomeDiRipiego(k);
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (!registroNonScritto) Log.Errore("sforamenti.json non scritto: riprovo a ogni valutazione", e);
+            registroNonScritto = true;
+            return false;
+        }
     }
+
+    /// <summary>L'ultimo millisecondo di un giorno locale, per valutarlo fino in fondo.</summary>
+    private static long UltimoMsDel(Giornata g, TimeZoneInfo zona, long ripiego) =>
+        Tempo.ProvaGiorno(g.Giorno, out var data) ? Tempo.InizioGiorno(data.AddDays(1), zona) - 1 : ripiego;
+
+    /// <summary>Per i test: quanti eventi di quel tipo aspettano di partire (in memoria).</summary>
+    internal IReadOnlyList<Evento> EventiInCoda(string tipo) =>
+        coda.Prossimi(CodaEventi.Massimo).Where(e => e.Tipo == tipo).ToList();
 
     /// <summary>I bonus di oggi per regola: quelli del patto più quelli appena concessi e non ancora riletti.</summary>
     private Dictionary<string, int> BonusOggi(long adesso)

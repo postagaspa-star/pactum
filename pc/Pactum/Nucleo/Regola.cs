@@ -11,6 +11,16 @@ public static class TipiRegola
     public const string VitaReale = "vita_reale";
 }
 
+/// <summary>Le chiavi di <c>app_o_categoria</c> che non sono un programma, un sito o una categoria.</summary>
+public static class Bersagli
+{
+    /// <summary>
+    /// (contratto v3.3) Tutto il computer: tutto il tempo attivo nel giorno, cioè lo stesso
+    /// <c>totale_minuti</c> della fotografia <c>uso_giornaliero</c>.
+    /// </summary>
+    public const string Totale = "totale";
+}
+
 /// <summary>Una regola del patto come arriva da <c>GET /api/patto</c> (contratto v3).</summary>
 public sealed record Regola(long Id, string Tipo, JsonObject Parametri, bool Attiva, long? DispositivoId)
 {

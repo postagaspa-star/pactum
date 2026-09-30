@@ -115,6 +115,43 @@ class ModelliPattoTest {
         assertNull(patto.contestoDispositivi().questo)
     }
 
+    // --- (0.9) il bonus concesso scritto nella copia prima di rileggerla -------
+
+    private val contatori = StatoBonus(
+        giorno = ContatoreBonus(usati = 15, tetto = 30, residui = 15),
+        settimana = ContatoreBonus(usati = 30, tetto = 90, residui = 60),
+    )
+
+    @Test
+    fun `il bonus appena concesso allunga il limite nella copia di oggi`() {
+        val copia = Patto(
+            bonusOggiPerRegola = mapOf("1" to 15, "2" to 5),
+            bonusGiornoLocale = "2026-09-30",
+            bonus = contatori,
+        )
+        val dopo = copia.conBonus(regolaId = 1, minuti = 5, giorno = "2026-09-30")
+        assertEquals(mapOf("1" to 20, "2" to 5), dopo.bonusOggiPerRegola)
+        assertEquals(ContatoreBonus(usati = 20, tetto = 30, residui = 10), dopo.bonus?.giorno)
+        assertEquals(ContatoreBonus(usati = 35, tetto = 90, residui = 55), dopo.bonus?.settimana)
+    }
+
+    @Test
+    fun `su una copia di ieri il bonus di oggi riparte da solo`() {
+        val copia = Patto(bonusOggiPerRegola = mapOf("1" to 30), bonusGiornoLocale = "2026-09-29")
+        val dopo = copia.conBonus(regolaId = 1, minuti = 15, giorno = "2026-09-30")
+        assertEquals(mapOf("1" to 15), dopo.bonusOggiPerRegola)
+        assertEquals("2026-09-30", dopo.bonusGiornoLocale)
+    }
+
+    @Test
+    fun `la copia sa i bonus solo del giorno in cui e' stata letta`() {
+        val roma = java.time.ZoneId.of("Europe/Rome")
+        fun ms(testo: String) = java.time.LocalDateTime.parse(testo).atZone(roma).toInstant().toEpochMilli()
+        val copia = Patto(fuso = "Europe/Rome", bonusGiornoLocale = "2026-09-29")
+        assertTrue(copia.bonusNoti(ms("2026-09-29T23:59:59")))
+        assertEquals(false, copia.bonusNoti(ms("2026-09-30T00:00:30")))
+    }
+
     @Test
     fun `il residuo del bonus e' il piu' piccolo dei due tetti`() {
         val patto = Patto(

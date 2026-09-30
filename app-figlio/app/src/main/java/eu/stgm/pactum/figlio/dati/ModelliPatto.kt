@@ -93,6 +93,33 @@ data class Patto(
         return minOf(contatori.giorno.residui, contatori.settimana.residui)
     }
 
+    /**
+     * (0.9) La copia sa i bonus del giorno di [now]: è stata sincronizzata quel
+     * giorno. Per valutare un giorno già finito (l'ultimo minuto prima di
+     * mezzanotte) senza saperne i bonus, i limiti non si valutano: uno
+     * sforamento sarebbe falso.
+     */
+    fun bonusNoti(now: Long = System.currentTimeMillis()): Boolean = copiaDiOggi(now)
+
+    /**
+     * (0.9) La copia con un bonus appena concesso dal server, prima di
+     * rileggerla: se la rilettura non riesce, la sentinella vede comunque il
+     * limite allungato invece di uno sforamento falso. [giorno] = il giorno del
+     * patto del bonus; una copia di un altro giorno riparte dai soli minuti nuovi.
+     */
+    fun conBonus(regolaId: Long, minuti: Int, giorno: String): Patto {
+        val stessoGiorno = bonusGiornoLocale == null || bonusGiornoLocale == giorno
+        val base = if (stessoGiorno) bonusOggiPerRegola else emptyMap()
+        val chiave = regolaId.toString()
+        return copy(
+            bonusOggiPerRegola = base + (chiave to (base[chiave] ?: 0) + minuti),
+            bonusGiornoLocale = giorno,
+            bonus = bonus?.takeIf { stessoGiorno }
+                ?.let { it.copy(giorno = it.giorno.conUsati(minuti), settimana = it.settimana.conUsati(minuti)) }
+                ?: bonus,
+        )
+    }
+
     /** La copia è stata sincronizzata oggi, nel fuso del patto (o non si sa quando). */
     private fun copiaDiOggi(now: Long): Boolean {
         val giornoPatto = Instant.ofEpochMilli(now).atZone(zonaPatto(fuso)).toLocalDate().toString()
@@ -260,7 +287,10 @@ data class SitiGiorno(
 data class DominioVisite(val dominio: String = "", val visite: Int = 0)
 
 @Serializable
-data class ContatoreBonus(val usati: Int = 0, val tetto: Int = 0, val residui: Int = 0)
+data class ContatoreBonus(val usati: Int = 0, val tetto: Int = 0, val residui: Int = 0) {
+    fun conUsati(minuti: Int): ContatoreBonus =
+        copy(usati = usati + minuti, residui = (residui - minuti).coerceAtLeast(0))
+}
 
 @Serializable
 data class StatoBonus(

@@ -29,9 +29,10 @@ class PattoLocale(context: Context) {
      * prima (una lettura in viaggio mentre il telefono veniva ricollegato) non
      * entra: sarebbe il patto di un altro dispositivo, e la sentinella ne
      * valuterebbe le regole. Controllo e scrittura stanno sotto lo stesso
-     * mutex di [cambiaCollegamento], così non si possono incrociare.
+     * mutex di [cambiaCollegamento], così non si possono incrociare. False se
+     * la copia non è entrata.
      */
-    suspend fun salva(patto: Patto) = withContext(Dispatchers.IO) {
+    suspend fun salva(patto: Patto): Boolean = withContext(Dispatchers.IO) {
         val impostazioni = Impostazioni(app)
         // Stampa il giorno del patto a cui i bonus_oggi_per_regola si riferiscono:
         // serve al valutatore per non applicare i bonus di ieri al limite di oggi
@@ -41,15 +42,34 @@ class PattoLocale(context: Context) {
         mutex.withLock {
             val lettoCon = patto.lettoCon
             if (lettoCon != null && lettoCon != impostazioni.leggiConfigurazione().impronta) {
-                return@withLock
+                return@withLock false
             }
-            val temp = File(file.parentFile, file.name + ".tmp")
-            temp.writeText(json.encodeToString(Patto.serializer(), daScrivere))
-            if (!temp.renameTo(file)) {
-                file.delete()
-                temp.renameTo(file)
-            }
+            scrivi(daScrivere)
             impostazioni.aggiornaIdentita(patto.dispositivo, patto.figlio)
+            true
+        }
+    }
+
+    /**
+     * (0.9) Una modifica fatta sul telefono alla copia che c'è (il bonus appena
+     * concesso, prima della rilettura dal server), sotto lo stesso mutex. Senza
+     * copia non c'è niente da modificare.
+     */
+    suspend fun modifica(trasforma: (Patto) -> Patto) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            if (!file.exists()) return@withLock
+            val attuale = runCatching { json.decodeFromString(Patto.serializer(), file.readText()) }.getOrNull()
+                ?: return@withLock
+            scrivi(trasforma(attuale))
+        }
+    }
+
+    private fun scrivi(patto: Patto) {
+        val temp = File(file.parentFile, file.name + ".tmp")
+        temp.writeText(json.encodeToString(Patto.serializer(), patto))
+        if (!temp.renameTo(file)) {
+            file.delete()
+            temp.renameTo(file)
         }
     }
 

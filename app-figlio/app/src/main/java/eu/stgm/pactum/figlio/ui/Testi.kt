@@ -65,12 +65,21 @@ fun descrizioneRegola(tipo: String, parametri: JsonObject): String {
 
 /**
  * Il bersaglio di un limite di tempo in chiaro: un'app o una categoria del
- * telefono, oppure (v3) un programma o un sito del computer ("Minecraft",
- * "youtube.com (sito)"). [nomeServer] è il nome leggibile che il server può
- * mandare sulla regola: per un'app di un altro telefono, che qui non è
- * installata, è l'unico nome che c'è.
+ * telefono, "Tutto il telefono" (0.9), oppure (v3) un programma o un sito del
+ * computer ("Minecraft", "youtube.com (sito)"). [nomeServer] è il nome
+ * leggibile che il server può mandare sulla regola: per un'app di un altro
+ * telefono, che qui non è installata, è l'unico nome che c'è. [tipoDispositivo]
+ * = di che dispositivo è la regola: "totale" su un computer è "Tutto il computer".
  */
-fun etichettaChiave(context: Context, chiave: String, nomeServer: String? = null): String {
+fun etichettaChiave(
+    context: Context,
+    chiave: String,
+    nomeServer: String? = null,
+    tipoDispositivo: String? = null,
+): String {
+    if (tipoDispositivo == TipiDispositivo.COMPUTER && CatalogoApp.eTotale(chiave)) {
+        return context.getString(R.string.chiave_totale_computer)
+    }
     ChiaviComputer.etichetta(chiave, nomeServer, context.getString(R.string.chiave_sito))?.let { return it }
     val etichetta = CatalogoApp.etichettaValore(context, chiave)
     if (etichetta != chiave) return etichetta
@@ -97,7 +106,7 @@ fun descrizioneRegola(
     TipiRegola.LIMITE_TEMPO -> context.getString(
         if (breve) R.string.regola_limite_tempo_breve else R.string.regola_limite_tempo,
         parametroTesto(parametri, "app_o_categoria")
-            ?.let { etichettaChiave(context, it, nomeServer) } ?: "?",
+            ?.let { etichettaChiave(context, it, nomeServer, tipoDispositivo) } ?: "?",
         testoDurata(context, parametroTesto(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
     )
 

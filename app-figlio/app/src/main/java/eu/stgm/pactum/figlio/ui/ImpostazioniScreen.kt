@@ -43,6 +43,7 @@ import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -52,7 +53,8 @@ import java.time.format.DateTimeFormatter
 /**
  * Le Impostazioni del figlio: il collegamento al patto (indirizzo del server e
  * codice di 6 cifre, v3; il vecchio codice lungo dietro "Hai un codice
- * lungo?"), la chiusura della sera, e "Cosa vede tuo padre" per sempre a un tocco.
+ * lungo?"), la chiusura della sera, l'avviso a tutto schermo (0.9), e "Cosa
+ * vede tuo padre" per sempre a un tocco.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -202,6 +204,10 @@ fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
                 }
             }
 
+            // (0.9) L'avviso a tutto schermo quando si va oltre una regola.
+            TitoloSezione(stringResource(R.string.impostazioni_sezione_avviso))
+            RigaAvvisoTuttoSchermo()
+
             // Per sempre a un tocco: cosa arriva al genitore, e cosa no (C6).
             TitoloSezione(stringResource(R.string.cosa_vede_titolo))
             Text(
@@ -212,6 +218,45 @@ fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
                 Text(stringResource(R.string.impostazioni_cosa_vede_apri))
             }
         }
+    }
+}
+
+/**
+ * "Avviso a tutto schermo": attivo se Android lascia a Pactum "Mostra sopra le
+ * altre app". Non c'è un interruttore nell'app: il permesso È l'interruttore, e
+ * si riguarda a ogni ritorno dalle impostazioni di sistema.
+ */
+@Composable
+private fun RigaAvvisoTuttoSchermo() {
+    val context = LocalContext.current
+    val attivo = rememberMostraSopra()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = stringResource(R.string.impostazioni_avviso_riga),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = stringResource(if (attivo) R.string.impostazioni_avviso_attivo else R.string.impostazioni_avviso_spento),
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (attivo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    Text(
+        text = stringResource(
+            if (attivo) R.string.impostazioni_avviso_spiegazione_attivo else R.string.impostazioni_avviso_spiegazione_spento,
+        ),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (!attivo) {
+        OutlinedButton(
+            onClick = { PermessiHelper.apri(context, PermessiHelper.intentMostraSopra(context)) },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.passo_apri_impostazioni))
+        }
+        AiutoRestrizioni(stringResource(R.string.aiuto_mostra_sopra_testo))
     }
 }
 

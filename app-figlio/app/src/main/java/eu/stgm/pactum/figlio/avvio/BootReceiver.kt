@@ -25,12 +25,36 @@ import kotlinx.serialization.json.put
  * marca il reboot nel registro. Il marcatore serve perché elapsedRealtime si
  * azzera al riavvio (architettura.md): senza, l'azzeramento sembrerebbe una
  * manomissione.
+ *
+ * (0.9) Anche dopo un aggiornamento di Pactum (MY_PACKAGE_REPLACED): il
+ * processo è stato fermato e il servizio non riparte da solo, quindi la
+ * sentinella resterebbe al ritmo di 15 minuti del worker.
  */
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED -> dopoAccensione(context)
+            Intent.ACTION_MY_PACKAGE_REPLACED -> dopoAggiornamento(context)
+        }
+    }
 
+    /**
+     * Niente evento "riavvio" e niente ancora nuova: il telefono non si è
+     * spento, elapsedRealtime non si è azzerato. Solo il testimone da riaccendere.
+     */
+    private fun dopoAggiornamento(context: Context) {
+        BattitoWorker.pianifica(context)
+        if (PermessiHelper.haAccessoUso(context)) {
+            try {
+                PactumService.avvia(context)
+            } catch (e: Exception) {
+                // avvio rifiutato: lo riaccende il worker al suo giro
+            }
+        }
+    }
+
+    private fun dopoAccensione(context: Context) {
         BattitoWorker.pianifica(context)
 
         // La notifica "Pactum sta facendo da testimone" deve tornare da sola

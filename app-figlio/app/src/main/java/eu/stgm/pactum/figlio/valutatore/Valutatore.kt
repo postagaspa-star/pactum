@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.valutatore
 
+import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import eu.stgm.pactum.figlio.misura.UsoApp
@@ -52,25 +53,37 @@ sealed interface MomentoFascia {
  * L'uso di oggi indicizzato come lo legge il valutatore: per pacchetto (in
  * minuscolo) e per chiave `categoria:*`, con i minuti arrotondati per app —
  * lo stesso conto di SentinellaPatto e della schermata Oggi, così "48 min su
- * 1 h" e lo sforamento parlano degli stessi minuti.
+ * 1 h" e lo sforamento parlano degli stessi minuti. (0.9) E "totale", tutto il
+ * telefono: i millisecondi veri sommati e poi divisi, come il `totale_minuti`
+ * della fotografia (non la somma dei minuti arrotondati per app), così il
+ * genitore e il figlio vedono lo stesso numero; mai meno di [totaleMinimo],
+ * il più alto già visto oggi (il totale del giorno non scende).
  */
 class IndiceUso(
     uso: List<Pair<String, Long>>,
     categoriaDi: (String) -> String,
+    private val totaleMinimo: Long = 0L,
 ) {
     private val perPacchetto = HashMap<String, Long>()
     private val perCategoria = HashMap<String, Long>()
+    private var totaleMillis = 0L
 
     init {
         for ((pacchetto, millis) in uso) {
             val minuti = millis / 60_000
             perPacchetto.merge(pacchetto.lowercase(), minuti, Long::plus)
             perCategoria.merge(categoriaDi(pacchetto), minuti, Long::plus)
+            totaleMillis += millis
         }
     }
 
+    /** Tutto il telefono, in minuti. */
+    val totaleMinuti: Long get() = maxOf(totaleMillis / 60_000, totaleMinimo)
+
     /** I minuti di oggi su una chiave `app_o_categoria` (match esatto, contratto v2.1). */
     fun minuti(chiave: String): Long {
+        // "totale" solo esatto, minuscolo e senza spazi: come lo accetta il server.
+        if (chiave == CatalogoApp.CHIAVE_TOTALE) return totaleMinuti
         val k = chiave.trim().lowercase()
         return if (k.startsWith(PREFISSO_CATEGORIA)) perCategoria[k] ?: 0L else perPacchetto[k] ?: 0L
     }
@@ -88,9 +101,11 @@ class IndiceUso(
             uso: List<UsoApp>,
             contaNellUso: (String) -> Boolean,
             categoriaDi: (String) -> String,
+            totaleMinimo: Long = 0L,
         ): IndiceUso = IndiceUso(
             uso = uso.filter { contaNellUso(it.pacchetto) }.map { it.pacchetto to it.millisPrimoPiano },
             categoriaDi = categoriaDi,
+            totaleMinimo = totaleMinimo,
         )
     }
 }

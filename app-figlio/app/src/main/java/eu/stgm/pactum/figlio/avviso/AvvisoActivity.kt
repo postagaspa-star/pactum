@@ -1,0 +1,234 @@
+package eu.stgm.pactum.figlio.avviso
+
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import eu.stgm.pactum.design.BarraUso
+import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.figlio.MainActivity
+import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.permessi.PermessiHelper
+import eu.stgm.pactum.figlio.ui.Etichetta
+import eu.stgm.pactum.figlio.ui.testoDurata
+import eu.stgm.pactum.figlio.ui.theme.PactumTheme
+
+/**
+ * (0.9) L'avviso a tutto schermo quando si va oltre una regola: si apre sopra
+ * l'app in uso e dice quale regola, quanto hai usato e il limite che ti sei
+ * dato. NON è un blocco: "Ho capito" (o il tasto indietro) chiude e torna
+ * dov'eri, "Apri Pactum" porta alla schermata Oggi.
+ *
+ * Vive in un task suo, fuori dalle recenti (manifest): chiudendolo si torna
+ * all'app di prima, non a una schermata di Pactum rimasta aperta sotto. Parte
+ * dalla sentinella, cioè da dietro le quinte: Android (10+) lo permette solo
+ * con "Mostra sopra le altre app". Senza (o durante una chiamata) resta la
+ * notifica, sul canale che si vede in alto. Un secondo sforamento mentre
+ * l'avviso è aperto si aggiunge al primo.
+ */
+class AvvisoActivity : ComponentActivity() {
+
+    private val avvisi = mutableStateOf<List<Avviso>>(emptyList())
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        avvisi.value = Avviso.daJson(
+            savedInstanceState?.getString(EXTRA_AVVISI) ?: intent?.getStringExtra(EXTRA_AVVISI),
+        )
+        if (avvisi.value.isEmpty()) {
+            finish()
+            return
+        }
+        setContent {
+            PactumTheme {
+                AvvisoScreen(
+                    avvisi = avvisi.value,
+                    onHoCapito = { finish() },
+                    onApriPactum = { apriPactum() },
+                )
+            }
+        }
+    }
+
+    /** Uno sforamento nuovo mentre l'avviso è ancora aperto: si aggiunge, il primo resta. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        avvisi.value = Avviso.unisci(avvisi.value, Avviso.daJson(intent.getStringExtra(EXTRA_AVVISI)))
+    }
+
+    /**
+     * Uscito con Home o con le app recenti: l'avviso l'ha visto, e non deve
+     * ricomparire unito al prossimo. Lo spegnimento dello schermo non passa di
+     * qui: l'avviso resta e si ritrova allo sblocco.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        finish()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(EXTRA_AVVISI, Avviso.inJson(avvisi.value))
+    }
+
+    private fun apriPactum() {
+        // Come il tocco sulla notifica dello sforamento: Pactum su Oggi.
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra(MainActivity.EXTRA_DESTINAZIONE, MainActivity.DEST_OGGI),
+        )
+        finish()
+    }
+
+    companion object {
+        private const val EXTRA_AVVISI = "avvisi"
+
+        /**
+         * Apre l'avviso sopra qualsiasi app, se "Mostra sopra le altre app" è
+         * concesso. False se non è partito: la notifica c'è già comunque.
+         */
+        fun apri(context: Context, avvisi: List<Avviso>): Boolean {
+            if (avvisi.isEmpty() || !PermessiHelper.puoMostrareSopra(context)) return false
+            // NO_USER_ACTION: non è il ragazzo ad andarsene dall'app che sta
+            // usando (niente "onUserLeaveHint" per lei: un video non va in
+            // riquadro, un'app non crede di essere stata lasciata).
+            val intent = Intent(context, AvvisoActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
+                .putExtra(EXTRA_AVVISI, Avviso.inJson(avvisi))
+            return try {
+                context.startActivity(intent)
+                true
+            } catch (e: RuntimeException) {
+                false // Android l'ha rifiutato: resta la notifica
+            }
+        }
+    }
+}
+
+/**
+ * Stesse parole delle notifiche ("Oggi sei andato oltre", "Nessun blocco: è il
+ * tuo patto.") e stessa riga della schermata Oggi: nome, "31 min su 30 min",
+ * la barra piena, "1 min oltre". I pulsanti in basso, sotto il pollice.
+ */
+@Composable
+private fun AvvisoScreen(avvisi: List<Avviso>, onHoCapito: () -> Unit, onApriPactum: () -> Unit) {
+    Scaffold { padding ->
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Spazi.xl, vertical = Spazi.xxl),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                Text(
+                    text = stringResource(
+                        if (avvisi.all { it.fascia }) {
+                            R.string.notifica_sforamento_fascia_titolo
+                        } else {
+                            R.string.notifica_sforamento_limite_titolo
+                        },
+                    ),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                avvisi.forEach { SchedaAvviso(it) }
+                Text(
+                    text = stringResource(R.string.avviso_nessun_blocco),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spazi.xl, vertical = Spazi.l),
+                verticalArrangement = Arrangement.spacedBy(Spazi.s),
+            ) {
+                Button(onClick = onHoCapito, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.avviso_ho_capito))
+                }
+                OutlinedButton(onClick = onApriPactum, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.avviso_apri_pactum))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SchedaAvviso(avviso: Avviso) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(Spazi.l + Spazi.xs),
+            verticalArrangement = Arrangement.spacedBy(Spazi.s),
+        ) {
+            if (avviso.fascia) {
+                Text(
+                    text = stringResource(R.string.avviso_fascia_regola, avviso.dalle ?: "?", avviso.alle ?: "?"),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.avviso_fascia_uso, testoDurata(avviso.minutiOltre.toLong())),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                val usati = avviso.minutiUsati ?: 0
+                val limite = avviso.limiteEfficace ?: 0
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = avviso.nome ?: "?",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.oggi_minuti_su_limite,
+                            testoDurata(usati.toLong()),
+                            testoDurata(limite.toLong()),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                // Come in Oggi: oltre il limite la barra resta piena, l'eccedenza si dice a parole.
+                BarraUso(minuti = usati, limite = limite, massimoDelGiorno = limite)
+                Etichetta(stringResource(R.string.oggi_oltre, testoDurata(avviso.minutiOltre.toLong())))
+                avviso.limite?.let { base ->
+                    Text(
+                        text = if (avviso.bonus > 0) {
+                            stringResource(
+                                R.string.avviso_limite_dato_bonus,
+                                testoDurata(base.toLong()),
+                                testoDurata(avviso.bonus.toLong()),
+                            )
+                        } else {
+                            stringResource(R.string.avviso_limite_dato, testoDurata(base.toLong()))
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}

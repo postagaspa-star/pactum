@@ -83,6 +83,7 @@ fun OggiScreen(
     val stato by vm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val mostraSopra = rememberMostraSopra()
 
     // Prima lettura e rilettura a ogni ritorno in primo piano.
     LifecycleResumeEffect(Unit) {
@@ -175,6 +176,12 @@ fun OggiScreen(
                         modifier = Modifier.padding(bottom = Spazi.l),
                     )
                 }
+            }
+
+            // (0.9) Finché manca "Mostra sopra le altre app": chi aggiorna non
+            // ripassa dall'onboarding, e qui il permesso si vede.
+            if (!mostraSopra) {
+                item { SchedaMostraSopra() }
             }
 
             if (stato.regole.isNotEmpty()) {

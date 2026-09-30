@@ -22,6 +22,14 @@ object AvvisiLocali {
 
     const val CANALE_PATTO = "avvisi_patto"
 
+    /**
+     * (0.9) Lo sforamento quando l'avviso a tutto schermo non può partire
+     * (niente "Mostra sopra le altre app", una chiamata in corso): importanza
+     * alta, cioè il banner in alto sopra l'app in uso. Un canale nuovo apposta:
+     * l'importanza di un canale già creato non si cambia più da codice.
+     */
+    const val CANALE_SFORAMENTI = "sforamenti"
+
     /** Basi separate per non collidere tra loro né con la notifica fissa (FGS id 1). */
     private const val BASE_ID_SFORAMENTO = 1_000_000L
     private const val BASE_ID_SERVER = 2_000_000L
@@ -57,6 +65,18 @@ object AvvisiLocali {
         )
     }
 
+    private fun creaCanaleSforamenti(context: Context) {
+        NotificationManagerCompat.from(context).createNotificationChannel(
+            NotificationChannelCompat.Builder(
+                CANALE_SFORAMENTI,
+                NotificationManagerCompat.IMPORTANCE_HIGH,
+            )
+                .setName(context.getString(R.string.canale_sforamenti_nome))
+                .setDescription(context.getString(R.string.canale_sforamenti_descrizione))
+                .build(),
+        )
+    }
+
     /** Alza una notifica; false se il permesso manca (il chiamante NON segna l'avviso come fatto). */
     fun avvisa(
         context: Context,
@@ -64,10 +84,11 @@ object AvvisiLocali {
         titolo: String,
         testo: String,
         destinazione: String = MainActivity.DEST_OGGI,
+        canale: String = CANALE_PATTO,
     ): Boolean {
         if (!puoAvvisare(context)) return false
-        creaCanale(context)
-        val notifica = NotificationCompat.Builder(context, CANALE_PATTO)
+        if (canale == CANALE_SFORAMENTI) creaCanaleSforamenti(context) else creaCanale(context)
+        val notifica = NotificationCompat.Builder(context, canale)
             .setSmallIcon(R.drawable.ic_notifica_testimone)
             .setContentTitle(titolo)
             .setContentText(testo)

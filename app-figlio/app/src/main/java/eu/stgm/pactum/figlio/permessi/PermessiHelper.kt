@@ -2,6 +2,7 @@ package eu.stgm.pactum.figlio.permessi
 
 import android.Manifest
 import android.app.AppOpsManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -64,18 +65,53 @@ object PermessiHelper {
     fun intentImpostazioniNotifiche(context: Context): Intent =
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+
+    /**
+     * (0.9) "Mostra sopra le altre app": l'unico modo in cui Android (10+)
+     * lascia aprire l'avviso a tutto schermo mentre si usa un'altra app.
+     */
+    fun puoMostrareSopra(context: Context): Boolean = Settings.canDrawOverlays(context)
+
+    /**
+     * La schermata di sistema per concederlo. Da Android 11 il pacchetto viene
+     * ignorato e si apre l'elenco delle app: per questo i testi dicono di
+     * cercare Pactum nell'elenco.
+     */
+    fun intentMostraSopra(context: Context): Intent = Intent(
+        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+        Uri.parse("package:${context.packageName}"),
+    )
+
+    /**
+     * (0.9) Apre una schermata di sistema. Se il telefono non ce l'ha (marche
+     * che la tolgono o la spostano), la pagina dell'app in "Info app": da lì
+     * si arriva a tutto. Mai un crash per un tocco su "Apri impostazioni".
+     */
+    fun apri(context: Context, intent: Intent) {
+        try {
+            context.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            try {
+                context.startActivity(intentInfoApp(context))
+            } catch (e: ActivityNotFoundException) {
+                // nemmeno Info app: non resta niente da aprire
+            }
+        }
+    }
 }
 
 data class StatoPermessi(
     val accessoUso: Boolean,
     val esenzioneBatteria: Boolean,
     val notifiche: Boolean,
+    val mostraSopra: Boolean = false,
 ) {
     companion object {
         fun leggi(context: Context) = StatoPermessi(
             accessoUso = PermessiHelper.haAccessoUso(context),
             esenzioneBatteria = PermessiHelper.haEsenzioneBatteria(context),
             notifiche = PermessiHelper.haPermessoNotifiche(context),
+            mostraSopra = PermessiHelper.puoMostrareSopra(context),
         )
     }
 }

@@ -13,7 +13,6 @@ import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.aggiornamento.Aggiornatore
 import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
-import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.AncoraTempo
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.CodaEventi
@@ -25,10 +24,12 @@ import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.TipiEvento
 import eu.stgm.pactum.figlio.dati.TipiNotifica
 import eu.stgm.pactum.figlio.giornata.ChiusuraSerale
+import eu.stgm.pactum.figlio.misura.FotografiaUso
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.rete.PostinoClient
+import eu.stgm.pactum.figlio.servizio.PactumService
 import eu.stgm.pactum.figlio.siti.Domini
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.siti.RegistroSiti
@@ -78,20 +79,36 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         val configurazione = impostazioni.leggiConfigurazione()
         if (!configurazione.completa) return Result.success() // patto non ancora configurato
 
+        val accessoUso = PermessiHelper.haAccessoUso(context)
+        // (0.9) Il servizio del testimone, se non c'è: dopo un aggiornamento, un
+        // "Interrompi" dalle app attive o un'uccisione del sistema non riparte
+        // da solo, e senza di lui la sentinella torna al ritmo di questo worker.
+        // Se è già vivo non cambia niente. Android può rifiutare l'avvio da
+        // dietro le quinte (senza l'esenzione dalla batteria): si riprova al giro dopo.
+        if (accessoUso) {
+            try {
+                PactumService.avvia(context)
+            } catch (e: Exception) {
+                // avvio rifiutato: ci riprova il giro dopo
+            }
+        }
+
         // Manomissioni per revoca di permessi (tappa 6): rilevate PRIMA di leggere
         // gli eventi da consegnare, così l'eventuale evento parte in questo giro.
         rilevaManomissioniPermessi(context, impostazioni, coda)
 
         val oggi = LocalDate.now()
+        // (0.9) L'uso di oggi letto una volta: lo usano la fotografia e la sentinella.
+        val letturaOggi = if (accessoUso) UsageStatsReader(context).leggiGiorno(oggi) else null
 
-        if (PermessiHelper.haAccessoUso(context)) {
+        if (letturaOggi != null) {
             // Oggi + IERI: l'uso dopo l'ultima run del giorno andrebbe perso
             // per sempre (di notte il telefono dorme e la run di mezzanotte
             // non arriva). Il server tiene l'ultima fotografia per giorno,
             // quindi rimandare ieri è idempotente; la sostituzione per giorno
             // evita di riempire la coda di fotografie quasi identiche.
-            coda.sostituisciUsoGiornaliero(eventoUsoGiornaliero(context, oggi))
-            coda.sostituisciUsoGiornaliero(eventoUsoGiornaliero(context, oggi.minusDays(1)))
+            coda.sostituisciUsoGiornaliero(FotografiaUso.evento(context, letturaOggi))
+            coda.sostituisciUsoGiornaliero(FotografiaUso.evento(context, oggi.minusDays(1)))
         }
 
         // Siti visitati (v2.3): stessa filosofia dell'uso — fotografia
@@ -123,7 +140,9 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
                 // una serie di 12 giorni mai guardata è comunque un record.
                 impostazioni.aggiornaSerie(patto.giorniPatto())
             }
-            SentinellaPatto(context).valuta()
+            // Il patto è appena stato letto: niente seconda rilettura. L'uso è
+            // quello già letto per la fotografia.
+            SentinellaPatto(context).valuta(giornata = letturaOggi, rileggiPatto = false)
         }
         // Riserve del servizio: il bonus rimasto a metà e la chiusura della sera.
         runCatching { ConsegnaBonus.recupera(context) }
@@ -276,54 +295,6 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
             oggetto = oggetto,
             contesto = patto.contestoDispositivi(),
         ).testo
-    }
-
-    /**
-     * Fotografia cumulativa dell'uso di [giorno]. Il server, ricevendo più
-     * fotografie dello stesso giorno, tiene l'ultima: idempotente per design.
-     *
-     * (v2.2) La fotografia porta anche `nomi` (etichette leggibili: solo il
-     * telefono del figlio può risolvere i pacchetti) e `uso_categorie` (totali
-     * per categoria col mapping interno di CatalogoApp — LO STESSO che
-     * SentinellaPatto dà in pasto al valutatore, così "categoria:social" nella
-     * finestra e nel valutatore contano le stesse app).
-     */
-    private fun eventoUsoGiornaliero(context: Context, giorno: LocalDate): Evento {
-        // Filtrata una volta sola, prima di costruire il JSON: così totale,
-        // per-app, nomi e categorie raccontano tutti la stessa storia.
-        val uso = UsageStatsReader(context).usoDelGiorno(giorno)
-            .filter { CatalogoApp.contaNellUso(context, it.pacchetto) }
-        return Evento(
-            tipo = TipiEvento.USO_GIORNALIERO,
-            tsDevice = System.currentTimeMillis(),
-            dettagli = buildJsonObject {
-                put("giorno", giorno.toString())
-                put("uso_minuti", buildJsonObject {
-                    uso.forEach { put(it.pacchetto, JsonPrimitive(it.millisPrimoPiano / 60_000)) }
-                })
-                // Totale del giorno dai millisecondi veri, non dalla somma dei
-                // minuti arrotondati per app (contratto-api.md: totale_minuti).
-                put("totale_minuti", uso.sumOf { it.millisPrimoPiano } / 60_000)
-                // Solo etichette risolte per i pacchetti presenti in uso_minuti:
-                // se il pacchetto non si risolve, il server ripiega da solo sul
-                // nome pacchetto (contratto: uso_recente).
-                put("nomi", buildJsonObject {
-                    uso.forEach {
-                        val etichetta = CatalogoApp.etichettaValore(context, it.pacchetto)
-                        if (etichetta != it.pacchetto) put(it.pacchetto, JsonPrimitive(etichetta))
-                    }
-                })
-                // Per categoria: somma dei minuti arrotondati per app, così il
-                // totale di una categoria torna con le sue app in uso_minuti
-                // (stesso arrotondamento per-app di SentinellaPatto).
-                put("uso_categorie", buildJsonObject {
-                    uso.groupBy { CatalogoApp.categoriaDiPacchetto(context, it.pacchetto) }
-                        .forEach { (categoria, usi) ->
-                            put(categoria, JsonPrimitive(usi.sumOf { it.millisPrimoPiano / 60_000 }))
-                        }
-                })
-            },
-        )
     }
 
     /**

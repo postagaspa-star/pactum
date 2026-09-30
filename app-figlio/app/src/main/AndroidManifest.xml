@@ -23,6 +23,11 @@
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
+    <!-- (0.9) Avviso a tutto schermo quando si va oltre una regola: da Android
+         10 un'app dietro le quinte apre una schermata sopra l'app in uso solo
+         con "Mostra sopra le altre app", che il figlio concede (o no) dalle
+         Impostazioni. Senza, resta la notifica. Non blocca niente. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".PactumApp"
@@ -41,6 +46,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- (0.9) L'avviso a tutto schermo. Task suo (taskAffinity) e fuori
+             dalle recenti: "Ho capito" chiude e si torna all'app di prima, non
+             a una schermata di Pactum rimasta aperta sotto. singleTask: un
+             avviso nuovo mentre c'è ancora quello vecchio si aggiunge a lui. -->
+        <activity
+            android:name=".avviso.AvvisoActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="eu.stgm.pactum.figlio.avviso" />
 
         <service
             android:name=".servizio.PactumService"
@@ -64,12 +80,15 @@
             </intent-filter>
         </service>
 
+        <!-- (0.9) Anche MY_PACKAGE_REPLACED: dopo un aggiornamento il servizio
+             del testimone non riparte da solo. Arriva solo a Pactum stessa. -->
         <receiver
             android:name=".avvio.BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

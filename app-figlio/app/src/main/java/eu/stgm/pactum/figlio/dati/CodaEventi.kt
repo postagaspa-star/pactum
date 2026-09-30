@@ -21,9 +21,12 @@ class CodaEventi(context: Context) {
 
     suspend fun accoda(evento: Evento) = withContext(Dispatchers.IO) {
         mutex.withLock {
-            file.appendText(json.encodeToString(Evento.serializer(), evento) + "\n")
             val eventi = leggi()
-            if (eventi.size > MAX_EVENTI) scrivi(eventi.takeLast(MAX_EVENTI))
+            // (0.9) Lo stesso fatto rinato con lo stesso id (sforamento, se il
+            // processo è morto a metà): in coda una volta sola.
+            if (eventi.any { it.id == evento.id }) return@withLock
+            file.appendText(json.encodeToString(Evento.serializer(), evento) + "\n")
+            if (eventi.size + 1 > MAX_EVENTI) scrivi((eventi + evento).takeLast(MAX_EVENTI))
         }
     }
 

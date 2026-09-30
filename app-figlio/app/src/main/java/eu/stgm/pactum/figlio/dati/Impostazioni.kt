@@ -12,6 +12,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import eu.stgm.pactum.design.GiornoPatto
 import eu.stgm.pactum.figlio.giornata.Serie
 import eu.stgm.pactum.figlio.giornata.SerieSalvata
+import eu.stgm.pactum.figlio.valutatore.Segnalazioni
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -302,11 +303,9 @@ class Impostazioni(private val context: Context) {
     // più vecchie di una settimana si potano a ogni scrittura: la memoria serve
     // solo per il giorno corrente e i confini di mezzanotte, non per sempre.
 
-    private fun chiaveSforamento(regolaId: Long, giorno: String) = "$regolaId:$giorno"
-
-    suspend fun sforamentoGiaSegnalato(regolaId: Long, giorno: String): Boolean =
-        chiaveSforamento(regolaId, giorno) in
-            (context.dataStore.data.first()[Chiavi.SFORAMENTI_SEGNALATI].orEmpty())
+    /** Le chiavi già segnalate (Segnalazioni.chiave): la sentinella decide da qui cosa è nuovo. */
+    suspend fun leggiSforamentiSegnalati(): Set<String> =
+        context.dataStore.data.first()[Chiavi.SFORAMENTI_SEGNALATI].orEmpty()
 
     suspend fun registraSforamentoSegnalato(regolaId: Long, giorno: String) {
         context.dataStore.edit { p ->
@@ -315,7 +314,7 @@ class Impostazioni(private val context: Context) {
                 val g = chiave.substringAfter(':', "")
                 runCatching { LocalDate.parse(g) }.getOrNull()?.isBefore(soglia) != true
             }
-            p[Chiavi.SFORAMENTI_SEGNALATI] = (recenti + chiaveSforamento(regolaId, giorno)).toSet()
+            p[Chiavi.SFORAMENTI_SEGNALATI] = (recenti + Segnalazioni.chiave(regolaId, giorno)).toSet()
         }
     }
 

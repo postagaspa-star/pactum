@@ -194,9 +194,16 @@ object ConsegnaBonus {
                         codice = risposta.codice,
                         dettaglio = leggiDettaglioErrore(risposta.corpo),
                     )
+                    // (0.9) Concesso: prima nella copia locale, POI via dal
+                    // cassetto. Finché è nel cassetto la sentinella lo conta;
+                    // dopo, lo deve trovare nella copia anche se la rilettura
+                    // qui sotto non riesce (altrimenti uno sforamento falso).
+                    if (esito is EsitoBonus.Concesso) {
+                        PattoLocale(context).modifica { it.conBonus(bonus.regolaId, bonus.minuti, bonus.giorno) }
+                    }
                     if (esito !is EsitoBonus.SenzaRete) cassetta.svuota()
-                    // Il limite efficace di oggi è cambiato: la sentinella deve
-                    // saperlo subito, non al prossimo giro del worker.
+                    // Il limite efficace di oggi è cambiato: la copia buona è
+                    // quella del server, appena si riesce a leggerla.
                     if (esito is EsitoBonus.Concesso) {
                         postino.leggiPatto()?.let { PattoLocale(context).salva(it) }
                     }

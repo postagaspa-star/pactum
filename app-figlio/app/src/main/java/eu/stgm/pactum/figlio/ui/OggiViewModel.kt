@@ -18,9 +18,9 @@ import eu.stgm.pactum.figlio.dati.StatoBonus
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import eu.stgm.pactum.figlio.dati.zonaPatto
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
+import eu.stgm.pactum.figlio.misura.UsoContato
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.valutatore.MomentoFascia
-import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import eu.stgm.pactum.figlio.valutatore.Valutatore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -185,20 +185,25 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             }.orEmpty()
 
             val adesso = System.currentTimeMillis()
-            val uso = UsageStatsReader(context).usoDelGiorno()
-            val indice = SentinellaPatto.indiceUso(context, uso)
+            // Contato come lo contano la sentinella e la fotografia inviata al
+            // server: fuori Home, sistema senza icona e le due app Pactum, e un
+            // totale che durante il giorno non scende. Così il totale del figlio
+            // coincide con quello che il genitore vede nella finestra.
+            val oggi = LocalDate.now()
+            val uso = UsoContato.di(
+                context,
+                oggi,
+                UsageStatsReader(context).usoDelGiorno(oggi),
+                CatalogoApp.filtroUso(context),
+            )
             val bonusOggi = patto?.bonusValidiOggi(adesso).orEmpty()
             // (v3) Solo le regole di questo telefono e la vita reale: quelle del
             // computer si misurano sul computer.
             val regole = patto?.regoleDiQuestoDispositivo().orEmpty()
                 .filter { it.attiva }
-                .map { regola -> rigaRegola(regola, bonusOggi, indice::minuti, adesso) }
+                .map { regola -> rigaRegola(regola, bonusOggi, uso.indice::minuti, adesso) }
 
-            // Stesso filtro della fotografia inviata al server (BattitoWorker):
-            // fuori Home, sistema senza icona e le due app Pactum. Così il totale
-            // del figlio coincide con quello che il genitore vede nella finestra.
-            val contati = uso.filter { CatalogoApp.contaNellUso(context, it.pacchetto) }
-            val righe = contati
+            val righe = uso.perApp
                 .filter { it.millisPrimoPiano >= 60_000 } // sotto il minuto: rumore
                 .map {
                     RigaUso(
@@ -232,7 +237,7 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                     bonus = patto?.bonus,
                     fuso = patto?.fuso,
                     righe = righe,
-                    minutiTotali = contati.sumOf { u -> u.millisPrimoPiano } / 60_000,
+                    minutiTotali = uso.totaleMinuti,
                     bonusInSospeso = if (sospeso == null && finestra) aperto else sospeso,
                     finestraBonus = finestra,
                 )

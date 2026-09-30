@@ -24,10 +24,12 @@ data class AppInstallata(val pacchetto: String, val etichetta: String)
  * regola scelta col selettore non scatterebbe mai.
  *
  * `app_o_categoria` (contratto-api.md v2.1) è un nome pacchetto Android oppure
- * una chiave `categoria:*`; il match del valutatore è esatto sul pacchetto o
- * sulla categoria. La categoria di un pacchetto viene da ApplicationInfo.category
- * (mapping interno all'app). QUERY_ALL_PACKAGES è già nel manifest (sideload,
- * nessuna policy Play — architettura.md).
+ * una chiave `categoria:*` (dalla 0.9 anche "totale", tutto il telefono); il
+ * match del valutatore è esatto sul pacchetto o sulla categoria. La categoria
+ * di un pacchetto viene dalle eccezioni fisse (0.9: i messaggi fuori da ogni
+ * categoria, YouTube social) e poi da ApplicationInfo.category (mapping
+ * interno all'app). QUERY_ALL_PACKAGES è già nel manifest (sideload, nessuna
+ * policy Play — architettura.md).
  */
 object CatalogoApp {
 
@@ -42,18 +44,59 @@ object CatalogoApp {
 
     val CATEGORIE = listOf(CAT_SOCIAL, CAT_GIOCHI, CAT_VIDEO, CAT_MUSICA, CAT_ALTRO)
 
-    /** La categoria del contratto per una app, da ApplicationInfo.category. */
-    fun categoriaDi(info: ApplicationInfo): String = when (info.category) {
-        ApplicationInfo.CATEGORY_SOCIAL -> CAT_SOCIAL
-        ApplicationInfo.CATEGORY_GAME -> CAT_GIOCHI
-        ApplicationInfo.CATEGORY_VIDEO -> CAT_VIDEO
-        ApplicationInfo.CATEGORY_AUDIO -> CAT_MUSICA
-        else -> CAT_ALTRO
+    /**
+     * (0.9) Tutto il telefono: il limite vale su tutto l'uso del giorno, lo
+     * stesso `totale_minuti` della fotografia che arriva al genitore.
+     */
+    const val CHIAVE_TOTALE = "totale"
+
+    /** Solo la chiave esatta (minuscola, senza spazi): come la accetta il server. */
+    fun eTotale(valore: String): Boolean = valore == CHIAVE_TOTALE
+
+    /**
+     * (0.9, decisione di Andrea) Le eccezioni fisse, che valgono PRIMA della
+     * categoria dichiarata dall'app. L'unica tabella: da qui passano la
+     * valutazione delle regole di categoria, la schermata Oggi e le categorie
+     * della fotografia per il genitore.
+     * - Le app di messaggi non sono in nessuna categoria ("Altre app"): non
+     *   contano in social, giochi, video, musica. Discord, Instagram, Snapchat,
+     *   TikTok e simili restano social.
+     * - YouTube è social (dichiara "video").
+     */
+    private val CATEGORIE_FISSE: Map<String, String> = buildMap {
+        listOf(
+            "com.whatsapp", "com.whatsapp.w4b", // WhatsApp, WhatsApp Business
+            "org.telegram.messenger", "org.telegram.messenger.web", "org.thunderdog.challegram", // Telegram
+            "com.facebook.orca", "com.facebook.mlite", // Messenger, Messenger Lite
+            "org.thoughtcrime.securesms", // Signal
+            "com.google.android.apps.messaging", // Messaggi di Google
+            "com.samsung.android.messaging", // Messaggi Samsung
+            "com.viber.voip", // Viber
+            "com.tencent.mm", // WeChat
+            "jp.naver.line.android", // Line
+            "ch.threema.app", // Threema
+            "com.skype.raider", // Skype
+        ).forEach { put(it, CAT_ALTRO) }
+        put("com.google.android.youtube", CAT_SOCIAL)
     }
 
-    /** La categoria di un pacchetto installato, "categoria:altro" se ignoto. */
+    /**
+     * La categoria del contratto per un pacchetto: prima le eccezioni fisse,
+     * poi quella che l'app dichiara ([dichiarata] = ApplicationInfo.category,
+     * null se l'app non si trova).
+     */
+    fun categoriaDi(pacchetto: String, dichiarata: Int?): String =
+        CATEGORIE_FISSE[pacchetto] ?: when (dichiarata) {
+            ApplicationInfo.CATEGORY_SOCIAL -> CAT_SOCIAL
+            ApplicationInfo.CATEGORY_GAME -> CAT_GIOCHI
+            ApplicationInfo.CATEGORY_VIDEO -> CAT_VIDEO
+            ApplicationInfo.CATEGORY_AUDIO -> CAT_MUSICA
+            else -> CAT_ALTRO
+        }
+
+    /** La categoria di un pacchetto, "categoria:altro" se ignoto. */
     fun categoriaDiPacchetto(context: Context, pacchetto: String): String =
-        infoApplicazione(context, pacchetto)?.let { categoriaDi(it) } ?: CAT_ALTRO
+        categoriaDi(pacchetto, infoApplicazione(context, pacchetto)?.category)
 
     /**
      * Le app con un'icona nel launcher (quelle che il ragazzo riconosce), la
@@ -73,7 +116,8 @@ object CatalogoApp {
     }
 
     /**
-     * Vero se il tempo passato su questo pacchetto va nella fotografia d'uso.
+     * Il filtro della fotografia d'uso: vero se il tempo passato su un pacchetto
+     * conta (nella fotografia, nel totale, nelle regole e nelle fasce).
      *
      * Fuori restano tre cose che non sono "tempo su una app" e che nessun altro
      * strumento (Family Link compreso) conta, e che gonfiavano il totale:
@@ -84,12 +128,24 @@ object CatalogoApp {
      *    il proprio patto.
      * Il criterio non è una lista di nomi (cambia da telefono a telefono) ma due
      * domande al sistema: sei tu il launcher? hai un'icona da cui ti si avvia?
+     *
+     * (0.9) Un filtro vale per un giro intero: la schermata Home si risolve una
+     * volta sola, e ogni pacchetto si chiede al sistema una volta sola (le fasce
+     * lo chiedono per ogni sua sessione). Non è thread-safe: un filtro per giro.
      */
-    fun contaNellUso(context: Context, pacchetto: String): Boolean {
-        if (pacchetto == context.packageName) return false
-        if (pacchetto in PACCHETTI_PACTUM) return false
-        if (pacchetto == launcherPredefinito(context)) return false
-        return context.packageManager.getLaunchIntentForPackage(pacchetto) != null
+    fun filtroUso(context: Context): (String) -> Boolean {
+        val pm = context.packageManager
+        val mio = context.packageName
+        val home = launcherPredefinito(context)
+        val risposte = HashMap<String, Boolean>()
+        return { pacchetto ->
+            risposte.getOrPut(pacchetto) {
+                pacchetto != mio &&
+                    pacchetto !in PACCHETTI_PACTUM &&
+                    pacchetto != home &&
+                    pm.getLaunchIntentForPackage(pacchetto) != null
+            }
+        }
     }
 
     /** Il pacchetto della schermata Home in uso (varia per marca e per scelta). */
@@ -109,12 +165,13 @@ object CatalogoApp {
     private val PACCHETTI_PACTUM = setOf("eu.stgm.pactum.figlio", "eu.stgm.pactum.genitore")
 
     /**
-     * L'etichetta leggibile di un valore `app_o_categoria`: il nome della
-     * categoria, oppure l'etichetta dell'app dal pacchetto. Se il pacchetto non
-     * è (più) installato, l'ultimo nome che l'app gli ha visto; solo se non
-     * l'ha mai visto, il valore grezzo (o un vecchio testo libero).
+     * L'etichetta leggibile di un valore `app_o_categoria`: "Tutto il telefono",
+     * il nome della categoria, oppure l'etichetta dell'app dal pacchetto. Se il
+     * pacchetto non è (più) installato, l'ultimo nome che l'app gli ha visto;
+     * solo se non l'ha mai visto, il valore grezzo (o un vecchio testo libero).
      */
     fun etichettaValore(context: Context, valore: String): String {
+        if (eTotale(valore)) return context.getString(R.string.chiave_totale)
         if (valore.startsWith(PREFISSO_CATEGORIA)) return nomeCategoria(context, valore)
         val info = infoApplicazione(context, valore) ?: return ultimoNome(context, valore) ?: valore
         val etichetta = context.packageManager.getApplicationLabel(info).toString()

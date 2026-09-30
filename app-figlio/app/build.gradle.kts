@@ -27,10 +27,11 @@ android {
         applicationId = "eu.stgm.pactum.figlio"
         minSdk = 26
         targetSdk = 35
-        // v2.3: osservazione dei siti visitati (solo domini). Nuova funzione =
-        // nuovo versionCode, altrimenti l'auto-aggiornamento non la propone.
-        versionCode = 8
-        versionName = "0.8.0"
+        // 0.9: sentinella ogni minuto a schermo acceso, avviso a tutto schermo,
+        // limite su tutto il telefono. Nuova funzione = nuovo versionCode,
+        // altrimenti l'auto-aggiornamento non la propone.
+        versionCode = 9
+        versionName = "0.9.0"
     }
 
     signingConfigs {

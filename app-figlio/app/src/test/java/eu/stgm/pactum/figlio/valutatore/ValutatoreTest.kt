@@ -163,6 +163,78 @@ class ValutatoreTest {
         assertEquals(0L, indice.minuti("com.android.launcher3"))
     }
 
+    // --- (0.9) il limite su tutto il telefono ---
+
+    @Test
+    fun `tutto il telefono conta lo stesso numero del totale della fotografia`() {
+        // 30 min 59 s + 20 min 59 s: per app fanno 30 + 20 = 50, ma il totale del
+        // giorno (totale_minuti della fotografia) somma i millisecondi veri: 51.
+        // La Home e Pactum restano fuori, come nella fotografia.
+        val uso = listOf(
+            UsoApp("com.zhiliaoapp.musically", 30 * 60_000L + 59_000L),
+            UsoApp("com.instagram.android", 20 * 60_000L + 59_000L),
+            UsoApp("com.android.launcher3", 40 * 60_000L),
+            UsoApp("eu.stgm.pactum.figlio", 10 * 60_000L),
+        )
+        val fotografia = setOf("com.zhiliaoapp.musically", "com.instagram.android")
+        val indice = IndiceUso.daUso(
+            uso = uso,
+            contaNellUso = { it in fotografia },
+            categoriaDi = { "categoria:social" },
+        )
+        // Lo stesso calcolo di totale_minuti in FotografiaUso.
+        val totaleMinuti = uso.filter { it.pacchetto in fotografia }.sumOf { it.millisPrimoPiano } / 60_000
+        assertEquals(51L, totaleMinuti)
+        assertEquals(totaleMinuti, indice.minuti("totale"))
+        assertEquals(50L, indice.minuti("categoria:social"))
+    }
+
+    @Test
+    fun `tutto il telefono vale solo con la chiave esatta, come per il server`() {
+        val indice = IndiceUso(uso = listOf("com.zhiliaoapp.musically" to 30 * 60_000L), categoriaDi = { "categoria:social" })
+        assertEquals(30L, indice.minuti("totale"))
+        assertEquals(0L, indice.minuti(" Totale "))
+        assertEquals(0L, indice.minuti("TOTALE"))
+    }
+
+    @Test
+    fun `tutto il telefono non scende sotto il piu' alto gia' visto oggi`() {
+        // Un'app usata 40 minuti e poi disinstallata: i suoi minuti non ci sono
+        // più, ma il totale del giorno resta quello già visto (come sul server).
+        val indice = IndiceUso(
+            uso = listOf("org.telegram.messenger" to 20 * 60_000L),
+            categoriaDi = { "categoria:altro" },
+            totaleMinimo = 60L,
+        )
+        assertEquals(60L, indice.minuti("totale"))
+        assertEquals(60L, indice.totaleMinuti)
+        // Le app e le categorie restano quelle misurate adesso.
+        assertEquals(20L, indice.minuti("categoria:altro"))
+    }
+
+    @Test
+    fun `una regola su tutto il telefono va oltre come le altre, bonus compreso`() {
+        // 70 min + 60 min 30 s = 130 minuti di telefono oggi, limite 2 ore.
+        val indice = IndiceUso(
+            uso = listOf("com.zhiliaoapp.musically" to 70 * 60_000L, "org.telegram.messenger" to 60 * 60_000L + 30_000L),
+            categoriaDi = { "categoria:altro" },
+        )
+        fun valuta(bonus: Map<String, Int>) = Valutatore.valuta(
+            regole = listOf(limite(4, "totale", 120)),
+            bonusOggiPerRegola = bonus,
+            usoMinutiEtichetta = indice::minuti,
+            usoMinutiIntervallo = { _, _ -> 0L },
+            now = ms("2026-09-30T21:00:00"),
+            zona = roma,
+        )
+        val oltre = valuta(emptyMap()).single()
+        assertEquals(4L, oltre.regolaId)
+        assertEquals(120, oltre.limiteEfficace)
+        assertEquals(10, oltre.minutiOltre)
+        // +15 di bonus su questa regola: 130 su 135 è dentro.
+        assertEquals(emptyList<Sforamento>(), valuta(mapOf("4" to 15)))
+    }
+
     // --- il bonus in sospeso nella valutazione (sentinella) ---
 
     @Test

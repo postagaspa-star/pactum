@@ -567,8 +567,9 @@ private fun CampoTesto(
 /**
  * Il selettore di `app_o_categoria` (contratto v2.1): niente più testo libero
  * (una regola scritta a mano non troverebbe mai un pacchetto e non scatterebbe
- * mai in silenzio). Si sceglie una categoria fissa o un'app installata dal
- * selettore; si salva la chiave `categoria:*` o il nome pacchetto.
+ * mai in silenzio). Si sceglie tutto il telefono (0.9), una categoria fissa o
+ * un'app installata dal selettore; si salva "totale", la chiave `categoria:*`
+ * o il nome pacchetto.
  */
 @Composable
 private fun SelettoreAppOCategoria(valore: String, onScegli: (String) -> Unit) {
@@ -603,6 +604,10 @@ private fun DialogoSceltaApp(onScegli: (String) -> Unit, onAnnulla: () -> Unit) 
         title = { Text(stringResource(R.string.regola_scegli_app_titolo)) },
         text = {
             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
+                // (0.9) In cima: tutto l'uso del telefono, lo stesso totale che vede il genitore.
+                item(key = CatalogoApp.CHIAVE_TOTALE) {
+                    RigaScelta(stringResource(R.string.chiave_totale)) { onScegli(CatalogoApp.CHIAVE_TOTALE) }
+                }
                 item { TitoloSezione(stringResource(R.string.regola_sezione_categorie)) }
                 items(CatalogoApp.CATEGORIE, key = { it }) { chiave ->
                     RigaScelta(CatalogoApp.nomeCategoria(context, chiave)) { onScegli(chiave) }

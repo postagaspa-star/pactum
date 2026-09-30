@@ -39,9 +39,11 @@ import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.permessi.StatoPermessi
 
 /**
- * Checklist dei tre permessi. Ogni passo mostra lo stato e apre la schermata
- * di sistema giusta; il passo sull'accesso ai dati di utilizzo include la
- * guida alle impostazioni con limitazioni di Android 15/16 (architettura.md).
+ * Checklist dei permessi: tre che servono, e (0.9) un quarto facoltativo,
+ * "Mostra sopra le altre app", per l'avviso a tutto schermo. Ogni passo mostra
+ * lo stato e apre la schermata di sistema giusta; i passi sull'accesso ai dati
+ * di utilizzo e su "Mostra sopra le altre app" includono la guida alle
+ * impostazioni con limitazioni di Android 15/16 (architettura.md).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,8 +73,8 @@ fun OnboardingScreen(statoPermessi: StatoPermessi, onAggiorna: () -> Unit) {
                 descrizione = stringResource(R.string.passo_uso_descrizione),
                 fatto = statoPermessi.accessoUso,
                 etichettaAzione = stringResource(R.string.passo_apri_impostazioni),
-                onAzione = { context.startActivity(PermessiHelper.intentAccessoUso()) },
-                contenutoExtra = { AiutoRestrizioni() },
+                onAzione = { PermessiHelper.apri(context, PermessiHelper.intentAccessoUso()) },
+                contenutoExtra = { AiutoRestrizioni(stringResource(R.string.aiuto_restrizioni_testo)) },
             )
 
             PassoPermesso(
@@ -80,7 +82,7 @@ fun OnboardingScreen(statoPermessi: StatoPermessi, onAggiorna: () -> Unit) {
                 descrizione = stringResource(R.string.passo_batteria_descrizione),
                 fatto = statoPermessi.esenzioneBatteria,
                 etichettaAzione = stringResource(R.string.passo_apri_impostazioni),
-                onAzione = { context.startActivity(PermessiHelper.intentEsenzioneBatteria(context)) },
+                onAzione = { PermessiHelper.apri(context, PermessiHelper.intentEsenzioneBatteria(context)) },
             )
 
             PassoPermesso(
@@ -92,9 +94,19 @@ fun OnboardingScreen(statoPermessi: StatoPermessi, onAggiorna: () -> Unit) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         lanciaPermessoNotifiche.launch(Manifest.permission.POST_NOTIFICATIONS)
                     } else {
-                        context.startActivity(PermessiHelper.intentImpostazioniNotifiche(context))
+                        PermessiHelper.apri(context, PermessiHelper.intentImpostazioniNotifiche(context))
                     }
                 },
+            )
+
+            // (0.9) Facoltativo: senza, l'avviso arriva come banner in alto.
+            PassoPermesso(
+                titolo = stringResource(R.string.passo_mostra_sopra_titolo),
+                descrizione = stringResource(R.string.passo_mostra_sopra_descrizione),
+                fatto = statoPermessi.mostraSopra,
+                etichettaAzione = stringResource(R.string.passo_apri_impostazioni),
+                onAzione = { PermessiHelper.apri(context, PermessiHelper.intentMostraSopra(context)) },
+                contenutoExtra = { AiutoRestrizioni(stringResource(R.string.aiuto_mostra_sopra_testo)) },
             )
 
             OutlinedButton(onClick = onAggiorna, modifier = Modifier.fillMaxWidth()) {
@@ -148,9 +160,13 @@ private fun PassoPermesso(
     }
 }
 
-/** "Se Android ti blocca…": la guida passo-passo alle impostazioni con limitazioni. */
+/**
+ * "Se Android ti blocca…": la guida passo-passo alle impostazioni con
+ * limitazioni di Android 15/16 per le app installate a mano. [testo] = i passi
+ * per quel permesso (accesso ai dati di utilizzo, o "Mostra sopra le altre app").
+ */
 @Composable
-private fun AiutoRestrizioni() {
+internal fun AiutoRestrizioni(testo: String) {
     val context = LocalContext.current
     var aperto by rememberSaveable { mutableStateOf(false) }
 
@@ -160,10 +176,10 @@ private fun AiutoRestrizioni() {
     if (aperto) {
         Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
             Text(
-                text = stringResource(R.string.aiuto_restrizioni_testo),
+                text = testo,
                 style = MaterialTheme.typography.bodySmall,
             )
-            OutlinedButton(onClick = { context.startActivity(PermessiHelper.intentInfoApp(context)) }) {
+            OutlinedButton(onClick = { PermessiHelper.apri(context, PermessiHelper.intentInfoApp(context)) }) {
                 Text(stringResource(R.string.aiuto_apri_info_app))
             }
         }

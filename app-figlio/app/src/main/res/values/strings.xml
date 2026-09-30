@@ -4,13 +4,19 @@
 
     <!-- Onboarding -->
     <string name="onboarding_titolo">Benvenuto in Pactum</string>
-    <string name="onboarding_intro">Pactum è un testimone, non un carceriere: misura l\'uso delle app e lo racconta al patto, senza bloccare niente. Per funzionare servono tre permessi.</string>
+    <string name="onboarding_intro">Pactum è un testimone, non un carceriere: misura l\'uso delle app e lo racconta al patto, senza bloccare niente. Per funzionare servono tre permessi; il quarto è facoltativo.</string>
     <string name="passo_uso_titolo">1. Accesso ai dati di utilizzo</string>
     <string name="passo_uso_descrizione">Serve per misurare quanto tempo passi nelle app. Senza questo permesso Pactum non può fare da testimone.</string>
     <string name="passo_batteria_titolo">2. Esenzione dalla batteria</string>
     <string name="passo_batteria_descrizione">Evita che Android sospenda Pactum e interrompa la registrazione dell\'uso.</string>
     <string name="passo_notifiche_titolo">3. Notifiche</string>
     <string name="passo_notifiche_descrizione">Per la notifica fissa del testimone e gli avvisi del patto.</string>
+    <!-- (0.9) Il permesso "Mostra sopra le altre app": da Android 11 si apre
+         l'elenco delle app, non la pagina di Pactum. -->
+    <string name="passo_mostra_sopra_titolo">4. Mostra sopra le altre app (facoltativo)</string>
+    <string name="passo_mostra_sopra_descrizione">Per l\'avviso a tutto schermo quando vai oltre una regola: si apre sopra l\'app che stai usando e si chiude sempre, non blocca niente. Senza, l\'avviso arriva in alto sullo schermo. Nell\'elenco che si apre cerca Pactum e attivalo.</string>
+    <!-- La stessa guida di aiuto_restrizioni_testo, per "Mostra sopra le altre app". -->
+    <string name="aiuto_mostra_sopra_testo">Su Android 15 e 16, con l\'app installata a mano (dal browser o da un file), l\'interruttore “Mostra sopra le altre app” può partire bloccato dalle impostazioni con limitazioni. Se hai già sbloccato Pactum per l\'accesso ai dati di utilizzo, di solito non serve.\n\n1. Tocca “Apri impostazioni” e prova ad attivare Pactum: comparirà “Impostazione non disponibile”.\n2. Torna qui e tocca “Apri info app”.\n3. Nella pagina dell\'app tocca il menu ⋮ in alto a destra.\n4. Scegli “Consenti impostazioni con limitazioni” e conferma con PIN o impronta.\n5. Torna su “Mostra sopra le altre app” e attiva Pactum.</string>
     <string name="passo_apri_impostazioni">Apri impostazioni</string>
     <string name="passo_fatto">Fatto</string>
     <string name="passo_da_fare">Da fare</string>
@@ -118,6 +124,10 @@
     <string name="oggi_fascia_finita">per oggi la fascia è finita</string>
     <string name="oggi_fascia_non_oggi">oggi la fascia non c\'è</string>
     <string name="oggi_vita_reale_diario">Segna nel Diario</string>
+    <!-- (0.9) La scheda che resta in Oggi finché manca "Mostra sopra le altre app". -->
+    <string name="oggi_avviso_titolo">Avviso a tutto schermo</string>
+    <string name="oggi_avviso_testo">Quando vai oltre una regola, Pactum può dirtelo a tutto schermo, sopra l\'app che stai usando. Si chiude sempre: non blocca niente. Per farlo serve il permesso «Mostra sopra le altre app». Senza, l\'avviso arriva in alto sullo schermo.</string>
+    <string name="oggi_avviso_passi">1. Tocca «Apri impostazioni».\n2. Nell\'elenco che si apre cerca Pactum e attivalo.\n3. Torna qui: questa scheda sparisce da sola.</string>
     <string name="oggi_sezione_tempo">DOVE È FINITO IL TEMPO</string>
     <!-- (v3) Con altri dispositivi: questo elenco è solo del telefono. -->
     <string name="oggi_sezione_tempo_telefono">DOVE È FINITO IL TEMPO SUL TELEFONO</string>
@@ -208,6 +218,13 @@
     <string name="impostazioni_serale_attiva">Ogni sera, una notifica</string>
     <string name="impostazioni_serale_ora">Ogni sera alle</string>
     <string name="impostazioni_serale_spiegazione">Una notifica sola: se la giornata è stata dentro le tue regole, o dove è andata oltre. Si calcola sul telefono.</string>
+    <!-- (0.9) L'avviso a tutto schermo: il permesso di sistema è l'interruttore. -->
+    <string name="impostazioni_sezione_avviso">Quando vai oltre una regola</string>
+    <string name="impostazioni_avviso_riga">Avviso a tutto schermo</string>
+    <string name="impostazioni_avviso_attivo">Attivo</string>
+    <string name="impostazioni_avviso_spento">Spento</string>
+    <string name="impostazioni_avviso_spiegazione_attivo">Oltre alla notifica si apre un avviso sopra l\'app che stai usando. Si chiude sempre con «Ho capito»: non blocca niente.</string>
+    <string name="impostazioni_avviso_spiegazione_spento">Per ora arriva solo una notifica in alto sullo schermo. Per l\'avviso a tutto schermo Pactum ha bisogno di «Mostra sopra le altre app»: tocca «Apri impostazioni», cerca Pactum nell\'elenco e attivalo.</string>
     <string name="impostazioni_cosa_vede_testo">Tutto quello che arriva nella sua app, e quello che resta fuori.</string>
     <string name="impostazioni_cosa_vede_apri">Guarda l\'elenco</string>
     <string name="azione_salva">Salva</string>
@@ -246,6 +263,10 @@
     <!-- (v3) Le chiavi del computer: exe:minecraft.exe → "Minecraft" (nome
          leggibile dal server, sennò il file senza .exe); sito:youtube.com → questa. -->
     <string name="chiave_sito">%1$s (sito)</string>
+    <!-- (0.9) La regola sul totale del giorno (app_o_categoria = "totale"): lo
+         stesso totale che vede il genitore. Su un computer (nelle proposte). -->
+    <string name="chiave_totale">Tutto il telefono</string>
+    <string name="chiave_totale_computer">Tutto il computer</string>
     <!-- (v3) Su quale altro dispositivo sta una regola, dentro una frase -->
     <string name="dispositivo_sul_computer">sul computer</string>
     <string name="dispositivo_sul_computer_nome">sul computer “%1$s”</string>
@@ -404,8 +425,23 @@
     <string name="canale_patto_descrizione">Le novità del tuo patto: proposte, conferme, promemoria sui limiti e com\'è andata la giornata.</string>
     <string name="notifica_sforamento_limite_titolo">Oggi sei andato oltre</string>
     <string name="notifica_sforamento_limite_testo">%1$s: oggi sei andato %2$d min oltre il limite che ti sei dato (%3$d min). Nessun blocco: è il tuo patto.</string>
+    <!-- (0.9) Visto appena dopo mezzanotte: l'ultimo minuto di ieri. -->
+    <string name="notifica_sforamento_limite_ieri_titolo">Ieri sei andato oltre</string>
+    <string name="notifica_sforamento_limite_ieri_testo">%1$s: ieri sei andato %2$d min oltre il limite che ti sei dato (%3$d min). Nessun blocco: è il tuo patto.</string>
+    <!-- (0.9) Il canale del banner in alto, quando l'avviso a tutto schermo non parte. -->
+    <string name="canale_sforamenti_nome">Quando vai oltre una regola</string>
+    <string name="canale_sforamenti_descrizione">Un avviso in alto sullo schermo quando vai oltre una regola e l\'avviso a tutto schermo non può aprirsi.</string>
     <string name="notifica_sforamento_fascia_titolo">Hai usato il telefono in una fascia che ti sei imposto</string>
     <string name="notifica_sforamento_fascia_testo">Hai usato il telefono %1$d min in una fascia che ti sei imposto (%2$s–%3$s). Nessun blocco: è il tuo patto.</string>
+    <!-- (0.9) L'avviso a tutto schermo: i titoli sono quelli delle notifiche qui
+         sopra, la riga della regola è quella di Oggi. Si chiude sempre. -->
+    <string name="avviso_limite_dato">Il limite che ti sei dato: %1$s al giorno.</string>
+    <string name="avviso_limite_dato_bonus">Il limite che ti sei dato: %1$s al giorno, più %2$s di bonus oggi.</string>
+    <string name="avviso_fascia_regola">Niente telefono dalle %1$s alle %2$s</string>
+    <string name="avviso_fascia_uso">Oggi %1$s di telefono dentro questa fascia.</string>
+    <string name="avviso_nessun_blocco">Nessun blocco: è il tuo patto.</string>
+    <string name="avviso_ho_capito">Ho capito</string>
+    <string name="avviso_apri_pactum">Apri Pactum</string>
     <string name="tipo_nuova_proposta">Nuova proposta del genitore</string>
     <string name="tipo_verdetto">Esito della tua dichiarazione</string>
     <string name="tipo_segno">Un segno dal genitore</string>

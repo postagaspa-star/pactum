@@ -24,4 +24,8 @@ APK risultante: `app\build\outputs\apk\debug\app-debug.apk`.
 
 - Con cavo: `adb install app\build\outputs\apk\debug\app-debug.apk`
 - Oppure copiare l'APK sul telefono e aprirlo (sideload). Nessun permesso
-  speciale: solo notifiche (richieste alla prima apertura su Android 13+).
+  speciale: le notifiche (richieste alla prima apertura su Android 13+) e,
+  dalla 0.9, l'esenzione dalla batteria (una spiegazione, poi la domanda di
+  Android; resta anche in Impostazioni → Avvisi del patto, col passo per il
+  risparmio batteria della marca). Le sveglie esatte del giro (USE_EXACT_ALARM,
+  e SCHEDULE_EXACT_ALARM su Android 12) si concedono da sole all'installazione.

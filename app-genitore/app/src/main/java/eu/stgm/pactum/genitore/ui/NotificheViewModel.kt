@@ -34,6 +34,10 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
         val primaLetturaFatta: Boolean = false,
         /** "Segna come letta" è fallita: da dire UNA volta, poi consumare. */
         val lettaFallita: Boolean = false,
+        /** (0.9) "Segna tutte come lette" è in corso: il pulsante si spegne. */
+        val segnaturaInCorso: Boolean = false,
+        /** (0.9) Quante non si sono segnate con "Segna tutte": da dire UNA volta, poi consumare. */
+        val tutteFallite: Int? = null,
     )
 
     private val _stato = MutableStateFlow(StatoNotifiche())
@@ -121,6 +125,42 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun consumaLettaFallita() {
         _stato.value = _stato.value.copy(lettaFallita = false)
+    }
+
+    /**
+     * (0.9) "Segna tutte come lette": una richiesta per notifica (il contratto
+     * non ha una segnatura in blocco), al massimo SEGNATURE_IN_PARALLELO alla
+     * volta. Quelle segnate spariscono dalla lista e dalla tendina; quelle che
+     * non si sono segnate restano, e si dice quante. È un gesto del genitore:
+     * la vedetta non segna mai niente da sola.
+     */
+    fun segnaTutteLette() {
+        val daSegnare = _stato.value.notifiche
+        if (daSegnare.isEmpty() || _stato.value.segnaturaInCorso) return
+        _stato.value = _stato.value.copy(segnaturaInCorso = true)
+        viewModelScope.launch {
+            val configurazione = Impostazioni(getApplication()).leggiConfigurazione()
+            val postino = PostinoClient(configurazione)
+            val esiti = perOgnuna(daSegnare, SEGNATURE_IN_PARALLELO) { notifica ->
+                notifica.id to postino.segnaLetta(notifica.id)
+            }
+            val segnate = esiti.filter { it.second }.map { it.first }.toSet()
+            // Via anche le notifiche di sistema gemelle: letta è letta.
+            val gestore = NotificationManagerCompat.from(getApplication())
+            segnate.forEach { gestore.cancel(it.toInt()) }
+            val fallite = esiti.size - segnate.size
+            _stato.value = _stato.value.copy(
+                notifiche = _stato.value.notifiche.filterNot { it.id in segnate },
+                segnaturaInCorso = false,
+                tutteFallite = fallite.takeIf { it > 0 },
+            )
+            // Letto tutto: anche il riassunto "Novità da leggere" non ha più niente da dire.
+            if (_stato.value.notifiche.isEmpty()) gestore.cancel(ID_RIASSUNTO)
+        }
+    }
+
+    fun consumaTutteFallite() {
+        _stato.value = _stato.value.copy(tutteFallite = null)
     }
 
     /** Dopo un cambio di server: notifiche e regole di prima sono di un altro server. */

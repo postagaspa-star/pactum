@@ -303,6 +303,30 @@ class LogicaFamigliaTest {
         }
     }
 
+    @Test
+    fun `la notifica fissa del servizio non prende mai l'id di un altro avviso`() {
+        (0L..500L).forEach { id ->
+            assertTrue("id $id", idDigest(id) != ID_NOTIFICA_FISSA)
+            assertTrue("id $id", idAvvisoSilenzio(id) != ID_NOTIFICA_FISSA)
+        }
+        assertTrue(ID_NOTIFICA_FISSA != ID_AVVISO_UNICO && ID_NOTIFICA_FISSA != ID_DIGEST_07)
+        // Sotto i digest (1.900.000.000 in su) e i silenzi, e positivo.
+        assertTrue(ID_NOTIFICA_FISSA in 1..1_899_999_999)
+        assertTrue(ID_RIASSUNTO != ID_NOTIFICA_FISSA && ID_RIASSUNTO in 1..1_899_999_999)
+    }
+
+    @Test
+    fun `per fare posto si tolgono solo avvisi del patto e il riassunto, mai silenzi o digest`() {
+        assertTrue(avvisoTogliibile(7))
+        assertTrue(avvisoTogliibile(123_456))
+        assertTrue(avvisoTogliibile(ID_RIASSUNTO))
+        assertFalse(avvisoTogliibile(ID_NOTIFICA_FISSA))
+        assertFalse(avvisoTogliibile(idDigest(1)))
+        assertFalse(avvisoTogliibile(idAvvisoSilenzio(1)))
+        assertFalse(avvisoTogliibile(ID_AVVISO_UNICO))
+        assertFalse(avvisoTogliibile(ID_DIGEST_07))
+    }
+
     // --- il passaggio dalla 0.7 ------------------------------------------------------------
 
     private val silenzioDella07 = SilenzioNoto(silente = true, ultimoBattito = "2026-09-24T09:00:00+00:00")

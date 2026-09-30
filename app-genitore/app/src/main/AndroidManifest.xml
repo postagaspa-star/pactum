@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -8,6 +9,29 @@
          PackageInstaller. La firma con la stessa chiave e' la garanzia
          d'integrita' (architettura.md). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- (0.9) Pactum sempre attivo: servizio in primo piano specialUse (come
+         l'app del figlio), svegliato circa ogni minuto da una sveglia di
+         Android che tiene sveglio il processore solo il tempo del giro. La
+         rete si controlla prima di chiedere al server. L'esenzione dalla
+         batteria si chiede al genitore con una spiegazione (sideload: nessuna
+         policy Play si applica). Android può comunque ritardare le sveglie a
+         telefono fermo, e certe marche fermano le app: le Impostazioni lo
+         dicono e aiutano a sistemare. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        tools:ignore="BatteryLife" />
+    <!-- (0.9) Sveglia ESATTA del giro: USE_EXACT_ALARM da Android 13 (concesso
+         all'installazione; la regola del Play Store sugli usi ammessi non conta
+         per un'app installata a mano), SCHEDULE_EXACT_ALARM solo su Android 12.
+         Se Android non la concede, si ripiega sulla sveglia inesatta. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
 
     <application
         android:name=".PactumApp"
@@ -27,12 +51,35 @@
             </intent-filter>
         </activity>
 
+        <!-- (0.9) La vedetta sempre attiva: un giro circa ogni minuto, anche a
+             schermo spento, per avvisare il genitore quando succede qualcosa
+             nel patto (quanto presto dipende da quello che Android concede). -->
+        <service
+            android:name=".servizio.VedettaService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Avvisi al genitore sul patto familiare figlio-genitore: controllo delle novita' del patto circa ogni minuto" />
+        </service>
+
+        <!-- (0.9) La sveglia del giro. Interna: la invoca solo il PendingIntent
+             che diamo ad AlarmManager. Se il servizio non c'è più (fermato da
+             «App attive», o chiuso da Android) lo rimette in piedi. -->
+        <receiver
+            android:name=".servizio.SvegliaReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- All'accensione del telefono e (0.9) subito dopo un aggiornamento
+             dell'app: il worker e il servizio ripartono da soli. -->
         <receiver
             android:name=".avvio.BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

@@ -265,6 +265,15 @@ data class UsoGiorno(
     @SerialName("aggiornato_ts") val aggiornatoTs: String? = null,
     val app: List<UsoApp> = emptyList(),
     val categorie: List<UsoCategoria> = emptyList(),
+    // (v3.3) Il limite su TUTTO il dispositivo ("Tutto il telefono": una regola
+    // limite_tempo con app_o_categoria = "totale"), accanto al totale del giorno
+    // e mai in `app` o `categorie`. Stesso significato che in UsoApp: limite
+    // base, e i minuti bonus concessi quel giorno su quella regola. Ci sono solo
+    // se il dispositivo ha una regola sul totale attiva e il giorno ha la sua
+    // fotografia; assenti (server vecchio, nessuna regola) = null, null, 0.
+    val limite: Int? = null,
+    @SerialName("regola_id") val regolaId: Long? = null,
+    val bonus: Int = 0,
 )
 
 /** Una app della fotografia: `nome` risolto sul telefono del figlio (fallback: il pacchetto). */
@@ -298,8 +307,9 @@ data class RegolaFinestra(
     val tipo: String,
     val parametri: JsonObject = JsonObject(emptyMap()),
     // Il nome leggibile dell'app per le limite_tempo su un pacchetto ("TikTok"
-    // invece di com.zhiliaoapp.musically). Assente per le categorie e sui server
-    // vecchi: allora si ripiega sulla chiave.
+    // invece di com.zhiliaoapp.musically). Assente per le categorie, per il
+    // totale del dispositivo (v3.3: "Tutto il telefono" lo scrive l'app) e sui
+    // server vecchi: allora si ripiega sulla chiave.
     val nome: String? = null,
     val attiva: Boolean = true,
     @SerialName("creata_ts") val creataTs: String = "",
@@ -384,8 +394,15 @@ data class Notifica(
     @SerialName("dispositivo_id") val dispositivoId: Long? = null,
 )
 
+/**
+ * La risposta di GET /api/notifiche. (0.9) `notifiche` è OBBLIGATORIO, senza
+ * valore di riserva: una risposta `{}` o `{"notifiche": null}` non è "zero non
+ * lette" ma una risposta sbagliata, e si tratta come un server muto. Con una
+ * lista vuota di riserva la vedetta dimenticherebbe gli avvisi già dati e al
+ * giro dopo li ridarebbe tutti.
+ */
 @Serializable
-data class PaccoNotifiche(val notifiche: List<Notifica> = emptyList())
+data class PaccoNotifiche(val notifiche: List<Notifica>)
 
 // --- Proposte (tappa 5) -----------------------------------------------------
 // Il genitore propone una modifica; il server calcola il `confronto` testuale e

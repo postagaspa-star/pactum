@@ -1,5 +1,7 @@
 package eu.stgm.pactum.genitore.ui
 
+import android.os.Build
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -32,11 +36,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.BuildConfig
@@ -46,18 +52,26 @@ import eu.stgm.pactum.genitore.aggiornamento.EsitoAggiornamento
 import eu.stgm.pactum.genitore.dati.ConfigurazionePostino
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.rete.PostinoClient
+import eu.stgm.pactum.genitore.servizio.EsenzioneBatteria
+import eu.stgm.pactum.genitore.servizio.MarcaConRisparmio
+import eu.stgm.pactum.genitore.servizio.marcaConRisparmio
+import eu.stgm.pactum.genitore.sync.Vedetta
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.Locale
 
 /**
- * Impostazioni del binocolo, in quattro blocchi: la connessione (indirizzo del
+ * Impostazioni del binocolo, in cinque blocchi: la connessione (indirizzo del
  * server e codice d'accesso del genitore), la famiglia (v3: figli, dispositivi,
- * codici per collegarli), il digest giornaliero, gli aggiornamenti dell'app.
+ * codici per collegarli), gli avvisi del patto (0.9: Pactum sempre attivo), il
+ * digest giornaliero, gli aggiornamenti dell'app. [mostraAvvisi] = aperte dalla
+ * notifica fissa: la sezione degli avvisi viene in vista da sola.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImpostazioniScreen(
+    mostraAvvisi: Boolean = false,
+    onAvvisiMostrati: () -> Unit = {},
     famigliaVm: FamigliaViewModel = viewModel(),
     finestraVm: FinestraViewModel = viewModel(),
     proposteVm: ProposteViewModel = viewModel(),
@@ -240,6 +254,14 @@ fun ImpostazioniScreen(
                 },
             )
 
+            // (0.9) Avvisi del patto: Pactum sempre attivo, gli avvisi accesi,
+            // l'esenzione dalla batteria e il risparmio batteria della marca.
+            HorizontalDivider(
+                modifier = Modifier.padding(top = Spazi.s),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+            SezioneAvvisi(mostra = mostraAvvisi, onMostrata = onAvvisiMostrati)
+
             // Digest giornaliero: l'ora scelta e l'interruttore. Si salva al
             // gesto, senza pulsante: è una preferenza, non una configurazione.
             HorizontalDivider(
@@ -302,6 +324,96 @@ fun ImpostazioniScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.impostazioni_controlla_aggiornamenti))
+            }
+        }
+    }
+}
+
+/**
+ * (0.9) Avvisi del patto: cosa fa Pactum sempre attivo, e le tre cose del
+ * telefono che decidono se gli avvisi arrivano in tempo — gli avvisi accesi,
+ * l'esenzione dalla batteria di Android, e il risparmio batteria della marca
+ * (Xiaomi, Huawei, Oppo, Vivo, OnePlus, Samsung…), con un passo in parole
+ * semplici. Ogni pulsante apre la schermata di Android giusta; lo stato si
+ * rilegge al ritorno. [mostra] = ci si arriva dalla notifica fissa ("tocca per
+ * sistemare"): la sezione viene in vista da sola.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SezioneAvvisi(mostra: Boolean, onMostrata: () -> Unit) {
+    val context = LocalContext.current
+    var esente by remember { mutableStateOf(EsenzioneBatteria.concessa(context)) }
+    var accesi by remember { mutableStateOf(Vedetta.avvisiAccesi(context)) }
+    LifecycleResumeEffect(Unit) {
+        esente = EsenzioneBatteria.concessa(context)
+        accesi = Vedetta.avvisiAccesi(context)
+        onPauseOrDispose { }
+    }
+    val inVista = remember { BringIntoViewRequester() }
+    LaunchedEffect(mostra) {
+        if (!mostra) return@LaunchedEffect
+        withFrameNanos { } // prima si dispone la schermata, poi si scorre
+        inVista.bringIntoView()
+        onMostrata()
+    }
+    val marca = remember { marcaConRisparmio(Build.MANUFACTURER) }
+    val nomeApp = stringResource(R.string.nome_app)
+
+    Column(
+        modifier = Modifier.fillMaxWidth().bringIntoViewRequester(inVista),
+        verticalArrangement = Arrangement.spacedBy(Spazi.m),
+    ) {
+        TitoloSezione(stringResource(R.string.impostazioni_attivo_titolo))
+        Text(
+            text = stringResource(R.string.impostazioni_attivo_descrizione),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (!accesi) {
+            Text(
+                text = stringResource(R.string.impostazioni_avvisi_spenti),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedButton(
+                onClick = { EsenzioneBatteria.apriNotifiche(context) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.impostazioni_avvisi_accendi))
+            }
+        }
+        Text(
+            text = stringResource(if (esente) R.string.impostazioni_attivo_si else R.string.impostazioni_attivo_no),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!esente) {
+            OutlinedButton(
+                onClick = { EsenzioneBatteria.chiedi(context) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.impostazioni_attivo_consenti))
+            }
+        }
+        if (marca != null) {
+            Text(
+                text = when (marca) {
+                    MarcaConRisparmio.XIAOMI -> stringResource(R.string.marca_xiaomi)
+                    MarcaConRisparmio.HUAWEI -> stringResource(R.string.marca_huawei, nomeApp)
+                    MarcaConRisparmio.OPPO_ONEPLUS -> stringResource(R.string.marca_oppo_oneplus)
+                    MarcaConRisparmio.VIVO -> stringResource(R.string.marca_vivo, nomeApp)
+                    MarcaConRisparmio.SAMSUNG -> stringResource(R.string.marca_samsung, nomeApp)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(R.string.marca_nota),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = { EsenzioneBatteria.apriInfoApp(context) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.marca_apri_info_app))
             }
         }
     }

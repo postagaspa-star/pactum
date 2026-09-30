@@ -28,10 +28,12 @@ android {
         applicationId = "eu.stgm.pactum.genitore"
         minSdk = 26
         targetSdk = 35
-        // v0.6.0: registro dei siti visitati (solo domini). Nuova funzione =
-        // nuovo versionCode, altrimenti l'auto-aggiornamento non la propone.
-        versionCode = 8
-        versionName = "0.8.0"
+        // Nuova funzione = nuovo versionCode, altrimenti l'auto-aggiornamento
+        // non la propone. v0.9.0: Pactum sempre attivo (avvisi entro circa un
+        // minuto, anche a schermo spento) e il limite su tutto il dispositivo
+        // (contratto v3.3).
+        versionCode = 9
+        versionName = "0.9.0"
     }
 
     signingConfigs {

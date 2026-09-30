@@ -56,6 +56,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
@@ -76,6 +77,7 @@ import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.StatoBonus
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
 import eu.stgm.pactum.genitore.dati.TipiRegola
+import eu.stgm.pactum.genitore.sync.Vedetta
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
@@ -104,6 +106,7 @@ private const val INTERVALLO_RILETTURA_MS = 60_000L
 fun FinestraScreen(
     notificheNonLette: Int,
     onApriNotifiche: () -> Unit,
+    onApriAvvisi: () -> Unit = {},
     vm: FinestraViewModel = viewModel(),
     famigliaVm: FamigliaViewModel = viewModel(),
 ) {
@@ -199,6 +202,7 @@ fun FinestraScreen(
                         ),
                         invioSegno = stato.invioSegno,
                         onMandaSegno = { vm.mandaSegno(figlioId) },
+                        onApriAvvisi = onApriAvvisi,
                     )
                 }
             }
@@ -246,6 +250,7 @@ private fun ContenutoFinestra(
     segnoSpento: Boolean,
     invioSegno: Boolean,
     onMandaSegno: () -> Unit,
+    onApriAvvisi: () -> Unit,
 ) {
     // Per raccontare storico ed eventi serve la regola: la finestra porta TUTTE
     // le regole (anche eliminate), quindi la mappa è completa.
@@ -279,6 +284,12 @@ private fun ContenutoFinestra(
     }
     val gruppi = remember(finestra) {
         if (perDispositivo) raggruppaRegole(finestra.regole, dispositivi) else emptyList()
+    }
+    // (0.9) Il giorno delle regole nella scheda del patto: oggi, l'ultimo della
+    // striscia (dal più vecchio a oggi). Senza striscia (server vecchio) niente elenco.
+    val oggiDelPatto = finestra.striscia.lastOrNull()?.data
+    val regoleDiOggi = remember(finestra) {
+        oggiDelPatto?.let { regoleDelGiorno(finestra, it) }.orEmpty()
     }
 
     // "Ho capito" vale per sempre: sta in DataStore, non nello stato della
@@ -323,6 +334,10 @@ private fun ContenutoFinestra(
             }
         }
 
+        // (0.9) Gli avvisi: spenti, oppure quando Pactum ha guardato il patto
+        // l'ultima volta (in evidenza se è passato troppo).
+        item { RigaAvvisi(onSistema = onApriAvvisi) }
+
         // La cornice: cos'è Pactum e perché non impone lui le regole.
         // Richiudibile: dopo averla letta non ingombra più, nemmeno dopo.
         if (introChiusa == false) {
@@ -366,6 +381,10 @@ private fun ContenutoFinestra(
                     onMandaSegno = onMandaSegno,
                     // xxl tra l'eroe e il resto (§3.3): lo spacedBy ne mette già m.
                     modifier = Modifier.padding(bottom = Spazi.xxl - Spazi.m),
+                    // (0.9) Le regole di oggi (l'ultimo giorno della striscia), una per una.
+                    giornoRegole = oggiDelPatto,
+                    regoleDiOggi = regoleDiOggi,
+                    dispositivi = if (perDispositivo) dispositivi else emptyList(),
                 )
             }
         }
@@ -558,6 +577,56 @@ private fun CardIntro(onChiudi: () -> Unit) {
             ) {
                 Text(stringResource(R.string.intro_chiudi))
             }
+        }
+    }
+}
+
+/**
+ * (0.9) La riga degli avvisi, in cima alla Panoramica:
+ * - avvisi spenti su questo telefono → lo si dice, con "Sistema";
+ * - se no, "Avvisi: ultimo controllo alle 21:30", sottovoce; oltre 15 minuti
+ *   in evidenza (la stessa grammatica dei dati non aggiornati, mai rossa), con
+ *   "Sistema".
+ * L'ora è quella dell'ultimo giro della vedetta andato a buon fine: in memoria
+ * se il servizio gira in questo processo, se no quella salvata (ogni 10 minuti).
+ */
+@Composable
+private fun RigaAvvisi(onSistema: () -> Unit) {
+    val context = LocalContext.current
+    val impostazioni = remember { Impostazioni(context.applicationContext) }
+    val inMemoria by Vedetta.ultimoControllo.collectAsState()
+    val salvato by impostazioni.ultimoControlloAvvisi.collectAsState(initial = null)
+    var accesi by remember { mutableStateOf(Vedetta.avvisiAccesi(context)) }
+    LifecycleResumeEffect(Unit) {
+        accesi = Vedetta.avvisiAccesi(context)
+        onPauseOrDispose { }
+    }
+    val p = parole()
+
+    if (!accesi) {
+        RigaAvvisoDaSistemare(stringResource(R.string.avvisi_spenti_panoramica), onSistema)
+        return
+    }
+    val ultimo = listOfNotNull(inMemoria, salvato).maxOrNull()?.let(Instant::ofEpochMilli) ?: return
+    val quando = alleQuando(p, ultimo)
+    if (controlloVecchio(ultimo, Instant.now())) {
+        RigaAvvisoDaSistemare(stringResource(R.string.avvisi_controllo_vecchio, quando), onSistema)
+    } else {
+        Text(
+            text = stringResource(R.string.avvisi_ultimo_controllo, quando),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Una riga su fondo neutro (come i dati non aggiornati) con "Sistema", che porta alle Impostazioni. */
+@Composable
+private fun RigaAvvisoDaSistemare(testo: String, onSistema: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        RigaDatiVecchi(testo)
+        TextButton(onClick = onSistema) {
+            Text(stringResource(R.string.avvisi_sistema))
         }
     }
 }
@@ -765,6 +834,11 @@ private fun colorePallino(stato: StatoCanale): Color = when (stato) {
  * (v3) Con più dispositivi, sotto la striscia del figlio c'è quella di ciascun
  * dispositivo ([strisceDispositivi]), piccola: la grande resta del figlio.
  *
+ * (0.9) Sotto la riga di riepilogo, prima delle strisce dei dispositivi, le
+ * regole di oggi una per una ([regoleDiOggi]): anche quelle mantenute, non solo
+ * quello che è andato storto. La striscia non si tocca per cambiare giorno,
+ * quindi l'elenco è di oggi, l'ultimo giorno della striscia ([giornoRegole]).
+ *
  * Senza `striscia` (server vecchio) la scheda non va in errore: resta la riga
  * di riepilogo, e il segno si nasconde ([mostraSegno] false) perché quel server
  * non conosce POST /api/segno.
@@ -779,6 +853,9 @@ private fun SchedaPatto(
     invioSegno: Boolean,
     onMandaSegno: () -> Unit,
     modifier: Modifier = Modifier,
+    giornoRegole: String? = null,
+    regoleDiOggi: List<RegolaDelGiorno> = emptyList(),
+    dispositivi: List<VistaDispositivo> = emptyList(),
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -837,6 +914,16 @@ private fun SchedaPatto(
                 style = MaterialTheme.typography.bodyMedium,
             )
 
+            // (0.9) Oggi, regola per regola: anche quelle mantenute.
+            if (giornoRegole != null && regoleDiOggi.isNotEmpty()) {
+                RegoleDelGiornoNellaScheda(
+                    giorno = giornoRegole,
+                    righe = regoleDiOggi,
+                    dispositivi = dispositivi,
+                    modifier = Modifier.padding(top = Spazi.m),
+                )
+            }
+
             // (v3) Accanto alla striscia del figlio, quella di ciascun dispositivo.
             strisceDispositivi.forEach { dispositivo ->
                 StrisciaDispositivo(dispositivo, modifier = Modifier.padding(top = Spazi.m))
@@ -863,6 +950,67 @@ private fun SchedaPatto(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * (0.9) Le regole di [giorno] nella scheda del patto: una riga per regola, col
+ * quadretto di quel giorno della SUA striscia (stesso componente, stessi colori
+ * del patto: dentro la striscia, come vuole la prima legge del colore) e lo
+ * stato in parole accanto al nome ("mantenuta", "fuori regola · 15 min oltre",
+ * "senza dati"). Con più dispositivi (o con gli impegni della vita reale), le
+ * stesse intestazioni delle regole qui sotto: icona e nome del dispositivo, o
+ * IMPEGNI.
+ */
+@Composable
+private fun RegoleDelGiornoNellaScheda(
+    giorno: String,
+    righe: List<RegolaDelGiorno>,
+    dispositivi: List<VistaDispositivo>,
+    modifier: Modifier = Modifier,
+) {
+    val p = parole()
+    val perId = righe.associateBy { it.regola.id }
+    // Server 0.7 (nessun dispositivo): un elenco solo, senza intestazioni, come "Le regole".
+    val gruppi = if (dispositivi.isEmpty()) {
+        listOf(GruppoRegole(GenereGruppo.ALTRE, null, righe.map { it.regola }))
+    } else {
+        raggruppaRegole(righe.map { it.regola }, dispositivi).filter { it.regole.isNotEmpty() }
+    }
+    val conIntestazioni = dispositivi.isNotEmpty() && gruppi.size > 1
+    Column(modifier = modifier.fillMaxWidth()) {
+        SopraTitolo(stringResource(R.string.patto_oggi))
+        gruppi.forEach { gruppo ->
+            if (conIntestazioni) IntestazioneGruppo(gruppo)
+            gruppo.regole.forEach { regola ->
+                val riga = perId[regola.id] ?: return@forEach
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = Spazi.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StrisciaGiorni(
+                        giorni = listOf(GiornoPatto(giorno, riga.segnale)),
+                        lato = 20.dp,
+                        mostraNumero = false,
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = Spazi.s),
+                    ) {
+                        Text(
+                            text = descrizioneRegola(riga.regola),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            text = testoStatoRegola(p, riga),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
     }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.AddCircle
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,12 +27,16 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
@@ -64,6 +69,8 @@ fun NotificheScreen(
     val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val messaggioLettaFallita = stringResource(R.string.notifica_letta_fallita)
+    val testi = parole()
+    var confermaTutte by rememberSaveable { mutableStateOf(false) }
 
     LifecycleResumeEffect(Unit) {
         vm.aggiorna()
@@ -79,6 +86,37 @@ fun NotificheScreen(
         if (!stato.lettaFallita) return@LaunchedEffect
         vm.consumaLettaFallita()
         ambito.launch { snackbarHostState.showSnackbar(messaggioLettaFallita) }
+    }
+    // (0.9) "Segna tutte come lette" andata a metà: si dice quante sono rimaste.
+    LaunchedEffect(stato.tutteFallite) {
+        val fallite = stato.tutteFallite ?: return@LaunchedEffect
+        vm.consumaTutteFallite()
+        val messaggio = testi.testo(R.string.notifiche_segna_tutte_fallite, fallite)
+        ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+    }
+
+    if (confermaTutte) {
+        // Non si torna indietro: prima una domanda, che dice la verità su cosa succede.
+        AlertDialog(
+            onDismissRequest = { confermaTutte = false },
+            title = { Text(stringResource(R.string.notifiche_segna_tutte_titolo)) },
+            text = { Text(stringResource(R.string.notifiche_segna_tutte_testo)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confermaTutte = false
+                        vm.segnaTutteLette()
+                    },
+                ) {
+                    Text(stringResource(R.string.notifiche_segna_tutte_conferma))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confermaTutte = false }) {
+                    Text(stringResource(R.string.azione_annulla))
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -142,6 +180,17 @@ fun NotificheScreen(
                             )
                         }
                     } else {
+                        // (0.9) Con più di una, tutte insieme (dopo una conferma).
+                        if (stato.notifiche.size > 1) {
+                            item {
+                                TextButton(
+                                    onClick = { confermaTutte = true },
+                                    enabled = !stato.segnaturaInCorso,
+                                ) {
+                                    Text(stringResource(R.string.notifiche_segna_tutte))
+                                }
+                            }
+                        }
                         item {
                             ListaRighe(stato.notifiche) { notifica ->
                                 RigaNotifica(

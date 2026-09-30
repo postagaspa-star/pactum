@@ -11,6 +11,7 @@ import eu.stgm.pactum.genitore.dati.RiepilogoFinestra
 import eu.stgm.pactum.genitore.dati.SegnoMandato
 import eu.stgm.pactum.genitore.ui.FinestraViewModel.EsitoSegno
 import eu.stgm.pactum.genitore.ui.esitoDelSegno
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
@@ -148,6 +149,40 @@ class PostinoClientTest {
         assertTrue(f.striscia.isEmpty())
     }
 
+    @Test
+    fun `v3,3 - il giorno porta il limite sul totale del dispositivo, e senza regola niente`() {
+        val f = leggiFinestra(
+            """
+            { "dispositivi": [ { "id": 1, "nome": "Telefono", "tipo": "telefono",
+                "uso_recente": [
+                  { "giorno": "2026-09-28", "totale_minuti": null, "aggiornato_ts": null, "app": [], "categorie": [] },
+                  { "giorno": "2026-09-29", "totale_minuti": 150, "app": [], "categorie": [] },
+                  { "giorno": "2026-09-30", "totale_minuti": 192, "limite": 180, "regola_id": 7, "bonus": 15,
+                    "aggiornato_ts": "2026-09-30T18:00:00+00:00",
+                    "app": [ { "chiave": "com.zhiliaoapp.musically", "nome": "TikTok", "minuti": 65 } ],
+                    "categorie": [] } ] } ],
+              "uso_recente": [ { "giorno": "2026-09-30", "totale_minuti": 192, "limite": 180, "regola_id": 7,
+                                 "bonus": null, "app": [], "categorie": [] } ] }
+            """.trimIndent(),
+        )
+        val (senzaFotografia, senzaRegola, conLimite) = f.dispositivi.single().usoRecente
+        assertEquals(180, conLimite.limite)
+        assertEquals(7L, conLimite.regolaId)
+        assertEquals(15, conLimite.bonus)
+        // Il limite del totale non finisce tra le app.
+        assertNull(conLimite.app.single().limite)
+        // Un giorno senza regola sul totale, o senza fotografia: niente limite, bonus 0.
+        listOf(senzaFotografia, senzaRegola).forEach {
+            assertNull(it.limite)
+            assertNull(it.regolaId)
+            assertEquals(0, it.bonus)
+        }
+        assertNull(senzaFotografia.totaleMinuti)
+        // Il primo livello (primo dispositivo) porta gli stessi campi; un bonus a null vale 0.
+        assertEquals(180, f.usoRecente.single().limite)
+        assertEquals(0, f.usoRecente.single().bonus)
+    }
+
     // --- v3: la famiglia, e il server 0.7 che non la conosce ---------------------------
 
     /** Com'è fatta GET /api/famiglia sul server v3 (server/app/routes/famiglia.py). */
@@ -198,6 +233,35 @@ class PostinoClientTest {
         assertEquals(EsitoFamiglia.Fallita, PostinoClient.interpretaFamiglia(401, """{"detail": "x"}"""))
         assertEquals(EsitoFamiglia.Fallita, PostinoClient.interpretaFamiglia(200, "non è json"))
         assertEquals(EsitoFamiglia.Fallita, PostinoClient.interpretaFamiglia(200, null))
+    }
+
+    @Test
+    fun `dopo_id si aggiunge solo con un id valido`() {
+        assertEquals("/api/notifiche", PostinoClient.percorsoNotifiche(null))
+        assertEquals("/api/notifiche?dopo_id=0", PostinoClient.percorsoNotifiche(0))
+        assertEquals("/api/notifiche?dopo_id=42", PostinoClient.percorsoNotifiche(42))
+        // Un negativo il server lo rifiuta (422): meglio la lista intera.
+        assertEquals("/api/notifiche", PostinoClient.percorsoNotifiche(-1))
+    }
+
+    @Test
+    fun `una risposta senza la lista delle notifiche non vale zero non lette`() {
+        // `{}` o `null` non sono "nessuna notifica": sono una risposta sbagliata.
+        // Se valessero una lista vuota, la vedetta dimenticherebbe gli avvisi dati
+        // e al giro dopo li ridarebbe tutti.
+        listOf("{}", """{"notifiche": null}""").forEach { corpo ->
+            val errore = try {
+                PostinoClient.json.decodeFromString(PaccoNotifiche.serializer(), corpo)
+                null
+            } catch (e: SerializationException) {
+                e
+            }
+            assertTrue("«$corpo» non deve valere zero non lette", errore != null)
+        }
+        // Una lista vuota vera, invece, è "niente di nuovo".
+        assertTrue(
+            PostinoClient.json.decodeFromString(PaccoNotifiche.serializer(), """{"notifiche": []}""").notifiche.isEmpty(),
+        )
     }
 
     @Test

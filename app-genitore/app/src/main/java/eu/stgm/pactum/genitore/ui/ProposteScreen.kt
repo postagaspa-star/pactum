@@ -337,7 +337,8 @@ internal fun DialogoNuovaProposta(
     var motivazione by rememberSaveable { mutableStateOf("") }
     // Il bersaglio NON si cambia: si propone un nuovo limite, non un'altra app
     // (contratto v2.1: la chiave nasce da un selettore, mai da testo libero). Sul
-    // computer poi sarebbe un `exe:` o un `sito:` da scrivere a mano.
+    // computer poi sarebbe un `exe:` o un `sito:` da scrivere a mano. (v3.3) Su
+    // una regola sul totale resta "totale": la proposta cambia solo i minuti.
     val app = parametroTesto(regola.parametri, "app_o_categoria") ?: ""
     var minuti by rememberSaveable {
         mutableStateOf(parametroTesto(regola.parametri, "minuti_al_giorno") ?: "")
@@ -423,9 +424,10 @@ internal fun DialogoNuovaProposta(
                         TipiRegola.LIMITE_TEMPO -> {
                             Column {
                                 Text(
+                                    // (v3.3) "Su: Tutto il telefono" per il totale del dispositivo.
                                     text = stringResource(
                                         R.string.proposta_bersaglio,
-                                        nomeLeggibile(app, regola.nome),
+                                        bersaglioRegola(parole(), regola),
                                     ),
                                     style = MaterialTheme.typography.bodyLarge,
                                 )

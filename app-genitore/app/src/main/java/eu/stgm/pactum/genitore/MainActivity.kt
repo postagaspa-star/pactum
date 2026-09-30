@@ -41,12 +41,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.genitore.dati.Impostazioni
-import eu.stgm.pactum.genitore.sync.VedettaWorker
+import eu.stgm.pactum.genitore.servizio.EsenzioneBatteria
+import eu.stgm.pactum.genitore.servizio.VedettaService
+import eu.stgm.pactum.genitore.sync.Vedetta
 import eu.stgm.pactum.genitore.ui.FamigliaViewModel
 import eu.stgm.pactum.genitore.ui.FinestraScreen
 import eu.stgm.pactum.genitore.ui.ImpostazioniScreen
@@ -120,6 +123,10 @@ class MainActivity : ComponentActivity() {
         const val DEST_TURNO = "turno"
         const val DEST_NOTIFICHE = "notifiche"
 
+        // (0.9) La sezione "Avvisi del patto" delle Impostazioni: ci porta la
+        // notifica fissa quando gli avvisi possono arrivare in ritardo o sono spenti.
+        const val DEST_AVVISI = "avvisi"
+
         // Le destinazioni di prima (6 schede): le notifiche già nella tendina le
         // portano ancora nel loro PendingIntent. Restano riconosciute e finiscono
         // su "Proposte e conferme", così nessun tocco cade nel vuoto dopo l'aggiornamento.
@@ -157,6 +164,8 @@ private fun GenitoreRoot(
 ) {
     var destinazione by rememberSaveable { mutableStateOf(Destinazione.FINESTRA) }
     var notificheAperte by rememberSaveable { mutableStateOf(false) }
+    // (0.9) Le Impostazioni si aprono già sulla sezione "Avvisi del patto".
+    var avvisiDaMostrare by rememberSaveable { mutableStateOf(false) }
 
     // Lo stesso ViewModel che usa la lista delle notifiche (scope dell'attività):
     // il badge e la lista contano le stesse cose.
@@ -184,7 +193,16 @@ private fun GenitoreRoot(
         onFiglioConsumato()
     }
 
+    // (0.9) Pactum sempre attivo: il servizio parte all'apertura dell'app e
+    // appena il collegamento è salvato, solo se c'è (indirizzo + codice).
+    val context = LocalContext.current
+    val impostazioni = remember { Impostazioni(context.applicationContext) }
+    val configurazione by impostazioni.configurazione.collectAsState(initial = null)
+    val configurata = configurazione?.completa == true
+    AvvioVedetta(configurata)
+
     RichiestaPermessoNotifiche()
+    RichiestaEsenzioneBatteria(configurata)
 
     // Arrivo da una notifica: salta alla scheda giusta, una volta sola.
     LaunchedEffect(destinazioneRichiesta) {
@@ -203,6 +221,11 @@ private fun GenitoreRoot(
             MainActivity.DEST_NOTIFICHE -> {
                 destinazione = Destinazione.FINESTRA
                 notificheAperte = true
+            }
+            MainActivity.DEST_AVVISI -> {
+                destinazione = Destinazione.IMPOSTAZIONI
+                notificheAperte = false
+                avvisiDaMostrare = true
             }
             // DEST_FINESTRA e qualunque valore sconosciuto: la casa.
             else -> {
@@ -267,11 +290,18 @@ private fun GenitoreRoot(
                     FinestraScreen(
                         notificheNonLette = nonLette,
                         onApriNotifiche = { notificheAperte = true },
+                        onApriAvvisi = {
+                            destinazione = Destinazione.IMPOSTAZIONI
+                            avvisiDaMostrare = true
+                        },
                     )
                 }
                 Destinazione.TEMPO -> TempoScreen()
                 Destinazione.TURNO -> TurnoScreen()
-                Destinazione.IMPOSTAZIONI -> ImpostazioniScreen()
+                Destinazione.IMPOSTAZIONI -> ImpostazioniScreen(
+                    mostraAvvisi = avvisiDaMostrare,
+                    onAvvisiMostrati = { avvisiDaMostrare = false },
+                )
             }
         }
     }
@@ -297,7 +327,7 @@ private fun RichiestaPermessoNotifiche() {
 
     LaunchedEffect(richiestaFatta) {
         // null = DataStore non ancora letto: aspettare, non richiedere due volte.
-        if (richiestaFatta == false && !VedettaWorker.puoAvvisare(context)) {
+        if (richiestaFatta == false && !Vedetta.puoAvvisare(context)) {
             mostraDialogo = true
         }
     }
@@ -325,6 +355,77 @@ private fun RichiestaPermessoNotifiche() {
         dismissButton = {
             TextButton(onClick = chiudi) {
                 Text(stringResource(R.string.permesso_notifiche_non_ora))
+            }
+        },
+    )
+}
+
+/**
+ * (0.9) Il servizio sempre attivo, a ogni ritorno dell'app in primo piano e
+ * appena il collegamento c'è. Avviarlo quando gira già non fa niente: il loop è
+ * uno solo. Con l'app davanti Android lo lascia sempre partire.
+ */
+@Composable
+private fun AvvioVedetta(configurata: Boolean) {
+    val context = LocalContext.current
+    val cicloVita = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(configurata, cicloVita) {
+        if (!configurata) return@LaunchedEffect
+        cicloVita.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            VedettaService.avvia(context.applicationContext)
+        }
+    }
+}
+
+/**
+ * (0.9) L'esenzione dalla batteria: una volta, con l'app collegata e gli
+ * avvisi accesi, prima una spiegazione semplice del perché, poi la domanda di
+ * Android (da rispondere con «Consenti»). "Non ora" non insiste: la stessa
+ * richiesta resta nelle Impostazioni, sezione Avvisi del patto. Dopo la
+ * richiesta del permesso notifiche, mai insieme: lo stato si rilegge a ogni
+ * ritorno sull'app.
+ */
+@Composable
+private fun RichiestaEsenzioneBatteria(configurata: Boolean) {
+    val context = LocalContext.current
+    val ambito = rememberCoroutineScope()
+    val impostazioni = remember { Impostazioni(context.applicationContext) }
+    val richiestaFatta by impostazioni.richiestaBatteriaFatta.collectAsState(initial = null)
+    var daChiedere by remember { mutableStateOf(false) }
+    LifecycleResumeEffect(configurata) {
+        daChiedere = configurata && Vedetta.avvisiAccesi(context) && !EsenzioneBatteria.concessa(context)
+        onPauseOrDispose { }
+    }
+    var mostraDialogo by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(richiestaFatta, daChiedere) {
+        // null = DataStore non ancora letto: aspettare, non chiedere due volte.
+        if (richiestaFatta == false && daChiedere) mostraDialogo = true
+    }
+
+    if (!mostraDialogo) return
+
+    val chiudi: () -> Unit = {
+        mostraDialogo = false
+        ambito.launch { impostazioni.registraRichiestaBatteriaFatta() }
+    }
+    AlertDialog(
+        onDismissRequest = chiudi,
+        title = { Text(stringResource(R.string.batteria_titolo)) },
+        text = { Text(stringResource(R.string.batteria_testo)) },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    chiudi()
+                    EsenzioneBatteria.chiedi(context)
+                },
+            ) {
+                Text(stringResource(R.string.batteria_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = chiudi) {
+                Text(stringResource(R.string.batteria_non_ora))
             }
         },
     )

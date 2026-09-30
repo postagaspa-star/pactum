@@ -17,6 +17,25 @@
     <string name="permesso_notifiche_ok">Va bene</string>
     <string name="permesso_notifiche_non_ora">Non ora</string>
 
+    <!-- (0.9) Pactum sempre attivo: la notifica fissa del servizio, silenziosa,
+         su un canale suo (separato dagli avvisi del patto) -->
+    <string name="canale_attivo_nome">Pactum attivo</string>
+    <string name="canale_attivo_descrizione">La notifica fissa che tiene Pactum sempre attivo. Puoi silenziarla o nasconderla: gli avvisi del patto arrivano lo stesso.</string>
+    <string name="attivo_notifica_titolo">Pactum è attivo</string>
+    <string name="attivo_notifica_testo">Ti avvisa quando succede qualcosa nel patto.</string>
+    <!-- Quando qualcosa non va, la notifica fissa lo dice e porta dove si sistema -->
+    <string name="attivo_notifica_ritardi">Gli avvisi possono arrivare in ritardo: tocca per sistemare.</string>
+    <string name="attivo_notifica_spenti">Gli avvisi del patto sono spenti: tocca per sistemare.</string>
+    <!-- (0.9) L\'esenzione dalla batteria: una spiegazione, una volta, poi la
+         domanda di Android. Dopo resta nelle Impostazioni, sezione Avvisi del patto. -->
+    <string name="batteria_titolo">Avvisi anche a telefono fermo</string>
+    <string name="batteria_testo">Per avvisarti anche quando il telefono è fermo, Pactum deve poter restare attivo. Con «Va bene» Android ti chiede se lasciare l\'app sempre attiva in background: tocca «Consenti». Pactum fa solo un piccolo controllo al minuto.</string>
+    <string name="batteria_ok">Va bene</string>
+    <string name="batteria_non_ora">Non ora</string>
+    <!-- Quando il telefono non ha la domanda diretta e si apre un elenco -->
+    <string name="batteria_cerca_nell_elenco">Nell\'elenco scegli «Tutte le app», cerca «%1$s» e scegli «Non ottimizzare».</string>
+    <string name="batteria_cerca_in_info_app">Tocca «Batteria» e scegli «Senza restrizioni».</string>
+
     <!-- Prima apertura: manca il collegamento col server (tutte le schermate) -->
     <string name="config_mancante_titolo">Manca il collegamento</string>
 
@@ -106,6 +125,17 @@
         <item quantity="one">%1$d giorno su %2$d dentro questa regola</item>
         <item quantity="other">%1$d giorni su %2$d dentro questa regola</item>
     </plurals>
+    <!-- (0.9) Nella scheda del patto: oggi, regola per regola, anche quelle mantenute.
+         Lo stato viene dal semaforo di ogni regola (lo stesso della sua striscia). -->
+    <string name="patto_oggi">OGGI</string>
+    <string name="stato_regola_mantenuta">mantenuta</string>
+    <string name="stato_regola_fuori">fuori regola</string>
+    <string name="stato_regola_fuori_oltre">fuori regola · %1$s oltre</string>
+    <string name="stato_regola_senza_dati">senza dati</string>
+    <string name="stato_impegno_confermato">successo confermato</string>
+    <string name="stato_impegno_non_riuscito">non riuscito</string>
+    <string name="stato_impegno_nessuna_conferma">nessuna conferma per ora</string>
+    <string name="stato_regola_non_piu_attiva">%1$s · non più attiva</string>
     <string name="riepilogo_nessun_fuori_regola">Nessun giorno fuori regola</string>
     <string name="riepilogo_registro_completo">registrazione completa</string>
     <plurals name="riepilogo_giorni_fuori_regola">
@@ -133,6 +163,10 @@
     <string name="regola_tipo_fascia_oraria">FASCIA ORARIA</string>
     <string name="regola_tipo_vita_reale">VITA REALE</string>
     <string name="regola_limite_tempo">%1$s: al massimo %2$s al giorno</string>
+    <!-- (v3.3) Un limite su tutto il dispositivo (la chiave "totale"): si dice
+         col tipo del dispositivo della regola (senza, è il telefono: server vecchio) -->
+    <string name="bersaglio_totale_telefono">Tutto il telefono</string>
+    <string name="bersaglio_totale_computer">Tutto il computer</string>
     <string name="regola_fascia_oraria">Niente telefono dalle %1$s alle %2$s (%3$s)</string>
     <string name="regola_fascia_oraria_computer">Niente computer dalle %1$s alle %2$s (%3$s)</string>
     <string name="regola_vita_reale">%1$s — arbitro: %2$s, %3$s</string>
@@ -187,6 +221,8 @@
     <string name="regola_su_app">su %1$s</string>
     <string name="regola_su_fascia">sulla fascia %1$s–%2$s</string>
     <string name="regola_su_vita_reale">su «%1$s»</string>
+    <string name="regola_su_totale_telefono">su tutto il telefono</string>
+    <string name="regola_su_totale_computer">su tutto il computer</string>
 
     <!-- Notifiche (lista aperta dalla campanella della Panoramica) -->
     <string name="notifiche_titolo">Notifiche</string>
@@ -201,6 +237,20 @@
     <string name="notifiche_config_mancante">Prima servono l\'indirizzo del server e il codice d\'accesso: li trovi nelle Impostazioni.</string>
     <string name="notifica_segna_letta">Segna come letta</string>
     <string name="notifica_letta_fallita">Non sono riuscito a segnarla come letta: riprova.</string>
+    <!-- (0.9) Tutte insieme: una conferma, perché non si torna indietro -->
+    <string name="notifiche_segna_tutte">Segna tutte come lette</string>
+    <string name="notifiche_segna_tutte_titolo">Segnare tutte come lette?</string>
+    <string name="notifiche_segna_tutte_testo">Spariscono da questa lista, anche per l\'altro genitore se usa Pactum. I fatti restano nella Panoramica.</string>
+    <string name="notifiche_segna_tutte_conferma">Segna tutte</string>
+    <string name="notifiche_segna_tutte_fallite">Alcune non si sono segnate (%1$d): riprova.</string>
+    <!-- (0.9) Tante novità insieme: un riassunto, non una raffica di avvisi -->
+    <string name="riassunto_novita_titolo">Novità da leggere: %1$d</string>
+    <string name="riassunto_novita_testo">Tocca per vederle nella lista delle notifiche.</string>
+    <!-- (0.9) In cima alla Panoramica: quando Pactum ha guardato il patto l\'ultima volta -->
+    <string name="avvisi_ultimo_controllo">Avvisi: ultimo controllo %1$s</string>
+    <string name="avvisi_controllo_vecchio">Avvisi: ultimo controllo %1$s. Da allora Pactum non è riuscito a guardare il patto: gli avvisi possono arrivare in ritardo.</string>
+    <string name="avvisi_spenti_panoramica">Gli avvisi di Pactum sono spenti su questo telefono: non ti arriva niente.</string>
+    <string name="avvisi_sistema">Sistema</string>
     <string name="tipo_sforamento">Fuori regola</string>
     <string name="tipo_manomissione">Anomalia</string>
     <string name="tipo_bonus">Bonus</string>
@@ -411,19 +461,45 @@
     <string name="impostazioni_digest_attivo">Digest attivo</string>
     <string name="impostazioni_digest_ora">Ora del digest</string>
     <string name="digest_titolo">Oggi: %1$s</string>
+    <!-- (v3.3) Con un limite su tutto il dispositivo, accanto al totale: come per le app -->
+    <string name="digest_titolo_con_limite">Oggi: %1$s (limite %2$s)</string>
+    <!-- Col bonus concesso oggi su quella regola: il limite di oggi è la somma, come nel Tempo -->
+    <string name="digest_titolo_con_limite_bonus">Oggi: %1$s (limite %2$s + %3$s di bonus)</string>
     <string name="digest_titolo_nessun_dato">Oggi: nessun dato ricevuto</string>
     <string name="digest_testo_nessun_dato">Il telefono del figlio non ha ancora inviato i dati di oggi. Tocca per il dettaglio.</string>
     <string name="digest_app">%1$s %2$s</string>
     <string name="digest_app_con_limite">%1$s %2$s (limite %3$s)</string>
+    <string name="digest_app_con_limite_bonus">%1$s %2$s (limite %3$s + %4$s di bonus)</string>
     <string name="digest_testo">%1$s — tocca per il dettaglio</string>
     <string name="digest_tocca">Tocca per il dettaglio.</string>
     <string name="digest_freschezza">Ultimo aggiornamento alle %1$s — da allora il telefono del figlio non invia dati.</string>
     <!-- v3: il digest di un figlio con più dispositivi, una riga per dispositivo -->
     <string name="digest_parte_dispositivo">%1$s %2$s</string>
+    <string name="digest_parte_dispositivo_con_limite">%1$s %2$s (limite %3$s)</string>
+    <string name="digest_parte_dispositivo_con_limite_bonus">%1$s %2$s (limite %3$s + %4$s di bonus)</string>
     <string name="digest_parte_dispositivo_nessun_dato">%1$s nessun dato</string>
     <string name="digest_riga_dispositivo">%1$s: %2$s</string>
     <string name="digest_riga_dispositivo_nessun_dato">%1$s: nessun dato ricevuto oggi</string>
     <string name="digest_freschezza_dispositivo">%1$s: ultimo aggiornamento alle %2$s.</string>
+
+    <!-- (0.9) Avvisi del patto: Pactum sempre attivo, gli avvisi accesi, l\'esenzione
+         dalla batteria e il risparmio batteria della marca del telefono -->
+    <string name="impostazioni_attivo_titolo">Avvisi del patto</string>
+    <string name="impostazioni_attivo_descrizione">Pactum resta attivo e guarda il patto circa ogni minuto, anche a schermo spento, per avvisarti quando succede qualcosa. Perché gli avvisi arrivino in tempo, Android deve lasciarlo lavorare.</string>
+    <string name="impostazioni_attivo_si">Android lascia Pactum sempre attivo.</string>
+    <string name="impostazioni_attivo_no">Android può mettere in pausa Pactum quando il telefono è fermo: gli avvisi possono arrivare in ritardo.</string>
+    <string name="impostazioni_attivo_consenti">Lascia Pactum sempre attivo</string>
+    <string name="impostazioni_avvisi_spenti">Gli avvisi del patto sono spenti su questo telefono: finché restano spenti non ti arriva niente.</string>
+    <string name="impostazioni_avvisi_accendi">Accendi gli avvisi</string>
+    <!-- Il risparmio batteria della marca: un passo in parole semplici, per marca.
+         %1$s = il nome dell\'app come lo mostra il telefono -->
+    <string name="marca_xiaomi">Sui telefoni Xiaomi c\'è anche un risparmio batteria di Xiaomi, che può fermare Pactum. Apri «Info app», tocca «Risparmio batteria» e scegli «Nessuna restrizione»; poi accendi «Avvio automatico».</string>
+    <string name="marca_huawei">Sui telefoni Huawei e Honor c\'è anche una gestione della batteria loro, che può fermare Pactum. Nelle impostazioni del telefono apri Batteria, poi Avvio app: cerca «%1$s», spegni «Gestisci automaticamente» e lascia accese tutte le voci.</string>
+    <string name="marca_oppo_oneplus">Sui telefoni Oppo, Realme e OnePlus c\'è anche un risparmio batteria loro, che può fermare Pactum. Apri «Info app», tocca «Utilizzo batteria» e accendi «Consenti attività in background» (e «Consenti avvio automatico», se c\'è).</string>
+    <string name="marca_vivo">Sui telefoni Vivo c\'è anche un risparmio batteria di Vivo, che può fermare Pactum. Nelle impostazioni del telefono apri Batteria e lascia a «%1$s» il consumo in background; poi in «Info app» consenti l\'avvio automatico.</string>
+    <string name="marca_samsung">Sui telefoni Samsung c\'è anche un risparmio batteria di Samsung, che può mettere Pactum a dormire. Nelle impostazioni del telefono apri Batteria, poi Limiti di utilizzo in background: aggiungi «%1$s» alle «App mai in sospensione».</string>
+    <string name="marca_nota">I nomi delle voci possono cambiare un po\' da un modello all\'altro.</string>
+    <string name="marca_apri_info_app">Apri «Info app»</string>
 
     <!-- Aggiornamenti (tappa 6) -->
     <string name="impostazioni_aggiornamenti_titolo">Aggiornamenti</string>

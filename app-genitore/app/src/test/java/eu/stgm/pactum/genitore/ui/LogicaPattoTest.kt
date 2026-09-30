@@ -3,8 +3,10 @@ package eu.stgm.pactum.genitore.ui
 import eu.stgm.pactum.design.GiornoPatto
 import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.genitore.dati.EventoFinestra
+import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.QuadrettoSemaforo
+import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.RiepilogoFinestra
 import eu.stgm.pactum.genitore.dati.UsoApp
 import eu.stgm.pactum.genitore.dati.UsoCategoria
@@ -500,6 +502,284 @@ class LogicaPattoTest {
         assertEquals(75, tiktok.limiteDelGiorno)
         assertEquals(0, minutiOltre(tiktok.minuti, tiktok.limite, tiktok.bonus))
         assertEquals(150, elenco.dentroIlPatto.last().limiteDelGiorno)
+    }
+
+    // --- v3.3: il limite su tutto il dispositivo ---------------------------------------
+
+    @Test
+    fun `il limite sul totale del giorno si legge come quello di un'app`() {
+        // 190 minuti su 180 + 15 concessi: per il figlio è dentro, e così per il padre.
+        val giorno = UsoGiorno(giorno = "2026-09-30", totaleMinuti = 190, limite = 180, regolaId = 7, bonus = 15)
+        val voce = voceTotale(giorno)!!
+        assertEquals(190, voce.minuti)
+        assertEquals(180, voce.limite)
+        assertEquals(195, voce.limiteDelGiorno)
+        assertEquals(0, minutiOltre(voce.minuti, voce.limite, voce.bonus))
+        // 215 minuti: 20 oltre il limite del giorno.
+        val oltre = voceTotale(giorno.copy(totaleMinuti = 215))!!
+        assertEquals(20, minutiOltre(oltre.minuti, oltre.limite, oltre.bonus))
+        // Senza bonus vale il limite base.
+        val senzaBonus = voceTotale(giorno.copy(totaleMinuti = 200, bonus = 0))!!
+        assertEquals(20, minutiOltre(senzaBonus.minuti, senzaBonus.limite, senzaBonus.bonus))
+    }
+
+    @Test
+    fun `senza regola sul totale, o senza fotografia, niente limite accanto al totale`() {
+        assertEquals(null, voceTotale(UsoGiorno(giorno = "2026-09-30", totaleMinuti = 190)))
+        // Giorno senza fotografia: niente totale, niente confronto — mai uno zero finto.
+        assertEquals(null, voceTotale(UsoGiorno(giorno = "2026-09-30", totaleMinuti = null, limite = 180)))
+    }
+
+    @Test
+    fun `il limite sul totale sta accanto al totale, mai fra le voci del patto`() {
+        val giorno = UsoGiorno(
+            giorno = "2026-09-30",
+            totaleMinuti = 190,
+            app = listOf(UsoApp("tiktok", "TikTok", minuti = 50, limite = 60)),
+            limite = 180,
+            regolaId = 7,
+        )
+        assertEquals(listOf("tiktok"), elencoTempo(giorno).dentroIlPatto.map { it.chiave })
+    }
+
+    @Test
+    fun `la chiave del totale e totale e basta`() {
+        assertTrue(eTotale("totale"))
+        assertTrue(eTotale(" Totale "))
+        assertFalse(eTotale("categoria:totale"))
+        assertFalse(eTotale("com.totale.app"))
+        assertFalse(eTotale(null))
+        assertEquals("totale", CHIAVE_TOTALE)
+    }
+
+    // --- 0.9: il limite di QUEL giorno ------------------------------------------------
+
+    /** Una regola limite_tempo cambiata l'ultima volta a [ultimaModifica] (ISO UTC). */
+    private fun regolaCambiata(id: Long, ultimaModifica: String) = RegolaFinestra(
+        id = id,
+        tipo = "limite_tempo",
+        ultimaModificaTs = ultimaModifica,
+    )
+
+    @Test
+    fun `il limite vale dal giorno dell'ultima modifica della regola, compreso`() {
+        // Cambiata il 28 settembre alle 18 di Roma.
+        val regola = regolaCambiata(1, "2026-09-28T16:00:00+00:00")
+        // Prima della modifica valeva un altro limite: niente limite, niente "oltre".
+        assertFalse(limiteValidoIl("2026-09-27", regola))
+        // Il giorno stesso sì: l'app del figlio valuta tutta la giornata con la
+        // regola nuova (conta l'uso dalle 00:00), e lo sforamento può arrivare quel giorno.
+        assertTrue(limiteValidoIl("2026-09-28", regola))
+        assertTrue(limiteValidoIl("2026-09-29", regola))
+        assertTrue(limiteValidoIl("2026-09-30", regola))
+    }
+
+    @Test
+    fun `il giorno della modifica si conta nel fuso del patto`() {
+        // 22:30 UTC del 28 = 00:30 del 29 a Roma: modificata il 29, non il 28.
+        val regola = regolaCambiata(1, "2026-09-28T22:30:00+00:00")
+        assertFalse(limiteValidoIl("2026-09-28", regola))
+        assertTrue(limiteValidoIl("2026-09-29", regola))
+        assertTrue(limiteValidoIl("2026-09-30", regola))
+    }
+
+    @Test
+    fun `regola sconosciuta o data illeggibile - il limite si mostra come prima`() {
+        assertTrue(limiteValidoIl("2026-09-29", null))
+        assertTrue(limiteValidoIl("2026-09-29", regolaCambiata(1, "")))
+        assertTrue(limiteValidoIl("ieri", regolaCambiata(1, "2026-09-28T16:00:00+00:00")))
+    }
+
+    @Test
+    fun `nei giorni prima della modifica spariscono limite e oltre, per le app, le categorie e il totale`() {
+        val regole = mapOf(
+            1L to regolaCambiata(1, "2026-09-29T08:00:00+00:00"), // TikTok: cambiata il 29
+            2L to regolaCambiata(2, "2026-09-01T08:00:00+00:00"), // YouTube: da tempo
+            3L to regolaCambiata(3, "2026-09-29T08:00:00+00:00"), // Social: cambiata il 29
+            7L to regolaCambiata(7, "2026-09-30T06:00:00+00:00"), // Tutto il telefono: creata oggi
+        )
+        // Il 28: prima delle modifiche del 29 (TikTok, Social) e della nascita del totale (30).
+        val giorno = UsoGiorno(
+            giorno = "2026-09-28",
+            totaleMinuti = 250,
+            app = listOf(
+                UsoApp("tiktok", "TikTok", minuti = 90, limite = 60, regolaId = 1, bonus = 15),
+                UsoApp("youtube", "YouTube", minuti = 50, limite = 60, regolaId = 2),
+                UsoApp("meteo", "Meteo", minuti = 5),
+            ),
+            categorie = listOf(UsoCategoria("categoria:social", minuti = 130, limite = 120, regolaId = 3)),
+            limite = 180,
+            regolaId = 7,
+            bonus = 10,
+        )
+        val valido = giornoConLimitiValidi(giorno, regole)
+        // TikTok: niente limite quel giorno, e quindi niente "oltre"; finisce nel resto della giornata.
+        val tiktok = valido.app.first { it.chiave == "tiktok" }
+        assertEquals(null, tiktok.limite)
+        assertEquals(0, tiktok.bonus)
+        // YouTube: la regola non è cambiata da allora, il limite resta.
+        assertEquals(60, valido.app.first { it.chiave == "youtube" }.limite)
+        assertEquals(null, valido.categorie.single().limite)
+        // Il totale: la regola è nata il 30, il 28 non valeva.
+        assertEquals(null, valido.limite)
+        assertEquals(0, valido.bonus)
+        assertEquals(null, voceTotale(valido))
+        // I minuti restano veri.
+        assertEquals(250, valido.totaleMinuti)
+        assertEquals(90, tiktok.minuti)
+        assertEquals(listOf("youtube"), elencoTempo(valido).dentroIlPatto.map { it.chiave })
+        assertEquals(listOf("tiktok", "meteo"), elencoTempo(valido).restoDellaGiornata.map { it.chiave })
+        // Il 29, il giorno stesso della modifica: TikTok e Social valgono già, col bonus.
+        val ventinove = giornoConLimitiValidi(giorno.copy(giorno = "2026-09-29"), regole)
+        assertEquals(60, ventinove.app.first { it.chiave == "tiktok" }.limite)
+        assertEquals(15, ventinove.app.first { it.chiave == "tiktok" }.bonus)
+        assertEquals(120, ventinove.categorie.single().limite)
+        assertEquals(null, ventinove.limite)
+        // Il 30, il giorno in cui è nato: vale anche il totale, col suo bonus.
+        val trenta = giornoConLimitiValidi(giorno.copy(giorno = "2026-09-30"), regole)
+        assertEquals(180, trenta.limite)
+        assertEquals(10, trenta.bonus)
+        assertEquals(180, voceTotale(trenta)?.limite)
+    }
+
+    // --- 0.9: oggi, regola per regola, nella scheda del patto ---------------------------
+
+    private val oggi30 = "2026-09-30"
+
+    /** Una regola col suo semaforo: [stati] = lo stato di ieri (29) e di oggi (30). */
+    private fun regolaConSemaforo(
+        id: Long,
+        tipo: String = "limite_tempo",
+        dispositivo: Long? = 1,
+        attiva: Boolean = true,
+        ieri: String? = "verde",
+        oggi: String? = "verde",
+        chiave: String = "app$id",
+    ) = RegolaFinestra(
+        id = id,
+        tipo = tipo,
+        parametri = buildJsonObject {
+            put("app_o_categoria", chiave)
+            put("minuti_al_giorno", 30)
+        },
+        attiva = attiva,
+        dispositivoId = dispositivo,
+        ultimaModificaTs = "2026-09-01T10:00:00+00:00",
+        semaforo = listOfNotNull(
+            ieri?.let { QuadrettoSemaforo("2026-09-29", it) },
+            oggi?.let { QuadrettoSemaforo(oggi30, it) },
+        ),
+    )
+
+    private fun dispositivo(id: Long, tipo: String = "telefono", revocato: Boolean = false, uso: List<UsoGiorno> = emptyList()) =
+        eu.stgm.pactum.genitore.dati.DispositivoFinestra(id = id, nome = "D$id", tipo = tipo, revocato = revocato, usoRecente = uso)
+
+    @Test
+    fun `lo stato di una regola in un giorno e quello del suo semaforo`() {
+        val regola = regolaConSemaforo(1, ieri = "rosso", oggi = "verde")
+        assertEquals(M, segnaleDellaRegola(regola, oggi30))
+        assertEquals(F, segnaleDellaRegola(regola, "2026-09-29"))
+        assertEquals(N, segnaleDellaRegola(regolaConSemaforo(2, oggi = "grigio"), oggi30))
+        // Un giorno che il semaforo non ha: non si sa.
+        assertEquals(null, segnaleDellaRegola(regola, "2026-09-20"))
+    }
+
+    @Test
+    fun `nella scheda del patto anche le regole mantenute, e ogni giorno rosso ha la sua regola rossa`() {
+        val oggiTelefono = UsoGiorno(
+            giorno = oggi30,
+            totaleMinuti = 200,
+            app = listOf(
+                UsoApp("brawl", "Brawl Stars", minuti = 20, limite = 30, regolaId = 1),
+                UsoApp("tiktok", "TikTok", minuti = 75, limite = 60, regolaId = 2),
+            ),
+            limite = 180,
+            regolaId = 8,
+            bonus = 15,
+        )
+        val finestra = Finestra(
+            regole = listOf(
+                regolaConSemaforo(1, oggi = "verde", chiave = "brawl"), // Brawl Stars: mantenuta
+                regolaConSemaforo(2, oggi = "rosso", chiave = "tiktok"), // TikTok: 15 min oltre
+                regolaConSemaforo(3, tipo = "fascia_oraria", dispositivo = 2, oggi = "grigio"), // computer, senza dati
+                regolaConSemaforo(4, tipo = "vita_reale", dispositivo = null, oggi = "verde"), // impegno confermato
+                regolaConSemaforo(5, attiva = false, oggi = "rosso"), // eliminata oggi, ma oggi ha contato
+                regolaConSemaforo(6, attiva = false, oggi = "grigio"), // eliminata prima: oggi non c'entra
+                regolaConSemaforo(7, dispositivo = 3, oggi = "grigio"), // di un telefono scollegato
+                regolaConSemaforo(8, oggi = "rosso", chiave = "totale"), // tutto il telefono: 5 min oltre (180 + 15)
+                regolaConSemaforo(9, oggi = null), // il semaforo non ha oggi: senza dati
+            ),
+            dispositivi = listOf(
+                dispositivo(1, uso = listOf(oggiTelefono)),
+                dispositivo(2, tipo = "computer"),
+                dispositivo(3, revocato = true),
+            ),
+        )
+        val righe = regoleDelGiorno(finestra, oggi30)
+        assertEquals(
+            listOf(1L to M, 2L to F, 3L to N, 4L to M, 5L to F, 8L to F, 9L to N),
+            righe.map { it.regola.id to it.segnale },
+        )
+        assertEquals(
+            listOf(null, 15, null, null, null, 5, null),
+            righe.map { it.minutiOltre },
+        )
+        // Se oggi è rosso, nell'elenco c'è almeno una regola rossa.
+        assertTrue(righe.any { it.segnale == F })
+    }
+
+    @Test
+    fun `l'elenco segue il giorno che gli si chiede`() {
+        val finestra = Finestra(
+            regole = listOf(regolaConSemaforo(1, ieri = "rosso", oggi = "verde")),
+            dispositivi = listOf(dispositivo(1)),
+        )
+        assertEquals(listOf(M), regoleDelGiorno(finestra, oggi30).map { it.segnale })
+        assertEquals(listOf(F), regoleDelGiorno(finestra, "2026-09-29").map { it.segnale })
+    }
+
+    @Test
+    fun `i minuti oltre solo per un limite di tempo fuori regola, e solo se si sanno`() {
+        val uso = UsoGiorno(
+            giorno = oggi30,
+            totaleMinuti = 100,
+            app = listOf(UsoApp("tiktok", "TikTok", minuti = 70, limite = 60, regolaId = 2, bonus = 15)),
+            categorie = listOf(UsoCategoria("categoria:social", minuti = 150, limite = 120, regolaId = 3)),
+        )
+        val dispositivi = dispositiviDellaFinestra(Finestra(dispositivi = listOf(dispositivo(1, uso = listOf(uso)))))
+        // 70 su 60 + 15 di bonus: rosso nel semaforo, ma adesso dentro — niente minuti.
+        assertEquals(null, minutiOltreDellaRegola(regolaConSemaforo(2, chiave = "tiktok"), oggi30, dispositivi))
+        assertEquals(30, minutiOltreDellaRegola(regolaConSemaforo(3, chiave = "categoria:social"), oggi30, dispositivi))
+        // Una fascia oraria non ha minuti; un giorno senza fotografia nemmeno.
+        assertEquals(null, minutiOltreDellaRegola(regolaConSemaforo(3, tipo = "fascia_oraria"), oggi30, dispositivi))
+        assertEquals(null, minutiOltreDellaRegola(regolaConSemaforo(3, chiave = "categoria:social"), "2026-09-29", dispositivi))
+    }
+
+    // --- 0.9: gli avvisi, l'ultimo controllo ---------------------------------------------
+
+    @Test
+    fun `l'ultimo controllo si fa notare solo dopo 15 minuti`() {
+        val ultimo = java.time.Instant.parse("2026-09-30T19:00:00Z")
+        assertFalse(controlloVecchio(ultimo, ultimo.plusSeconds(15 * 60)))
+        assertTrue(controlloVecchio(ultimo, ultimo.plusSeconds(15 * 60 + 1)))
+        assertFalse(controlloVecchio(ultimo, ultimo.plusSeconds(60)))
+    }
+
+    @Test
+    fun `segna tutte - al massimo quattro richieste insieme, e i risultati in ordine`() {
+        val inCorso = java.util.concurrent.atomic.AtomicInteger(0)
+        val massimo = java.util.concurrent.atomic.AtomicInteger(0)
+        val risultati = kotlinx.coroutines.runBlocking {
+            perOgnuna((1..12).toList(), SEGNATURE_IN_PARALLELO) { n ->
+                val adesso = inCorso.incrementAndGet()
+                massimo.accumulateAndGet(adesso) { a, b -> maxOf(a, b) }
+                kotlinx.coroutines.delay(20)
+                inCorso.decrementAndGet()
+                n * 10
+            }
+        }
+        assertEquals((1..12).map { it * 10 }, risultati)
+        assertTrue("in parallelo: ${massimo.get()}", massimo.get() in 2..SEGNATURE_IN_PARALLELO)
     }
 
     // --- l'orario del server --------------------------------------------------------

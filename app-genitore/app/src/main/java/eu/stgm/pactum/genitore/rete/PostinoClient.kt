@@ -20,6 +20,7 @@ import eu.stgm.pactum.genitore.dati.PaccoProposte
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.SegnoMandato
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -27,6 +28,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.ConnectionPool
 import okhttp3.Dns
 import okhttp3.HttpUrl
@@ -36,6 +39,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import java.io.File
 import java.io.IOException
 import java.net.Inet4Address
@@ -45,6 +49,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 
 /**
  * L'esito di una scrittura verso il postino. `Riuscito` porta il dato creato
@@ -93,7 +98,7 @@ sealed interface EsitoFamiglia {
  *
  *   GET  {base}/api/famiglia                 → Famiglia (v3; 404 = server 0.7)
  *   GET  {base}/api/finestra?figlio_id=n     → Finestra
- *   GET  {base}/api/notifiche                → {"notifiche": [...]} (non lette, tutti i figli)
+ *   GET  {base}/api/notifiche[?dopo_id=n]    → {"notifiche": [...]} (non lette, tutti i figli; v3.3: solo id > n)
  *   POST {base}/api/notifiche/{id}/letta     → 2xx = segnata
  *   POST {base}/api/segno {figlio_id}        → il riconoscimento al figlio (v2.4)
  *   POST/PATCH figli, dispositivi, codici    → la famiglia (v3)
@@ -105,8 +110,20 @@ sealed interface EsitoFamiglia {
  *
  * Tollerante all'offline: qualunque fallimento (rete, HTTP non-2xx, JSON
  * inatteso) restituisce null/false — chi chiama decide se riprovare.
+ *
+ * (0.9) [perLaVedetta] = il client del giro della vedetta: ogni richiesta ha un
+ * tempo massimo di 30 secondi in tutto (connessione compresa), così un giro non
+ * resta appeso a un server che non risponde. E ogni richiesta si interrompe
+ * davvero quando chi l'ha chiesta rinuncia (una coroutine annullata, un tempo
+ * scaduto): non resta a consumare rete per conto suo.
  */
-class PostinoClient(private val configurazione: ConfigurazionePostino) {
+class PostinoClient(
+    private val configurazione: ConfigurazionePostino,
+    perLaVedetta: Boolean = false,
+) {
+
+    /** Il client delle richieste normali (letture e scritture): quello della vedetta ha il tempo massimo. */
+    private val clientNormale: OkHttpClient = if (perLaVedetta) httpVedetta else http
 
     /** GET /api/famiglia (v3): i figli coi loro dispositivi, o "server 0.7", o fallita. */
     suspend fun leggiFamiglia(): EsitoFamiglia {
@@ -117,8 +134,14 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     suspend fun leggiFinestra(figlioId: Long? = null): Finestra? =
         leggi(conFiglio("/api/finestra", figlioId))?.let { decodifica(Finestra.serializer(), it) }
 
-    suspend fun leggiNotifiche(): List<Notifica>? =
-        leggi("/api/notifiche")
+    /**
+     * GET /api/notifiche: le non lette. (v3.3) Con [dopoId] solo quelle con id
+     * maggiore ("Solo le notifiche nuove"): il giro di ogni minuto scarica solo
+     * il nuovo. Un server più vecchio ignora il parametro e manda tutto: chi
+     * chiama non deve contare su una lista corta.
+     */
+    suspend fun leggiNotifiche(dopoId: Long? = null): List<Notifica>? =
+        leggi(percorsoNotifiche(dopoId))
             ?.let { decodifica(PaccoNotifiche.serializer(), it) }
             ?.notifiche
 
@@ -295,27 +318,44 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
      * rifiuti: il codice `errore` sta lì) + l'ora del server (header `Date`),
      * null se la rete cade o l'indirizzo salvato non è un URL. [client]: quello
      * di tutti, o [httpCreazioni] per le creazioni.
+     *
+     * (0.9) La chiamata è asincrona e si annulla con chi l'ha chiesta: un
+     * `withTimeoutOrNull` attorno (la vedetta aspetta i nomi al massimo 10 s)
+     * la chiude davvero, invece di aspettare che finisca da sola.
      */
     private suspend fun richiedi(
         metodo: String,
         percorso: String,
         corpo: RequestBody?,
-        client: OkHttpClient = http,
+        client: OkHttpClient = clientNormale,
     ): RispostaHttp? {
         if (!configurazione.completa) return null
-        return withContext(Dispatchers.IO) {
-            try {
-                val richiesta = richiesta(percorso)
-                    .method(metodo, corpo)
-                    .build()
-                client.newCall(richiesta).execute().use { risposta ->
-                    RispostaHttp(risposta.code, risposta.body?.string(), oraDalHeader(risposta.header("Date")))
-                }
-            } catch (e: IOException) {
-                null
-            } catch (e: IllegalArgumentException) {
-                null // URL malformato nelle impostazioni: non è un motivo per crashare.
-            }
+        val richiesta = try {
+            richiesta(percorso).method(metodo, corpo).build()
+        } catch (e: IllegalArgumentException) {
+            return null // URL malformato nelle impostazioni: non è un motivo per crashare.
+        }
+        return suspendCancellableCoroutine { continuazione ->
+            val chiamata = client.newCall(richiesta)
+            continuazione.invokeOnCancellation { chiamata.cancel() }
+            chiamata.enqueue(
+                object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        if (continuazione.isActive) continuazione.resume(null)
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        val letta = try {
+                            response.use { risposta ->
+                                RispostaHttp(risposta.code, risposta.body?.string(), oraDalHeader(risposta.header("Date")))
+                            }
+                        } catch (e: IOException) {
+                            null
+                        }
+                        if (continuazione.isActive) continuazione.resume(letta)
+                    }
+                },
+            )
         }
     }
 
@@ -346,6 +386,13 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         /** Il percorso con `?figlio_id=n`; senza figlio (server 0.7) com'era. */
         internal fun conFiglio(percorso: String, figlioId: Long?): String =
             if (figlioId == null) percorso else "$percorso?figlio_id=$figlioId"
+
+        /**
+         * (v3.3) Il percorso delle notifiche, con `?dopo_id=n` solo se c'è un id
+         * valido (il server rifiuta un numero negativo con un 422).
+         */
+        internal fun percorsoNotifiche(dopoId: Long?): String =
+            if (dopoId == null || dopoId < 0) "/api/notifiche" else "/api/notifiche?dopo_id=$dopoId"
 
         /**
          * GET /api/famiglia dal codice HTTP. Il 404 è il server 0.7 (la rotta non
@@ -477,10 +524,21 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         }
 
         // Un solo client OkHttp per processo: riusa pool di connessioni e thread.
+        // OkHttp chiede da solo le risposte compresse (gzip, contratto v3.3) e
+        // le scompatta prima che arrivino qui.
         private val http: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
+            .build()
+
+        /**
+         * (0.9) Il client del giro della vedetta: lo stesso, con 30 secondi al
+         * massimo per richiesta in tutto. Il download dell'aggiornamento non
+         * passa di qui (può durare di più, ed è del worker).
+         */
+        private val httpVedetta: OkHttpClient = http.newBuilder()
+            .callTimeout(30, TimeUnit.SECONDS)
             .build()
 
         /**

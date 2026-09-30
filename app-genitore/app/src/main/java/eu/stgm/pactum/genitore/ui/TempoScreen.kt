@@ -184,9 +184,12 @@ private fun ContenutoTempo(
     // Il giorno scelto dal selettore; null = oggi (l'ultima voce: il contratto
     // ordina dal più vecchio a oggi). Se la voce scelta sparisce al cambio di
     // giornata, si ricade su oggi invece di restare su un giorno fantasma.
+    // (0.9) Coi soli limiti che valevano QUEL giorno: il server manda il limite
+    // di adesso, e prima dell'ultima modifica della regola ne valeva un altro.
     var giornoScelto by rememberSaveable { mutableStateOf<String?>(null) }
-    val selezionato = usoRecente.firstOrNull { it.giorno == giornoScelto }
-        ?: usoRecente.lastOrNull()
+    val regolePerId = remember(finestra) { finestra.regole.associateBy { it.id } }
+    val selezionato = (usoRecente.firstOrNull { it.giorno == giornoScelto } ?: usoRecente.lastOrNull())
+        ?.let { giornoConLimitiValidi(it, regolePerId) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -256,7 +259,7 @@ private fun ContenutoTempo(
             item {
                 SchedaGiorno(
                     giorno = selezionato,
-                    oggi = selezionato == usoRecente.last(),
+                    oggi = selezionato.giorno == usoRecente.last().giorno,
                     computer = computer,
                 )
             }
@@ -273,8 +276,9 @@ private fun ContenutoTempo(
 
             if (selezionato.totaleMinuti != null) {
                 // (v3) I limiti sui siti di un computer stanno nei siti del giorno.
+                // (0.9) Solo quelli che valevano quel giorno.
                 val sitiNelPatto = vociSitiNelPatto(
-                    regoleDelDispositivo = regoleDelDispositivo,
+                    regoleDelDispositivo = regoleDelDispositivo.filter { limiteValidoIl(selezionato.giorno, it) },
                     giorno = selezionato,
                     siti = sitiRecenti?.firstOrNull { it.giorno == selezionato.giorno },
                     bonusDelGiorno = bonusDelGiorno(dispositivo.bonusGiornalieri, selezionato.giorno),
@@ -687,6 +691,8 @@ private fun SchedaGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
  * Il totale del giorno: `labelMedium` "OGGI" sopra, `displaySmall` il valore,
  * `labelSmall` quando è arrivato il dato — un "oggi 3 h" delle 14:00 non
  * racconta la serata. Senza fotografia lo si dice, esplicito.
+ * (v3.3) Con un limite su tutto il dispositivo, sotto il valore il limite come
+ * per le app: la barra sul limite del giorno e "limite 3 h", "20 min oltre".
  */
 @Composable
 private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
@@ -717,6 +723,8 @@ private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
             text = testoDurata(totale.toLong()),
             style = MaterialTheme.typography.displaySmall,
         )
+        val limiteTotale = voceTotale(giorno)
+        if (limiteTotale != null) LimiteDelTotale(limiteTotale)
         val fotografia = istanteServer(giorno.aggiornatoTs)
         if (fotografia != null) {
             Text(
@@ -726,7 +734,35 @@ private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = if (limiteTotale != null) Modifier.padding(top = Spazi.s) else Modifier,
             )
+        }
+    }
+}
+
+/**
+ * (v3.3) Il limite su tutto il dispositivo, accanto al totale del giorno e
+ * detto come quello di un'app DENTRO IL PATTO: la barra è sul limite del
+ * giorno (base + bonus concessi), il chip dice il limite base, e "oltre" si
+ * conta su base + bonus, come lo conta il figlio. Niente terracotta: quanto
+ * oltre si dice a parole.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LimiteDelTotale(voce: VoceTempo) {
+    val limite = voce.limite ?: return
+    val limiteDelGiorno = voce.limiteDelGiorno ?: limite
+    val oltre = minutiOltre(voce.minuti, limite, voce.bonus)
+    Spacer(modifier = Modifier.height(Spazi.s))
+    BarraUso(minuti = voce.minuti, limite = limiteDelGiorno, massimoDelGiorno = limiteDelGiorno)
+    Spacer(modifier = Modifier.height(Spazi.s))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Spazi.s),
+        verticalArrangement = Arrangement.spacedBy(Spazi.xs),
+    ) {
+        Etichetta(stringResource(R.string.tempo_limite, testoDurata(limite.toLong())))
+        if (oltre > 0) {
+            Etichetta(stringResource(R.string.tempo_oltre, testoDurata(oltre.toLong())))
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.Dispositivo
@@ -87,6 +88,32 @@ fun descrizioneRegola(regola: RegolaFinestra): String = descrizioneRegola(parole
 fun descrizioneRegola(parole: Parole, regola: RegolaFinestra): String =
     descrizioneRegola(parole, regola.tipo, regola.parametri, regola.nome, regola.dispositivo?.tipo)
 
+/**
+ * (0.9) Lo stato di una regola in un giorno, in parole, per l'elenco della
+ * scheda del patto: "mantenuta", "fuori regola · 15 min oltre", "senza dati";
+ * per la vita reale "successo confermato", "non riuscito", "nessuna conferma per
+ * ora" (grigio vuol dire niente dichiarato, o un successo ancora da confermare).
+ * Una regola che oggi non c'è più lo dice: "· non più attiva".
+ */
+fun testoStatoRegola(parole: Parole, riga: RegolaDelGiorno): String {
+    val stato = if (riga.regola.tipo == TipiRegola.VITA_REALE) {
+        when (riga.segnale) {
+            Segnale.MANTENUTA -> parole.testo(R.string.stato_impegno_confermato)
+            Segnale.FUORI_REGOLA -> parole.testo(R.string.stato_impegno_non_riuscito)
+            Segnale.NESSUN_DATO -> parole.testo(R.string.stato_impegno_nessuna_conferma)
+        }
+    } else {
+        when (riga.segnale) {
+            Segnale.MANTENUTA -> parole.testo(R.string.stato_regola_mantenuta)
+            Segnale.FUORI_REGOLA -> riga.minutiOltre
+                ?.let { parole.testo(R.string.stato_regola_fuori_oltre, testoDurata(parole, it.toLong())) }
+                ?: parole.testo(R.string.stato_regola_fuori)
+            Segnale.NESSUN_DATO -> parole.testo(R.string.stato_regola_senza_dati)
+        }
+    }
+    return if (riga.regola.attiva) stato else parole.testo(R.string.stato_regola_non_piu_attiva, stato)
+}
+
 /** Il tipo della regola come sopra-titolo della sua scheda ("LIMITE DI TEMPO"). */
 @Composable
 fun etichettaTipoRegola(tipo: String): String = when (tipo) {
@@ -104,7 +131,8 @@ fun etichettaTipoRegola(tipo: String): String = when (tipo) {
  * `nomeApp` è il nome leggibile che la finestra allega alle limite_tempo su un
  * pacchetto ("TikTok"): se c'è, il genitore non legge mai com.zhiliaoapp.musically.
  * `tipoDispositivo` (v3): una fascia oraria di un computer dice "Niente
- * computer", non "Niente telefono".
+ * computer", non "Niente telefono"; (v3.3) un limite sul totale dice "Tutto il
+ * computer", non "Tutto il telefono".
  */
 fun descrizioneRegola(
     parole: Parole,
@@ -115,7 +143,7 @@ fun descrizioneRegola(
 ): String = when (tipo) {
     TipiRegola.LIMITE_TEMPO -> parole.testo(
         R.string.regola_limite_tempo,
-        nomeBersaglio(parametri, nomeApp),
+        nomeBersaglio(parole, parametri, nomeApp, tipoDispositivo),
         testoDurata(parole, campo(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
     )
 
@@ -164,9 +192,43 @@ fun descrizioneParametri(parole: Parole, regola: RegolaFinestra, parametri: Json
     )
 }
 
-/** L'app, il programma, il sito o la categoria di una limite_tempo, col nome leggibile se c'è. */
-private fun nomeBersaglio(parametri: JsonObject, nomeApp: String?): String =
-    nomeLeggibile(campo(parametri, "app_o_categoria") ?: "?", nomeApp)
+/**
+ * L'app, il programma, il sito o la categoria di una limite_tempo, col nome
+ * leggibile se c'è; (v3.3) "Tutto il telefono" o "Tutto il computer" per il
+ * totale del dispositivo, dal tipo del dispositivo della regola.
+ */
+private fun nomeBersaglio(
+    parole: Parole,
+    parametri: JsonObject,
+    nomeApp: String?,
+    tipoDispositivo: String?,
+): String {
+    val chiave = campo(parametri, "app_o_categoria")
+    if (eTotale(chiave)) return nomeTotale(parole, tipoDispositivo)
+    return nomeLeggibile(chiave ?: "?", nomeApp)
+}
+
+/**
+ * Il bersaglio di una regola limite_tempo come lo legge il genitore ("TikTok",
+ * "Social", "Tutto il telefono"): lo stesso della frase della regola. Serve al
+ * dialogo delle proposte ("Su: Tutto il telefono").
+ */
+fun bersaglioRegola(parole: Parole, regola: RegolaFinestra): String =
+    nomeBersaglio(parole, regola.parametri, regola.nome, regola.dispositivo?.tipo)
+
+/**
+ * (v3.3) Il totale del dispositivo detto per il tipo del dispositivo della
+ * regola: "Tutto il computer" per un computer, "Tutto il telefono" per il resto.
+ * Una regola senza dispositivo viene da un server che non conosce i computer:
+ * è del telefono.
+ */
+fun nomeTotale(parole: Parole, tipoDispositivo: String?): String = parole.testo(
+    if (tipoDispositivo == TipiDispositivo.COMPUTER) {
+        R.string.bersaglio_totale_computer
+    } else {
+        R.string.bersaglio_totale_telefono
+    },
+)
 
 /**
  * Il nome da mostrare per una chiave del contratto: il `nome` leggibile quando
@@ -556,6 +618,8 @@ private const val APP_NEL_DIGEST = 3
  * - Un telefono solo (o server 0.7): come la 0.7 — "Oggi: 3 h" e le prime app.
  * - Più dispositivi, o un computer: il titolo mette in fila i totali
  *   ("Oggi: Telefono 3 h · Computer 2 h"), il testo una riga per dispositivo.
+ * - (v3.3) Un limite su tutto il dispositivo sta accanto al suo totale, come
+ *   quello di un'app: "Oggi: 3 h 20 min (limite 3 h)".
  * Un oggi senza fotografia lo dice, MAI uno zero finto; una fotografia ferma
  * da più di 90 minuti è un parziale, e lo si scrive.
  * I dispositivi scollegati o non ancora collegati non entrano: non mandano dati.
@@ -568,11 +632,11 @@ fun testoDigest(parole: Parole, dispositivi: List<VistaDispositivo>, adesso: Ins
     }
     val parti = attivi.map { dispositivo ->
         val nome = nomeDelDispositivo(parole, dispositivo.nome, dispositivo.tipo)
-        val totale = dispositivo.usoRecente.lastOrNull()?.totaleMinuti
-        if (totale == null) {
+        val uso = dispositivo.usoRecente.lastOrNull()
+        if (uso?.totaleMinuti == null) {
             parole.testo(R.string.digest_parte_dispositivo_nessun_dato, nome)
         } else {
-            parole.testo(R.string.digest_parte_dispositivo, nome, testoDurata(parole, totale.toLong()))
+            parteDispositivo(parole, nome, uso, uso.totaleMinuti)
         }
     }
     val righe = attivi.map { dispositivo ->
@@ -583,7 +647,7 @@ fun testoDigest(parole: Parole, dispositivi: List<VistaDispositivo>, adesso: Ins
         } else {
             val prime = primeApp(parole, uso)
             if (prime.isEmpty()) {
-                parole.testo(R.string.digest_parte_dispositivo, nome, testoDurata(parole, uso.totaleMinuti.toLong()))
+                parteDispositivo(parole, nome, uso, uso.totaleMinuti)
             } else {
                 parole.testo(R.string.digest_riga_dispositivo, nome, prime)
             }
@@ -602,14 +666,55 @@ fun testoDigest(parole: Parole, dispositivi: List<VistaDispositivo>, adesso: Ins
     return TestoNotifica(parole.testo(R.string.digest_titolo, parti.joinToString(" · ")), testo)
 }
 
-/** Il digest della 0.7: un telefono, il totale nel titolo, le prime app nel testo. */
+/**
+ * "Telefono 3 h 20 min", e (v3.3) "Telefono 3 h 20 min (limite 3 h)" quando il
+ * dispositivo ha un limite sul totale: il limite accanto al totale, come per le
+ * app ("TikTok 1 h (limite 1 h)"). Col bonus concesso oggi su quella regola il
+ * limite di oggi è la somma, come nel Tempo: "(limite 3 h + 15 min di bonus)".
+ */
+private fun parteDispositivo(parole: Parole, nome: String, uso: UsoGiorno, totale: Int): String {
+    val durata = testoDurata(parole, totale.toLong())
+    val limite = uso.limite
+        ?: return parole.testo(R.string.digest_parte_dispositivo, nome, durata)
+    val bonus = uso.bonus
+    return if (bonus > 0) {
+        parole.testo(
+            R.string.digest_parte_dispositivo_con_limite_bonus,
+            nome,
+            durata,
+            testoDurata(parole, limite.toLong()),
+            testoDurata(parole, bonus.toLong()),
+        )
+    } else {
+        parole.testo(R.string.digest_parte_dispositivo_con_limite, nome, durata, testoDurata(parole, limite.toLong()))
+    }
+}
+
+/**
+ * Il digest della 0.7: un telefono, il totale nel titolo (v3.3: col limite sul
+ * totale, se c'è), le prime app nel testo.
+ */
 private fun digestUnTelefono(parole: Parole, uso: UsoGiorno?, adesso: Instant): TestoNotifica {
     val totale = uso?.totaleMinuti
         ?: return TestoNotifica(
             parole.testo(R.string.digest_titolo_nessun_dato),
             parole.testo(R.string.digest_testo_nessun_dato),
         )
-    val titolo = parole.testo(R.string.digest_titolo, testoDurata(parole, totale.toLong()))
+    val limite = uso.limite
+    val titolo = when {
+        limite == null -> parole.testo(R.string.digest_titolo, testoDurata(parole, totale.toLong()))
+        uso.bonus > 0 -> parole.testo(
+            R.string.digest_titolo_con_limite_bonus,
+            testoDurata(parole, totale.toLong()),
+            testoDurata(parole, limite.toLong()),
+            testoDurata(parole, uso.bonus.toLong()),
+        )
+        else -> parole.testo(
+            R.string.digest_titolo_con_limite,
+            testoDurata(parole, totale.toLong()),
+            testoDurata(parole, limite.toLong()),
+        )
+    }
     val prime = primeApp(parole, uso)
     val corpo = if (prime.isEmpty()) {
         parole.testo(R.string.digest_tocca)
@@ -630,7 +735,11 @@ private fun digestUnTelefono(parole: Parole, uso: UsoGiorno?, adesso: Instant): 
     return TestoNotifica(titolo, testo)
 }
 
-/** "TikTok 1 h (limite 1 h) · YouTube 40 min": le app più usate del giorno, col limite dove c'è. */
+/**
+ * "TikTok 1 h (limite 1 h) · YouTube 40 min": le app più usate del giorno, col
+ * limite dove c'è — e (0.9) col bonus concesso oggi su quella regola, come nel
+ * Tempo: "(limite 1 h + 15 min di bonus)".
+ */
 private fun primeApp(parole: Parole, uso: UsoGiorno): String =
     uso.app
         .sortedByDescending { it.minuti }
@@ -639,10 +748,16 @@ private fun primeApp(parole: Parole, uso: UsoGiorno): String =
             val nome = nomeLeggibile(app.chiave, app.nome)
             val durata = testoDurata(parole, app.minuti.toLong())
             val limite = app.limite
-            if (limite != null) {
-                parole.testo(R.string.digest_app_con_limite, nome, durata, testoDurata(parole, limite.toLong()))
-            } else {
-                parole.testo(R.string.digest_app, nome, durata)
+            when {
+                limite == null -> parole.testo(R.string.digest_app, nome, durata)
+                app.bonus > 0 -> parole.testo(
+                    R.string.digest_app_con_limite_bonus,
+                    nome,
+                    durata,
+                    testoDurata(parole, limite.toLong()),
+                    testoDurata(parole, app.bonus.toLong()),
+                )
+                else -> parole.testo(R.string.digest_app_con_limite, nome, durata, testoDurata(parole, limite.toLong()))
             }
         }
 
@@ -904,13 +1019,22 @@ private fun fraseModifica(parole: Parole, payload: JsonObject, regola: RegolaFin
 }
 
 /**
- * "su TikTok", "sulla fascia 21:00–07:00", "su «Camminare un'ora»": la regola
- * come complemento di una frase ("Ha accettato la tua proposta su TikTok").
- * null per un tipo di regola sconosciuto.
+ * "su TikTok", "sulla fascia 21:00–07:00", "su «Camminare un'ora»", (v3.3) "su
+ * tutto il telefono": la regola come complemento di una frase ("Ha accettato la
+ * tua proposta su TikTok"). null per un tipo di regola sconosciuto.
  */
 private fun suRegola(parole: Parole, regola: RegolaFinestra): String? = when (regola.tipo) {
-    TipiRegola.LIMITE_TEMPO ->
-        parole.testo(R.string.regola_su_app, nomeBersaglio(regola.parametri, regola.nome))
+    TipiRegola.LIMITE_TEMPO -> if (eTotale(campo(regola.parametri, "app_o_categoria"))) {
+        parole.testo(
+            if (regola.dispositivo?.tipo == TipiDispositivo.COMPUTER) {
+                R.string.regola_su_totale_computer
+            } else {
+                R.string.regola_su_totale_telefono
+            },
+        )
+    } else {
+        parole.testo(R.string.regola_su_app, bersaglioRegola(parole, regola))
+    }
     TipiRegola.FASCIA_ORARIA -> parole.testo(
         R.string.regola_su_fascia,
         campo(regola.parametri, "dalle") ?: "?",

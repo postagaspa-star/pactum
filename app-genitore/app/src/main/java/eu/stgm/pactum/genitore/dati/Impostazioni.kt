@@ -1,6 +1,7 @@
 package eu.stgm.pactum.genitore.dati
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -8,6 +9,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import eu.stgm.pactum.genitore.sync.avvisateDaRicordare
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -81,6 +83,14 @@ class Impostazioni(private val context: Context) {
         // valgono la chiave 0 e il figlio 0.
         val SILENZI_NOTI = stringPreferencesKey("silenzi_noti")
         val DIGEST_INVIATI = stringSetPreferencesKey("digest_inviati")
+
+        // (0.9) La spiegazione sull'esenzione dalla batteria, mostrata una volta.
+        val RICHIESTA_BATTERIA_FATTA = booleanPreferencesKey("richiesta_batteria_fatta")
+
+        // (0.9) L'ultimo giro della vedetta andato a buon fine (epoch ms): la riga
+        // "Avvisi: ultimo controllo" della Panoramica. Scritto al massimo ogni 10
+        // minuti (il dato preciso sta in memoria, Vedetta.ultimoControllo).
+        val ULTIMO_CONTROLLO_AVVISI = longPreferencesKey("ultimo_controllo_avvisi")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -88,6 +98,16 @@ class Impostazioni(private val context: Context) {
     }
 
     suspend fun leggiConfigurazione(): ConfigurazionePostino = configurazione.first()
+
+    /**
+     * (0.9) true = le impostazioni sono ancora quelle di [configurazione]. Un giro
+     * della vedetta cominciato col server di prima non deve riscrivere ricordo,
+     * silenzi e digest dopo che il cambio di server li ha azzerati: ogni sua
+     * scrittura passa da qui, nella stessa transazione.
+     */
+    private fun stessaConfigurazione(p: Preferences, configurazione: ConfigurazionePostino?): Boolean =
+        configurazione == null ||
+            ((p[Chiavi.SERVER_URL] ?: "") == configurazione.serverUrl && (p[Chiavi.TOKEN] ?: "") == configurazione.token)
 
     suspend fun salvaConfigurazione(serverUrl: String, token: String) {
         context.dataStore.edit { p ->
@@ -105,6 +125,7 @@ class Impostazioni(private val context: Context) {
                 p.remove(Chiavi.SILENZI_NOTI)
                 p.remove(Chiavi.FIGLIO_SCELTO)
                 p.remove(Chiavi.FAMIGLIA_LETTA)
+                p.remove(Chiavi.ULTIMO_CONTROLLO_AVVISI)
             }
             p[Chiavi.SERVER_URL] = urlNuovo
             p[Chiavi.TOKEN] = tokenNuovo
@@ -149,12 +170,15 @@ class Impostazioni(private val context: Context) {
         }
     }
 
-    suspend fun salvaSilenziNoti(silenzi: Map<Long, SilenzioNoto>) {
+    /** [perConfigurazione]: il server del giro; se nel frattempo è cambiato, non si scrive. */
+    suspend fun salvaSilenziNoti(silenzi: Map<Long, SilenzioNoto>, perConfigurazione: ConfigurazionePostino? = null) {
         val grezzo = jsonSilenzi.encodeToString(
             MappaSilenzi.serializer(),
             MappaSilenzi(silenzi.mapKeys { it.key.toString() }),
         )
-        context.dataStore.edit { p -> p[Chiavi.SILENZI_NOTI] = grezzo }
+        context.dataStore.edit { p ->
+            if (stessaConfigurazione(p, perConfigurazione)) p[Chiavi.SILENZI_NOTI] = grezzo
+        }
     }
 
     /**
@@ -173,8 +197,12 @@ class Impostazioni(private val context: Context) {
      * null = mai salvati) e l'ultimo giorno della 0.7, e restituisce i digest da
      * salvare (null = niente da cambiare). La logica è in digestDopoAggiornamento.
      */
-    suspend fun passaggioDigest(passaggio: (inviati: Set<String>?, ultimoGiorno07: String?) -> Set<String>?) {
+    suspend fun passaggioDigest(
+        perConfigurazione: ConfigurazionePostino? = null,
+        passaggio: (inviati: Set<String>?, ultimoGiorno07: String?) -> Set<String>?,
+    ) {
         context.dataStore.edit { p ->
+            if (!stessaConfigurazione(p, perConfigurazione)) return@edit
             passaggio(p[Chiavi.DIGEST_INVIATI], p[Chiavi.DIGEST_ULTIMO_GIORNO_07])
                 ?.let { p[Chiavi.DIGEST_INVIATI] = it }
         }
@@ -185,8 +213,9 @@ class Impostazioni(private val context: Context) {
         "$figlioId|$giorno" in context.dataStore.data.first()[Chiavi.DIGEST_INVIATI].orEmpty()
 
     /** Registra il digest di oggi per il figlio, e dimentica i suoi giorni vecchi. */
-    suspend fun registraDigestInviato(figlioId: Long, giorno: String) {
+    suspend fun registraDigestInviato(figlioId: Long, giorno: String, perConfigurazione: ConfigurazionePostino? = null) {
         context.dataStore.edit { p ->
+            if (!stessaConfigurazione(p, perConfigurazione)) return@edit
             val altri = p[Chiavi.DIGEST_INVIATI].orEmpty()
                 .filterNot { it.substringBefore('|') == figlioId.toString() }
             p[Chiavi.DIGEST_INVIATI] = (altri + "$figlioId|$giorno").toSet()
@@ -197,33 +226,60 @@ class Impostazioni(private val context: Context) {
     val ultimaVerificaRiuscita: Flow<Long?> =
         context.dataStore.data.map { p -> p[Chiavi.ULTIMA_VERIFICA_OK] }
 
-    /** Da chiamare a ogni risposta buona del server (vedetta, finestra, prova manuale). */
+    /** Da chiamare a ogni risposta buona del server (finestra, prova manuale). */
     suspend fun registraVerificaRiuscita(ts: Long = System.currentTimeMillis()) {
         context.dataStore.edit { p -> p[Chiavi.ULTIMA_VERIFICA_OK] = ts }
     }
 
-    /** Id delle notifiche del patto già avvisate con una notifica di sistema. */
-    suspend fun leggiIdAvvisati(): Set<Long> =
-        context.dataStore.data.first()[Chiavi.NOTIFICHE_AVVISATE]
-            .orEmpty()
-            .mapNotNull { it.toLongOrNull() }
-            .toSet()
+    /** (0.9) L'ultimo giro della vedetta andato a buon fine (epoch ms), null = mai (con questo server). */
+    val ultimoControlloAvvisi: Flow<Long?> =
+        context.dataStore.data.map { p -> p[Chiavi.ULTIMO_CONTROLLO_AVVISI] }
 
     /**
-     * Aggiunge gli id appena avvisati. L'insieme è limitato ai più RECENTI
-     * (gli id del server crescono sempre): senza tetto crescerebbe per sempre,
-     * e i vecchi id non servono più — le notifiche lette spariscono comunque
-     * da GET /api/notifiche.
+     * (0.9) Un giro della vedetta è andato: "ultimo controllo" e "ultima verifica
+     * riuscita" in una scrittura sola. La vedetta la chiama al massimo ogni 10
+     * minuti (CadenzaVedetta.registrazioneDovuta), non a ogni giro.
      */
-    suspend fun registraIdAvvisati(nuovi: Collection<Long>) {
-        if (nuovi.isEmpty()) return
+    suspend fun registraControlloVedetta(ts: Long, perConfigurazione: ConfigurazionePostino) {
         context.dataStore.edit { p ->
-            val unione = p[Chiavi.NOTIFICHE_AVVISATE].orEmpty()
+            if (!stessaConfigurazione(p, perConfigurazione)) return@edit
+            p[Chiavi.ULTIMO_CONTROLLO_AVVISI] = ts
+            p[Chiavi.ULTIMA_VERIFICA_OK] = ts
+        }
+    }
+
+    /** Id delle notifiche del patto già avvisate con una notifica di sistema. */
+    suspend fun leggiIdAvvisati(): Set<Long> = leggiIdAvvisatiSeCi().orEmpty()
+
+    /**
+     * (0.9) Come [leggiIdAvvisati], ma null = mai salvati: app appena installata,
+     * o server appena cambiato. È il "primo giro": le non lette si dicono con un
+     * riassunto, non con una raffica. Un insieme vuoto invece è "letto tutto".
+     */
+    suspend fun leggiIdAvvisatiSeCi(): Set<Long>? =
+        context.dataStore.data.first()[Chiavi.NOTIFICHE_AVVISATE]
+            ?.mapNotNull { it.toLongOrNull() }
+            ?.toSet()
+
+    /**
+     * (0.9) Dopo un giro della vedetta: aggiunge gli id appena avvisati e, con
+     * la lista INTERA delle non lette ([nonLette], giro completo), tiene solo
+     * quelle ancora non lette sul server; con la lista parziale del giro veloce
+     * ([nonLette] null) non toglie niente (v. avvisateDaRicordare). Niente tetto.
+     * Se nel frattempo il server è cambiato non scrive; se non cambia niente,
+     * DataStore non riscrive il file.
+     */
+    suspend fun ricordaIdAvvisati(
+        avvisati: Collection<Long>,
+        nonLette: Collection<Long>?,
+        perConfigurazione: ConfigurazionePostino,
+    ) {
+        context.dataStore.edit { p ->
+            if (!stessaConfigurazione(p, perConfigurazione)) return@edit
+            val prima = p[Chiavi.NOTIFICHE_AVVISATE].orEmpty()
                 .mapNotNull { it.toLongOrNull() }
-                .toSet() + nuovi
-            p[Chiavi.NOTIFICHE_AVVISATE] = unione
-                .sortedDescending()
-                .take(TETTO_ID_AVVISATI)
+                .toSet()
+            p[Chiavi.NOTIFICHE_AVVISATE] = avvisateDaRicordare(prima, avvisati, nonLette)
                 .map { it.toString() }
                 .toSet()
         }
@@ -273,8 +329,18 @@ class Impostazioni(private val context: Context) {
         context.dataStore.edit { p -> p[Chiavi.INTRO_CHIUSA] = true }
     }
 
+    /**
+     * (0.9) true = la spiegazione sull'esenzione dalla batteria è già stata
+     * mostrata una volta. Dopo, la richiesta resta nelle Impostazioni.
+     */
+    val richiestaBatteriaFatta: Flow<Boolean> =
+        context.dataStore.data.map { p -> p[Chiavi.RICHIESTA_BATTERIA_FATTA] ?: false }
+
+    suspend fun registraRichiestaBatteriaFatta() {
+        context.dataStore.edit { p -> p[Chiavi.RICHIESTA_BATTERIA_FATTA] = true }
+    }
+
     private companion object {
-        const val TETTO_ID_AVVISATI = 500
         const val ORA_DIGEST_DEFAULT = 21
         val jsonSilenzi = Json { ignoreUnknownKeys = true }
     }

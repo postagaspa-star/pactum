@@ -4,14 +4,23 @@ import eu.stgm.pactum.design.GiornoPatto
 import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.design.segnaleDaStato
 import eu.stgm.pactum.genitore.dati.EventoFinestra
+import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.QuadrettoSemaforo
+import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.RiepilogoFinestra
 import eu.stgm.pactum.genitore.dati.StatiProposta
+import eu.stgm.pactum.genitore.dati.TipiRegola
 import eu.stgm.pactum.genitore.dati.UsoGiorno
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -126,6 +135,78 @@ private fun dataOppureNull(iso: String): LocalDate? = try {
     null
 }
 
+// --- Le regole di un giorno, nella scheda del patto (0.9) ---------------------------
+
+/**
+ * Lo stato di [regola] in [giorno] (ISO), dal suo `semaforo`: la stessa voce che
+ * colora la sua striscia piccola, calcolata dal server con la stessa funzione
+ * della striscia del patto. Nessuna logica nuova: verde = mantenuta, rosso =
+ * fuori regola, grigio (o altro) = senza dati — per la vita reale verde =
+ * confermata, rosso = non riuscita, grigio = nessuna conferma. null = il
+ * semaforo non ha quel giorno (server vecchio, o giorno fuori dagli 8).
+ */
+fun segnaleDellaRegola(regola: RegolaFinestra, giorno: String): Segnale? =
+    regola.semaforo.firstOrNull { it.data == giorno }?.let { segnaleDaStato(it.stato) }
+
+/**
+ * Una riga dell'elenco "oggi, regola per regola" della scheda del patto.
+ * [minutiOltre] solo per un limite di tempo fuori regola, se i minuti si sanno.
+ */
+data class RegolaDelGiorno(
+    val regola: RegolaFinestra,
+    val segnale: Segnale,
+    val minutiOltre: Int? = null,
+)
+
+/**
+ * Le regole di [giorno] per la scheda del patto, in ordine di id:
+ * - quelle in vigore (attive, non di un dispositivo scollegato), anche quando
+ *   quel giorno non hanno dati: il padre vede anche le regole mantenute, non
+ *   solo quello che è andato storto;
+ * - e quelle che quel giorno hanno contato nella striscia (verde o rosso) anche
+ *   se adesso non ci sono più (eliminate quel giorno, o di un dispositivo
+ *   scollegato quel giorno): così un giorno rosso ha sempre la sua regola rossa.
+ * Lo stato viene da [segnaleDellaRegola].
+ */
+fun regoleDelGiorno(finestra: Finestra, giorno: String): List<RegolaDelGiorno> {
+    val inVigore = regoleProponibili(finestra).map { it.id }.toSet()
+    val dispositivi = dispositiviDellaFinestra(finestra)
+    return finestra.regole.sortedBy { it.id }.mapNotNull { regola ->
+        val segnale = segnaleDellaRegola(regola, giorno)
+        val contato = segnale == Segnale.MANTENUTA || segnale == Segnale.FUORI_REGOLA
+        if (regola.id !in inVigore && !contato) return@mapNotNull null
+        val stato = segnale ?: Segnale.NESSUN_DATO
+        RegolaDelGiorno(
+            regola = regola,
+            segnale = stato,
+            minutiOltre = if (stato == Segnale.FUORI_REGOLA) minutiOltreDellaRegola(regola, giorno, dispositivi) else null,
+        )
+    }
+}
+
+/**
+ * Di quanto un limite di tempo è andato oltre in [giorno]: i minuti del giorno
+ * sul limite di quel giorno (base + bonus), dalla stessa voce di `uso_recente`
+ * che usa il Tempo (app, categoria o totale del dispositivo con quel
+ * `regola_id`). null = non si sa (fasce, siti, giorno senza fotografia, limite
+ * che quel giorno era un altro) o non è oltre.
+ */
+fun minutiOltreDellaRegola(regola: RegolaFinestra, giorno: String, dispositivi: List<VistaDispositivo>): Int? {
+    if (regola.tipo != TipiRegola.LIMITE_TEMPO || !limiteValidoIl(giorno, regola)) return null
+    val idDispositivo = regola.dispositivoId ?: regola.dispositivo?.id
+    val uso = dispositivi.firstOrNull { it.id == idDispositivo }
+        ?.usoRecente
+        ?.firstOrNull { it.giorno == giorno }
+        ?: return null
+    val totale = uso.totaleMinuti
+    val oltre = when {
+        uso.regolaId == regola.id && totale != null -> minutiOltre(totale, uso.limite, uso.bonus)
+        else -> uso.app.firstOrNull { it.regolaId == regola.id }?.let { minutiOltre(it.minuti, it.limite, it.bonus) }
+            ?: uso.categorie.firstOrNull { it.regolaId == regola.id }?.let { minutiOltre(it.minuti, it.limite, it.bonus) }
+    }
+    return oltre?.takeIf { it > 0 }
+}
+
 // --- "Da guardare insieme" -----------------------------------------------------
 
 enum class GenereVoce { FUORI_REGOLA, INTERRUZIONE }
@@ -192,6 +273,32 @@ const val VOCI_DA_GUARDARE_VISIBILI = 5
  */
 fun dallaPiuRecente(notifiche: List<Notifica>): List<Notifica> =
     notifiche.sortedByDescending { it.id }
+
+/** (0.9) Quante richieste insieme per "Segna tutte come lette": il server è un NAS di casa. */
+const val SEGNATURE_IN_PARALLELO = 4
+
+/**
+ * (0.9) [lavoro] su ogni voce, al massimo [massimo] alla volta; i risultati
+ * nell'ordine delle voci. "Segna tutte come lette" fa una richiesta per
+ * notifica: con cento notifiche, non cento richieste nello stesso istante.
+ */
+suspend fun <T, R> perOgnuna(voci: List<T>, massimo: Int, lavoro: suspend (T) -> R): List<R> = coroutineScope {
+    val posti = Semaphore(massimo.coerceAtLeast(1))
+    voci.map { voce -> async { posti.withPermit { lavoro(voce) } } }.awaitAll()
+}
+
+// --- Avvisi: l'ultimo controllo (0.9) ----------------------------------------------
+
+/** Oltre questa durata dall'ultimo controllo, la riga "Avvisi: ultimo controllo" si fa notare. */
+val SOGLIA_CONTROLLO_VECCHIO: Duration = Duration.ofMinutes(15)
+
+/**
+ * true = l'ultimo giro della vedetta andato a buon fine è più vecchio di 15
+ * minuti: Pactum non riesce a guardare il patto (server che non risponde,
+ * telefono senza rete, app fermata), e gli avvisi possono arrivare in ritardo.
+ */
+fun controlloVecchio(ultimo: Instant, adesso: Instant): Boolean =
+    Duration.between(ultimo, adesso) > SOGLIA_CONTROLLO_VECCHIO
 
 // --- Il segno -------------------------------------------------------------------
 
@@ -284,6 +391,93 @@ fun elencoTempo(giorno: UsoGiorno, altreNelPatto: List<VoceTempo> = emptyList())
         dentroIlPatto = dentro,
         restoDellaGiornata = resto,
         massimoDelGiorno = giorno.app.maxOfOrNull { it.minuti } ?: 0,
+    )
+}
+
+// --- Il limite di QUEL giorno (0.9) ------------------------------------------------
+
+/**
+ * true = il limite di [regola] valeva in [giorno] (ISO, giorno del patto): il
+ * giorno è quello dell'ultima modifica della regola o uno dopo. Il server mette
+ * accanto a ogni giorno degli 8 il limite di ADESSO; in un giorno PRIMA
+ * dell'ultima modifica valeva un altro limite (o nessuno), e "20 min oltre"
+ * direbbe una cosa falsa.
+ *
+ * Il giorno stesso della modifica vale: l'app del figlio valuta tutta la
+ * giornata con la regola nuova (una regola creata alle 15:00 conta l'uso dalle
+ * 00:00), quindi quel giorno il limite è in vigore e lo sforamento può arrivare
+ * proprio quel giorno.
+ *
+ * Regola che non si trova, data illeggibile: si mostra come prima (non si sa, e
+ * non si nasconde un limite per un dato mancante).
+ */
+fun limiteValidoIl(giorno: String, regola: RegolaFinestra?, zona: ZoneId = FUSO_PATTO): Boolean {
+    if (regola == null) return true
+    val modificata = istanteServer(regola.ultimaModificaTs)?.atZone(zona)?.toLocalDate() ?: return true
+    val data = dataOppureNull(giorno) ?: return true
+    return !data.isBefore(modificata)
+}
+
+/**
+ * Il giorno del Tempo col solo limite che valeva davvero: toglie limite, regola
+ * e bonus da app, categorie e totale del dispositivo nei giorni PRIMA
+ * dell'ultima modifica della regola ([limiteValidoIl]). Il resto non cambia: i
+ * minuti sono veri comunque.
+ */
+fun giornoConLimitiValidi(
+    giorno: UsoGiorno,
+    regole: Map<Long, RegolaFinestra>,
+    zona: ZoneId = FUSO_PATTO,
+): UsoGiorno {
+    fun vale(regolaId: Long?): Boolean = regolaId == null || limiteValidoIl(giorno.giorno, regole[regolaId], zona)
+    val totaleValido = giorno.limite == null || vale(giorno.regolaId)
+    return giorno.copy(
+        app = giorno.app.map { app ->
+            if (app.limite == null || vale(app.regolaId)) app else app.copy(limite = null, regolaId = null, bonus = 0)
+        },
+        categorie = giorno.categorie.map { categoria ->
+            if (categoria.limite == null || vale(categoria.regolaId)) {
+                categoria
+            } else {
+                categoria.copy(limite = null, regolaId = null, bonus = 0)
+            }
+        },
+        limite = if (totaleValido) giorno.limite else null,
+        regolaId = if (totaleValido) giorno.regolaId else null,
+        bonus = if (totaleValido) giorno.bonus else 0,
+    )
+}
+
+// --- Il limite su tutto il dispositivo (v3.3) -------------------------------------
+
+/**
+ * La chiave del contratto per "tutto il dispositivo" (`app_o_categoria`): un
+ * limite sul totale del giorno, "al telefono al massimo 3 ore". Minuscola,
+ * proprio così; come l'app del figlio si tollerano spazi e maiuscole.
+ */
+const val CHIAVE_TOTALE = "totale"
+
+/** true = la chiave è quella del totale del dispositivo. */
+fun eTotale(chiave: String?): Boolean = chiave?.trim()?.lowercase() == CHIAVE_TOTALE
+
+/**
+ * Il limite su tutto il dispositivo di un giorno, letto come una voce del
+ * patto: i minuti sono il totale del giorno, il limite e il bonus quelli che il
+ * server mette accanto a `totale_minuti`. Così il Tempo lo mostra con le stesse
+ * regole delle app: limite del giorno = base + bonus, "oltre" su quello.
+ * null = nessuna regola sul totale, o giorno senza fotografia (niente totale,
+ * niente confronto: mai uno zero finto).
+ */
+fun voceTotale(giorno: UsoGiorno): VoceTempo? {
+    val totale = giorno.totaleMinuti ?: return null
+    val limite = giorno.limite ?: return null
+    return VoceTempo(
+        chiave = CHIAVE_TOTALE,
+        nome = null,
+        minuti = totale,
+        limite = limite,
+        categoria = false,
+        bonus = giorno.bonus,
     )
 }
 

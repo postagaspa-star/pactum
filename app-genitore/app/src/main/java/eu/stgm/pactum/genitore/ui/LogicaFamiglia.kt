@@ -303,6 +303,23 @@ fun idAvvisoSilenzio(chiave: Long): Int =
 /** Il digest di un figlio (0 = server 0.7): quello di oggi sostituisce quello di ieri. */
 fun idDigest(chiave: Long): Int = 1_900_000_000 + Math.floorMod(chiave, 50_000_000L).toInt()
 
+/**
+ * (0.9) La notifica fissa del servizio sempre attivo ("Pactum è attivo"): sotto
+ * gli id dei digest e dei silenzi, sopra quelli del server (le notifiche del
+ * patto usano il loro id, che parte da 1).
+ */
+const val ID_NOTIFICA_FISSA = 1_800_000_000
+
+/** (0.9) Il riassunto "Novità da leggere: N", al posto di una raffica di avvisi. */
+const val ID_RIASSUNTO = 1_800_000_010
+
+/**
+ * (0.9) true = un avviso che si può togliere dalla tendina per fare spazio: un
+ * avviso del patto (id del server, sotto quelli riservati) o il riassunto. Gli
+ * avvisi di silenzio e i digest no: dicono uno stato, non un fatto già visto.
+ */
+fun avvisoTogliibile(id: Int): Boolean = id in 0 until ID_NOTIFICA_FISSA || id == ID_RIASSUNTO
+
 // --- Il passaggio dalla 0.7 (un figlio, un dispositivo) alla 0.8 ------------------------
 
 /**

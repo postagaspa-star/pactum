@@ -1,5 +1,6 @@
 package eu.stgm.pactum.genitore.ui
 
+import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.Dispositivo
 import eu.stgm.pactum.genitore.dati.Notifica
@@ -970,6 +971,304 @@ class TestiTest {
         val t = testoDigest(p, listOf(telefono, computer), adesso)
         assertTrue(t.testo, t.testo.contains("Telefono: ultimo aggiornamento alle"))
         assertFalse(t.testo, t.testo.contains("PC: ultimo aggiornamento"))
+    }
+
+    // --- v3.3: il limite su tutto il dispositivo ------------------------------------------
+
+    /** Una regola sul totale ("totale" nel contratto), del dispositivo di tipo [tipo]. */
+    private fun totale(minuti: Int, tipo: String?, id: Long = 30, nome: String? = null) = RegolaFinestra(
+        id = id,
+        tipo = "limite_tempo",
+        parametri = buildJsonObject {
+            put("app_o_categoria", "totale")
+            put("minuti_al_giorno", minuti)
+        },
+        nome = nome,
+        dispositivoId = if (tipo == null) null else 1,
+        dispositivo = tipo?.let { RiferimentoDispositivo(1, "Telefono di Andrea", it) },
+    )
+
+    @Test
+    fun `una regola sul totale si scrive Tutto il telefono o Tutto il computer`() {
+        assertEquals("Tutto il telefono: al massimo 3 h al giorno", descrizioneRegola(p, totale(180, "telefono")))
+        assertEquals(
+            "Tutto il computer: al massimo 2 h 30 min al giorno",
+            descrizioneRegola(p, totale(150, "computer")),
+        )
+        // Senza il dispositivo (un server che non conosce i computer) è il telefono.
+        assertEquals("Tutto il telefono: al massimo 3 h al giorno", descrizioneRegola(p, totale(180, null)))
+        assertEquals("Tutto il telefono", bersaglioRegola(p, totale(180, null)))
+    }
+
+    @Test
+    fun `senza dispositivo nella regola anche la frase col su dice il telefono`() {
+        val t = testoNotifica(
+            p,
+            notifica(
+                "bonus",
+                buildJsonObject {
+                    put("minuti", 5)
+                    put("regola_id", 30)
+                },
+            ),
+            mapOf(30L to totale(180, null)),
+        )
+        assertEquals("Si è dato 5 min in più su tutto il telefono", t.testo)
+    }
+
+    @Test
+    fun `un nome del server su una regola sul totale non prende il posto delle parole giuste`() {
+        assertEquals(
+            "Tutto il telefono: al massimo 3 h al giorno",
+            descrizioneRegola(p, totale(180, "telefono", nome = "totale")),
+        )
+    }
+
+    @Test
+    fun `nelle notifiche il totale si legge come le altre regole, mai con la chiave`() {
+        val regoleTotale = mapOf(30L to totale(180, "telefono"), 31L to totale(120, "computer", id = 31))
+        fun frase(tipo: String, payload: JsonObject) = testoNotifica(p, notifica(tipo, payload), regoleTotale)
+
+        val sforamento = frase("sforamento", buildJsonObject { putJsonObject("dettagli") { put("regola_id", 30) } })
+        assertEquals(TestoNotifica("Fuori regola", "Tutto il telefono: al massimo 3 h al giorno"), sforamento)
+
+        val bonus = frase(
+            "bonus",
+            buildJsonObject {
+                put("minuti", 15)
+                put("regola_id", 30)
+            },
+        )
+        assertEquals(TestoNotifica("Bonus", "Si è dato 15 min in più su tutto il telefono"), bonus)
+
+        val risposta = frase(
+            "proposta_risposta",
+            buildJsonObject {
+                put("regola_id", 31)
+                put("esito", "accetta")
+            },
+        )
+        assertEquals("Ha accettato la tua proposta su tutto il computer", risposta.testo)
+
+        val nuova = frase(
+            "modifica_regola",
+            buildJsonObject {
+                put("regola_id", 31)
+                put("azione", "creazione")
+                put("parametri", totale(120, "computer").parametri)
+            },
+        )
+        assertEquals(TestoNotifica("Nuova regola", "Tutto il computer: al massimo 2 h al giorno"), nuova)
+
+        listOf(sforamento, bonus, risposta, nuova).forEach { t ->
+            assertFalse("«${t.testo}»", (t.titolo + " " + t.testo).contains("totale"))
+        }
+    }
+
+    @Test
+    fun `lo storico racconta il cambio di bersaglio con le parole giuste`() {
+        val oggiSulTotale = totale(180, "telefono")
+        val primaSuInstagram = buildJsonObject {
+            put("app_o_categoria", "com.instagram.android")
+            put("minuti_al_giorno", 60)
+        }
+        assertEquals(
+            "com.instagram.android: al massimo 1 h al giorno",
+            descrizioneParametri(p, oggiSulTotale, primaSuInstagram),
+        )
+        assertEquals(
+            "Tutto il telefono: al massimo 2 h al giorno",
+            descrizioneParametri(
+                p,
+                oggiSulTotale,
+                buildJsonObject {
+                    put("app_o_categoria", "totale")
+                    put("minuti_al_giorno", 120)
+                },
+            ),
+        )
+        // Il contrario: oggi è su TikTok, prima era su tutto il computer.
+        val tiktokSulComputer = tiktok.copy(dispositivo = RiferimentoDispositivo(2, "PC", "computer"))
+        assertEquals(
+            "Tutto il computer: al massimo 3 h al giorno",
+            descrizioneParametri(
+                p,
+                tiktokSulComputer,
+                buildJsonObject {
+                    put("app_o_categoria", "totale")
+                    put("minuti_al_giorno", 180)
+                },
+            ),
+        )
+    }
+
+    @Test
+    fun `nel dialogo delle proposte il bersaglio del totale e detto a parole`() {
+        assertEquals("Tutto il computer", bersaglioRegola(p, totale(180, "computer")))
+        assertEquals("Tutto il telefono", bersaglioRegola(p, totale(180, "telefono")))
+        assertEquals("TikTok", bersaglioRegola(p, tiktok))
+        assertEquals("Social", bersaglioRegola(p, social))
+    }
+
+    private fun telefonoCol(limite: Int, bonus: Int, app: List<UsoApp> = emptyList()) = VistaDispositivo(
+        id = 1,
+        nome = "Telefono",
+        usoRecente = listOf(
+            UsoGiorno(
+                giorno = "2026-09-24",
+                totaleMinuti = 200,
+                aggiornatoTs = fresco,
+                app = app,
+                limite = limite,
+                regolaId = 30,
+                bonus = bonus,
+            ),
+        ),
+    )
+
+    @Test
+    fun `il digest dice il limite sul totale accanto al totale, come per le app`() {
+        val telefono = telefonoCol(limite = 180, bonus = 0, app = listOf(UsoApp("tiktok", "TikTok", minuti = 60, limite = 60)))
+        assertEquals(
+            TestoNotifica("Oggi: 3 h 20 min (limite 3 h)", "TikTok 1 h (limite 1 h) — tocca per il dettaglio"),
+            testoDigest(p, listOf(telefono), adesso),
+        )
+        val computer = VistaDispositivo(id = 2, nome = "Computer", tipo = "computer", usoRecente = usoDiOggi(60))
+        assertEquals(
+            "Oggi: Telefono 3 h 20 min (limite 3 h) · Computer 1 h",
+            testoDigest(p, listOf(telefono, computer), adesso).titolo,
+        )
+        // Senza una regola sul totale il digest resta com'era.
+        assertEquals("Oggi: 1 h", testoDigest(p, listOf(telefono.copy(usoRecente = usoDiOggi(60))), adesso).titolo)
+    }
+
+    @Test
+    fun `nel digest il limite tiene conto del bonus di oggi, come nel Tempo`() {
+        // 200 minuti su 180 + 15 di bonus: il limite di oggi è 3 h 15 min, e il
+        // digest non deve far sembrare "oltre" un giorno che per il figlio è oltre
+        // solo di 5 minuti (o dentro, con più bonus).
+        val telefono = telefonoCol(
+            limite = 180,
+            bonus = 15,
+            app = listOf(UsoApp("tiktok", "TikTok", minuti = 70, limite = 60, regolaId = 1, bonus = 15)),
+        )
+        assertEquals(
+            TestoNotifica(
+                "Oggi: 3 h 20 min (limite 3 h + 15 min di bonus)",
+                "TikTok 1 h 10 min (limite 1 h + 15 min di bonus) — tocca per il dettaglio",
+            ),
+            testoDigest(p, listOf(telefono), adesso),
+        )
+        val computer = VistaDispositivo(id = 2, nome = "Computer", tipo = "computer", usoRecente = usoDiOggi(60))
+        assertEquals(
+            "Oggi: Telefono 3 h 20 min (limite 3 h + 15 min di bonus) · Computer 1 h",
+            testoDigest(p, listOf(telefono, computer), adesso).titolo,
+        )
+    }
+
+    // --- 0.9: oggi, regola per regola, nella scheda del patto ---------------------------
+
+    private val brawlStars = RegolaFinestra(
+        id = 11,
+        tipo = "limite_tempo",
+        parametri = buildJsonObject {
+            put("app_o_categoria", "com.supercell.brawlstars")
+            put("minuti_al_giorno", 30)
+        },
+        nome = "Brawl Stars",
+    )
+
+    @Test
+    fun `ogni regola di oggi dice il suo stato a parole`() {
+        val m = eu.stgm.pactum.design.Segnale.MANTENUTA
+        val f = eu.stgm.pactum.design.Segnale.FUORI_REGOLA
+        val n = eu.stgm.pactum.design.Segnale.NESSUN_DATO
+        // La riga che Andrea vuole vedere subito: il nome come nelle regole, e lo stato.
+        assertEquals("Brawl Stars: al massimo 30 min al giorno", descrizioneRegola(p, brawlStars))
+        assertEquals("mantenuta", testoStatoRegola(p, RegolaDelGiorno(brawlStars, m)))
+        assertEquals("fuori regola · 15 min oltre", testoStatoRegola(p, RegolaDelGiorno(brawlStars, f, minutiOltre = 15)))
+        assertEquals("fuori regola · 1 h 5 min oltre", testoStatoRegola(p, RegolaDelGiorno(brawlStars, f, minutiOltre = 65)))
+        assertEquals("fuori regola", testoStatoRegola(p, RegolaDelGiorno(brawlStars, f)))
+        assertEquals("senza dati", testoStatoRegola(p, RegolaDelGiorno(brawlStars, n)))
+        // Fasce orarie e totale: come i limiti.
+        assertEquals("mantenuta", testoStatoRegola(p, RegolaDelGiorno(sera, m)))
+        // La vita reale: gli stati delle dichiarazioni.
+        assertEquals("successo confermato", testoStatoRegola(p, RegolaDelGiorno(camminare, m)))
+        assertEquals("non riuscito", testoStatoRegola(p, RegolaDelGiorno(camminare, f)))
+        assertEquals("nessuna conferma per ora", testoStatoRegola(p, RegolaDelGiorno(camminare, n)))
+        // Una regola eliminata oggi che oggi ha contato: lo dice.
+        assertEquals(
+            "fuori regola · non più attiva",
+            testoStatoRegola(p, RegolaDelGiorno(brawlStars.copy(attiva = false), f)),
+        )
+    }
+
+    // --- 0.9: Pactum sempre attivo ------------------------------------------------------
+
+    @Test
+    fun `la spiegazione della batteria nomina i pulsanti che ci sono davvero`() {
+        val testo = p.testo(R.string.batteria_testo)
+        // Il nostro pulsante, e quello di Android: «Consenti».
+        assertTrue(testo.contains("«${p.testo(R.string.batteria_ok)}»"))
+        assertTrue(testo.contains("«Consenti»"))
+        assertTrue(testo.contains("telefono è fermo"))
+        // Niente frasi che Android non mostra, e niente "rispondi di sì".
+        assertFalse(testo.contains("senza limiti di batteria"))
+        assertFalse(testo.contains("rispondi di sì"))
+    }
+
+    @Test
+    fun `la notifica fissa dice cosa fa, senza allarmare, e quando serve cosa non va`() {
+        assertEquals("Pactum è attivo", p.testo(R.string.attivo_notifica_titolo))
+        assertEquals("Ti avvisa quando succede qualcosa nel patto.", p.testo(R.string.attivo_notifica_testo))
+        assertEquals(
+            "Gli avvisi possono arrivare in ritardo: tocca per sistemare.",
+            p.testo(R.string.attivo_notifica_ritardi),
+        )
+        assertEquals("Gli avvisi del patto sono spenti: tocca per sistemare.", p.testo(R.string.attivo_notifica_spenti))
+    }
+
+    @Test
+    fun `nessuna promessa di subito dove Android non la garantisce`() {
+        listOf(
+            R.string.attivo_notifica_testo,
+            R.string.attivo_notifica_ritardi,
+            R.string.batteria_titolo,
+            R.string.batteria_testo,
+            R.string.impostazioni_attivo_titolo,
+            R.string.impostazioni_attivo_descrizione,
+            R.string.impostazioni_attivo_si,
+            R.string.canale_attivo_descrizione,
+        ).forEach { id ->
+            val frase = p.testo(id).lowercase()
+            listOf("subito", "appena", "immediat").forEach { promessa ->
+                assertFalse("'$promessa' in «$frase»", frase.contains(promessa))
+            }
+        }
+    }
+
+    @Test
+    fun `nell'elenco della batteria si dice che cosa cercare, col nome vero dell'app`() {
+        val nome = p.testo(R.string.nome_app)
+        assertEquals(
+            "Nell'elenco scegli «Tutte le app», cerca «Pactum Genitore» e scegli «Non ottimizzare».",
+            p.testo(R.string.batteria_cerca_nell_elenco, nome),
+        )
+    }
+
+    @Test
+    fun `il passo per la marca porta il nome vero dell'app`() {
+        val nome = p.testo(R.string.nome_app)
+        listOf(R.string.marca_huawei, R.string.marca_vivo, R.string.marca_samsung).forEach { id ->
+            assertTrue(p.testo(id, nome).contains("«Pactum Genitore»"))
+        }
+    }
+
+    @Test
+    fun `il riassunto e la riga degli avvisi si leggono in italiano`() {
+        assertEquals("Novità da leggere: 12", p.testo(R.string.riassunto_novita_titolo, 12))
+        assertEquals("Avvisi: ultimo controllo alle 21:30", p.testo(R.string.avvisi_ultimo_controllo, "alle 21:30"))
+        assertEquals("Alcune non si sono segnate (3): riprova.", p.testo(R.string.notifiche_segna_tutte_fallite, 3))
     }
 
     // --- nessun gergo nelle parole dell'app -------------------------------------------

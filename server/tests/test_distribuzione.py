@@ -41,14 +41,14 @@ def test_versione_shape_e_default(client):
     dati = r.json()
     # (v3) c'e' anche il programma per il computer, con la sua numerazione.
     assert set(dati) == {"figlio", "genitore", "computer"}
-    assert dati["computer"]["versione_code"] == 1
-    assert dati["computer"]["versione_nome"] == "0.8.0"
+    assert dati["computer"]["versione_code"] == 2
+    assert dati["computer"]["versione_nome"] == "0.9.0"
     assert dati["computer"]["url"] == "/scarica/pactum-computer.zip"
     for ruolo in ("figlio", "genitore"):
         blocco = dati[ruolo]
         assert set(blocco) >= {"versione_code", "versione_nome", "url"}
-        assert blocco["versione_code"] == 8
-        assert blocco["versione_nome"] == "0.8.0"
+        assert blocco["versione_code"] == 9
+        assert blocco["versione_nome"] == "0.9.0"
         assert blocco["url"] == f"/scarica/pactum-{ruolo}.apk"
     # Le due app viaggiano SEMPRE alla stessa versione: si rilasciano insieme e
     # la finestra del genitore deve mostrare quello che l'app del figlio manda.

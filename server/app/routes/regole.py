@@ -30,9 +30,9 @@ def _valida_o_422(tipo: str, parametri: dict, tipo_dispositivo: str | None = Non
         and not chiave_adatta(tipo_dispositivo, validi["app_o_categoria"])
     ):
         attese = (
-            "exe:<programma>, sito:<dominio> o categoria:*"
+            "exe:<programma>, sito:<dominio>, categoria:* o totale"
             if tipo_dispositivo == "computer"
-            else "il nome di un pacchetto Android o categoria:*"
+            else "il nome di un pacchetto Android, categoria:* o totale"
         )
         raise HTTPException(
             status_code=422,

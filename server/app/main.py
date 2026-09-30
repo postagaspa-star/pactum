@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from starlette.middleware.gzip import GZipMiddleware
 
 from . import copie, db
 from .config import (
@@ -45,6 +46,23 @@ def _db_ok(db_path: str) -> bool:
         return False
 
 
+class GzipSoloApi:
+    """(v3.3) Risposte JSON compresse per chi le chiede (Accept-Encoding: gzip):
+    l'app del genitore 0.9 chiede le notifiche ogni minuto e il server le rimanda
+    tutte finche' non sono lette. Solo sotto /api/: gli APK e lo zip di /scarica
+    sono gia' compressi e devono conservare la loro lunghezza."""
+
+    def __init__(self, app):
+        self.app = app
+        self.gzip = GZipMiddleware(app, minimum_size=500)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].startswith("/api/"):
+            await self.gzip(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)
+
+
 @asynccontextmanager
 async def _ciclo_di_vita(app: FastAPI):
     """(v3.2) La copia notturna gira finche' gira il server. Allo spegnimento il
@@ -84,6 +102,7 @@ def create_app() -> FastAPI:
     )
 
     app = FastAPI(title="Pactum — postino", version=VERSIONE, lifespan=_ciclo_di_vita)
+    app.add_middleware(GzipSoloApi)
     app.state.settings = settings
     app.state.copia_notturna = copie.prepara_copia_notturna(settings)
 

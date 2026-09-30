@@ -18,7 +18,7 @@ from .. import clock, famiglia, semaforo, siti
 from ..auth import richiede_genitore
 from ..config import fuso_patto
 from ..db import accoda_notifica, get_conn, segno_mandato_oggi, stato_bonus
-from ..schemas import SegnoIn
+from ..schemas import CHIAVE_TOTALE, SegnoIn
 from .regole import _riga_regola
 
 router = APIRouter(dependencies=[Depends(richiede_genitore)])
@@ -90,6 +90,7 @@ def _uso_recente(
     giorni: list,
     limiti: dict,
     bonus_regola: dict | None = None,
+    limite_totale: dict | None = None,
 ) -> list:
     """(v2.2) I tempi d'uso di TUTTE le app negli 8 giorni della finestra, dalla
     fotografia uso_giornaliero VIGENTE di ciascun giorno. Un giorno senza
@@ -102,7 +103,9 @@ def _uso_recente(
     anche `bonus`, i minuti concessi QUEL giorno su QUELLA regola: senza, il
     genitore vedrebbe "10 min oltre" in un giorno che per il figlio (limite + bonus)
     e' dentro la regola. (v3) Tutto di un dispositivo: le sue fotografie, i limiti
-    delle sue regole, i suoi bonus."""
+    delle sue regole, i suoi bonus. (v3.3) `limite_totale` = {"limite", "regola_id"}
+    della regola "totale" ATTIVA del dispositivo: va accanto a totale_minuti nella
+    voce del giorno, solo nei giorni con la fotografia."""
     bonus_regola = bonus_regola or {}
     date_iso = [g.isoformat() for g in giorni]
     segnaposto = ",".join("?" * len(date_iso))
@@ -146,15 +149,10 @@ def _uso_recente(
             voce = {"chiave": chiave, "minuti": minuti}
             _con_limite(voce, limiti.get(chiave), bonus_regola, data)
             categorie.append(voce)
-        voci.append(
-            {
-                "giorno": data,
-                "totale_minuti": riga["totale_minuti"],
-                "aggiornato_ts": riga["ts_server"],
-                "app": app,
-                "categorie": categorie,
-            }
-        )
+        voce_giorno = {"giorno": data, "totale_minuti": riga["totale_minuti"]}
+        _con_limite(voce_giorno, limite_totale, bonus_regola, data)  # (v3.3) accanto al totale
+        voce_giorno.update({"aggiornato_ts": riga["ts_server"], "app": app, "categorie": categorie})
+        voci.append(voce_giorno)
     return voci
 
 
@@ -228,6 +226,9 @@ def _misure(
                 parametri["app_o_categoria"],
                 {"limite": parametri["minuti_al_giorno"], "regola_id": riga["id"]},
             )
+    # (v3.3) Il limite sul totale non e' di un'app ne' di una categoria: sta
+    # accanto al totale del giorno, e nessuna voce di uso_minuti lo prende.
+    limite_totale = limiti.pop(CHIAVE_TOTALE, None)
 
     # Riepilogo bonus per giorno (per tutto il dispositivo, stessa finestra di 8
     # giorni): dalla tabella bonus autoritativa, coi giorni nel fuso del patto.
@@ -246,7 +247,7 @@ def _misure(
 
     return {
         "stato_silenzio": famiglia.stato_silenzio(conn, dispositivo, ora),
-        "uso_recente": _uso_recente(conn, dispositivo_id, giorni, limiti, bonus_regola),
+        "uso_recente": _uso_recente(conn, dispositivo_id, giorni, limiti, bonus_regola, limite_totale),
         # (v2.3) I siti visitati: il genitore vede QUALI siti, mai cosa ci fa
         # dentro. Stessa funzione di GET /api/patto — il figlio vede la stessa
         # identica lista (tavola rotonda). Non entra nel semaforo: non e' un'infrazione.
@@ -289,7 +290,9 @@ def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(ge
         if riga["tipo"] == "limite_tempo":
             chiave = json.loads(riga["parametri"])["app_o_categoria"]
             # (S2) Le categorie le traduce l'app: il nome si allega solo ai pacchetti.
-            if not chiave.startswith("categoria:"):
+            # (v3.3) Neanche al totale: "Tutto il telefono" / "Tutto il computer" lo
+            # scrivono le app dal tipo del dispositivo.
+            if not chiave.startswith("categoria:") and chiave != CHIAVE_TOTALE:
                 voce["nome"] = nomi.get(chiave) or chiave
         regole.append(voce)
 

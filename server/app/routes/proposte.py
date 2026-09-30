@@ -49,14 +49,16 @@ def _confronto_vivo(
     if parametri_proposti is None:
         return None
     regola = conn.execute(
-        "SELECT tipo, parametri FROM regole WHERE id = ? AND attiva = 1", (regola_id,)
+        "SELECT r.tipo, r.parametri, d.tipo AS tipo_dispositivo FROM regole r"
+        " LEFT JOIN dispositivi d ON d.id = r.dispositivo_id WHERE r.id = ? AND r.attiva = 1",
+        (regola_id,),
     ).fetchone()
     if regola is None:
         return None
     if parametri_proposti == MARCATORE_ELIMINA:
         return "propone di eliminare la regola", "elimina"
     return confronto.confronto_e_direzione(
-        regola["tipo"], json.loads(regola["parametri"]), parametri_proposti
+        regola["tipo"], json.loads(regola["parametri"]), parametri_proposti, regola["tipo_dispositivo"]
     )
 
 
@@ -125,9 +127,10 @@ def crea_proposta(
             testo = "propone di eliminare la regola"
             direzione = "elimina"
         else:
-            parametri = _valida_o_422(riga["tipo"], corpo.parametri_proposti, tipo_dispositivo(conn, riga))
+            tipo_del_dispositivo = tipo_dispositivo(conn, riga)
+            parametri = _valida_o_422(riga["tipo"], corpo.parametri_proposti, tipo_del_dispositivo)
             testo, direzione = confronto.confronto_e_direzione(
-                riga["tipo"], json.loads(riga["parametri"]), parametri
+                riga["tipo"], json.loads(riga["parametri"]), parametri, tipo_del_dispositivo
             )
 
         gia_pendente = conn.execute(

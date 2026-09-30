@@ -16,7 +16,7 @@ notifiche del genitore restano condivise (colonna `letta`)."""
 import json
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import clock
 from ..auth import Identita, richiede_patto
@@ -49,13 +49,18 @@ def _non_letta(chi: Identita) -> tuple[str, tuple]:
 
 @router.get("/notifiche")
 def elenca_notifiche(
-    chi: Identita = Depends(richiede_patto), conn: sqlite3.Connection = Depends(get_conn)
+    dopo_id: int | None = Query(default=None, ge=0),
+    chi: Identita = Depends(richiede_patto),
+    conn: sqlite3.Connection = Depends(get_conn),
 ):
+    """(v3.3) Con `dopo_id` solo le non lette con id maggiore: l'app del genitore
+    0.9 guarda ogni minuto e le serve sapere solo cosa e' arrivato di nuovo."""
     condizione, parametri = _filtro(chi)
     non_letta, parametri_non_letta = _non_letta(chi)
+    dopo, parametri_dopo = ("AND id > ?", (dopo_id,)) if dopo_id is not None else ("", ())
     righe = conn.execute(
-        f"SELECT * FROM notifiche WHERE {condizione} AND {non_letta} ORDER BY id",
-        (*parametri, *parametri_non_letta),
+        f"SELECT * FROM notifiche WHERE {condizione} AND {non_letta} {dopo} ORDER BY id",
+        (*parametri, *parametri_non_letta, *parametri_dopo),
     ).fetchall()
     return {
         "notifiche": [

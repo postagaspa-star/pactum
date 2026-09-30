@@ -99,7 +99,7 @@ Le dichiarazioni, dalla più recente, max 50. Risposta `200`: `{ "dichiarazioni"
 
 ### Regole — GET /api/regole · POST /api/regole · PATCH /api/regole/{id} · DELETE /api/regole/{id}
 - Tipi: `limite_tempo {app_o_categoria, minuti_al_giorno}` · `fascia_oraria {dalle:"HH:MM", alle:"HH:MM", giorni:[lun..dom]}` · `vita_reale {descrizione, arbitro_nome, frequenza}`.
-- (v2.1) Convenzione `app_o_categoria`: un **nome pacchetto Android** (es. `com.instagram.android`, scelto da un selettore delle app installate — mai testo libero) oppure una **chiave di categoria** tra `categoria:social · categoria:giochi · categoria:video · categoria:musica · categoria:altro`. Il valutatore locale fa il match esatto sul pacchetto o sulla categoria (mapping interno all'app).
+- (v2.1) Convenzione `app_o_categoria`: un **nome pacchetto Android** (es. `com.instagram.android`, scelto da un selettore delle app installate — mai testo libero) oppure una **chiave di categoria** tra `categoria:social · categoria:giochi · categoria:video · categoria:musica · categoria:altro`. Il valutatore locale fa il match esatto sul pacchetto o sulla categoria (mapping interno all'app). (v3.3) Oppure **`totale`**: tutto il tempo del dispositivo nel giorno (v. la sezione v3.3).
 - PATCH: corpo `{ "parametri": {...}, "proposta_id": n? }` — `proposta_id` (proposta accettata, monouso) bypassa il lock dei 4 giorni (modifica concordata). La modifica concordata applica **esattamente** i parametri della proposta: se `parametri` non coincide con i `parametri_proposti` della proposta → `409 {"errore": "parametri_non_concordati"}` e la proposta NON viene consumata. Su una modifica che STRINGE, `proposta_id` viene ignorato (niente consumo, `concordata=false`).
 - Lock asimmetrico: modifica che ALLENTA entro 4 giorni dall'ultima creazione/modifica → `409` con i secondi residui; modifica che STRINGE → subito.
 - DELETE = allentamento massimo (stesso lock) e soft-delete; eliminare l'ultima regola attiva → `409 errore=ultima_regola`. DELETE concordato: `?proposta_id=n` vale solo se i `parametri_proposti` della proposta sono il marcatore `{"azione": "elimina"}`, altrimenti `409 parametri_non_concordati` senza consumo.
@@ -165,7 +165,7 @@ La finestra: tutto ciò che riguarda il patto in una risposta sola. Risposta `20
 - **`riepilogo`** (v2.4): `{ "giorni_fuori_regola": n, "interruzioni": n }`, cioè la riga sotto la striscia, uguale nelle due app. `giorni_fuori_regola` = voci `rosso` della `striscia`. `interruzioni` = eventi `manomissione` il cui `ts_server`, nel fuso del patto, cade negli stessi 8 giorni. Lo calcola il server, dalla stessa funzione per `GET /api/finestra` e `GET /api/patto`. Le app ricevono al massimo 20 eventi e il giorno va preso nel fuso del patto, non in quello del telefono che legge.
 - **`segno_oggi`** (v2.4, redesign C7): `true` se il genitore ha già mandato il segno di riconoscimento oggi (fuso del patto). Serve all'app per spegnere il pulsante.
 - **`regole`**: TUTTE le regole, anche le eliminate (`attiva=false`) — la finestra mostra la storia, mentre `GET /api/regole` (il patto vigente) mostra solo le attive. Ordinate per `id` crescente. `allentabile_dal` = `ultima_modifica_ts` + 4 giorni (il lock asimmetrico, informativo per il genitore).
-- **`nome`** (S2, solo nella finestra): per le regole `limite_tempo` il cui `app_o_categoria` è un pacchetto Android, il server allega un `nome` leggibile — l'etichetta più recente vista per quel pacchetto nelle fotografie `uso_giornaliero` (fallback: il pacchetto stesso) — così il genitore legge "TikTok" e non `com.zhiliaoapp.musically`. Il campo è **assente** per le regole di categoria (`app_o_categoria` = `categoria:*`): la traduce l'app. Assente anche in `GET /api/regole` (solo la finestra lo aggiunge).
+- **`nome`** (S2, solo nella finestra): per le regole `limite_tempo` il cui `app_o_categoria` è un pacchetto Android, il server allega un `nome` leggibile — l'etichetta più recente vista per quel pacchetto nelle fotografie `uso_giornaliero` (fallback: il pacchetto stesso) — così il genitore legge "TikTok" e non `com.zhiliaoapp.musically`. Il campo è **assente** per le regole di categoria (`app_o_categoria` = `categoria:*`): la traduce l'app. (v3.3) Assente anche per le regole sul totale (`app_o_categoria` = `totale`): le app scrivono "Tutto il telefono" / "Tutto il computer" dal tipo del dispositivo. Assente anche in `GET /api/regole` (solo la finestra lo aggiunge).
 - **`semaforo`**: 8 voci per regola (oggi + i 7 giorni precedenti), dal più vecchio a oggi (oggi in coda). `stato` ∈ **solo `verde` / `rosso` / `grigio`** (niente `giallo`). Per `limite_tempo` e `fascia_oraria`: `rosso` = almeno uno sforamento della regola nel giorno; `grigio` = giorno prima della creazione oppure giorno **strettamente** successivo all'eliminazione (il giorno stesso dell'eliminazione non è grigio); `verde` = il resto. (v2.1) Per le regole **`vita_reale`**: `verde` = dichiarazione **confermata** (anche per conto) nel giorno; `rosso` = **fallimento dichiarato** o successo **ribaltato**; `grigio` = nessuna dichiarazione o verdetto ancora in attesa. Il rosso di un fallimento dichiarato fotografa il fatto, non punisce l'onestà: l'onestà è visibile perché la dichiarazione l'ha fatta il figlio.
   (v2.4) **Niente verde senza dati.** Per `limite_tempo` e `fascia_oraria` un giorno senza sforamenti è `verde` solo se per quel giorno è arrivata almeno una fotografia `uso_giornaliero`. Senza fotografia è `grigio`: il telefono non ha raccontato niente, e un giorno di cui non si sa nulla non può figurare come mantenuto (tavola rotonda §3.4: "vuoto se non c'erano dati"). Il `rosso` resta `rosso` anche senza fotografia, perché lo sforamento è già un dato.
 - **`sforamenti_recenti` / `manomissioni_recenti`**: eventi del registro (stessa forma di POST /api/eventi + `ts_server`), max 20 ciascuno, dal più recente. `ts_device` può essere `null`.
@@ -180,7 +180,7 @@ La finestra: tutto ciò che riguarda il patto in una risposta sola. Risposta `20
   "app": [ { "chiave": "com.zhiliaoapp.musically", "nome": "TikTok", "minuti": 65, "limite": 60, "regola_id": 1 } ],
   "categorie": [ { "chiave": "categoria:social", "minuti": 130, "limite": 120, "regola_id": 4 } ] }
 ```
-  `app` ordinate per minuti decrescenti; `nome` = etichetta dai `nomi` della fotografia (fallback: il pacchetto); `limite`/`regola_id` presenti SOLO dove una regola `limite_tempo` **attiva** combacia esattamente con la `chiave` (limite base: gli eventuali bonus del giorno sono già visibili in `bonus_giornalieri`); (v2.4) accanto a `limite` c'è sempre **`bonus`**, cioè i minuti concessi QUEL giorno (fuso del patto) su QUELLA regola, `0` se nessuno: "oltre il limite" per il genitore significa oltre `limite + bonus`, come per il figlio; `categorie` dai totali `uso_categorie`. Un giorno senza fotografia ha `totale_minuti: null` e liste vuote — MAI uno zero finto: "nessun dato ricevuto" è un'informazione.
+  `app` ordinate per minuti decrescenti; `nome` = etichetta dai `nomi` della fotografia (fallback: il pacchetto); `limite`/`regola_id` presenti SOLO dove una regola `limite_tempo` **attiva** combacia esattamente con la `chiave` (limite base: gli eventuali bonus del giorno sono già visibili in `bonus_giornalieri`); (v2.4) accanto a `limite` c'è sempre **`bonus`**, cioè i minuti concessi QUEL giorno (fuso del patto) su QUELLA regola, `0` se nessuno: "oltre il limite" per il genitore significa oltre `limite + bonus`, come per il figlio; `categorie` dai totali `uso_categorie`. Un giorno senza fotografia ha `totale_minuti: null` e liste vuote — MAI uno zero finto: "nessun dato ricevuto" è un'informazione. (v3.3) Il limite di una regola `totale` sta nella voce del giorno, accanto a `totale_minuti` (`limite`, `regola_id`, `bonus`), mai in `app` o `categorie`: v. la sezione v3.3.
 - **`siti_recenti`** (v2.3, deciso da Andrea col padre il 01/08: il genitore vede QUALI siti, mai cosa ci fa dentro): 8 voci — gli stessi 8 giorni del semaforo e di `uso_recente` — dal più vecchio a oggi, dalla fotografia `siti_giornalieri` vigente di ciascun giorno —
 ```json
 { "giorno": "2026-08-01", "totale_domini": 37, "dns_cifrato": false, "aggiornato_ts": "…",
@@ -354,6 +354,7 @@ Gli endpoint del dispositivo non hanno `figlio_id`: il figlio è quello del toke
 - `app_o_categoria`:
   - sui **telefoni** resta come prima: nome del pacchetto Android oppure `categoria:*`;
   - sui **computer**: `exe:<nome>` (nome del file del programma, minuscolo, es. `exe:minecraft.exe`), oppure `sito:<dominio>` (dominio registrabile minuscolo, es. `sito:youtube.com`: il tempo passato su quel sito nel browser), oppure `categoria:*`;
+  - (v3.3) su **tutti e due** anche `totale`: tutto il tempo del dispositivo nel giorno (v. la sezione v3.3);
   - il server rifiuta con `422` una chiave che non va bene per il tipo del dispositivo della regola.
 - Ogni regola nelle risposte porta anche `"dispositivo": { "id", "nome", "tipo" }` (o `null` per la vita reale), così le app scrivono "sul computer" senza un'altra chiamata.
 
@@ -445,8 +446,61 @@ La forma della v2.4 resta, riferita al figlio indicato:
 - `GET /api/salute` (nessun auth) ha anche `"backup": { "ultima": "pactum-20260925.db" | null, "quando": ISO 8601 UTC | null, "copie": n }`: il nome dell'ultima copia (mai il percorso), quando è stata scritta, quante ce ne sono.
 - **Ripristino**: con `PACTUM_RIPRISTINA=<nome di una copia in PACTUM_BACKUP_DIR>` (solo il nome: `/`, `\` e `..` sono rifiutati), all'avvio e **prima** di aprire e migrare il database il server controlla la copia con `integrity_check`, mette da parte il registro attuale come `<db>.prima-del-ripristino-AAAAMMGG-HHMMSS` (insieme ai suoi `-wal`/`-shm`/`-journal`) e rimette la copia al suo posto; una copia vecchia (anche v2) viene poi migrata come le altre. Nome non valido, copia che non c'è o rotta: il server **non parte**. Il segno `.ripristinato-<nome>` accanto al database impedisce di ripetere lo stesso ripristino a ogni riavvio; il log chiede di togliere `PACTUM_RIPRISTINA` dal `.env`.
 
+## v3.3 — limite sul totale del dispositivo (30/09/2026, decisione di Andrea)
+
+Fino alla v3.2 un `limite_tempo` valeva su un'app, un programma, un sito o una categoria. Dalla v3.3 può valere anche su **tutto il dispositivo**: "al telefono al massimo 3 ore al giorno".
+
+Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
+
+### La chiave `totale`
+
+- `app_o_categoria = "totale"` (proprio così, minuscolo) = **tutto l'uso di quel dispositivo nel giorno**, cioè lo stesso `totale_minuti` della fotografia `uso_giornaliero` del dispositivo: sul telefono il tempo di tutte le app, sul computer il tempo attivo al computer.
+- Vale per i **telefoni** e per i **computer**, in `POST /api/regole`, in `PATCH /api/regole/{id}` e nelle proposte:
+  ```json
+  { "tipo": "limite_tempo", "parametri": { "app_o_categoria": "totale", "minuti_al_giorno": 180 } }
+  ```
+- Tutte le altre chiavi restano come prima: `422` per quelle che non vanno bene per il tipo del dispositivo della regola.
+
+### Chi valuta: le app, come sempre
+
+- Le app valutano da sole anche il totale: quando il `totale_minuti` del giorno supera il limite efficace (`minuti_al_giorno` + bonus concessi oggi su quella regola), mandano l'evento **`sforamento`** con gli stessi dettagli delle altre regole (`regola_id`, `giorno`, `limite_efficace`, `minuti_oltre`), al massimo uno per regola per giorno.
+- Il server **non cambia** il modo in cui colora: il semaforo della regola, la striscia del dispositivo, quella del figlio e il `riepilogo` vengono dagli sforamenti, come per ogni altra regola. Vale ancora "niente verde senza dati".
+
+### Bonus, blocco dei 4 giorni, proposte
+
+- **Bonus**: `POST /api/bonus` con il `regola_id` di una regola `totale` allunga il totale di oggi, con gli stessi tetti per dispositivo.
+- **Blocco dei 4 giorni**: come per le altre `limite_tempo`. Più minuti = allenta (aspetta 4 giorni o una proposta accettata), meno minuti = stringe (subito), eliminare = allenta. Cambiare bersaglio (da `totale` a un'app, o da un'app a `totale`) conta come allentamento, come ogni cambio di bersaglio.
+- **Proposte**: il genitore propone modifiche o l'eliminazione di una regola `totale` come di ogni altra; se il figlio accetta, il server applica la modifica da solo.
+- **Confronto**: a bersaglio uguale il testo non cambia (`"−30 min al giorno rispetto ad ora"`). Quando il bersaglio cambia, nel testo `totale` si legge **"tutto il telefono"** o **"tutto il computer"** secondo il tipo del dispositivo della regola: `"da tutto il telefono (180 min) a com.instagram.android (60 min) al giorno"`.
+
+### Nella finestra del genitore
+
+- **`nome`**: una regola `totale` **non** ha `nome`, come le regole di categoria. Le app scrivono **"Tutto il telefono"** o **"Tutto il computer"** dal `dispositivo.tipo` della regola.
+- **`uso_recente`**: il limite di una regola `totale` sta **accanto al totale del giorno**, mai accanto a un'app o a una categoria (`totale` non combacia mai con una voce di `app` o di `categorie`). Nella voce del giorno, vicino a `totale_minuti`, ci sono `limite`, `regola_id` e `bonus`, con lo stesso significato che hanno nelle voci di `app` e `categorie` (limite base; `bonus` = minuti concessi quel giorno su quella regola; "oltre il limite" = oltre `limite + bonus`):
+  ```json
+  { "giorno": "2026-09-30", "totale_minuti": 192, "limite": 180, "regola_id": 7, "bonus": 15,
+    "aggiornato_ts": "…", "app": [ … ], "categorie": [ … ] }
+  ```
+  - I tre campi ci sono **solo** se il dispositivo ha una regola `totale` **attiva** e quel giorno ha la sua fotografia. Un giorno senza fotografia resta com'era: `totale_minuti: null`, liste vuote, nessun limite.
+  - Con più regole `totale` attive sullo stesso dispositivo vale quella con l'`id` più basso, come per le app.
+  - Vale per `dispositivi[].uso_recente` e quindi anche per `uso_recente` di primo livello (il primo dispositivo).
+
+### Compatibilità
+
+- Nessun cambio al database e nessun endpoint nuovo.
+- Un'app che non conosce `totale` ignora i tre campi in più nella voce del giorno (tolleranza evolutiva) e mostra la regola con la chiave com'è.
+
+### Solo le notifiche nuove
+
+- `GET /api/notifiche?dopo_id=N` (facoltativo, intero ≥ 0) restituisce solo le notifiche **non lette** con `id > N`, nella stessa forma. Senza `dopo_id` tutto come prima. Vale per il genitore e per i dispositivi. L'app del genitore 0.9 lo usa nel giro di ogni minuto con l'id più alto già visto, e rilegge la lista intera solo nel giro lento. `dopo_id` negativo → `422`.
+
+### Risposte compresse
+
+- Le risposte sotto `/api/` più grandi di 500 byte arrivano compresse (gzip) se il client manda `Accept-Encoding: gzip`, come fa da solo OkHttp nelle app Android. Serve all'app del genitore 0.9, che chiede le notifiche ogni minuto e riceve ogni volta tutte quelle non lette. `/scarica` non si comprime mai: APK e zip sono già compressi e devono mantenere la loro lunghezza.
+
 ---
-**Versione: v3.2 — 25/09/2026**: copia notturna del registro fatta dal server stesso (sul NAS non c'è un programmatore di attività): una al giorno dopo le 03:00 del patto, controllata con `integrity_check`, ultime 30; campo `backup` in `GET /api/salute`; ripristino di una copia all'avvio con `PACTUM_RIPRISTINA`. Nessun cambio per le app.
+**Versione: v3.3 — 30/09/2026** (decisione di Andrea): limite sul totale del dispositivo — `app_o_categoria = "totale"` accettato per telefoni e computer, valutato dalle app con lo `sforamento` di sempre (semaforo invariato); nella finestra la regola totale non ha `nome` e il suo limite sta accanto al `totale_minuti` del giorno in `uso_recente` (`limite`, `regola_id`, `bonus`); nel confronto delle proposte "tutto il telefono" / "tutto il computer"; `GET /api/notifiche?dopo_id=N` (solo le non lette arrivate dopo) e risposte `/api/` compresse gzip su richiesta, per l'app del genitore sempre attiva. Nessun cambio al database.
+**v3.2 — 25/09/2026**: copia notturna del registro fatta dal server stesso (sul NAS non c'è un programmatore di attività): una al giorno dopo le 03:00 del patto, controllata con `integrity_check`, ultime 30; campo `backup` in `GET /api/salute`; ripristino di una copia all'avvio con `PACTUM_RIPRISTINA`. Nessun cambio per le app.
 **v3 — 23/09/2026** (decisione di Andrea): famiglia con più figli, ogni figlio con più dispositivi (telefoni e computer) con regole, tempi, bonus e registro separati; vita reale e striscia per figlio; token per dispositivo e per genitore con abbinamento a codice di 6 cifre; computer con programmi (`exe:`), siti (`sito:`, letti dalla barra degli indirizzi, solo il dominio) e spegnimento che non è un'interruzione; compatibile con le app 0.7.
 **v2.4 — 19/09/2026** (redesign Fascia B/C della tavola rotonda, deciso da Andrea): `striscia` aggregata degli 8 giorni in `GET /api/finestra` **e identica** in `GET /api/patto`, uscita da una sola funzione del server; semaforo senza verde nei giorni senza fotografia (un giorno di cui non si sa niente non è un giorno mantenuto); `giorno` opzionale nei dettagli di `sforamento`, così gli sforamenti consegnati in ritardo cadono nel giorno giusto; `riepilogo` (giorni fuori regola + interruzioni negli 8 giorni) e `semaforo` per regola anche in `GET /api/patto`, cosi' il figlio vede gli stessi fatti del genitore; `POST /api/segno` (riconoscimento del genitore a testo fisso, max 1 al giorno) + `segno_oggi` nella finestra + notifica di tipo `segno` al figlio.
 **v2.3 — 01/08/2026** (decisione di Andrea col padre): il genitore **vede** i siti visitati dal figlio, senza poterli bloccare — nuovo evento `siti_giornalieri` (fotografia cumulativa del giorno, monotona, `dns_cifrato` appiccicoso come dichiarazione di cecità), `siti_recenti` in `GET /api/finestra` **e identico** in `GET /api/patto` (tavola rotonda), limiti del dato e patto etico messi per iscritto nella sezione "Siti visitati". Solo domini, mai URL, contenuti o ricerche.

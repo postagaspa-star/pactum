@@ -50,8 +50,15 @@ def valida_parametri(tipo: str, parametri: dict) -> dict:
 PREFISSI_SOLO_COMPUTER = ("exe:", "sito:")
 CARATTERI_VIETATI_CHIAVE = "/\\:"
 
+# (v3.3) Il limite sul totale del dispositivo, per telefoni e computer: tutto l'uso
+# del giorno, lo stesso totale_minuti della fotografia uso_giornaliero. Non e' il
+# nome di un'app: non combacia mai con una voce di uso_minuti o uso_categorie.
+CHIAVE_TOTALE = "totale"
+
 
 def chiave_adatta(tipo_dispositivo: str, chiave: str) -> bool:
+    if chiave == CHIAVE_TOTALE:
+        return True
     if tipo_dispositivo != "computer":
         return not chiave.startswith(PREFISSI_SOLO_COMPUTER)
     if chiave.startswith("categoria:"):

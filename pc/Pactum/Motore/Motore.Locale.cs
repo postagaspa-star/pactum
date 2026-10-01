@@ -64,7 +64,7 @@ public sealed partial class Motore
         lock (misura)
         {
             oggi = contatore.Oggi.Giorno;
-            giorni.Add(Copia(contatore.Oggi));
+            giorni.Add(contatore.Oggi.Copia());
         }
         var limite = Tempo.DataDi(Tempo.AdessoUtcMs(), TimeZoneInfo.Local).AddDays(-30);
         foreach (var file in Directory.EnumerateFiles(percorsi.Giorni, "*.json"))
@@ -215,6 +215,126 @@ public sealed partial class Motore
         return Errore("rete", dettagli);
     }
 
+    /// <summary>
+    /// (0.10) POST /locale/proponi: il figlio propone al genitore un cambio su una sua regola, o di
+    /// eliminarla (contratto v3.4, POST /api/proposte col token del dispositivo). Se il genitore
+    /// accetta, vale subito. Come il bonus: una richiesta sola, senza ripetizioni automatiche, e gli
+    /// esiti del server tradotti in codici che l'interfaccia sa dire (<see cref="ErroreProposta"/>).
+    /// </summary>
+    public async Task<JsonObject> ProponiAsync(long? regolaId, JsonObject? parametri, string? motivazione)
+    {
+        var (corpo, errore) = CorpoProposta(regolaId, parametri, motivazione);
+        if (corpo == null) return Errore(errore!);
+        var (server, tok) = Credenziali();
+        if (server == null || tok == null) return Errore("non_abbinato");
+
+        var r = await postino.InviaAsync("POST", server, "api/proposte", tok, corpo.ToJsonString(), TempoInterattivo).ConfigureAwait(false);
+        Annota(r);
+        var e = ErroreProposta(r);
+        if (e != null)
+        {
+            Log.Info($"proposta sulla regola {regolaId} non accettata dal server: {Json.Testo(e["errore"])}");
+            return e;
+        }
+        // Nel diario mai il perché: è del figlio e va solo al genitore.
+        Log.Info($"proposta al genitore sulla regola {regolaId}");
+        return new JsonObject { ["ok"] = true, ["proposta"] = PropostaDallaRisposta(r.Corpo) };
+    }
+
+    /// <summary>
+    /// (0.10) POST /locale/ritira: il figlio ritira una sua proposta ancora in attesa (contratto v3.4,
+    /// POST /api/proposte/{id}/ritira, nessun corpo). La regola resta com'è.
+    /// </summary>
+    public async Task<JsonObject> RitiraAsync(long? propostaId)
+    {
+        if (propostaId is not > 0) return Errore("non_riuscita");
+        var (server, tok) = Credenziali();
+        if (server == null || tok == null) return Errore("non_abbinato");
+
+        var percorso = "api/proposte/" + propostaId.Value.ToString(CultureInfo.InvariantCulture) + "/ritira";
+        var r = await postino.InviaAsync("POST", server, percorso, tok, null, TempoInterattivo).ConfigureAwait(false);
+        Annota(r);
+        var e = ErroreRitiro(r);
+        if (e != null)
+        {
+            Log.Info($"proposta {propostaId} non ritirata: {Json.Testo(e["errore"])}");
+            return e;
+        }
+        Log.Info($"proposta {propostaId} ritirata");
+        return new JsonObject { ["ok"] = true, ["proposta"] = PropostaDallaRisposta(r.Corpo) };
+    }
+
+    /// <summary>
+    /// (0.10) Il corpo di POST /api/proposte dal computer: la regola, i parametri proposti (oppure il
+    /// marcatore <c>{"azione": "elimina"}</c>) e il perché, solo se c'è. Mai <c>figlio_id</c>: il figlio
+    /// è quello del token. Senza regola o senza parametri non si chiama il server: c'è l'errore.
+    /// </summary>
+    public static (JsonObject? Corpo, string? Errore) CorpoProposta(long? regolaId, JsonObject? parametri, string? motivazione)
+    {
+        if (regolaId is not > 0) return (null, "regola_non_valida");
+        if (parametri == null || parametri.Count == 0) return (null, "parametri_non_validi");
+        var corpo = new JsonObject
+        {
+            ["regola_id"] = regolaId.Value,
+            ["parametri_proposti"] = parametri.DeepClone(),
+        };
+        var perche = motivazione?.Trim();
+        if (!string.IsNullOrEmpty(perche)) corpo["motivazione"] = perche;
+        return (corpo, null);
+    }
+
+    /// <summary>
+    /// (0.10) La risposta di POST /api/proposte tradotta per l'interfaccia, se non è un successo
+    /// (contratto v3.4). 409 coi codici del contratto (<c>proposta_gia_pendente</c>,
+    /// <c>regola_non_valida</c>, <c>dispositivo_revocato</c>), 422 parametri che non vanno bene. Un
+    /// server di prima della v3.4 accetta le proposte solo dal genitore e risponde 403 (ruolo
+    /// sbagliato): allora va aggiornato il server, non è un errore del figlio.
+    /// </summary>
+    public static JsonObject? ErroreProposta(Risposta r)
+    {
+        if (r.Ok) return null;
+        if (r.Rete || r.Stato is 502 or 503 or 504) return Errore("rete");
+        if (r.Stato == 401) return Errore("non_abbinato");
+        if (r.Stato is 403 or 404 or 405) return Errore("server_da_aggiornare");
+        if (r.Stato == 422) return Errore("parametri_non_validi");
+        var codice = Json.Testo(DettaglioErrore(r.Corpo)["errore"]);
+        if (r.Stato == 409 && codice is "proposta_gia_pendente" or "regola_non_valida" or "dispositivo_revocato") return Errore(codice);
+        return Errore("non_riuscita", new JsonObject { ["stato"] = r.Stato });
+    }
+
+    /// <summary>
+    /// (0.10) La risposta di POST /api/proposte/{id}/ritira tradotta per l'interfaccia, se non è un
+    /// successo: 409 <c>proposta_non_pendente</c> (il genitore ha già risposto), 403 la proposta non è
+    /// del figlio, 404 <c>{"detail": "proposta non trovata"}</c> il server v3.4 non la trova più. Un
+    /// server di prima della v3.4 non conosce il ritiro: 404 senza quel dettaglio (<c>Not Found</c>,
+    /// nessuna strada) o 405, server da aggiornare.
+    /// </summary>
+    public static JsonObject? ErroreRitiro(Risposta r)
+    {
+        if (r.Ok) return null;
+        if (r.Rete || r.Stato is 502 or 503 or 504) return Errore("rete");
+        if (r.Stato == 401) return Errore("non_abbinato");
+        if (r.Stato == 403) return Errore("non_tua");
+        if (r.Stato == 404 && string.Equals(Json.Testo((Json.Analizza(r.Corpo) as JsonObject)?["detail"])?.Trim(), "proposta non trovata", StringComparison.OrdinalIgnoreCase))
+        {
+            return Errore("proposta_non_trovata");
+        }
+        if (r.Stato is 404 or 405) return Errore("server_da_aggiornare");
+        if (r.Stato == 409 && Json.Testo(DettaglioErrore(r.Corpo)["errore"]) == "proposta_non_pendente") return Errore("proposta_non_pendente");
+        return Errore("non_riuscita", new JsonObject { ["stato"] = r.Stato });
+    }
+
+    /// <summary>
+    /// La proposta nella risposta del server: da sola (POST /api/proposte) oppure dentro
+    /// <c>"proposta"</c> (come la risposta a una proposta). Null se non c'è.
+    /// </summary>
+    public static JsonObject? PropostaDallaRisposta(string corpo)
+    {
+        if (Json.Analizza(corpo) is not JsonObject o) return null;
+        if (o["proposta"] is JsonObject dentro) return (JsonObject)dentro.DeepClone();
+        return o["id"] != null ? o : null;
+    }
+
     /// <summary>POST /locale/aggiorna</summary>
     public async Task<JsonObject> AggiornaAsync() =>
         new() { ["ok"] = await SincronizzaAsync("interfaccia", TempoInterattivo).ConfigureAwait(false) };
@@ -222,6 +342,8 @@ public sealed partial class Motore
     /// <summary>
     /// /server/&lt;percorso&gt;: la richiesta va al server col token del dispositivo e torna
     /// com'è (stato e JSON). Solo sotto <c>api/</c>. Dopo ogni modifica riuscita si rilegge il patto.
+    /// (0.10) Il patto che la finestra legge ogni minuto (<c>GET api/patto</c>) diventa anche quello
+    /// del motore: una proposta appena accettata dal genitore vale subito anche per i limiti locali.
     /// </summary>
     public async Task<(int Stato, string Json)> InoltraAsync(string metodo, string percorso, string query, string? corpo)
     {
@@ -230,9 +352,16 @@ public sealed partial class Motore
         var (server, tok) = Credenziali();
         if (server == null || tok == null) return (401, new JsonObject { ["errore"] = "non_abbinato" }.ToJsonString());
 
+        long chiestoAlle = Tempo.AdessoUtcMs();
+        long chiestoTick = Environment.TickCount64;
         var r = await postino.InviaAsync(metodo, server, percorso + query, tok, metodo == "GET" ? null : (string.IsNullOrWhiteSpace(corpo) ? null : corpo)).ConfigureAwait(false);
         Annota(r);
         if (r.Rete) return (502, new JsonObject { ["errore"] = "rete" }.ToJsonString());
+        if (metodo == "GET" && r.Ok && percorso == "api/patto" && Json.Analizza(r.Corpo) is JsonObject letto)
+        {
+            // I limiti si rivalutano col giro di ogni 15 secondi: la finestra non aspetta.
+            AdottaPatto(letto, chiestoAlle, chiestoTick);
+        }
         if (metodo != "GET" && r.Ok) await AggiornaPattoAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(r.Corpo)) return (r.Stato, "{}");
         return Json.Analizza(r.Corpo) != null
@@ -276,16 +405,6 @@ public sealed partial class Motore
         if (dettagli != null) o["dettagli"] = dettagli;
         return o;
     }
-
-    private static Giornata Copia(Giornata g) => new()
-    {
-        Giorno = g.Giorno,
-        MsAttivi = g.MsAttivi,
-        Programmi = g.Programmi.ToDictionary(p => p.Key, p => new VoceProgramma { Nome = p.Value.Nome, Ms = p.Value.Ms }),
-        Siti = g.Siti.ToDictionary(s => s.Key, s => new VoceSito { Ms = s.Value.Ms, Visite = s.Value.Visite }),
-        MsPerCategoria = new Dictionary<string, long>(g.MsPerCategoria),
-        SitiNonLeggibili = g.SitiNonLeggibili,
-    };
 }
 
 /// <summary>Le forme JSON per l'interfaccia, logica pura (provata nei test).</summary>

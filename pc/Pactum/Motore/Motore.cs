@@ -17,6 +17,9 @@ public sealed partial class Motore : IDisposable
     private const int GiriTraSalvataggi = 60;
     private const int GiriTraValutazioni = 15;
 
+    /// <summary>(0.10) Quanto si aspetta il patto fresco prima di registrare uno sforamento nuovo; poi si decide sulla copia.</summary>
+    private static readonly TimeSpan TempoRilettura = TimeSpan.FromSeconds(10);
+
     private readonly Percorsi percorsi;
     private readonly Postino postino = new();
     private readonly LettoreIndirizzi lettore = new();
@@ -40,6 +43,9 @@ public sealed partial class Motore : IDisposable
     private Thread? filoMisura;
     private Task? cicloRete;
     private long giri;
+
+    // (0.10) 1 mentre una valutazione rilegge il patto prima di registrare uno sforamento nuovo.
+    private int valutazioneInCorso;
 
     private volatile bool bloccato;
     private volatile bool sospeso;
@@ -77,8 +83,11 @@ public sealed partial class Motore : IDisposable
     /// <summary>Prove: la finestra di questo processo vale come quella in primo piano (v. PrimoPiano.LeggiFinestraDi).</summary>
     public int? ProvaPidFinestra { get; set; }
 
-    /// <summary>Un fumetto per l'icona: titolo e testo. Arriva da un filo qualsiasi.</summary>
-    public event Action<string, string>? Fumetto;
+    /// <summary>
+    /// Un fumetto per l'icona: titolo, testo e (0.10) la sezione della finestra da aprire col clic
+    /// (<c>"proposte"</c>, <c>"diario"</c>; null = come sempre). Arriva da un filo qualsiasi.
+    /// </summary>
+    public event Action<string, string, string?>? Fumetto;
 
     /// <summary>
     /// (0.9) Sforamenti nuovi da mostrare anche a tutto schermo, oltre al fumetto: stesso dedup
@@ -304,7 +313,9 @@ public sealed partial class Motore : IDisposable
             lock (misura) SalvaGiorno(contatore.Oggi);
             ScriviVivo(ChiusuraDaScrivere());
         }
-        if (giri % GiriTraValutazioni == 0 || esito.GiorniChiusi.Count > 0) ValutaRegole(utc);
+        // (0.10) Uno sforamento nuovo si registra solo dopo aver riletto il patto (v. ValutaConPattoFrescoAsync):
+        // la rete non ferma la misura, che va avanti mentre si aspetta il server.
+        if (giri % GiriTraValutazioni == 0 || esito.GiorniChiusi.Count > 0) _ = ValutaConPattoFrescoAsync(utc);
     }
 
     private void ImpostaChiusura(string chiusura)
@@ -400,6 +411,55 @@ public sealed partial class Motore : IDisposable
     // ---------- Le regole: sforamenti, mai blocchi ----------
 
     /// <summary>
+    /// (0.10) La valutazione di ogni 15 secondi. Se la copia del patto trova uno sforamento NUOVO, prima
+    /// di registrarlo si rilegge il patto dal server e si rivaluta sulla stessa lettura dell'uso, come fa
+    /// la sentinella del telefono (SentinellaPatto.segnalaNuovi): una copia rimasta indietro (una proposta
+    /// appena accettata dal genitore, un bonus dato dal telefono) darebbe uno sforamento falso. Senza rete,
+    /// o col server che non risponde in <see cref="TempoRilettura"/>, si decide sulla copia, come prima.
+    /// Una alla volta: se la rilettura di prima non è finita, questo giro salta (tra 15 secondi c'è il prossimo).
+    /// </summary>
+    internal async Task ValutaConPattoFrescoAsync(long adesso)
+    {
+        if (Interlocked.CompareExchange(ref valutazioneInCorso, 1, 0) != 0) return;
+        try
+        {
+            Giornata lettura;
+            lock (misura) lettura = contatore.Oggi.Copia();
+            if (CiSonoNuovi(lettura, adesso))
+            {
+                bool fresco = await AggiornaPattoAsync(TempoRilettura, valuta: false).ConfigureAwait(false);
+                Log.Info(fresco
+                    ? "sforamento nuovo in vista: patto riletto prima di registrarlo"
+                    : "sforamento nuovo in vista: server non raggiungibile, si decide sulla copia del patto");
+            }
+            bool stessoGiorno;
+            lock (misura) stessoGiorno = contatore.Oggi.Giorno == lettura.Giorno;
+            // Sulla stessa lettura. Se intanto è passata la mezzanotte, solo l'evento: "oggi" non sarebbe più vero.
+            ValutaRegole(adesso, lettura, conAvvisi: stessoGiorno);
+        }
+        catch (Exception e)
+        {
+            Log.Errore("valutazione delle regole", e);
+        }
+        finally
+        {
+            Volatile.Write(ref valutazioneInCorso, 0);
+        }
+    }
+
+    /// <summary>(0.10) La copia del patto darebbe, su questa lettura, almeno uno sforamento mai segnalato? Non segna niente.</summary>
+    private bool CiSonoNuovi(Giornata lettura, long adesso)
+    {
+        var p = patto;
+        if (p == null || !Abbinato) return false;
+        var regole = p.RegoleDelComputer(IdDispositivo).ToList();
+        if (regole.Count == 0) return false;
+        var bonus = BonusOggi(adesso);
+        var trovati = Valutatore.Valuta(regole, bonus, lettura.MinutiDi, lettura.MinutiNellIntervallo, adesso, TimeZoneInfo.Local);
+        lock (misura) return trovati.Any(s => !registro.Contiene(s.RegolaId, Valutatore.GiornoDelloSforamento(s, lettura.Giorno)));
+    }
+
+    /// <summary>
     /// Valuta le regole del computer su <paramref name="giorno"/> (se manca, oggi) all'istante
     /// <paramref name="adesso"/>. La parte su disco è al meglio possibile e non lancia mai: gli
     /// sforamenti nuovi stanno nella coda in memoria anche se coda.json non si scrive, e il registro,
@@ -443,7 +503,7 @@ public sealed partial class Motore : IDisposable
             foreach (var a in avvisi)
             {
                 var (titolo, testo) = Testi.Fumetto(a);
-                Fumetto?.Invoke(titolo, testo);
+                Fumetto?.Invoke(titolo, testo, null);
             }
         }
         catch (Exception e)

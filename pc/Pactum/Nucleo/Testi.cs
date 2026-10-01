@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 
 namespace Pactum.Nucleo;
 
@@ -86,6 +87,101 @@ public static class Testi
     public static string FasciaRegola(string dalle, string alle) => $"Niente computer dalle {dalle} alle {alle}";
 
     public static string FasciaUso(long minuti) => $"Oggi {Durata(minuti)} di computer dentro questa fascia.";
+
+    // ---------- Le notifiche del server (i fumetti del giro di rete) ----------
+
+    public const string TitoloNovita = "Novità dal patto";
+    public const string TitoloNuovaProposta = "Nuova proposta del genitore";
+
+    /// <summary>(0.10, contratto v3.4) Il genitore ha risposto a una proposta del figlio.</summary>
+    public const string PropostaAccettata = "Il genitore ha accettato la tua proposta";
+    public const string PropostaRifiutata = "Il genitore ha rifiutato la tua proposta";
+    public const string PropostaRisposta = "Il genitore ha risposto alla tua proposta";
+
+    /// <summary>(0.10, contratto v3.4) Il genitore ha ritirato una sua proposta, prima che il figlio rispondesse.</summary>
+    public const string PropostaRitirata = "Il genitore ha ritirato la sua proposta";
+
+    /// <summary>(0.10) Le sezioni della finestra che il clic su un fumetto apre (come le notifiche del telefono).</summary>
+    public const string SezioneProposte = "proposte";
+    public const string SezioneDiario = "diario";
+
+    /// <summary>Il confronto fisso di una proposta di eliminare (contratto, POST /api/proposte).</summary>
+    private const string ConfrontoEliminazione = "propone di eliminare la regola";
+
+    /// <summary>
+    /// Il fumetto di una notifica del server: il titolo dal tipo (e, per la risposta a una proposta del
+    /// figlio, dall'esito), il testo dal messaggio del server senza ripetere il titolo (il contratto scrive
+    /// "&lt;titolo&gt;: &lt;confronto&gt;": nel testo resta il confronto, più cosa cambia). Se il messaggio
+    /// manca o è solo il titolo, una frase che dice cosa cambia: mai vuoto, il fumetto di Windows non
+    /// accetta un testo vuoto. (0.10) In più la sezione che il clic apre: Proposte per le proposte, il
+    /// Diario per un verdetto, null per il resto. Le notifiche nuove della v3.4 arrivano al computer solo
+    /// così: <c>proposta_risposta</c> (con <c>autore: "figlio"</c>, il genitore ha deciso su una proposta
+    /// del figlio) e <c>proposta_ritirata</c> (con <c>autore: "genitore"</c>). Un autore diverso al figlio
+    /// non arriva mai: se succedesse, resta una "novità" col suo messaggio.
+    /// </summary>
+    public static (string Titolo, string Testo, string? Sezione) Notifica(string tipo, string? messaggio, JsonObject? payload)
+    {
+        var autore = Json.Testo(payload?["autore"]);
+        var esito = Json.Testo(payload?["esito"]);
+        bool rispostaDelGenitore = tipo == "proposta_risposta" && autore is null or "figlio";
+        var (titolo, ripiego) = tipo switch
+        {
+            "nuova_proposta" when autore is null or "genitore" => (TitoloNuovaProposta, "Decidi tu: la trovi in Pactum, nelle proposte."),
+            "proposta_risposta" when rispostaDelGenitore => esito switch
+            {
+                "accetta" => (PropostaAccettata, "Vale già da adesso."),
+                "rifiuta" => (PropostaRifiutata, "La regola resta com'è."),
+                _ => (PropostaRisposta, "La risposta è in Pactum, nelle proposte."),
+            },
+            "proposta_ritirata" when autore is null or "genitore" => (PropostaRitirata, "Non c'è più niente da decidere: la regola resta com'è."),
+            "verdetto" => ("Esito della tua dichiarazione", "L'esito è in Pactum, nel Diario."),
+            "segno" => ("Un segno dal genitore", "Ho visto la settimana. Bene così."),
+            _ => (TitoloNovita, "Apri Pactum per vedere cosa è cambiato."),
+        };
+        string? sezione = tipo switch
+        {
+            "nuova_proposta" or "proposta_risposta" or "proposta_ritirata" => SezioneProposte,
+            "verdetto" => SezioneDiario,
+            _ => null,
+        };
+
+        var resto = SenzaTitolo(messaggio, titolo);
+        string testo;
+        if (rispostaDelGenitore && esito is "accetta" or "rifiuta" && resto.Length > 0)
+        {
+            // Una proposta di eliminare: il confronto del server è scritto per il genitore, al figlio si dice cosa è successo.
+            testo = string.Equals(resto.TrimEnd('.'), ConfrontoEliminazione, StringComparison.OrdinalIgnoreCase)
+                ? (esito == "accetta" ? "La regola è uscita dal patto." : "La regola resta nel patto.")
+                : Frase(resto) + " " + ripiego;
+        }
+        else
+        {
+            testo = resto.Length > 0 ? Frase(resto) : ripiego;
+        }
+        return (titolo, testo, sezione);
+    }
+
+    /// <summary>
+    /// Il messaggio senza il titolo in testa, quando lo ripete ("Il genitore ha accettato la tua proposta:
+    /// +30 min…" → "+30 min…"; solo il titolo → ""). Altrimenti il messaggio com'è.
+    /// </summary>
+    private static string SenzaTitolo(string? messaggio, string titolo)
+    {
+        var m = (messaggio ?? "").Trim();
+        if (!m.StartsWith(titolo, StringComparison.OrdinalIgnoreCase)) return m;
+        var dopo = m[titolo.Length..].Trim();
+        if (dopo.Length == 0 || dopo == ".") return "";
+        return dopo[0] == ':' ? dopo[1..].Trim() : m;
+    }
+
+    /// <summary>Una frase intera: la prima lettera maiuscola, il punto in fondo.</summary>
+    private static string Frase(string testo)
+    {
+        var t = testo.Trim();
+        if (t.Length == 0) return t;
+        if (char.IsLower(t[0])) t = char.ToUpper(t[0], CultureInfo.InvariantCulture) + t[1..];
+        return t[^1] is '.' or '!' or '?' ? t : t + ".";
+    }
 
     /// <summary>
     /// Tutto l'avviso in righe di testo semplice: per chi usa un lettore di schermo e per le prove

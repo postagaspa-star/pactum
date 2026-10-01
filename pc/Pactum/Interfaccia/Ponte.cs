@@ -115,6 +115,13 @@ public sealed class Ponte
                 return motore.BonusAsync(Nucleo.Json.Intero(o?["regola_id"]), Nucleo.Json.Intero(o?["minuti"]), Nucleo.Json.Testo(o?["motivo"]));
             }),
             "aggiorna" => ("POST", motore.AggiornaAsync),
+            // (0.10) Le proposte del figlio al genitore (contratto v3.4).
+            "proponi" => ("POST", () =>
+            {
+                var o = Corpo(corpo);
+                return motore.ProponiAsync(Nucleo.Json.Intero(o?["regola_id"]), o?["parametri_proposti"] as JsonObject, Nucleo.Json.Testo(o?["motivazione"]));
+            }),
+            "ritira" => ("POST", () => motore.RitiraAsync(Nucleo.Json.Intero(Corpo(corpo)?["proposta_id"]))),
             _ => null,
         };
         if (rotta == null) return Json(404, new JsonObject { ["errore"] = "sconosciuto" });

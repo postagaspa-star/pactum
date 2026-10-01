@@ -18,6 +18,9 @@
  *   ?prova=1&revocato=1   il genitore ha tolto il computer dalla sua app: come
  *                         il motore vero, "abbinato" diventa false ma il
  *                         server resta ricordato (si riparte da "Collega")
+ *   ?prova=1&vecchio=1    (0.10) un server di prima della v3.4: niente proposte
+ *                         del figlio (403 a «Proponi al genitore», 404 a
+ *                         «Ritira»), niente `autore` né `proposte_inviate`
  * Nella barra a sinistra c'è anche l'interruttore "Simula rete assente".
  */
 (function (radice) {
@@ -25,7 +28,7 @@
 
   const T = radice.PactumTesti;
   const MINUTI_GIORNO = 1440;
-  const opzioni = { abbinato: true, rete: true, revocato: false };
+  const opzioni = { abbinato: true, rete: true, revocato: false, vecchio: false };
   let S = null;
 
   // --- Attrezzi ------------------------------------------------------------------
@@ -59,9 +62,11 @@
   //
   // Un figlio (Andrea) con un telefono e questo computer. Sul computer: un
   // limite su Minecraft (stretto due giorni fa, quindi ancora bloccato per
-  // allentarlo), uno su youtube.com, una fascia 22:00–07:00; per il figlio,
-  // la camminata con la nonna come arbitro. Una proposta del genitore in
-  // attesa. Otto giorni di striscia: uno fuori regola, uno senza dati.
+  // allentarlo), uno su youtube.com (cambiato ieri, bloccato anche lui), una
+  // fascia 22:00–07:00; per il figlio, la camminata con la nonna come arbitro.
+  // Una proposta del genitore in attesa (su Minecraft) e (0.10) una del figlio
+  // che aspetta il genitore (sulla fascia). Otto giorni di striscia: uno fuori
+  // regola, uno senza dati.
 
   function costruisci() {
     const oggi = T.isoGiorno(new Date());
@@ -95,7 +100,7 @@
       regola(13, 'fascia_oraria', { dalle: '22:00', alle: '07:00', giorni: tuttiIGiorni }, computer,
         -20 * MINUTI_GIORNO, -20 * MINUTI_GIORNO, semaforo(V, V, V, G, V, V, V, V)),
       regola(14, 'limite_tempo', { app_o_categoria: 'sito:youtube.com', minuti_al_giorno: 45 }, computer,
-        -10 * MINUTI_GIORNO, -10 * MINUTI_GIORNO, semaforo(V, V, V, G, V, V, V, V)),
+        -10 * MINUTI_GIORNO, -MINUTI_GIORNO, semaforo(V, V, V, G, V, V, V, V)),
       regola(15, 'vita_reale', { descrizione: 'Camminare un\'ora', arbitro_nome: 'Nonna Lucia', frequenza: 'ogni giorno' }, null,
         -15 * MINUTI_GIORNO, -15 * MINUTI_GIORNO, semaforo(G, R, G, G, V, G, V, G)),
       // Le regole del telefono: il computer non le mostra fra le sue, ma servono
@@ -137,14 +142,37 @@
       bonusOggi: { 12: 15 },
       proposte: [
         {
-          id: 21, regola_id: 12,
+          id: 21, regola_id: 12, autore: 'genitore',
           parametri_proposti: { app_o_categoria: 'exe:minecraft.exe', minuti_al_giorno: 45 },
           motivazione: 'Questa settimana hai tre verifiche: che ne dici di stare un po\' più corto?',
           confronto: '−15 min al giorno rispetto ad ora', direzione: 'stringe',
           stato: 'pendente', usata: false, ts_server: isoTs(traMinuti(-22 * 60)), risposta: null,
         },
+        // (0.10) Le proposte del figlio: una che aspetta il genitore, una ritirata, una rifiutata.
         {
-          id: 18, regola_id: 3,
+          id: 24, regola_id: 13, autore: 'figlio',
+          parametri_proposti: { dalle: '22:30', alle: '07:00', giorni: tuttiIGiorni },
+          motivazione: 'Il venerdì l\'allenamento finisce tardi e i compiti li finisco dopo cena.',
+          confronto: 'orario da 22:00-07:00 a 22:30-07:00', direzione: 'allenta',
+          stato: 'pendente', usata: false, ts_server: isoTs(traMinuti(-3 * 60)), risposta: null,
+        },
+        {
+          id: 20, regola_id: 12, autore: 'figlio',
+          parametri_proposti: { app_o_categoria: 'exe:minecraft.exe', minuti_al_giorno: 120 },
+          motivazione: null,
+          confronto: '+60 min al giorno rispetto ad ora', direzione: 'allenta',
+          stato: 'ritirata', usata: false, ts_server: isoTs(traMinuti(-4 * MINUTI_GIORNO - 60)), risposta: null,
+        },
+        {
+          id: 19, regola_id: 14, autore: 'figlio',
+          parametri_proposti: { app_o_categoria: 'sito:youtube.com', minuti_al_giorno: 90 },
+          motivazione: 'Per i tutorial di chitarra.',
+          confronto: '+45 min al giorno rispetto ad ora', direzione: 'allenta',
+          stato: 'rifiutata', usata: false, ts_server: isoTs(traMinuti(-6 * MINUTI_GIORNO - 120)),
+          risposta: { esito: 'rifiuta', motivazione: 'Novanta è tanto: proviamo con sessanta, e ne riparliamo.', ts_server: isoTs(traMinuti(-6 * MINUTI_GIORNO - 30)) },
+        },
+        {
+          id: 18, regola_id: 3, autore: 'genitore',
           parametri_proposti: { app_o_categoria: 'com.instagram.android', minuti_al_giorno: 60 },
           motivazione: 'Per il gruppo della classe 45 minuti erano pochi.',
           confronto: '+15 min al giorno rispetto ad ora', direzione: 'allenta',
@@ -152,14 +180,14 @@
           risposta: { esito: 'accetta', motivazione: 'Grazie, così mi organizzo meglio.', ts_server: isoTs(traMinuti(-9 * MINUTI_GIORNO - 30)) },
         },
         {
-          id: 16, regola_id: 13,
+          id: 16, regola_id: 13, autore: 'genitore',
           parametri_proposti: { dalle: '21:30', alle: '07:00', giorni: tuttiIGiorni },
           motivazione: 'La sera al computer si fa tardi.',
           confronto: '+30 min di fascia al giorno rispetto ad ora', direzione: 'stringe',
           stato: 'rifiutata', usata: false, ts_server: isoTs(traMinuti(-14 * MINUTI_GIORNO - 300)),
           risposta: { esito: 'rifiuta', motivazione: 'Alle 21:30 spesso sto ancora finendo i compiti.', ts_server: isoTs(traMinuti(-14 * MINUTI_GIORNO - 200)) },
         },
-      ],
+      ].filter((p) => !opzioni.vecchio || p.autore === 'genitore'),
       dichiarazioni: [
         {
           id: 31, regola_id: 15, giorno: g(1), esito: 'successo', nota: 'Giro fino al parco con la nonna',
@@ -380,20 +408,67 @@
 
   // --- Il confronto delle proposte pendenti, ricalcolato a ogni lettura -----------------
 
+  // Come server/app/confronto.py: le stesse frasi, per tutti e due gli autori.
   function aggiornaConfronto(proposta) {
     if (proposta.stato !== 'pendente') return proposta;
-    const regola = S.regole.find((r) => r.id === proposta.regola_id);
+    const regola = S.regole.find((r) => r.id === proposta.regola_id && r.attiva);
     if (!regola) return proposta;
     if (T.eEliminazione(proposta)) {
       proposta.confronto = 'propone di eliminare la regola';
       proposta.direzione = 'elimina';
-    } else if (regola.tipo === 'limite_tempo') {
-      const diff = proposta.parametri_proposti.minuti_al_giorno - regola.parametri.minuti_al_giorno;
-      const cambiaBersaglio = proposta.parametri_proposti.app_o_categoria !== regola.parametri.app_o_categoria;
-      proposta.confronto = diff === 0 ? 'stesso limite di adesso' : (diff > 0 ? '+' : '−') + Math.abs(diff) + ' min al giorno rispetto ad ora';
-      proposta.direzione = cambiaBersaglio || diff > 0 ? 'allenta' : 'stringe';
+      return proposta;
+    }
+    const prima = regola.parametri;
+    const dopo = proposta.parametri_proposti;
+    proposta.direzione = allenta(regola.tipo, prima, dopo) ? 'allenta' : 'stringe';
+    if (regola.tipo === 'limite_tempo') {
+      const diff = dopo.minuti_al_giorno - prima.minuti_al_giorno;
+      proposta.confronto = prima.app_o_categoria !== dopo.app_o_categoria
+        ? 'da ' + nomeNelConfronto(prima.app_o_categoria) + ' (' + prima.minuti_al_giorno + ' min) a ' +
+          nomeNelConfronto(dopo.app_o_categoria) + ' (' + dopo.minuti_al_giorno + ' min) al giorno'
+        : (diff >= 0 ? '+' : '−') + Math.abs(diff) + ' min al giorno rispetto ad ora';
+    } else if (regola.tipo === 'fascia_oraria') {
+      const parti = [];
+      if (prima.dalle !== dopo.dalle || prima.alle !== dopo.alle) {
+        parti.push('orario da ' + prima.dalle + '-' + prima.alle + ' a ' + dopo.dalle + '-' + dopo.alle);
+      }
+      const escono = T.GIORNI.filter((g) => prima.giorni.includes(g) && !dopo.giorni.includes(g));
+      const entrano = T.GIORNI.filter((g) => dopo.giorni.includes(g) && !prima.giorni.includes(g));
+      const giorni = [escono.length ? 'esce ' + escono.join(', ') : null, entrano.length ? 'entra ' + entrano.join(', ') : null].filter(Boolean);
+      if (giorni.length) parti.push(giorni.join(', '));
+      proposta.confronto = parti.length ? parti.join('; ') : 'nessuna modifica alla copertura';
+    } else {
+      const parti = [];
+      if (prima.descrizione !== dopo.descrizione) parti.push('descrizione: "' + prima.descrizione + '" -> "' + dopo.descrizione + '"');
+      if (prima.frequenza !== dopo.frequenza) parti.push('frequenza: ' + prima.frequenza + ' -> ' + dopo.frequenza);
+      if (prima.arbitro_nome !== dopo.arbitro_nome) parti.push('arbitro: ' + prima.arbitro_nome + ' -> ' + dopo.arbitro_nome);
+      proposta.confronto = parti.length ? parti.join('; ') : 'nessuna modifica';
     }
     return proposta;
+  }
+
+  /**
+   * (v3.4, "I nomi nel confronto") Un bersaglio cambiato si scrive coi nomi che leggono le persone,
+   * mai con le chiavi: i programmi col nome visto, i siti col dominio, le categorie come le app.
+   */
+  function nomeNelConfronto(chiave) {
+    const k = String(chiave || '');
+    if (k === T.TOTALE) return 'tutto il computer';
+    const categorie = {
+      'categoria:social': 'Social', 'categoria:giochi': 'Giochi', 'categoria:video': 'Video',
+      'categoria:musica': 'Musica', 'categoria:altro': 'Altre app',
+    };
+    if (categorie[k]) return categorie[k];
+    if (k.startsWith('sito:')) return k.slice('sito:'.length);
+    const visto = S.visti.programmi.find((x) => x.chiave === k);
+    return visto ? visto.nome : k;
+  }
+
+  /** Una proposta come la manda il server: quello di prima della v3.4 non conosce `autore`. */
+  function pubblicaProposta(proposta) {
+    const fuori = copia(proposta);
+    if (opzioni.vecchio) delete fuori.autore;
+    return fuori;
   }
 
   // --- /locale/* --------------------------------------------------------------------------
@@ -404,7 +479,7 @@
       server: S.server,
       figlio: S.abbinato ? S.figlio : null,
       dispositivo: S.abbinato ? S.computer : null,
-      versione: '0.9.0',
+      versione: '0.10.0',
       ultimo_invio_ok: S.abbinato ? isoTs(S.ultimoInvio) : null,
       rete_ok: opzioni.rete,
       patto_aggiornato: S.abbinato ? isoTs(S.pattoAggiornato) : null,
@@ -472,6 +547,50 @@
     return risposta(200, { ok: true, bonus: S.bonus });
   }
 
+  /**
+   * (0.10) /locale/proponi e /locale/ritira: come il motore vero (Motore.ErroreProposta e
+   * Motore.ErroreRitiro), gli esiti del server diventano codici per l'interfaccia.
+   */
+  function traduci(r, ritiro) {
+    if (r.stato >= 200 && r.stato < 300) {
+      const proposta = r.dati && r.dati.proposta ? r.dati.proposta : r.dati;
+      return risposta(200, { ok: true, proposta });
+    }
+    const codice = T.erroreDi(r.dati) && T.erroreDi(r.dati).errore;
+    let e = 'non_riuscita';
+    if (r.stato === 0 || r.stato === 502 || r.stato === 503 || r.stato === 504) e = 'rete';
+    else if (r.stato === 401) e = 'non_abbinato';
+    else if (ritiro && r.stato === 403) e = 'non_tua';
+    // La v3.4 non trova più la proposta e lo dice; il server vecchio non conosce proprio il ritiro.
+    else if (ritiro && r.stato === 404 && r.dati && String(r.dati.detail || '').trim().toLowerCase() === 'proposta non trovata') e = 'proposta_non_trovata';
+    else if (r.stato === 403 || r.stato === 404 || r.stato === 405) e = 'server_da_aggiornare';
+    else if (!ritiro && r.stato === 422) e = 'parametri_non_validi';
+    else if (r.stato === 409 && !ritiro && ['proposta_gia_pendente', 'regola_non_valida', 'dispositivo_revocato'].includes(codice)) e = codice;
+    else if (r.stato === 409 && ritiro && codice === 'proposta_non_pendente') e = codice;
+    return risposta(200, { ok: false, errore: e });
+  }
+
+  function proponiLocale(corpo) {
+    const id = Number(corpo && corpo.regola_id);
+    const parametri = corpo && corpo.parametri_proposti;
+    if (!Number.isInteger(id) || id <= 0) return risposta(200, { ok: false, errore: 'regola_non_valida' });
+    if (!parametri || typeof parametri !== 'object' || !Object.keys(parametri).length) return risposta(200, { ok: false, errore: 'parametri_non_validi' });
+    if (!S.abbinato) return risposta(200, { ok: false, errore: 'non_abbinato' });
+    if (!opzioni.rete) return risposta(200, { ok: false, errore: 'rete' });
+    const pulito = { regola_id: id, parametri_proposti: parametri };
+    const perche = String((corpo && corpo.motivazione) || '').trim();
+    if (perche) pulito.motivazione = perche;
+    return traduci(proponi(pulito), false);
+  }
+
+  function ritiraLocale(corpo) {
+    const id = Number(corpo && corpo.proposta_id);
+    if (!Number.isInteger(id) || id <= 0) return risposta(200, { ok: false, errore: 'non_riuscita' });
+    if (!S.abbinato) return risposta(200, { ok: false, errore: 'non_abbinato' });
+    if (!opzioni.rete) return risposta(200, { ok: false, errore: 'rete' });
+    return traduci(ritira(id), true);
+  }
+
   function locale(metodo, via, corpo) {
     switch (metodo + ' ' + via) {
       case 'GET /locale/stato': return risposta(200, statoMotore());
@@ -484,6 +603,8 @@
         S.record = Math.max(S.record, serie);
         return risposta(200, { serie, record: S.record });
       }
+      case 'POST /locale/proponi': return proponiLocale(corpo);
+      case 'POST /locale/ritira': return ritiraLocale(corpo);
       case 'POST /locale/aggiorna':
         if (opzioni.rete) {
           S.ultimoInvio = new Date();
@@ -505,7 +626,11 @@
       regole: mie.map(pubblica),
       bonus: S.bonus,
       bonus_oggi_per_regola: S.bonusOggi,
-      proposte_pendenti: S.proposte.filter((p) => p.stato === 'pendente').map(aggiornaConfronto),
+      // (v3.4) proposte_pendenti = solo quelle del genitore; quelle del figlio stanno in proposte_inviate.
+      proposte_pendenti: S.proposte.filter((p) => p.stato === 'pendente' && T.autore(p) === 'genitore')
+        .map(aggiornaConfronto).sort(piuRecenti).map(pubblicaProposta),
+      proposte_inviate: opzioni.vecchio ? undefined : S.proposte.filter((p) => p.stato === 'pendente' && T.autore(p) === 'figlio')
+        .map(aggiornaConfronto).sort(piuRecenti).map(pubblicaProposta),
       dichiarazioni_in_attesa: S.dichiarazioni.filter((d) => d.stato === 'in_attesa'),
       siti_recenti: S.siti,
       striscia: aggregata,
@@ -576,6 +701,8 @@
 
   function rispondi(id, corpo) {
     const proposta = S.proposte.find((p) => p.id === id);
+    // (v3.4) A una proposta del figlio risponde il genitore, non il figlio.
+    if (proposta && T.autore(proposta) === 'figlio') return errore(403, 'la proposta è tua: risponde il genitore');
     if (!proposta || proposta.stato !== 'pendente') return errore(409, { errore: 'proposta_non_pendente' });
     const esito = corpo && corpo.esito;
     if (esito !== 'accetta' && esito !== 'rifiuta') return risposta(422, { detail: [{ loc: ['body', 'esito'], msg: 'esito non valido' }] });
@@ -605,6 +732,52 @@
     const fuori = copia(proposta);
     if (esito === 'accetta') fuori.regola = regolaRisultante;
     return risposta(200, fuori);
+  }
+
+  /** (v3.4) POST /api/proposte col token del dispositivo: la proposta del figlio al genitore. */
+  function proponi(corpo) {
+    if (opzioni.vecchio) return errore(403, 'serve il token del genitore');
+    const id = Number(corpo && corpo.regola_id);
+    const regola = S.regole.find((r) => r.id === id && r.attiva);
+    if (!regola) return errore(409, { errore: 'regola_non_valida' });
+    const p = corpo.parametri_proposti;
+    let parametri;
+    if (p && p.azione === 'elimina' && Object.keys(p).length === 1) {
+      parametri = { azione: 'elimina' };
+    } else {
+      const esito = valida(regola.tipo, p);
+      if (esito.errori) return risposta(422, { detail: esito.errori });
+      parametri = esito.parametri;
+    }
+    if (S.proposte.some((x) => x.regola_id === id && x.stato === 'pendente')) return errore(409, { errore: 'proposta_gia_pendente' });
+    const proposta = {
+      id: ++S.ultimoId,
+      regola_id: id,
+      parametri_proposti: parametri,
+      motivazione: corpo.motivazione || null,
+      confronto: '',
+      direzione: '',
+      stato: 'pendente',
+      usata: false,
+      ts_server: isoTs(new Date()),
+      risposta: null,
+      autore: 'figlio',
+    };
+    aggiornaConfronto(proposta);
+    S.proposte.push(proposta);
+    return risposta(200, proposta);
+  }
+
+  /** (v3.4) POST /api/proposte/{id}/ritira: solo le proprie, solo se ancora in attesa. */
+  function ritira(id) {
+    if (opzioni.vecchio) return errore(404, 'Not Found');
+    const proposta = S.proposte.find((p) => p.id === id);
+    if (!proposta) return errore(404, 'proposta non trovata');
+    if (T.autore(proposta) !== 'figlio') return errore(403, 'la proposta è del genitore');
+    if (proposta.stato !== 'pendente') return errore(409, { errore: 'proposta_non_pendente' });
+    aggiornaConfronto(proposta);
+    proposta.stato = 'ritirata';
+    return risposta(200, proposta);
   }
 
   function dichiara(corpo) {
@@ -637,14 +810,25 @@
     return risposta(200, dichiarazione);
   }
 
-  function server(metodo, via, corpo) {
+  function server(metodo, via, corpo, query) {
     if (metodo === 'GET' && via === '/api/patto') return risposta(200, patto());
     if (metodo === 'GET' && via === '/api/regole') {
       return risposta(200, { regole: S.regole.filter((r) => r.attiva).map(pubblica) });
     }
     if (metodo === 'GET' && via === '/api/proposte') {
-      return risposta(200, { proposte: S.proposte.map(aggiornaConfronto).slice().sort(piuRecenti) });
+      // (v3.4) Senza ?autori=tutti solo quelle del genitore, come le vedono le app 0.9; un server
+      // vecchio il parametro non lo conosce (e lì le proposte sono solo del genitore).
+      const autori = query.get('autori');
+      if (!opzioni.vecchio && autori !== null && autori !== 'tutti') {
+        return risposta(422, { detail: [{ loc: ['query', 'autori'], msg: 'solo «tutti»' }] });
+      }
+      const tutte = opzioni.vecchio || autori === 'tutti';
+      return risposta(200, {
+        proposte: S.proposte.filter((x) => tutte || T.autore(x) === 'genitore')
+          .map(aggiornaConfronto).slice().sort(piuRecenti).map(pubblicaProposta),
+      });
     }
+    if (metodo === 'POST' && via === '/api/proposte') return proponi(corpo);
     if (metodo === 'GET' && via === '/api/dichiarazioni') {
       return risposta(200, { dichiarazioni: S.dichiarazioni.slice().sort(piuRecenti).slice(0, 50) });
     }
@@ -654,6 +838,8 @@
     if (trovato && metodo === 'DELETE') return eliminaRegola(Number(trovato[1]));
     trovato = /^\/api\/proposte\/(\d+)\/risposta$/.exec(via);
     if (trovato && metodo === 'POST') return rispondi(Number(trovato[1]), corpo);
+    trovato = /^\/api\/proposte\/(\d+)\/ritira$/.exec(via);
+    if (trovato && metodo === 'POST') return ritira(Number(trovato[1]));
     if (metodo === 'POST' && via === '/api/dichiarazioni') return dichiara(corpo);
     return errore(404, 'Not Found');
   }
@@ -661,21 +847,22 @@
   async function gestisci(metodo, percorso, corpo) {
     if (!S) costruisci();
     await attesa(120 + Math.random() * 230);
-    const via = String(percorso).split('?')[0];
+    const [via, testoQuery] = String(percorso).split('?');
+    const query = new URLSearchParams(testoQuery || '');
     const m = String(metodo || 'GET').toUpperCase();
     if (via.startsWith('/locale/')) return locale(m, via, corpo);
     if (via.startsWith('/server/')) {
       if (!S.abbinato) return errore(401, 'token assente');
       // Il motore non raggiunge il server: nessuna risposta utile.
       if (!opzioni.rete) return risposta(503, { errore: 'rete' });
-      return server(m, via.slice('/server'.length), corpo);
+      return server(m, via.slice('/server'.length), corpo, query);
     }
     return errore(404, 'Not Found');
   }
 
   radice.PactumProva = {
     gestisci,
-    /** Da chiamare prima della prima richiesta: { abbinato, rete }. */
+    /** Da chiamare prima della prima richiesta: { abbinato, rete, revocato, vecchio }. */
     configura(nuove) {
       Object.assign(opzioni, nuove || {});
       if (S) S.abbinato = S.abbinato || opzioni.abbinato;

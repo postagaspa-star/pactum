@@ -651,7 +651,105 @@
       accettata: 'Accettata',
       rifiutata: 'Rifiutata',
       annullata: 'Annullata',
+      ritirata: 'Ritirata',
     })[stato] || String(stato || '');
+  }
+
+  // --- Le proposte del figlio (0.10, contratto v3.4) ----------------------------------
+
+  /**
+   * Chi ha fatto la proposta: "figlio" o "genitore". Le proposte di prima della
+   * v3.4 non lo dicono: allora le faceva solo il genitore.
+   */
+  function autore(proposta) {
+    return proposta && proposta.autore === 'figlio' ? 'figlio' : 'genitore';
+  }
+
+  function dataProposta(p) {
+    return String((p && p.ts_server) || '');
+  }
+
+  /**
+   * Le proposte ancora in attesa di `chi` le ha fatte, dalla più recente.
+   * `delPatto` = la lista che GET /api/patto dà già divisa per autore
+   * (`proposte_pendenti` per quelle del genitore, `proposte_inviate` per
+   * quelle del figlio; se manca, server vecchio: nessuna); `lette` = GET
+   * /api/proposte, con tutti e due gli autori, che vince sullo stato: una
+   * proposta che lì non è più in attesa sparisce anche se il patto è più vecchio.
+   */
+  function proposteInAttesa(delPatto, lette, chi) {
+    const perId = new Map();
+    (Array.isArray(delPatto) ? delPatto : []).forEach((p) => {
+      // La lista del patto è già di `chi`: si scarta solo una proposta che dice di essere dell'altro.
+      const dichiarato = p && (p.autore === 'figlio' || p.autore === 'genitore') ? p.autore : chi;
+      if (p && p.id != null && dichiarato === chi) perId.set(p.id, p);
+    });
+    (Array.isArray(lette) ? lette : []).forEach((p) => {
+      if (!p || p.id == null) return;
+      if (p.stato !== 'pendente') perId.delete(p.id);
+      else if (autore(p) === chi) perId.set(p.id, p);
+    });
+    return [...perId.values()].sort((a, b) =>
+      dataProposta(b).localeCompare(dataProposta(a)) || (numero(b.id) || 0) - (numero(a.id) || 0));
+  }
+
+  /**
+   * Un server di prima della v3.4 accetta le proposte solo dal genitore: non è
+   * colpa di nessuno, va aggiornato.
+   */
+  const SERVER_DA_AGGIORNARE = 'Per mandare proposte serve aggiornare il server di Pactum.';
+
+  /**
+   * (0.10) Il patto viene da un server di prima della v3.4: manca proprio
+   * `proposte_inviate`, che la v3.4 manda sempre (anche vuota). Allora le
+   * proposte del figlio non partirebbero: lo si dice prima, non dopo il modulo.
+   */
+  function serverSenzaProposteDelFiglio(patto) {
+    return Boolean(patto) && typeof patto === 'object' && !Object.prototype.hasOwnProperty.call(patto, 'proposte_inviate');
+  }
+
+  /**
+   * Quante regole tengono in piedi il patto, come le conta `ultima_regola` del
+   * server: quelle attive del figlio, (0.10) senza quelle di un dispositivo
+   * revocato (`dispositivi` di GET /api/patto, con `revocato`).
+   */
+  function regoleCheContano(regole, dispositivi) {
+    const revocati = new Set((Array.isArray(dispositivi) ? dispositivi : [])
+      .filter((d) => d && d.revocato === true).map((d) => d.id));
+    return (Array.isArray(regole) ? regole : []).filter((r) => {
+      if (!r || r.attiva === false) return false;
+      const id = r.dispositivo_id != null ? r.dispositivo_id : (r.dispositivo ? r.dispositivo.id : null);
+      return id == null || !revocati.has(id);
+    }).length;
+  }
+
+  /** Se «Proponi al genitore» non è andato: cosa è successo, detto semplice. */
+  function testoErroreProposta(errore) {
+    switch (errore) {
+      case 'proposta_gia_pendente': return 'C\'è già una proposta in attesa su questa regola.';
+      case 'regola_non_valida': return 'Questa regola non è più nel patto: la lista si aggiorna da sola.';
+      case 'dispositivo_revocato': return 'Questa regola è di un dispositivo che non è più collegato al patto: non si può più cambiare.';
+      case 'parametri_non_validi': return 'Il server non ha accettato la proposta: controlla i campi e riprova.';
+      case 'server_da_aggiornare': return SERVER_DA_AGGIORNARE;
+      case 'non_abbinato': return 'Il server non riconosce più questo computer: serve un codice nuovo per ricollegarlo.';
+      case 'rete': return 'Niente rete: la proposta non è partita. Riprova quando torna la connessione.';
+      default: return 'Non sono riuscito a mandare la proposta: riprova.';
+    }
+  }
+
+  /** Se «Ritira» non è andato. */
+  function testoErroreRitiro(errore) {
+    switch (errore) {
+      case 'proposta_non_pendente': return 'Questa proposta non è più in attesa: la lista si aggiorna da sola.';
+      // La v3.4 dice che non la trova più ({"detail": "proposta non trovata"}).
+      case 'proposta_non_trovata': return 'Non trovo più questa proposta: la lista si aggiorna da sola.';
+      case 'non_tua': return 'Questa proposta è del genitore: puoi accettarla o rifiutarla, non ritirarla.';
+      // Un server di prima della v3.4 non conosce il ritiro (404 Not Found, 405).
+      case 'server_da_aggiornare': return 'Per ritirare una proposta serve aggiornare il server di Pactum.';
+      case 'non_abbinato': return 'Il server non riconosce più questo computer: serve un codice nuovo per ricollegarlo.';
+      case 'rete': return 'Niente rete: la proposta non è stata ritirata. Riprova quando torna la connessione.';
+      default: return 'Non sono riuscito a ritirare la proposta: riprova.';
+    }
   }
 
   const T = {
@@ -666,6 +764,8 @@
     ripulisciIndirizzo, dominioDaTesto, normalizzaServer, nomeServer,
     erroreDi, uguali,
     testoStatoDichiarazione, eEliminazione, etichettaDirezione, etichettaStatoProposta,
+    autore, proposteInAttesa, testoErroreProposta, testoErroreRitiro,
+    SERVER_DA_AGGIORNARE, serverSenzaProposteDelFiglio, regoleCheContano,
   };
 
   if (typeof module === 'object' && module.exports) module.exports = T;

@@ -37,6 +37,24 @@ public sealed class Giornata
 
     public static Giornata Nuova(string giorno) => new() { Giorno = giorno };
 
+    /// <summary>
+    /// Una copia che non cambia più (0.10): la lettura dell'uso su cui si decide uno sforamento resta
+    /// la stessa mentre si rilegge il patto dal server e il giro di misura va avanti.
+    /// </summary>
+    public Giornata Copia() => new()
+    {
+        Giorno = Giorno,
+        MsAttivi = MsAttivi,
+        Programmi = Programmi.ToDictionary(p => p.Key, p => new VoceProgramma { Nome = p.Value.Nome, Ms = p.Value.Ms }),
+        Siti = Siti.ToDictionary(s => s.Key, s => new VoceSito { Ms = s.Value.Ms, Visite = s.Value.Visite }),
+        MsPerCategoria = new Dictionary<string, long>(MsPerCategoria),
+        MsPerMinuto = new Dictionary<long, long>(MsPerMinuto),
+        SitiNonLeggibili = SitiNonLeggibili,
+        BrowserNonLeggibili = new List<string>(BrowserNonLeggibili),
+        Revisione = Revisione,
+        RevisioneFotografata = RevisioneFotografata,
+    };
+
     public static long Minuti(long ms) => ms / 60_000;
 
     [JsonIgnore]

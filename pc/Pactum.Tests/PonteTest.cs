@@ -40,6 +40,7 @@ public class PonteTest
     [InlineData("api/patto", true)]
     [InlineData("api/regole/12", true)]
     [InlineData("api/proposte/4/risposta", true)]
+    [InlineData("api/proposte/4/ritira", true)]
     [InlineData("altro", false)]
     [InlineData("api/../../segreto", false)]
     [InlineData("api//regole", false)]
@@ -161,6 +162,19 @@ public class PonteTest
         Assert.False(Json.Booleano(e["ok"]));
         // Un 409 con qualunque altro codice resta "codice non valido".
         Assert.Equal("codice_non_valido", Json.Testo(MotorePactum.ErroreAbbinamento(new Pactum.Motore.Risposta(409, "{\"detail\": {\"errore\": \"codice_non_valido\"}}"))!["errore"]));
+    }
+
+    [Theory]
+    [InlineData("proposte", "https://pactum.locale/index.html#proposte")]
+    [InlineData("diario", "https://pactum.locale/index.html#diario")]
+    [InlineData(null, "https://pactum.locale/index.html")]
+    [InlineData("sconosciuta", "https://pactum.locale/index.html")]
+    [InlineData("proposte';alert(1)//", "https://pactum.locale/index.html")]
+    public void Il_clic_su_un_fumetto_apre_solo_sezioni_note(string? sezione, string indirizzo)
+    {
+        // (0.10) Il fumetto di una proposta apre Proposte; nient'altro entra nell'indirizzo o in uno script.
+        Assert.Equal(indirizzo, FinestraPactum.IndirizzoIniziale(sezione));
+        Assert.Equal(indirizzo.Contains('#'), FinestraPactum.SezioneValida(sezione));
     }
 
     [Fact]

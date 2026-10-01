@@ -42,7 +42,10 @@
     pattoNonAggiornato: false,
     revocato: false,         // il server non riconosce più questo computer (401)
     regoleFiglio: null,      // GET /server/api/regole: tutte le regole del figlio
-    proposte: null,          // GET /server/api/proposte
+    proposte: null,          // GET /server/api/proposte?autori=tutti
+    proposteOttimiste: [],   // (0.10) { proposta, giro }: appena mandate o ritirate, finché non torna un giro partito dopo
+    giriPartiti: 0,          // (0.10) quanti giri di lettura sono partiti
+    giroDopo: null,          // (0.10) il giro chiesto dopo un'azione, mentre ne era già in corso un altro
     dichiarazioni: null,     // GET /server/api/dichiarazioni
     dichiarazioniOttimiste: [],
     sezione: 'oggi',
@@ -301,14 +304,47 @@
     return (S.patto && S.patto.dispositivo) || (S.motore && S.motore.dispositivo) || null;
   }
 
-  function pendenti() {
+  /**
+   * (0.10) Le proposte lette dal server (GET /api/proposte?autori=tutti) con sopra quelle appena
+   * mandate o ritirate da qui: restano finché non torna un giro partito dopo l'azione, così un giro
+   * già in corso (con le liste di prima) non le fa sparire o tornare indietro.
+   */
+  function proposteLette() {
+    if (!S.proposteOttimiste.length) return S.proposte;
     const perId = new Map();
-    ((S.patto && S.patto.proposte_pendenti) || []).forEach((p) => perId.set(p.id, p));
-    (S.proposte || []).forEach((p) => {
-      if (p.stato === 'pendente') perId.set(p.id, p);
-      else perId.delete(p.id);
-    });
-    return [...perId.values()].sort((a, b) => String(b.ts_server || '').localeCompare(String(a.ts_server || '')));
+    (S.proposte || []).forEach((p) => perId.set(p.id, p));
+    S.proposteOttimiste.forEach((o) => perId.set(o.proposta.id, o.proposta));
+    return [...perId.values()].sort((a, b) =>
+      String(b.ts_server || '').localeCompare(String(a.ts_server || '')) || (T.numero(b.id) || 0) - (T.numero(a.id) || 0));
+  }
+
+  /** (0.10) Una proposta appena mandata o ritirata da qui: si vede subito (v. proposteLette). */
+  function ricordaProposta(proposta) {
+    S.proposteOttimiste = S.proposteOttimiste.filter((o) => o.proposta.id !== proposta.id)
+      .concat([{ proposta: Object.assign({ autore: 'figlio' }, proposta), giro: S.giriPartiti }]);
+  }
+
+  /** Le proposte del genitore che aspettano la risposta del figlio. (0.10) Mai le sue: a quelle risponde il genitore. */
+  function pendenti() {
+    return T.proposteInAttesa(S.patto && S.patto.proposte_pendenti, proposteLette(), 'genitore');
+  }
+
+  /** (0.10) Le proposte del figlio che aspettano il genitore (contratto v3.4, `proposte_inviate`). */
+  function inviate() {
+    return T.proposteInAttesa(S.patto && S.patto.proposte_inviate, proposteLette(), 'figlio');
+  }
+
+  /**
+   * (0.10) Il patto viene da un server di prima della v3.4 (manca `proposte_inviate`): le proposte
+   * non partirebbero, e lo si dice subito al posto di «Proponi al genitore».
+   */
+  function serverSenzaProposte() {
+    return T.serverSenzaProposteDelFiglio(S.patto);
+  }
+
+  /** (0.10) La proposta in attesa su una regola, di chiunque sia: ce n'è al massimo una (contratto v3.4). */
+  function propostaInAttesaSu(regolaId) {
+    return inviate().find((p) => p.regola_id === regolaId) || pendenti().find((p) => p.regola_id === regolaId) || null;
   }
 
   function tutteDichiarazioni() {
@@ -389,12 +425,16 @@
 
   /** "Concordata": i parametri di adesso sono quelli di una proposta accettata. */
   function eConcordata(regola) {
-    return (S.proposte || []).some((p) => p.stato === 'accettata' && p.usata && p.regola_id === regola.id &&
+    return (proposteLette() || []).some((p) => p.stato === 'accettata' && p.usata && p.regola_id === regola.id &&
       T.uguali(p.parametri_proposti, regola.parametri));
   }
 
+  /**
+   * Quante regole tengono in piedi il patto, come le conta `ultima_regola` del server: (0.10) senza
+   * quelle di un dispositivo revocato. null finché le regole del figlio non sono arrivate.
+   */
   function totaleRegoleFiglio() {
-    return S.regoleFiglio ? attive(S.regoleFiglio).length : null;
+    return S.regoleFiglio ? T.regoleCheContano(S.regoleFiglio, S.patto && S.patto.dispositivi) : null;
   }
 
   // --- Copia locale del patto (per aprire la finestra anche senza rete) --------------------
@@ -438,9 +478,23 @@
 
   // --- Leggere i dati ---------------------------------------------------------------------
 
-  /** Un giro di lettura completo. Mai due insieme. */
-  function aggiornaTutto() {
-    if (S.aggiornamento) return S.aggiornamento;
+  /**
+   * Un giro di lettura completo. Mai due insieme. (0.10) Con `{ fresco: true }`, dopo un'azione: un
+   * giro già in corso è partito prima dell'azione e porta le liste di prima, quindi appena finisce
+   * ne parte un altro.
+   */
+  function aggiornaTutto(opzioni) {
+    if (S.aggiornamento) {
+      if (!(opzioni && opzioni.fresco)) return S.aggiornamento;
+      if (!S.giroDopo) {
+        S.giroDopo = S.aggiornamento.then(() => {
+          S.giroDopo = null;
+          return aggiornaTutto();
+        });
+      }
+      return S.giroDopo;
+    }
+    const numero = ++S.giriPartiti;
     S.aggiornamento = (async () => {
       try {
         const stato = await Api.get('/locale/stato');
@@ -451,7 +505,8 @@
           Api.get('/locale/oggi'),
           Api.get('/locale/serie'),
           Api.get('/server/api/patto'),
-          Api.get('/server/api/proposte'),
+          // (0.10, contratto v3.4) Senza ?autori=tutti arrivano solo le proposte del genitore.
+          Api.get('/server/api/proposte?autori=tutti'),
           Api.get('/server/api/dichiarazioni'),
           Api.get('/server/api/regole'),
         ]);
@@ -468,7 +523,11 @@
           S.pattoNonAggiornato = true;
           S.revocato = patto.stato === 401;
         }
-        if (proposte.ok && proposte.dati && Array.isArray(proposte.dati.proposte)) S.proposte = proposte.dati.proposte;
+        if (proposte.ok && proposte.dati && Array.isArray(proposte.dati.proposte)) {
+          S.proposte = proposte.dati.proposte;
+          // Questo giro è partito dopo le azioni di prima: da qui le loro proposte le dice il server.
+          S.proposteOttimiste = S.proposteOttimiste.filter((o) => o.giro >= numero);
+        }
         if (dichiarazioni.ok && dichiarazioni.dati && Array.isArray(dichiarazioni.dati.dichiarazioni)) {
           S.dichiarazioni = dichiarazioni.dati.dichiarazioni;
         }
@@ -941,7 +1000,9 @@
   // --- Le mie regole -------------------------------------------------------------------
 
   function sezioneRegole() {
-    const parti = [h('p', { class: 'intro' }, 'Le regole di questo computer e i tuoi impegni di vita reale. Le scrivi tu: il genitore le vede e può solo proporre modifiche. Quelle del telefono stanno nell\'app del telefono.')];
+    const parti = [h('p', { class: 'intro' }, 'Le regole di questo computer e i tuoi impegni di vita reale. Le scrivi tu: il genitore le vede e può solo proporre modifiche. ' +
+      (serverSenzaProposte() ? '' : 'Anche tu puoi proporgli un cambio con «Proponi al genitore»: se accetta, vale subito, anche se allenta la regola. ') +
+      'Quelle del telefono stanno nell\'app del telefono.')];
     const patto = S.patto;
     if (!patto) {
       if (!S.pattoNonAggiornato) parti.push(caricamento('Sto leggendo il patto…'));
@@ -978,10 +1039,43 @@
         striscia(regola.semaforo, { piccola: true, descrizione: T.fraseConteggio(regola.semaforo, 'dentro questa regola') }),
         h('span', { class: 'conteggio', 'aria-hidden': 'true' }, T.conteggioBreve(regola.semaforo))));
     }
+    // (0.10) Una proposta in attesa su questa regola (al massimo una, di chiunque): si dice qui, e se
+    // ne può mandare un'altra solo dopo. Altrimenti «Proponi al genitore», accanto a Modifica ed Elimina.
+    const inAttesa = propostaInAttesaSu(regola.id);
+    if (inAttesa) {
+      card.append(h('p', { class: 'nota-blocco' }, icona('proposte'), h('span', null, rigaPropostaInAttesa(inAttesa), ' ',
+        h('a', { href: '#proposte', class: 'link-freccia', chiave: 'vai-proposta-' + regola.id }, 'Vai alle proposte', icona('freccia')))));
+    }
     card.append(h('div', { class: 'azioni-card' },
       h('button', { type: 'button', class: 'bottone testo', chiave: 'modifica-' + regola.id, 'aria-describedby': idDescrizione, onclick: () => dialogoRegola(regola) }, 'Modifica'),
-      h('button', { type: 'button', class: 'bottone testo', chiave: 'elimina-' + regola.id, 'aria-describedby': idDescrizione, onclick: () => dialogoElimina(regola) }, 'Elimina')));
+      h('button', { type: 'button', class: 'bottone testo', chiave: 'elimina-' + regola.id, 'aria-describedby': idDescrizione, onclick: () => dialogoElimina(regola) }, 'Elimina'),
+      azionePropostaSu(regola, inAttesa, idDescrizione)));
     return card;
+  }
+
+  /**
+   * (0.10) Accanto a Modifica ed Elimina: «Proponi al genitore»; niente se c'è già una proposta in
+   * attesa (lo dice la riga sopra); con un server di prima della v3.4, subito la frase che va aggiornato.
+   */
+  function azionePropostaSu(regola, inAttesa, idDescrizione) {
+    if (inAttesa) return null;
+    if (serverSenzaProposte()) return h('span', { class: 'nota-azioni' }, T.SERVER_DA_AGGIORNARE);
+    return h('button', {
+      type: 'button', class: 'bottone testo con-icona', chiave: 'proponi-' + regola.id, 'aria-describedby': idDescrizione,
+      onclick: () => dialogoRegola(regola, { proposta: true }),
+    }, icona('proposte'), 'Proponi al genitore');
+  }
+
+  /** (0.10) La riga sulla card di una regola con una proposta in attesa. */
+  function rigaPropostaInAttesa(p) {
+    if (T.autore(p) === 'figlio') {
+      return T.eEliminazione(p)
+        ? 'Hai proposto al genitore di eliminarla: aspetta la sua risposta.'
+        : 'Hai proposto al genitore: ' + (p.confronto || 'una modifica') + '. Aspetta la sua risposta.';
+    }
+    return T.eEliminazione(p)
+      ? 'Il genitore propone di eliminarla: decidi tu.'
+      : 'Il genitore propone: ' + (p.confronto || 'una modifica') + '. Decidi tu.';
   }
 
   function sbloccoDa(errore, regola) {
@@ -1025,8 +1119,9 @@
   // --- Proposte ---------------------------------------------------------------------------
 
   function sezioneProposte() {
-    const parti = [h('p', { class: 'intro' }, 'Il genitore non cambia le tue regole: può solo proporre. Decidi tu, e la tua risposta arriva nella sua app.')];
-    if (!S.patto && !S.proposte) {
+    const parti = [h('p', { class: 'intro' }, 'Il genitore non cambia le tue regole: può solo proporre, e decidi tu.' +
+      (serverSenzaProposte() ? '' : ' Anche tu puoi proporgli un cambio: se accetta, vale subito, anche se allenta la regola.'))];
+    if (!S.patto && !proposteLette()) {
       if (!S.pattoNonAggiornato) parti.push(caricamento('Sto leggendo le proposte…'));
       return parti;
     }
@@ -1035,9 +1130,21 @@
     if (!daDecidere.length) parti.push(rigaVuota('spunta', 'Nessuna proposta in attesa della tua risposta.'));
     daDecidere.forEach((p) => parti.push(cardPropostaPendente(p)));
 
-    const storia = (S.proposte || []).filter((p) => p.stato !== 'pendente');
+    // (0.10) Le proposte del figlio che aspettano il genitore: si possono ritirare.
+    const mie = inviate();
+    parti.push(titoloSezione('Le tue proposte'));
+    if (!mie.length && serverSenzaProposte()) {
+      parti.push(rigaVuota('info', T.SERVER_DA_AGGIORNARE));
+    } else if (!mie.length) {
+      parti.push(rigaVuota('info', 'Nessuna tua proposta in attesa. Per chiedere un cambio al genitore: in Le mie regole, «Proponi al genitore» sotto la regola che vuoi cambiare.'),
+        h('p', null, h('a', { href: '#regole', class: 'link-freccia', chiave: 'proposte-vai-regole' }, 'Vai a Le mie regole', icona('freccia'))));
+    }
+    mie.forEach((p) => parti.push(cardPropostaInviata(p)));
+
+    const lette = proposteLette();
+    const storia = (lette || []).filter((p) => p.stato !== 'pendente');
     parti.push(titoloSezione('Storia'));
-    if (!storia.length) parti.push(rigaVuota('info', S.proposte ? 'Nessuna proposta ancora.' : 'La storia delle proposte arriva appena il server risponde.'));
+    if (!storia.length) parti.push(rigaVuota('info', lette ? 'Nessuna proposta ancora.' : 'La storia delle proposte arriva appena il server risponde.'));
     storia.forEach((p) => parti.push(cardPropostaStorica(p)));
     return parti;
   }
@@ -1122,23 +1229,138 @@
     return card;
   }
 
+  /** Una proposta chiusa, di tutti e due (0.10): chi l'ha fatta, com'è finita e cosa ha detto il genitore. */
   function cardPropostaStorica(p) {
     const regola = regolaPerId(p.regola_id);
+    const delFiglio = T.autore(p) === 'figlio';
     const card = h('article', { class: 'card card-quieta' },
-      h('div', { class: 'card-testa' }, h('span', { class: 'etichetta-tipo' }, T.etichettaStatoProposta(p.stato).toUpperCase()), chipDirezione(p.direzione)));
-    if (p.confronto) card.append(h('p', { class: 'descrizione' }, p.confronto));
+      h('div', { class: 'card-testa' },
+        h('span', { class: 'etichetta-tipo' }, (delFiglio ? 'TUA PROPOSTA' : 'PROPOSTA DEL GENITORE') + ' · ' + T.etichettaStatoProposta(p.stato).toUpperCase()),
+        chipDirezione(p.direzione)));
+    if (delFiglio && T.eEliminazione(p)) {
+      // Il confronto di un'eliminazione ("propone di eliminare la regola") è scritto per il genitore.
+      card.append(h('p', { class: 'descrizione' }, regola ? 'Eliminare la regola «' + descrizione(regola) + '»' : 'Eliminare la regola'));
+    } else if (p.confronto) {
+      card.append(h('p', { class: 'descrizione' }, p.confronto));
+    }
     const dove = doveVale(regola);
     if (dove) card.append(h('p', { class: 'dove' }, iconaDispositivo(regola), dove));
-    if (regola) card.append(h('p', null, 'Regola: ' + descrizione(regola)));
-    else if (p.stato === 'annullata') card.append(h('p', { class: 'secondario' }, 'La regola era già stata tolta dal patto.'));
-    if (p.motivazione) card.append(h('p', { class: 'secondario' }, 'Il genitore dice: ' + p.motivazione));
-    if (p.risposta) {
+    if (regola && !(delFiglio && T.eEliminazione(p))) card.append(h('p', null, 'Regola: ' + descrizione(regola)));
+    else if (!regola && p.stato === 'annullata') card.append(h('p', { class: 'secondario' }, 'La regola era già stata tolta dal patto.'));
+    if (p.motivazione) card.append(h('p', { class: 'secondario' }, (delFiglio ? 'Il tuo perché: ' : 'Il genitore dice: ') + p.motivazione));
+    if (p.risposta && delFiglio) {
+      card.append(h('p', null, p.risposta.esito === 'accetta' ? 'Il genitore ha accettato' : 'Il genitore ha rifiutato'));
+      if (p.risposta.motivazione) card.append(h('p', { class: 'secondario' }, 'Il genitore dice: ' + p.risposta.motivazione));
+    } else if (p.risposta) {
       card.append(h('p', null, p.risposta.esito === 'accetta' ? 'Hai accettato' : 'Hai rifiutato'));
       if (p.risposta.motivazione) card.append(h('p', { class: 'secondario' }, 'Hai detto: ' + p.risposta.motivazione));
     }
+    if (p.stato === 'ritirata') card.append(h('p', null, delFiglio ? 'L\'hai ritirata tu.' : 'Il genitore l\'ha ritirata.'));
     const quando = T.dataOraBreve(p.ts_server);
     if (quando) card.append(h('p', { class: 'piccolo secondario' }, capitale(quando)));
     return card;
+  }
+
+  /** (0.10) Una proposta del figlio che aspetta il genitore: com'è adesso, come sarebbe, e «Ritira». */
+  function cardPropostaInviata(p) {
+    const regola = regolaPerId(p.regola_id);
+    const idTitolo = 'inviata-titolo-' + p.id;
+    const eliminazione = T.eEliminazione(p);
+    const card = h('article', { class: 'card', 'aria-labelledby': idTitolo },
+      h('div', { class: 'card-testa' }, h('span', { class: 'etichetta-tipo' }, 'LA TUA PROPOSTA'), chipDirezione(p.direzione)));
+    if (eliminazione) {
+      card.append(h('p', { class: 'confronto', id: idTitolo }, regola ? 'Hai proposto di togliere la regola: ' + descrizione(regola) : 'Hai proposto di togliere la regola'));
+    } else {
+      card.append(h('p', { class: 'confronto', id: idTitolo }, p.confronto || 'Proposta di modifica'));
+    }
+    const dove = doveVale(regola);
+    if (dove) card.append(h('p', { class: 'dove' }, iconaDispositivo(regola), dove));
+    if (regola && !eliminazione) {
+      card.append(h('p', null, 'Ora: ' + descrizione(regola)));
+      const dopo = p.parametri_proposti;
+      if (dopo && typeof dopo === 'object' && Object.keys(dopo).length && !T.uguali(dopo, regola.parametri)) {
+        card.append(h('p', null, 'Se il genitore accetta: ' + descriviPerProposta(regola, dopo)));
+      }
+    }
+    if (p.motivazione) card.append(h('p', { class: 'secondario' }, 'Il tuo perché: ' + p.motivazione));
+    const quando = T.dataOraBreve(p.ts_server);
+    card.append(h('p', { class: 'piccolo secondario' }, (quando ? capitale(quando) + ' · ' : '') + 'aspetta la risposta del genitore. Se accetta, vale subito.'));
+    card.append(h('div', { class: 'azioni' },
+      h('button', { type: 'button', class: 'bottone contorno', chiave: 'ritira-' + p.id, 'aria-describedby': idTitolo, onclick: () => dialogoRitira(p) }, 'Ritira')));
+    return card;
+  }
+
+  /**
+   * (0.10) Una proposta al genitore (contratto v3.4): il motore la manda al server e traduce gli
+   * esiti (anche quello del server da aggiornare). Torna null se è partita, altrimenti la frase
+   * da mostrare. Se il genitore accetta, vale subito.
+   */
+  async function mandaProposta(regola, parametri, motivazione) {
+    const corpo = { regola_id: regola.id, parametri_proposti: parametri };
+    const perche = String(motivazione || '').trim();
+    if (perche) corpo.motivazione = perche;
+    const r = await Api.post('/locale/proponi', corpo);
+    if (r.ok && r.dati && r.dati.ok === true) {
+      const creata = r.dati.proposta;
+      // Si vede subito fra "Le tue proposte", prima ancora che torni il patto.
+      if (creata && creata.id != null) ricordaProposta(creata);
+      avviso('Proposta mandata al genitore: se accetta, vale subito.');
+      render();
+      aggiornaTutto({ fresco: true });
+      return null;
+    }
+    const errore = (r.dati && r.dati.errore) || (r.rete ? 'rete' : null);
+    // La lista sullo schermo era vecchia: si rilegge, così si vede la proposta già in attesa.
+    if (errore === 'proposta_gia_pendente' || errore === 'regola_non_valida' || errore === 'dispositivo_revocato') aggiornaTutto({ fresco: true });
+    return T.testoErroreProposta(errore);
+  }
+
+  function dialogoRitira(p) {
+    apriDialogo({
+      titolo: 'Ritirare la proposta?',
+      fuoco: '.azioni-dialogo .bottone.testo',
+      costruisci(d) {
+        const ritira = h('button', { type: 'button', class: 'bottone primario', onclick: conferma }, 'Ritira');
+        const annulla = h('button', { type: 'button', class: 'bottone testo', onclick: () => d.chiudi() }, 'Annulla');
+        d.aggiorna = () => {
+          ritira.disabled = d.occupato;
+          ritira.textContent = d.occupato ? 'Ritiro…' : 'Ritira';
+          annulla.disabled = d.occupato;
+        };
+        const regola = regolaPerId(p.regola_id);
+        const cosa = T.eEliminazione(p)
+          ? 'Hai proposto di togliere ' + (regola ? '«' + descrizione(regola) + '»' : 'la regola') + '.'
+          : (p.confronto ? 'Hai proposto: ' + p.confronto + '.' : null);
+        aggiungi(d.corpo, [
+          cosa ? h('p', { class: 'secondario' }, cosa) : null,
+          h('p', null, 'Il genitore non dovrà più deciderla e la regola resta com\'è. Gli arriva un avviso.'),
+          h('p', { class: 'secondario' }, 'Se cambi idea, puoi mandarne un\'altra quando vuoi.'),
+          d.messaggio,
+          bottoniDialogo(annulla, ritira),
+        ]);
+
+        async function conferma() {
+          if (d.occupato) return;
+          d.pulisci();
+          d.occupato = true;
+          d.aggiorna();
+          const r = await Api.post('/locale/ritira', { proposta_id: p.id });
+          d.occupato = false;
+          d.aggiorna();
+          if (r.ok && r.dati && r.dati.ok === true) {
+            ricordaProposta(r.dati.proposta && r.dati.proposta.id != null ? r.dati.proposta : Object.assign({}, p, { stato: 'ritirata' }));
+            d.chiudi();
+            avviso('Proposta ritirata: la regola resta com\'è.');
+            render();
+            aggiornaTutto({ fresco: true });
+            return;
+          }
+          const errore = (r.dati && r.dati.errore) || (r.rete ? 'rete' : null);
+          d.errore(T.testoErroreRitiro(errore));
+          if (errore === 'proposta_non_pendente' || errore === 'proposta_non_trovata') aggiornaTutto({ fresco: true });
+        }
+      },
+    });
   }
 
   async function rispondiProposta(p, esito) {
@@ -1155,7 +1377,7 @@
       delete S.bozze['motivazione-' + p.id];
       delete S.motivazioniAperte[p.id];
       avviso(esito === 'accetta' ? 'Proposta accettata: la regola è già aggiornata.' : 'Proposta rifiutata. Il genitore riceve la tua risposta.');
-      await aggiornaTutto();
+      await aggiornaTutto({ fresco: true });
       delete S.invii[chiave];
       S.fuocoTitolo = true;
       render();
@@ -1169,7 +1391,7 @@
     else S.messaggi[chiave] = 'Non sono riuscito a inviare la risposta: riprova.';
     S.fuocoDopo = (esito === 'accetta' ? 'accetta-' : 'rifiuta-') + p.id;
     render();
-    if (e && e.errore === 'proposta_non_pendente') aggiornaTutto();
+    if (e && e.errore === 'proposta_non_pendente') aggiornaTutto({ fresco: true });
   }
 
   // --- Diario ------------------------------------------------------------------------------
@@ -1394,8 +1616,9 @@
         'I bonus che ti dai: quanti minuti, su quale regola e il perché, se lo scrivi. E quanti minuti di bonus ti sei dato in ciascuno degli ultimi 8 giorni.',
         'Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.',
         'Le tue risposte alle sue proposte, con la tua motivazione se la scrivi.',
+        'Le proposte che gli mandi tu, con il tuo perché se lo scrivi, e quelle che ritiri.',
         'Quando il programma ha mandato l\'ultimo aggiornamento, e se da più di tre quarti d\'ora non ne manda mentre il computer è acceso.',
-        'Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, o quando c\'è un\'interruzione nella registrazione.',
+        'Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, gli mandi o ritiri una proposta, o quando c\'è un\'interruzione nella registrazione.',
       ]),
       blocco('COSA RESTA FUORI', [
         'Gli indirizzi completi delle pagine. Il programma legge l\'indirizzo della pagina aperta per un istante, ne ricava il nome del sito e butta via il resto: non lo salva, non lo manda, non lo mostra. Il genitore vede youtube.com, mai quale video.',
@@ -1657,9 +1880,77 @@
     return h('div', { class: 'azioni-dialogo' }, annulla, conferma);
   }
 
-  /** Nuova regola o modifica. In modifica il tipo resta quello (il contratto non prevede di cambiarlo). */
-  function dialogoRegola(regola) {
+  function bloccoAttivo(r) {
+    const e = T.erroreDi(r && r.dati);
+    return Boolean(r && r.stato === 409 && e && e.errore === 'lock_attivo');
+  }
+
+  /**
+   * (0.10) Sotto il messaggio del blocco dei 4 giorni: lo stesso cambio si può chiedere al
+   * genitore, e se accetta vale subito. `prendi()` dà quello che c'è adesso nel modulo
+   * ({ parametri } oppure { manca }), o il marcatore di un'eliminazione.
+   */
+  function pannelloChiedi(regola, d, prendi) {
+    if (serverSenzaProposte()) {
+      return h('p', { class: 'nota-blocco' }, icona('info'), h('span', null, T.SERVER_DA_AGGIORNARE));
+    }
+    if (propostaInAttesaSu(regola.id)) {
+      return h('p', { class: 'nota-blocco' }, icona('proposte'),
+        h('span', null, 'C\'è già una proposta in attesa su questa regola: la trovi in Proposte.'));
+    }
+    const campo = h('input', {
+      type: 'text', id: 'chiedi-perche', class: 'campo', maxlength: 300, autocomplete: 'off',
+      // Invio qui manda la proposta: il modulo della modifica, tutto intorno, non riparte.
+      onkeydown: (e) => {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        chiedi();
+      },
+    });
+    const nota = h('div', { class: 'dialogo-messaggio' });
+    const bottone = h('button', { type: 'button', class: 'bottone primario', onclick: chiedi }, 'Chiedi al genitore');
+
+    async function chiedi() {
+      if (d.occupato) return;
+      const esito = prendi();
+      if (esito.manca) {
+        nota.replaceChildren(notaMessaggio(esito.manca));
+        return;
+      }
+      nota.replaceChildren();
+      d.occupato = true;
+      d.aggiorna();
+      campo.disabled = true;
+      bottone.disabled = true;
+      bottone.textContent = 'Mando…';
+      const errore = await mandaProposta(regola, esito.parametri, campo.value);
+      d.occupato = false;
+      d.aggiorna();
+      campo.disabled = false;
+      bottone.disabled = false;
+      bottone.textContent = 'Chiedi al genitore';
+      if (!errore) {
+        d.chiudi();
+        return;
+      }
+      nota.replaceChildren(notaMessaggio(errore));
+    }
+
+    return h('div', { class: 'pannello' },
+      h('p', { class: 'pannello-titolo' }, 'Puoi chiederlo al genitore: se accetta, vale subito.'),
+      h('div', { class: 'campo-gruppo' }, h('label', { class: 'etichetta-campo', for: 'chiedi-perche' }, 'Perché? (facoltativo)'), campo),
+      nota,
+      h('div', { class: 'azioni' }, bottone));
+  }
+
+  /**
+   * Nuova regola o modifica. In modifica il tipo resta quello (il contratto non prevede di cambiarlo).
+   * (0.10) Con `{ proposta: true }` lo stesso modulo, già compilato, diventa una proposta al
+   * genitore (contratto v3.4): un perché facoltativo, e anche «Proponi di eliminarla».
+   */
+  function dialogoRegola(regola, opzioni) {
     const nuova = !regola;
+    const proposta = !nuova && Boolean(opzioni && opzioni.proposta);
     const p = (regola && regola.parametri) || {};
     const f = {
       tipo: regola ? regola.tipo : 'limite_tempo',
@@ -1685,25 +1976,80 @@
       if (tipo === 'categoria') { f.bersaglio = 'categoria'; f.categoria = chiave.toLowerCase(); }
     }
 
+    // (0.10) Proporre di eliminare l'unica regola del patto non porterebbe a niente: il genitore non potrebbe accettare.
+    const eliminabile = proposta && totaleRegoleFiglio() !== 1;
+    const testoSalva = proposta ? 'Manda la proposta' : 'Salva';
+
     apriDialogo({
-      titolo: nuova ? 'Nuova regola' : 'Modifica la regola',
+      titolo: nuova ? 'Nuova regola' : proposta ? 'Proponi al genitore' : 'Modifica la regola',
       fuoco: nuova ? 'input[name="tipo"]:checked' : '.campi input, .campi select',
       costruisci(d) {
         const zonaTipo = h('div');
         const zonaCampi = h('div', { class: 'campi' });
-        const salva = h('button', { type: 'submit', class: 'bottone primario' }, 'Salva');
+        const salva = h('button', { type: 'submit', class: 'bottone primario' }, testoSalva);
         const annulla = h('button', { type: 'button', class: 'bottone testo', onclick: () => d.chiudi() }, 'Annulla');
+        const perche = proposta
+          ? h('input', { type: 'text', id: 'campo-perche', class: 'campo', maxlength: 300, autocomplete: 'off', 'aria-describedby': 'aiuto-perche' })
+          : null;
+        const elimina = eliminabile
+          ? h('button', { type: 'button', class: 'bottone collegamento', onclick: () => { if (!d.occupato) mostraConferma(true); } }, 'Proponi di eliminarla')
+          : null;
+        // (0.10) Proporre di eliminarla chiede una conferma, come sul telefono: Manda o Indietro.
+        const confermaPerche = h('p', { class: 'secondario', hidden: true });
+        const manda = h('button', { type: 'button', class: 'bottone primario', onclick: () => { if (!d.occupato) proponi({ azione: 'elimina' }); } }, 'Manda');
+        const indietro = h('button', { type: 'button', class: 'bottone testo', onclick: () => { if (!d.occupato) mostraConferma(false); } }, 'Indietro');
+        const conferma = eliminabile
+          ? h('div', { class: 'modulo', hidden: true },
+            h('p', null, 'Chiedi al genitore di eliminare dal patto «' + descrizione(regola) + '».'),
+            h('p', { class: 'secondario' }, 'Se accetta, la regola esce subito dal patto.'),
+            confermaPerche,
+            bottoniDialogo(indietro, manda))
+          : null;
         const modulo = h('form', { class: 'modulo', novalidate: true, onsubmit: (e) => { e.preventDefault(); invia(); } },
-          zonaTipo, zonaCampi, d.messaggio, bottoniDialogo(annulla, salva));
+          zonaTipo, zonaCampi,
+          perche ? h('div', { class: 'campo-gruppo' },
+            h('label', { class: 'etichetta-campo', for: 'campo-perche' }, 'Perché? (facoltativo)'), perche,
+            h('p', { class: 'aiuto', id: 'aiuto-perche' }, 'Il genitore lo legge insieme alla proposta.')) : null,
+          elimina ? h('div', { class: 'campo-gruppo' }, h('p', null, elimina),
+            h('p', { class: 'aiuto' }, 'Se il genitore accetta, la regola esce dal patto.')) : null,
+          d.messaggio, bottoniDialogo(annulla, salva));
         d.corpo.append(modulo);
+        if (conferma) d.corpo.append(conferma);
         d.aggiorna = () => {
           salva.disabled = d.occupato;
-          salva.textContent = d.occupato ? 'Salvo…' : 'Salva';
+          salva.textContent = d.occupato ? (proposta ? 'Mando…' : 'Salvo…') : testoSalva;
           annulla.disabled = d.occupato;
+          if (perche) perche.disabled = d.occupato;
+          if (elimina) elimina.disabled = d.occupato;
+          manda.disabled = d.occupato;
+          manda.textContent = d.occupato ? 'Mando…' : 'Manda';
+          indietro.disabled = d.occupato;
         };
+
+        /** (0.10) Dal modulo alla conferma di «Proponi di eliminarla», e ritorno. */
+        function mostraConferma(si) {
+          if (!conferma) return;
+          modulo.hidden = si;
+          conferma.hidden = !si;
+          if (si) {
+            const scritto = perche ? perche.value.trim() : '';
+            confermaPerche.textContent = scritto ? 'Il tuo perché: ' + scritto : '';
+            confermaPerche.hidden = !scritto;
+            indietro.focus();
+          } else if (elimina) {
+            elimina.focus();
+          }
+        }
 
         if (nuova) zonaTipo.append(sceltaTipo());
         else zonaTipo.append(h('p', { class: 'etichetta-tipo' }, T.etichettaTipo(regola.tipo)));
+        if (proposta) {
+          // Per la vita reale ogni cambio conta come un allentamento (server/app/lock.py): niente "stringerla da solo".
+          zonaTipo.append(h('p', { class: 'nota-blocco spazio-sopra' }, icona('info'),
+            h('span', null, regola.tipo === 'vita_reale'
+              ? 'Scrivila come la vorresti. Se il genitore accetta, vale subito.'
+              : 'Scrivila come la vorresti. Se il genitore accetta, vale subito, anche se la allenta. Stringerla invece puoi farlo da solo, sempre, con «Modifica».')));
+        }
         disegnaCampi();
 
         function sceltaTipo() {
@@ -1726,11 +2072,11 @@
 
         function disegnaCampi() {
           const parti = [];
-          if (!nuova) {
+          if (!nuova && !proposta) {
             const sblocco = T.istante(regola.allentabile_dal);
             if (sblocco && sblocco > new Date()) {
               parti.push(h('p', { class: 'nota-blocco' }, icona('info'),
-                h('span', null, 'Stringerla si può sempre; allentarla si potrà ' + T.dalQuando(sblocco) + '.')));
+                h('span', null, 'Stringerla si può sempre; allentarla si potrà ' + T.dalQuando(sblocco) + ', o prima se lo chiedi al genitore e accetta.')));
             }
           }
           if (f.tipo === 'limite_tempo') parti.push(...campiLimite());
@@ -1969,6 +2315,16 @@
             }
             return;
           }
+          if (proposta && T.uguali(esito.parametri, regola.parametri)) {
+            d.errore(eliminabile
+              ? 'È uguale alla regola di adesso: cambia qualcosa, oppure proponi di eliminarla.'
+              : 'È uguale alla regola di adesso: cambia qualcosa.');
+            return;
+          }
+          if (proposta) {
+            await proponi(esito.parametri);
+            return;
+          }
           if (!nuova && T.uguali(esito.parametri, regola.parametri)) {
             // Una "modifica" identica farebbe ripartire i 4 giorni per niente.
             d.chiudi();
@@ -1990,7 +2346,33 @@
             return;
           }
           d.errore(testoErroreRegola(r, { regola, eliminazione: false, totale: esito.parametri.app_o_categoria === T.TOTALE }));
+          // (0.10) Allentare è bloccato per 4 giorni: lo stesso cambio si può chiedere al genitore.
+          if (bloccoAttivo(r)) d.messaggio.append(pannelloChiedi(regola, d, parametriDaChiedere));
           if (r.stato === 404 || r.stato === 401) aggiornaTutto();
+        }
+
+        /** (0.10) Quello che c'è adesso nel modulo, per chiederlo al genitore dopo il blocco dei 4 giorni. */
+        function parametriDaChiedere() {
+          const esito = parametri();
+          if (!esito.manca && T.uguali(esito.parametri, regola.parametri)) return { manca: 'È uguale alla regola di adesso: cambia qualcosa.' };
+          return esito;
+        }
+
+        /** (0.10) La proposta al genitore, dal modulo o dalla conferma di «Proponi di eliminarla». */
+        async function proponi(parametriProposti) {
+          d.pulisci();
+          d.occupato = true;
+          d.aggiorna();
+          const errore = await mandaProposta(regola, parametriProposti, perche ? perche.value : '');
+          d.occupato = false;
+          d.aggiorna();
+          if (!errore) {
+            d.chiudi();
+            return;
+          }
+          // Il messaggio sta nel modulo: dalla conferma si torna lì, a leggerlo.
+          if (conferma && !conferma.hidden) mostraConferma(false);
+          d.errore(errore);
         }
       },
     });
@@ -2029,6 +2411,8 @@
             return;
           }
           d.errore(testoErroreRegola(r, { regola, eliminazione: true }));
+          // (0.10) Eliminare è bloccato per 4 giorni: si può chiedere al genitore di eliminarla.
+          if (bloccoAttivo(r)) d.messaggio.append(pannelloChiedi(regola, d, () => ({ parametri: { azione: 'elimina' } })));
           if (r.stato === 404) aggiornaTutto();
         }
       },
@@ -2154,6 +2538,7 @@
       abbinato: parametri.get('collega') !== '1',
       rete: parametri.get('rete') !== '0',
       revocato: parametri.get('revocato') === '1',
+      vecchio: parametri.get('vecchio') === '1',
     });
     Api.prova = true;
   }

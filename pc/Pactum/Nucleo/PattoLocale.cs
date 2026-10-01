@@ -28,6 +28,13 @@ public sealed class PattoLocale
     public string Fuso => Json.Testo(Dati["fuso"]) ?? "Europe/Rome";
 
     /// <summary>
+    /// (0.10, contratto v3.4) Una proposta del figlio aspetta il genitore (<c>proposte_inviate</c> non vuota):
+    /// il motore guarda patto e notifiche ogni minuto, così una proposta accettata vale subito anche qui.
+    /// Un server di prima della v3.4 il campo non lo manda: niente giro veloce.
+    /// </summary>
+    public bool HaProposteInviate => Dati["proposte_inviate"] is JsonArray inviate && inviate.Count > 0;
+
+    /// <summary>
     /// Le regole che il computer valuta: limite_tempo e fascia_oraria attive di QUESTO
     /// dispositivo (il patto v3 porta anche la vita reale del figlio, che si dichiara a mano).
     /// </summary>

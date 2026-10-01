@@ -126,12 +126,49 @@ public class FormeJsonTest
     [Fact]
     public void La_versione_e_la_stessa_nel_programma_e_nel_file()
     {
-        Assert.Equal("0.9.0", Versione.Nome);
-        Assert.Equal(9, Versione.Codice);
+        Assert.Equal("0.10.0", Versione.Nome);
+        // (0.10) Il codice segue quello delle app del telefono: 0.10.0 = 10 (v. Versione).
+        Assert.Equal(10, Versione.Codice);
         var assembly = typeof(Versione).Assembly;
-        Assert.Equal(new Version(0, 9, 0, 0), assembly.GetName().Version);
+        Assert.Equal(new Version(0, 10, 0, 0), assembly.GetName().Version);
         var file = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-        Assert.Equal("0.9.0.0", file.FileVersion);
+        Assert.Equal("0.10.0.0", file.FileVersion);
+    }
+
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(9, false)]
+    [InlineData(10, false)]
+    [InlineData(11, true)]
+    public async Task Una_versione_nuova_si_annuncia_solo_col_codice_del_computer_piu_alto(int codiceServer, bool annunciata)
+    {
+        // (0.10) Il codice del computer segue quello delle app (la 0.10.0 è la 10): il programma annuncia
+        // la successiva, e mai sé stesso o una vecchia (2 = il codice sbagliato che annunciava il server per la 0.9).
+        await using var server = new ServerFinto(r => r.Percorso switch
+        {
+            "/api/versione" => (200, "{\"computer\": {\"versione_code\": " + codiceServer + ", \"versione_nome\": \"0." + codiceServer + ".0\", \"url\": \"/scarica/pactum-computer.zip\"}}"),
+            "/api/patto" => (200, "{\"regole\": []}"),
+            "/api/notifiche" => (200, "{\"notifiche\": []}"),
+            _ => (200, "{}"),
+        });
+        using var cartella = new CartellaTemporanea();
+        var percorsi = new Percorsi(cartella.Percorso);
+        Archivio.ScriviJson(percorsi.Config, new Configurazione
+        {
+            Server = server.Indirizzo,
+            TokenProtetto = Pactum.Sistema.Dpapi.Proteggi("token-di-prova"),
+            Dispositivo = new JsonObject { ["id"] = 2, ["nome"] = "Computer", ["tipo"] = "computer" },
+            Figlio = new JsonObject { ["id"] = 1, ["nome"] = "Andrea" },
+        });
+        using var motore = new Motore.Motore(percorsi);
+        var avvisi = new List<string>();
+        motore.AvvisoAggiornamento += (_, testo, _) => avvisi.Add(testo);
+
+        await motore.SincronizzaAsync("prova");
+
+        Assert.Contains(server.Ricevute, r => r.Percorso == "/api/versione");
+        if (annunciata) Assert.Equal("È uscita la 0.11.0. Fai clic qui per aprire la pagina da cui scaricarla.", Assert.Single(avvisi));
+        else Assert.Empty(avvisi);
     }
 
     [Fact]
@@ -208,7 +245,7 @@ public class FormeJsonTest
         Assert.False(Json.Booleano(s["abbinato"]));
         Assert.Null(s["figlio"]);
         Assert.Null(s["dispositivo"]);
-        Assert.Equal("0.9.0", Json.Testo(s["versione"]));
+        Assert.Equal("0.10.0", Json.Testo(s["versione"]));
     }
 
     [Theory]

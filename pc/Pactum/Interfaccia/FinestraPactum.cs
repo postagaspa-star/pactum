@@ -24,12 +24,22 @@ public sealed class FinestraPactum : Form
     private CoreWebView2Environment? ambiente;
     private bool autoprovaFatta;
 
-    public FinestraPactum(Ponte ponte, string cartellaUi, string cartellaDatiWebView, Icon icona, string? fileAutoprova)
+    // (0.10) La sezione da aprire appena la pagina è pronta (il clic su un fumetto prima che la WebView ci sia).
+    private string? sezioneDaAprire;
+
+    /// <summary>(0.10) Le sezioni dell'interfaccia (SEZIONI di app.js): solo queste si aprono da fuori.</summary>
+    private static readonly HashSet<string> Sezioni = new(StringComparer.Ordinal)
+    {
+        "oggi", "regole", "proposte", "diario", "siti", "cosa-vede", "impostazioni",
+    };
+
+    public FinestraPactum(Ponte ponte, string cartellaUi, string cartellaDatiWebView, Icon icona, string? fileAutoprova, string? sezione = null)
     {
         this.ponte = ponte;
         this.cartellaUi = cartellaUi;
         this.cartellaDatiWebView = cartellaDatiWebView;
         this.fileAutoprova = fileAutoprova;
+        sezioneDaAprire = SezioneValida(sezione) ? sezione : null;
 
         Text = "Pactum";
         Icon = icona;
@@ -95,7 +105,39 @@ public sealed class FinestraPactum : Form
             core.NavigationCompleted += SuPaginaPronta;
             core.WebMessageReceived += SuMessaggioAutoprova;
         }
-        core.Navigate(Ponte.Origine + "/index.html");
+        core.Navigate(IndirizzoIniziale(sezioneDaAprire));
+        sezioneDaAprire = null;
+    }
+
+    /// <summary>(0.10) Una sezione dell'interfaccia che si può aprire da fuori (un fumetto): solo quelle note.</summary>
+    public static bool SezioneValida(string? sezione) => sezione != null && Sezioni.Contains(sezione);
+
+    /// <summary>(0.10) L'indirizzo della pagina, con la sezione da aprire se è una di quelle note.</summary>
+    public static string IndirizzoIniziale(string? sezione) =>
+        Ponte.Origine + "/index.html" + (SezioneValida(sezione) ? "#" + sezione : "");
+
+    /// <summary>
+    /// (0.10) Porta la finestra già aperta su una sezione (il clic sul fumetto di una proposta apre
+    /// Proposte). Se la pagina non c'è ancora, la sezione si apre appena è pronta.
+    /// </summary>
+    public void MostraSezione(string sezione)
+    {
+        if (!SezioneValida(sezione)) return;
+        var core = vista.CoreWebView2;
+        if (core == null)
+        {
+            sezioneDaAprire = sezione;
+            return;
+        }
+        try
+        {
+            // Solo un nome della lista qui sopra: niente testo che venga da fuori dentro lo script.
+            _ = core.ExecuteScriptAsync("location.hash = '#" + sezione + "';");
+        }
+        catch (Exception e) when (e is InvalidOperationException or ObjectDisposedException or System.Runtime.InteropServices.COMException)
+        {
+            Log.Errore("sezione della finestra non aperta", e);
+        }
     }
 
     /// <summary>

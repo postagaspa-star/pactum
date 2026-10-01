@@ -26,11 +26,12 @@ public sealed class ContestoPactum : ApplicationContext
     private readonly NotifyIcon icona;
     private readonly Control invocatore;
     private readonly SentinellaSchermo schermo;
-    private readonly Queue<(string Titolo, string Testo, string? Url)> fumetti = new();
+    private readonly Queue<(string Titolo, string Testo, string? Url, string? Sezione)> fumetti = new();
     private readonly System.Windows.Forms.Timer timerFumetti;
     private FinestraPactum? finestra;
     private FinestraAvviso? finestraAvviso;
     private string? urlFumettoInMostra;
+    private string? sezioneFumettoInMostra;
     private bool uscito;
 
     // Una domanda del programma è aperta ("Chiudi Pactum?"): l'avviso a tutto schermo non le va sopra, aspetta.
@@ -62,7 +63,7 @@ public sealed class ContestoPactum : ApplicationContext
         timerFumetti = new System.Windows.Forms.Timer { Interval = (int)IntervalloFumetti.TotalMilliseconds };
         timerFumetti.Tick += (_, _) => ProssimoFumetto();
 
-        motore.Fumetto += (titolo, testo) => SulFiloGrafico(() => AccodaFumetto(titolo, testo));
+        motore.Fumetto += (titolo, testo, sezione) => SulFiloGrafico(() => AccodaFumetto(titolo, testo, null, sezione));
         motore.AvvisoTuttoSchermo += avvisi => SulFiloGrafico(() => MostraAvviso(avvisi));
         motore.AvvisoAggiornamento += (titolo, testo, url) => SulFiloGrafico(() => AccodaFumetto(titolo, testo, url));
         schermo = new SentinellaSchermo(acceso => motore.SchermoAcceso(acceso));
@@ -125,16 +126,23 @@ public sealed class ContestoPactum : ApplicationContext
         }
     }
 
-    private void Apri()
+    private void Apri() => Apri(null);
+
+    /// <summary>
+    /// Apre (o riporta davanti) la finestra di Pactum. (0.10) Con <paramref name="sezione"/> la porta su
+    /// quella sezione: il clic sul fumetto di una proposta apre Proposte, come sul telefono.
+    /// </summary>
+    private void Apri(string? sezione)
     {
         if (uscito) return;
         // Chi apre Pactum (menu, doppio clic, fumetto, secondo avvio) ha visto l'avviso: si chiude,
         // come fa il suo pulsante "Apri Pactum", e la finestra del programma non gli finisce sotto.
         ChiudiAvviso();
+        if (finestra != null && !finestra.IsDisposed && sezione != null) finestra.MostraSezione(sezione);
         if (finestra == null || finestra.IsDisposed)
         {
             var cartellaUi = Path.Combine(AppContext.BaseDirectory, "ui");
-            finestra = new FinestraPactum(ponte, cartellaUi, Path.Combine(opzioni.CartellaDati, "WebView2"), CaricaIconaGrande(), opzioni.FileAutoprova);
+            finestra = new FinestraPactum(ponte, cartellaUi, Path.Combine(opzioni.CartellaDati, "WebView2"), CaricaIconaGrande(), opzioni.FileAutoprova, sezione);
             if (opzioni.FileAutoprova != null && opzioni.EsciDopoAutoprova)
             {
                 finestra.AutoprovaFinita += () => SulFiloGrafico(() => Esci("prova"));
@@ -321,7 +329,7 @@ public sealed class ContestoPactum : ApplicationContext
         }
     }
 
-    private void AccodaFumetto(string titolo, string testo, string? url = null)
+    private void AccodaFumetto(string titolo, string testo, string? url = null, string? sezione = null)
     {
         if (opzioni.CartellaProvaAvvisi is string cartella)
         {
@@ -329,7 +337,8 @@ public sealed class ContestoPactum : ApplicationContext
             try
             {
                 Directory.CreateDirectory(cartella);
-                File.AppendAllText(Path.Combine(cartella, "fumetti.txt"), titolo + Environment.NewLine + testo + Environment.NewLine + Environment.NewLine);
+                var clic = sezione != null ? "[clic: " + sezione + "]" + Environment.NewLine : "";
+                File.AppendAllText(Path.Combine(cartella, "fumetti.txt"), titolo + Environment.NewLine + testo + Environment.NewLine + clic + Environment.NewLine);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
@@ -338,7 +347,7 @@ public sealed class ContestoPactum : ApplicationContext
             Log.Info($"fumetto (prova, su file): {titolo}");
             return;
         }
-        fumetti.Enqueue((Taglia(titolo, 63), Taglia(testo, 255), url));
+        fumetti.Enqueue((Taglia(titolo, 63), Taglia(testo, 255), url, sezione));
         if (!timerFumetti.Enabled)
         {
             ProssimoFumetto();
@@ -352,21 +361,26 @@ public sealed class ContestoPactum : ApplicationContext
         {
             timerFumetti.Stop();
             urlFumettoInMostra = null;
+            sezioneFumettoInMostra = null;
             return;
         }
-        var (titolo, testo, url) = fumetti.Dequeue();
+        var (titolo, testo, url, sezione) = fumetti.Dequeue();
         urlFumettoInMostra = url;
+        sezioneFumettoInMostra = sezione;
         // Nel diario solo il titolo: il testo può nominare un sito o un programma.
         Log.Info($"fumetto: {titolo}");
         icona.ShowBalloonTip((int)IntervalloFumetti.TotalMilliseconds, titolo, testo, ToolTipIcon.Info);
     }
 
-    /// <summary>Clic sul fumetto: l'avviso di una versione nuova apre la pagina di download, gli altri aprono Pactum.</summary>
+    /// <summary>
+    /// Clic sul fumetto: l'avviso di una versione nuova apre la pagina di download, gli altri aprono
+    /// Pactum; (0.10) quelli delle proposte su Proposte, quello di un verdetto sul Diario.
+    /// </summary>
     private void SuClicFumetto()
     {
         var url = urlFumettoInMostra;
         if (url != null) ApriPagina(url);
-        else Apri();
+        else Apri(sezioneFumettoInMostra);
     }
 
     private static void ApriPagina(string url)

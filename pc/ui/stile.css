@@ -1059,8 +1059,18 @@ textarea {
 
 .azioni-card {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin: 0 -12px -6px;
+}
+
+/* (0.10) Al posto di «Proponi al genitore», con un server da aggiornare: una riga piccola, non un pulsante. */
+.nota-azioni {
+  align-self: center;
+  padding: 0 12px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--su-superficie-variante);
 }
 
 .azioni-dialogo {
@@ -1083,6 +1093,11 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* (0.10) Il modulo della proposta e la conferma di «Proponi di eliminarla» si danno il cambio. */
+.modulo[hidden] {
+  display: none;
 }
 
 .campi {
@@ -1168,6 +1183,11 @@ textarea {
 .nota-blocco .icona {
   width: 18px;
   height: 18px;
+}
+
+/* (0.10) La spiegazione in cima al modulo di una proposta, sotto il tipo della regola. */
+.nota-blocco.spazio-sopra {
+  margin-top: 10px;
 }
 
 .gruppo-scelte {

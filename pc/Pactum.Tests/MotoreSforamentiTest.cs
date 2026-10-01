@@ -79,7 +79,7 @@ public class MotoreSforamentiTest : IDisposable
         using var motore = Prepara(c, 150, (7, "totale", 120), (8, "exe:minecraft.exe", 10));
         var fumetti = new List<string>();
         var avvisi = new List<IReadOnlyList<Avviso>>();
-        motore.Fumetto += (_, testo) => fumetti.Add(testo);
+        motore.Fumetto += (_, testo, _) => fumetti.Add(testo);
         motore.AvvisoTuttoSchermo += a => avvisi.Add(a);
         DiscoPienoPer("sforamenti.json", "coda.json");
 
@@ -111,7 +111,7 @@ public class MotoreSforamentiTest : IDisposable
         // Riavvio lo stesso giorno: niente secondo sforamento, niente secondo avviso.
         using var dopo = new Motore.Motore(new Percorsi(c.Percorso));
         int mostrati = 0;
-        dopo.Fumetto += (_, _) => mostrati++;
+        dopo.Fumetto += (_, _, _) => mostrati++;
         dopo.AvvisoTuttoSchermo += _ => mostrati++;
         dopo.ValutaRegole(Tempo.AdessoUtcMs());
         Assert.Equal(0, mostrati);
@@ -134,7 +134,7 @@ public class MotoreSforamentiTest : IDisposable
 
         using var dopo = new Motore.Motore(new Percorsi(c.Percorso));
         int mostrati = 0;
-        dopo.Fumetto += (_, _) => mostrati++;
+        dopo.Fumetto += (_, _, _) => mostrati++;
         dopo.AvvisoTuttoSchermo += _ => mostrati++;
         dopo.ValutaRegole(Tempo.AdessoUtcMs());
         Assert.Equal(0, mostrati);
@@ -149,7 +149,7 @@ public class MotoreSforamentiTest : IDisposable
         using var c = new CartellaTemporanea();
         using var motore = Prepara(c, 150, (7, "totale", 120));
         int mostrati = 0;
-        motore.Fumetto += (_, _) => mostrati++;
+        motore.Fumetto += (_, _, _) => mostrati++;
         motore.AvvisoTuttoSchermo += _ => mostrati++;
 
         // Il giorno che si chiude, valutato fino all'ultimo secondo: solo l'evento, e col suo giorno.

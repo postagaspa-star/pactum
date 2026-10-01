@@ -4,12 +4,22 @@ using Pactum.Nucleo;
 
 namespace Pactum.Motore;
 
-/// <summary>Il giro di rete ogni 5 minuti: battito, fotografie e coda, patto, notifiche.</summary>
+/// <summary>
+/// Il giro di rete ogni 5 minuti: battito, fotografie e coda, patto, notifiche. (0.10) Mentre una
+/// proposta del figlio aspetta il genitore, in più un giro veloce ogni minuto: patto e notifiche.
+/// </summary>
 public sealed partial class Motore
 {
     /// <summary>Il giro di rete: ogni 5 minuti (contratto). Più corto solo nelle prove.</summary>
     public TimeSpan IntervalloRete { get; set; } = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan IntervalloVersione = TimeSpan.FromHours(12);
+
+    /// <summary>
+    /// (0.10) Il giro veloce, mentre una proposta del figlio aspetta il genitore (<c>proposte_inviate</c>
+    /// non vuota): se il genitore accetta, la regola nuova vale sul computer entro un minuto, e il fumetto
+    /// della risposta arriva con lei.
+    /// </summary>
+    private static readonly TimeSpan IntervalloVeloce = TimeSpan.FromSeconds(60);
 
     // Protegge config, token e lo stato della rete.
     private readonly object stato = new();
@@ -24,6 +34,11 @@ public sealed partial class Motore
     private long? ultimoInvioOkMs;
     private long prossimaVersioneTick;
     private int? versioneGiaSegnalata;
+
+    // (0.10) Quando è stato chiesto il patto che il motore sta usando (orologio monotono): uno chiesto
+    // prima, che arriva dopo, non lo sostituisce. Protetto da "stato".
+    private long pattoChiestoTick = long.MinValue;
+    private readonly object scritturaPatto = new();
 
     /// <summary>C'è una versione nuova del programma: titolo, testo e l'indirizzo della pagina da cui scaricarla.</summary>
     public event Action<string, string, string>? AvvisoAggiornamento;
@@ -46,14 +61,48 @@ public sealed partial class Motore
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(3), annulla).ConfigureAwait(false);
+            long prossimoGiro = long.MinValue;
             while (!annulla.IsCancellationRequested)
             {
-                await SincronizzaAsync("periodico").ConfigureAwait(false);
-                await Task.Delay(IntervalloRete, annulla).ConfigureAwait(false);
+                if (Environment.TickCount64 >= prossimoGiro)
+                {
+                    await SincronizzaAsync("periodico").ConfigureAwait(false);
+                    prossimoGiro = Environment.TickCount64 + (long)IntervalloRete.TotalMilliseconds;
+                }
+                else if (patto?.HaProposteInviate == true)
+                {
+                    // (0.10) Una proposta del figlio aspetta il genitore: se accetta, vale subito anche qui.
+                    await GiroVeloceAsync().ConfigureAwait(false);
+                }
+                long resta = prossimoGiro - Environment.TickCount64;
+                await Task.Delay(TimeSpan.FromMilliseconds(Math.Clamp(resta, 1_000, (long)IntervalloVeloce.TotalMilliseconds)), annulla).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
         {
+        }
+    }
+
+    /// <summary>
+    /// (0.10) Il giro veloce: solo patto e notifiche. Se un giro completo è in corso, questo salta
+    /// (il completo li legge già).
+    /// </summary>
+    internal async Task GiroVeloceAsync()
+    {
+        if (!await giroRete.WaitAsync(0).ConfigureAwait(false)) return;
+        try
+        {
+            bool ok = await AggiornaPattoAsync().ConfigureAwait(false);
+            ok &= await LeggiNotificheAsync(null).ConfigureAwait(false);
+            if (!ok) Log.Info("giro veloce: incompleto");
+        }
+        catch (Exception e)
+        {
+            Log.Errore("giro veloce", e);
+        }
+        finally
+        {
+            giroRete.Release();
         }
     }
 
@@ -130,29 +179,41 @@ public sealed partial class Motore
         return false;
     }
 
-    /// <summary>Rilegge il patto: regole del computer, bonus di oggi, striscia. Poi rivaluta le regole.</summary>
-    public async Task<bool> AggiornaPattoAsync(TimeSpan? tempoMassimo = null)
+    /// <summary>
+    /// Rilegge il patto: regole del computer, bonus di oggi, striscia. Poi, con <paramref name="valuta"/>,
+    /// rivaluta le regole (senza, lo fa chi chiama: v. <c>ValutaConPattoFrescoAsync</c>).
+    /// </summary>
+    public async Task<bool> AggiornaPattoAsync(TimeSpan? tempoMassimo = null, bool valuta = true)
     {
         var (server, tok) = Credenziali();
         if (server == null || tok == null) return false;
         long inizio = Tempo.AdessoUtcMs();
+        long inizioTick = Environment.TickCount64;
         var r = await postino.InviaAsync("GET", server, "api/patto", tok, null, tempoMassimo).ConfigureAwait(false);
         Annota(r);
         if (!r.Ok || Json.Analizza(r.Corpo) is not JsonObject dati) return false;
 
-        var nuovo = new PattoLocale(dati, Tempo.AdessoUtcMs());
-        patto = nuovo;
-        try
-        {
-            Archivio.ScriviJson(percorsi.Patto, new PattoSalvato { AggiornatoUtcMs = nuovo.AggiornatoUtcMs, Patto = dati });
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            Log.Errore("patto.json non scritto", e);
-        }
+        AdottaPatto(dati, inizio, inizioTick);
+        if (valuta) ValutaRegole(Tempo.AdessoUtcMs());
+        return true;
+    }
 
+    /// <summary>
+    /// Il patto appena arrivato dal server diventa quello del motore (regole, bonus, striscia) e si
+    /// salva per l'avvio senza rete. Arriva dal giro di rete o (0.10) dalla finestra, che lo legge ogni
+    /// minuto attraverso il ponte. Uno chiesto prima di quello in uso, e arrivato dopo, non lo
+    /// sostituisce: false. <paramref name="chiestoAlle"/> = l'ora della richiesta (UTC), per i bonus
+    /// appena dati; <paramref name="chiestoTick"/> = la stessa, sull'orologio monotono, per l'ordine.
+    /// </summary>
+    internal bool AdottaPatto(JsonObject dati, long chiestoAlle, long chiestoTick)
+    {
+        var nuovo = new PattoLocale(dati, Tempo.AdessoUtcMs());
         lock (stato)
         {
+            if (chiestoTick < pattoChiestoTick) return false;
+            pattoChiestoTick = chiestoTick;
+            patto = nuovo;
+
             // Il genitore può rinominare figlio e dispositivo: si tiene il nome nuovo.
             bool cambiato = false;
             if (dati["figlio"] is JsonObject f && Json.Intero(f["id"]) != null)
@@ -167,29 +228,55 @@ public sealed partial class Motore
             }
             if (cambiato) SalvaConfig();
         }
+        lock (scritturaPatto)
+        {
+            // Se intanto ne è arrivato uno più nuovo, su disco va quello (lo scrive lui).
+            if (ReferenceEquals(patto, nuovo))
+            {
+                try
+                {
+                    Archivio.ScriviJson(percorsi.Patto, new PattoSalvato { AggiornatoUtcMs = nuovo.AggiornatoUtcMs, Patto = dati });
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    Log.Errore("patto.json non scritto", e);
+                }
+            }
+        }
         // Il patto riletto contiene già i bonus concessi prima della richiesta.
-        lock (misura) bonusLocali.RemoveAll(b => b.UtcMs < inizio);
-        ValutaRegole(Tempo.AdessoUtcMs());
+        lock (misura) bonusLocali.RemoveAll(b => b.UtcMs < chiestoAlle);
         return true;
     }
 
-    /// <summary>Le notifiche nuove diventano fumetti. Non si marcano lette: sul server varrebbe per tutti i dispositivi.</summary>
+    /// <summary>
+    /// Le notifiche nuove diventano fumetti. Il computer non le marca lette (dalla v3.1 varrebbe solo per
+    /// lui): tiene il segno dell'ultima vista (<c>notifiche.json</c>) e (0.10) chiede solo quelle dopo
+    /// (<c>?dopo_id</c>, contratto v3.3). Un server più vecchio ignora il parametro e le manda tutte: il
+    /// filtro sull'ultima vista tiene comunque solo le nuove.
+    /// </summary>
     private async Task<bool> LeggiNotificheAsync(TimeSpan? tempoMassimo)
     {
         var (server, tok) = Credenziali();
         if (server == null || tok == null) return false;
-        var r = await postino.InviaAsync("GET", server, "api/notifiche", tok, null, tempoMassimo).ConfigureAwait(false);
+        long? giaViste;
+        lock (stato) giaViste = notifiche.UltimoId;
+        var percorso = giaViste is long ultimaVista
+            ? "api/notifiche?dopo_id=" + Math.Max(0, ultimaVista).ToString(CultureInfo.InvariantCulture)
+            : "api/notifiche";
+        var r = await postino.InviaAsync("GET", server, percorso, tok, null, tempoMassimo).ConfigureAwait(false);
         Annota(r);
-        if (!r.Ok || Json.Analizza(r.Corpo)?["notifiche"] is not JsonArray lista) return false;
+        if (!r.Ok || (Json.Analizza(r.Corpo) as JsonObject)?["notifiche"] is not JsonArray lista) return false;
 
         var voci = lista
-            .Select(n => (Id: Json.Intero(n?["id"]), Tipo: Json.Testo(n?["tipo"]) ?? "", Messaggio: Json.Testo(n?["messaggio"]) ?? ""))
+            .Select(n => (Id: Json.Intero(n?["id"]), Tipo: Json.Testo(n?["tipo"]) ?? "", Messaggio: Json.Testo(n?["messaggio"]) ?? "",
+                // (0.10) Il payload dice l'esito di una proposta del figlio e chi ne è l'autore (contratto v3.4).
+                Payload: n?["payload"] as JsonObject))
             .Where(n => n.Id != null)
             .OrderBy(n => n.Id)
             .ToList();
         long massimo = voci.Count > 0 ? voci.Max(n => n.Id!.Value) : 0;
 
-        List<(long? Id, string Tipo, string Messaggio)> nuove;
+        List<(long? Id, string Tipo, string Messaggio, JsonObject? Payload)> nuove;
         lock (stato)
         {
             if (notifiche.UltimoId == null)
@@ -205,18 +292,15 @@ public sealed partial class Motore
             notifiche.UltimoId = Math.Max(ultimo, massimo);
             Archivio.ScriviJson(percorsi.Notifiche, notifiche);
         }
-        foreach (var n in nuove.TakeLast(5)) Fumetto?.Invoke(TitoloNotifica(n.Tipo), n.Messaggio);
-        if (nuove.Count > 5) Fumetto?.Invoke("Novità dal patto", $"Ci sono altre {nuove.Count - 5} novità: aprile in Pactum.");
+        foreach (var n in nuove.TakeLast(5))
+        {
+            // (0.10) Col clic, il fumetto di una proposta apre Proposte (quello di un verdetto, il Diario).
+            var (titolo, testo, sezione) = Testi.Notifica(n.Tipo, n.Messaggio, n.Payload);
+            Fumetto?.Invoke(titolo, testo, sezione);
+        }
+        if (nuove.Count > 5) Fumetto?.Invoke(Testi.TitoloNovita, $"Ci sono altre {nuove.Count - 5} novità: aprile in Pactum.", null);
         return true;
     }
-
-    public static string TitoloNotifica(string tipo) => tipo switch
-    {
-        "nuova_proposta" => "Nuova proposta del genitore",
-        "verdetto" => "Esito della tua dichiarazione",
-        "segno" => "Un segno dal genitore",
-        _ => "Novità dal patto",
-    };
 
     private async Task ControllaVersioneAsync()
     {

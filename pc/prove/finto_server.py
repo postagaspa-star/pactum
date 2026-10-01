@@ -2,16 +2,22 @@
 Finto server Pactum v3, solo libreria standard: serve a provare il programma
 per il computer finché il server vero della v3 non è pronto.
 
-Implementa le chiamate che il computer usa (docs/contratto-api.md, v3, e la
-chiave "totale" della v3.3):
-abbina, battito, eventi, patto, notifiche, bonus, regole, proposte,
-dichiarazioni, versione. Gli errori escono alla FastAPI ({"detail": {...}}),
-come dal server vero. In più, per le prove, /prova/*: nuovo codice di
-abbinamento, notifica finta, stato completo.
+Implementa le chiamate che il computer usa (docs/contratto-api.md, v3, la
+chiave "totale" della v3.3 e le proposte del figlio della v3.4):
+abbina, battito, eventi, patto, notifiche, bonus, regole, proposte (anche
+dal computer, col ritiro), dichiarazioni, versione. Gli errori escono alla
+FastAPI ({"detail": {...}}), come dal server vero. In più, per le prove,
+/prova/*: nuovo codice di abbinamento, notifica finta, stato completo e
+(v3.4) quello che farebbe il genitore dalla sua app: una sua proposta, la
+risposta a una proposta del figlio, il ritiro di una sua proposta.
+
+Con --server-vecchio fa il server di prima della v3.4: le proposte le manda
+solo il genitore (403 al computer), il ritiro non esiste (404), niente
+`autore` né `proposte_inviate`.
 
 Nel suo diario scrive solo metodo, percorso e stato: mai i corpi.
 
-    python finto_server.py --porta 8765 --dati CARTELLA [--codice 123456] [--versione-computer 8]
+    python finto_server.py --porta 8765 --dati CARTELLA [--codice 123456] [--versione-computer 10] [--server-vecchio]
 """
 
 import argparse
@@ -68,7 +74,11 @@ class Stato:
         self.bonus = []
         self.notifiche = []
         self.prossima_notifica = 1
-        self.versione_computer = 8
+        # (0.10) Il codice del computer di GET /api/versione segue quello delle app: 0.10.0 = 10.
+        self.versione_computer = 10
+        self.proposte = {}         # (v3.4) id -> proposta, con "autore"
+        self.prossima_proposta = 1
+        self.server_vecchio = False
         # Una regola di vita reale del figlio, come nel patto vero (dispositivo null).
         self.crea_regola("vita_reale", {"descrizione": "Un'ora di camminata", "arbitro_nome": "Nonna", "frequenza": "giornaliera"}, None)
 
@@ -165,7 +175,8 @@ class Stato:
             "regole": [self.vista_regola(r) for r in sorted(regole, key=lambda r: r["id"])],
             "bonus": self.bonus_di(did),
             "bonus_oggi_per_regola": per_regola,
-            "proposte_pendenti": [],
+            # (v3.4) quelle a cui risponde il figlio; le sue, che aspettano il genitore, in proposte_inviate.
+            "proposte_pendenti": self.proposte_in_attesa("genitore"),
             "dichiarazioni_in_attesa": [],
             "siti_recenti": self.siti_recenti(did),
             "striscia": striscia,
@@ -177,7 +188,51 @@ class Stato:
             "dispositivi": [{"id": d["id"], "nome": d["nome"], "tipo": d["tipo"],
                              "striscia": self.striscia([r for r in tutte_del_figlio if r["dispositivo_id"] == d["id"]])}
                             for d in self.dispositivi.values()],
+        } | ({} if self.server_vecchio else {"proposte_inviate": self.proposte_in_attesa("figlio")})
+
+    # ---- proposte (v3.4) ----
+    def vista_proposta(self, p):
+        v = {k: p[k] for k in ("id", "regola_id", "parametri_proposti", "motivazione", "confronto", "direzione",
+                               "stato", "usata", "ts_server", "risposta")}
+        if not self.server_vecchio:
+            v["autore"] = p["autore"]
+        return v
+
+    def proposte_in_attesa(self, autore):
+        return [self.vista_proposta(p) for p in sorted(self.proposte.values(), key=lambda p: -p["id"])
+                if p["stato"] == "pendente" and p["autore"] == autore]
+
+    def crea_proposta(self, regola, parametri, motivazione, autore):
+        if any(p["regola_id"] == regola["id"] and p["stato"] == "pendente" for p in self.proposte.values()):
+            raise errore(409, "proposta_gia_pendente")
+        confronto, direzione = confronto_semplice(self, regola, parametri)
+        pid = self.prossima_proposta
+        self.prossima_proposta += 1
+        self.proposte[pid] = {
+            "id": pid, "regola_id": regola["id"], "parametri_proposti": parametri, "motivazione": motivazione,
+            "confronto": confronto, "direzione": direzione, "stato": "pendente", "usata": False,
+            "ts_server": iso(adesso()), "risposta": None, "autore": autore,
         }
+        return self.proposte[pid]
+
+    def chiudi_proposta(self, p, esito, motivazione):
+        """La risposta a una proposta: con "accetta" la modifica vale subito (lock saltato)."""
+        regola = self.regole[p["regola_id"]]
+        risultante = None
+        if esito == "accetta":
+            if p["parametri_proposti"] == {"azione": "elimina"}:
+                if len([x for x in self.regole.values() if x["attiva"]]) <= 1:
+                    raise errore(409, "ultima_regola")
+                regola["attiva"] = False
+            else:
+                regola["parametri"] = p["parametri_proposti"]
+                regola["ultima_modifica_ts"] = iso(adesso())
+                regola["allentabile_dal"] = iso(adesso() + dt.timedelta(days=4))
+                risultante = self.vista_regola(regola)
+        p["stato"] = "accettata" if esito == "accetta" else "rifiutata"
+        p["usata"] = esito == "accetta"
+        p["risposta"] = {"esito": esito, "motivazione": motivazione, "ts_server": iso(adesso())}
+        return risultante
 
     def notifica(self, tipo, messaggio, payload, dispositivo_id, destinatario="figlio"):
         n = {"id": self.prossima_notifica, "tipo": tipo, "messaggio": messaggio, "payload": payload,
@@ -200,6 +255,7 @@ class Stato:
             "regole": list(self.regole.values()),
             "bonus": self.bonus,
             "notifiche": self.notifiche,
+            "proposte": list(self.proposte.values()),
         }
         tmp = os.path.join(self.cartella, "stato.json.tmp")
         with open(tmp, "w", encoding="utf-8") as f:
@@ -216,6 +272,40 @@ class Errore(Exception):
 
 def errore(stato, codice, **altro):
     return Errore(stato, {"detail": dict({"errore": codice}, **altro)})
+
+
+NOMI_CATEGORIE = {"categoria:social": "Social", "categoria:giochi": "Giochi", "categoria:video": "Video",
+                  "categoria:musica": "Musica", "categoria:altro": "Altre app"}
+
+
+def nome_nel_confronto(stato, chiave):
+    """(v3.4, "I nomi nel confronto") Il bersaglio come lo leggono le persone, mai la chiave tecnica."""
+    if chiave == "totale":
+        return "tutto il computer"
+    if chiave in NOMI_CATEGORIE:
+        return NOMI_CATEGORIE[chiave]
+    if isinstance(chiave, str) and chiave.startswith("sito:"):
+        return chiave[len("sito:"):]
+    for (_, _), foto in sorted(stato.fotografie_uso.items(), key=lambda v: v[0][1], reverse=True):
+        nome = (foto.get("nomi") or {}).get(chiave)
+        if nome:
+            return nome
+    return chiave
+
+
+def confronto_semplice(stato, regola, parametri):
+    """Il confronto della proposta, come lo scrive il server per i casi comuni (v. server/app/confronto.py)."""
+    if parametri == {"azione": "elimina"}:
+        return "propone di eliminare la regola", "elimina"
+    prima = regola["parametri"]
+    if regola["tipo"] == "limite_tempo":
+        if prima.get("app_o_categoria") == parametri.get("app_o_categoria"):
+            delta = parametri.get("minuti_al_giorno", 0) - prima.get("minuti_al_giorno", 0)
+            return f"{'+' if delta >= 0 else '−'}{abs(delta)} min al giorno rispetto ad ora", ("allenta" if delta > 0 else "stringe")
+        return (f"da {nome_nel_confronto(stato, prima.get('app_o_categoria'))} ({prima.get('minuti_al_giorno')} min) "
+                f"a {nome_nel_confronto(stato, parametri.get('app_o_categoria'))} ({parametri.get('minuti_al_giorno')} min) al giorno",
+                "allenta")
+    return "modifica della regola", "allenta"
 
 
 def chiave_valida_computer(chiave):
@@ -331,6 +421,7 @@ class Gestore(BaseHTTPRequestHandler):
             return 200, {
                 "figlio": {"versione_code": 7, "versione_nome": "0.7.0", "url": "/scarica/pactum-figlio.apk", "note": ""},
                 "genitore": {"versione_code": 7, "versione_nome": "0.7.0", "url": "/scarica/pactum-genitore.apk", "note": ""},
+                # Il codice del computer segue quello delle app del telefono: 10 = 0.10.0, 11 = 0.11.0.
                 "computer": {"versione_code": s.versione_computer, "versione_nome": f"0.{s.versione_computer}.0",
                              "url": "/scarica/pactum-computer.zip", "note": "finto"},
             }
@@ -403,14 +494,82 @@ class Gestore(BaseHTTPRequestHandler):
                 secondi = int((dt.datetime.fromisoformat(r["allentabile_dal"]) - adesso()).total_seconds())
                 raise errore(409, "lock_attivo", secondi_residui=secondi, allentabile_dal=r["allentabile_dal"])
             r["attiva"] = False
+            # Come dalla v2.1: l'eliminazione annulla le proposte pendenti della regola, di tutti e due gli autori.
+            for p in s.proposte.values():
+                if p["regola_id"] == r["id"] and p["stato"] == "pendente":
+                    p["stato"] = "annullata"
             return 200, {"eliminata": True, "id": r["id"]}
 
         if metodo == "GET" and percorso == "/api/proposte":
-            return 200, {"proposte": []}
+            # (v3.4) Senza ?autori=tutti solo quelle del genitore (le app 0.9 non scambiano le proposte del
+            # figlio per sue); un server vecchio il parametro non lo conosce.
+            autori = (query.get("autori") or [None])[0]
+            if not s.server_vecchio and autori not in (None, "tutti"):
+                raise Errore(422, {"detail": [{"loc": ["query", "autori"], "msg": "solo tutti"}]})
+            tutte = s.server_vecchio or autori == "tutti"
+            elenco = [p for p in sorted(s.proposte.values(), key=lambda p: -p["id"]) if tutte or p["autore"] == "genitore"]
+            return 200, {"proposte": [s.vista_proposta(p) for p in elenco][:50]}
+        if metodo == "POST" and percorso == "/api/proposte":
+            return self.proponi(self.corpo(), did)
+        if metodo == "POST" and len(pezzi) == 4 and pezzi[:2] == ["api", "proposte"] and pezzi[3] in ("risposta", "ritira"):
+            p = s.proposte.get(int(pezzi[2])) if pezzi[2].isdigit() else None
+            if pezzi[3] == "ritira":
+                return self.ritira(p)
+            return self.rispondi_proposta(p, self.corpo())
         if metodo == "GET" and percorso == "/api/dichiarazioni":
             return 200, {"dichiarazioni": []}
 
         raise Errore(404, {"detail": "Not Found"})
+
+    # ---- proposte dal computer (v3.4) ----
+    def proponi(self, c, did):
+        s = self.stato
+        if s.server_vecchio:
+            raise Errore(403, {"detail": "serve il token del genitore"})
+        r = s.regole.get(c.get("regola_id"))
+        if r is None or not r["attiva"]:
+            raise errore(409, "regola_non_valida")
+        parametri = c.get("parametri_proposti")
+        if parametri != {"azione": "elimina"}:
+            valida_parametri(r["tipo"], parametri, s.dispositivi.get(r["dispositivo_id"]) or {"tipo": "telefono"})
+        p = s.crea_proposta(r, parametri, c.get("motivazione"), "figlio")
+        s.notifica("nuova_proposta", f"{s.figlio['nome']} propone: {p['confronto']}",
+                   {"proposta_id": p["id"], "regola_id": r["id"], "confronto": p["confronto"], "direzione": p["direzione"],
+                    "autore": "figlio"}, r["dispositivo_id"], destinatario="genitore")
+        return 200, s.vista_proposta(p)
+
+    def ritira(self, p):
+        s = self.stato
+        if s.server_vecchio:
+            raise Errore(404, {"detail": "Not Found"})
+        if p is None:
+            raise Errore(404, {"detail": "proposta non trovata"})
+        if p["autore"] != "figlio":
+            raise Errore(403, {"detail": "la proposta è del genitore"})
+        if p["stato"] != "pendente":
+            raise errore(409, "proposta_non_pendente")
+        p["stato"] = "ritirata"
+        r = s.regole[p["regola_id"]]
+        s.notifica("proposta_ritirata", f"{s.figlio['nome']} ha ritirato la sua proposta",
+                   {"proposta_id": p["id"], "regola_id": r["id"], "autore": "figlio"}, r["dispositivo_id"], destinatario="genitore")
+        return 200, s.vista_proposta(p)
+
+    def rispondi_proposta(self, p, c):
+        s = self.stato
+        if p is None:
+            raise Errore(404, {"detail": "proposta non trovata"})
+        if p["autore"] == "figlio":
+            raise Errore(403, {"detail": "a una proposta del figlio risponde il genitore"})
+        if p["stato"] != "pendente":
+            raise errore(409, "proposta_non_pendente")
+        esito = c.get("esito")
+        if esito not in ("accetta", "rifiuta"):
+            raise Errore(422, {"detail": [{"loc": ["body", "esito"], "msg": "accetta o rifiuta"}]})
+        risultante = s.chiudi_proposta(p, esito, c.get("motivazione"))
+        s.notifica("proposta_risposta", f"Il figlio ha risposto alla proposta: {esito}",
+                   {"proposta_id": p["id"], "regola_id": p["regola_id"], "esito": esito, "autore": "genitore"},
+                   s.regole[p["regola_id"]]["dispositivo_id"], destinatario="genitore")
+        return 200, {"proposta": s.vista_proposta(p), "regola": risultante}
 
     def abbina(self, c):
         s = self.stato
@@ -508,8 +667,39 @@ class Gestore(BaseHTTPRequestHandler):
                            c.get("dispositivo_id"))
             return 200, n
         if metodo == "POST" and nome == "versione":
-            s.versione_computer = int(c.get("versione_code", 9))
+            # Senza codice: la versione dopo la 0.10, per provare l'avviso di una versione nuova.
+            s.versione_computer = int(c.get("versione_code", 11))
             return 200, {"versione_code": s.versione_computer}
+        # (v3.4) Quello che farebbe il genitore dalla sua app, per provare le notifiche del computer.
+        if metodo == "POST" and nome == "proposta":
+            r = s.regole.get(c.get("regola_id"))
+            if r is None or not r["attiva"]:
+                raise errore(409, "regola_non_valida")
+            p = s.crea_proposta(r, c.get("parametri_proposti"), c.get("motivazione"), "genitore")
+            s.notifica("nuova_proposta", f"Nuova proposta del genitore: {p['confronto']}",
+                       {"proposta_id": p["id"], "regola_id": r["id"], "confronto": p["confronto"], "direzione": p["direzione"]},
+                       r["dispositivo_id"])
+            return 200, s.vista_proposta(p)
+        if metodo == "POST" and nome == "risposta":
+            p = s.proposte.get(c.get("proposta_id"))
+            if p is None or p["autore"] != "figlio" or p["stato"] != "pendente":
+                raise errore(409, "proposta_non_pendente")
+            esito = c.get("esito", "accetta")
+            regola = s.chiudi_proposta(p, esito, c.get("motivazione"))
+            verbo = "accettato" if esito == "accetta" else "rifiutato"
+            # Al figlio su tutti i suoi dispositivi (dispositivo_id null), senza modifica_regola al genitore.
+            s.notifica("proposta_risposta", f"Il genitore ha {verbo} la tua proposta: {p['confronto']}",
+                       {"proposta_id": p["id"], "regola_id": p["regola_id"], "esito": esito, "autore": "figlio"}, None)
+            return 200, {"proposta": s.vista_proposta(p), "regola": regola}
+        if metodo == "POST" and nome == "ritira":
+            p = s.proposte.get(c.get("proposta_id"))
+            if p is None or p["autore"] != "genitore" or p["stato"] != "pendente":
+                raise errore(409, "proposta_non_pendente")
+            p["stato"] = "ritirata"
+            s.notifica("proposta_ritirata", "Il genitore ha ritirato la sua proposta",
+                       {"proposta_id": p["id"], "regola_id": p["regola_id"], "autore": "genitore"},
+                       s.regole[p["regola_id"]]["dispositivo_id"])
+            return 200, s.vista_proposta(p)
         if metodo == "GET" and nome == "stato":
             return 200, {
                 "battiti": len(s.battiti),
@@ -519,6 +709,7 @@ class Gestore(BaseHTTPRequestHandler):
                 "fotografie_siti": {f"{k[0]}|{k[1]}": v for k, v in s.fotografie_siti.items()},
                 "bonus": s.bonus,
                 "regole": list(s.regole.values()),
+                "proposte": list(s.proposte.values()),
                 "dispositivi": {k: {kk: vv for kk, vv in v.items() if kk != "token"} for k, v in s.dispositivi.items()},
             }
         raise Errore(404, {"detail": "Not Found"})
@@ -529,10 +720,12 @@ def main():
     p.add_argument("--porta", type=int, default=8765)
     p.add_argument("--dati", default=None, help="cartella dove scrivere stato.json")
     p.add_argument("--codice", default="123456", help="codice di abbinamento valido all'avvio")
-    p.add_argument("--versione-computer", type=int, default=8)
+    p.add_argument("--versione-computer", type=int, default=10)
+    p.add_argument("--server-vecchio", action="store_true", help="come un server di prima della v3.4 (niente proposte del figlio)")
     a = p.parse_args()
     Gestore.stato = Stato(a.dati, a.codice)
     Gestore.stato.versione_computer = a.versione_computer
+    Gestore.stato.server_vecchio = a.server_vecchio
     server = ThreadingHTTPServer(("127.0.0.1", a.porta), Gestore)
     print(f"finto server Pactum v3 su http://127.0.0.1:{a.porta} (codice {a.codice})", flush=True)
     try:

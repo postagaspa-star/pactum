@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.Notifica
+import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,14 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
          * scrivere i testi col nome leggibile dell'app ("TikTok").
          */
         val regolePerId: Map<Long, RegolaFinestra> = emptyMap(),
+        /**
+         * (0.10) Le proposte in attesa lette con le stesse finestre, per id:
+         * dicono che cosa propone il figlio nelle notifiche `nuova_proposta`. Una
+         * proposta poi decisa resta qui com'era: racconta quello che aveva chiesto.
+         */
+        val propostePerId: Map<Long, Proposta> = emptyMap(),
+        /** (0.10) I nomi delle app che le stesse finestre conoscono: una proposta che cambia app la dice col nome. */
+        val nomi: Map<String, String> = emptyMap(),
         val configurazioneMancante: Boolean = false,
         val errore: Boolean = false,
         /**
@@ -63,11 +72,13 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
                 return@launch
             }
             val ordinate = dallaPiuRecente(notifiche)
-            val regole = regoleAggiornate(postino, ordinate, _stato.value)
+            val contesto = contestoAggiornato(postino, ordinate, _stato.value)
             _stato.value = _stato.value.copy(
                 caricamento = false,
                 notifiche = ordinate,
-                regolePerId = regole,
+                regolePerId = contesto.regolePerId,
+                propostePerId = contesto.propostePerId,
+                nomi = contesto.nomi,
                 configurazioneMancante = false,
                 errore = false,
                 primaLetturaFatta = true,
@@ -86,25 +97,34 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
      * (v3) Le notifiche sono di tutti i figli: si legge la finestra DEL FIGLIO di
      * ciascuna (una volta per figlio). Gli id delle regole sono unici su tutto il
      * server, quindi una mappa sola le tiene tutte.
+     *
+     * (0.10) Dalle stesse finestre, le proposte in attesa (anche i loro id sono
+     * unici su tutto il server) e i nomi delle app: una `nuova_proposta` porta un
+     * `regola_id`, quindi quando arriva la finestra del suo figlio si rilegge comunque.
      */
-    private suspend fun regoleAggiornate(
+    private suspend fun contestoAggiornato(
         postino: PostinoClient,
         notifiche: List<Notifica>,
         prima: StatoNotifiche,
-    ): Map<Long, RegolaFinestra> {
+    ): StatoNotifiche {
         val conRegola = notifiche.filter { regolaIdNotifica(it) != null }
-        if (conRegola.isEmpty()) return prima.regolePerId
+        if (conRegola.isEmpty()) return prima
         val giaViste = prima.notifiche.map { it.id }.toSet()
         val daRileggere = conRegola
             .filter { it.id !in giaViste || regolaIdNotifica(it) !in prima.regolePerId }
             .map { it.figlioId }
             .distinct()
-        if (daRileggere.isEmpty()) return prima.regolePerId
+        if (daRileggere.isEmpty()) return prima
         val regole = prima.regolePerId.toMutableMap()
+        val proposte = prima.propostePerId.toMutableMap()
+        val nomi = prima.nomi.toMutableMap()
         daRileggere.forEach { figlioId ->
-            postino.leggiFinestra(figlioId)?.regole?.forEach { regole[it.id] = it }
+            val finestra = postino.leggiFinestra(figlioId) ?: return@forEach
+            finestra.regole.forEach { regole[it.id] = it }
+            finestra.propostePendenti.forEach { proposte[it.id] = it }
+            nomi.putAll(nomiDelleApp(finestra))
         }
-        return regole
+        return prima.copy(regolePerId = regole, propostePerId = proposte, nomi = nomi)
     }
 
     fun segnaLetta(notifica: Notifica) {

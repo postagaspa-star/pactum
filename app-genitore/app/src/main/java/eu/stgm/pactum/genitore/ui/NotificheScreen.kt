@@ -195,7 +195,16 @@ fun NotificheScreen(
                             ListaRighe(stato.notifiche) { notifica ->
                                 RigaNotifica(
                                     notifica = notifica,
-                                    testo = testoNotifica(parole(), notifica, stato.regolePerId),
+                                    // (0.10) Con la famiglia (chi propone), le proposte
+                                    // (che cosa) e i nomi delle app (mai un pacchetto).
+                                    testo = testoNotifica(
+                                        parole(),
+                                        notifica,
+                                        stato.regolePerId,
+                                        famiglia.figli,
+                                        stato.propostePerId,
+                                        stato.nomi,
+                                    ),
                                     diChi = etichettaNotifica(notifica, famiglia.figli),
                                     onSegnaLetta = { vm.segnaLetta(notifica) },
                                 )
@@ -269,7 +278,8 @@ private fun iconaTipo(tipo: String): Painter = when (tipo) {
     "manomissione" -> rememberVectorPainter(Icons.Outlined.Info)
     "bonus" -> rememberVectorPainter(Icons.Outlined.AddCircle)
     "modifica_regola" -> rememberVectorPainter(Icons.Outlined.Edit)
-    "proposta_risposta", "proposta_annullata", "dichiarazione" ->
+    // (0.10) Anche le proposte del figlio e i suoi ritiri: è la scheda dove si decide.
+    "proposta_risposta", "proposta_annullata", "nuova_proposta", "proposta_ritirata", "dichiarazione" ->
         painterResource(R.drawable.ic_scheda_turno)
     // (v3) Il computer spento o riacceso.
     "sospensione", "ripresa" -> painterResource(R.drawable.ic_dispositivo_computer)

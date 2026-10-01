@@ -7,12 +7,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.dati.AutoriProposta
 import eu.stgm.pactum.genitore.dati.CodiciErrore
+import eu.stgm.pactum.genitore.dati.DirezioniProposta
 import eu.stgm.pactum.genitore.dati.Dispositivo
 import eu.stgm.pactum.genitore.dati.EsitiDichiarazione
 import eu.stgm.pactum.genitore.dati.EsitiRisposta
+import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Notifica
+import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.StatiProposta
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
 import eu.stgm.pactum.genitore.dati.TipiDispositivo
 import eu.stgm.pactum.genitore.dati.TipiRegola
@@ -237,14 +242,18 @@ fun nomeTotale(parole: Parole, tipoDispositivo: String?): String = parole.testo(
  * ripiego del server: "il pacchetto stesso") o una chiave con prefisso
  * (`exe:…`, `sito:…`) non è un nome: il genitore non legge mai `exe:`.
  */
-fun nomeLeggibile(chiave: String, nome: String?): String {
-    val pulito = nome?.trim()?.takeIf { candidato ->
+fun nomeLeggibile(chiave: String, nome: String?): String = nomeVero(chiave, nome) ?: etichettaAppOCategoria(chiave)
+
+/**
+ * Il [nome] di una [chiave] se è davvero un nome ("TikTok", "Minecraft"); null se
+ * manca, è la chiave stessa (il ripiego del server) o ha un prefisso tecnico.
+ */
+fun nomeVero(chiave: String, nome: String?): String? =
+    nome?.trim()?.takeIf { candidato ->
         candidato.isNotEmpty() &&
             candidato != chiave &&
             PREFISSI_TECNICI.none { candidato.startsWith(it) }
     }
-    return pulito ?: etichettaAppOCategoria(chiave)
-}
 
 private val PREFISSI_TECNICI = listOf("exe:", "sito:", "categoria:")
 
@@ -811,6 +820,287 @@ fun attesaInMinuti(secondi: Long): Long = ((secondi + 59) / 60).coerceAtLeast(1)
 fun rifiutoPropostaDefinitivo(codice: String?): Boolean =
     codice == CodiciErrore.PROPOSTA_GIA_PENDENTE || codice == CodiciErrore.REGOLA_NON_VALIDA
 
+/**
+ * (0.10) Che cosa dire quando la risposta del genitore a una proposta del figlio
+ * è arrivata. Un sì su un'eliminazione non "cambia" la regola: la toglie.
+ */
+@StringRes
+fun messaggioDecisione(esito: String, eliminazione: Boolean): Int = when {
+    esito != EsitiRisposta.ACCETTA -> R.string.decisione_rifiutata
+    eliminazione -> R.string.decisione_accettata_eliminazione
+    else -> R.string.decisione_accettata
+}
+
+/**
+ * (0.10) Che cosa dire quando il server non prende la risposta a una proposta
+ * del figlio, ciascun rifiuto col suo motivo vero. Con `ultima_regola` e
+ * `dispositivo_revocato` la proposta resta in attesa (contratto v3.4): si dice,
+ * e si dice che resta il no. `proposta_non_pendente` dice com'è finita davvero,
+ * dalla rilettura ([statoFinale], v. [messaggioNonPiuInAttesa]). null = rete
+ * caduta o un rifiuto che non si conosce: "riprova".
+ */
+@StringRes
+fun messaggioRifiutoDecisione(codice: String?, statoFinale: String? = null): Int = when (codice) {
+    CodiciErrore.PROPOSTA_NON_PENDENTE -> messaggioNonPiuInAttesa(statoFinale, propostaDelFiglio = true)
+    CodiciErrore.ULTIMA_REGOLA -> R.string.decisione_errore_ultima_regola
+    CodiciErrore.DISPOSITIVO_REVOCATO -> R.string.decisione_errore_dispositivo_scollegato
+    CodiciErrore.NON_TROVATO -> R.string.decisione_errore_non_trovata
+    CodiciErrore.SERVER_DA_AGGIORNARE -> R.string.decisione_errore_server_da_aggiornare
+    else -> R.string.decisione_errore_generico
+}
+
+/**
+ * (0.10) Che cosa dire quando il ritiro di una proposta del genitore non passa.
+ * Un server più vecchio della v3.4 non conosce il ritiro: non è un errore da
+ * riprovare, serve aggiornare il server. `proposta_non_pendente` come nella
+ * risposta: com'è finita davvero.
+ */
+@StringRes
+fun messaggioRifiutoRitiro(codice: String?, statoFinale: String? = null): Int = when (codice) {
+    CodiciErrore.PROPOSTA_NON_PENDENTE -> messaggioNonPiuInAttesa(statoFinale, propostaDelFiglio = false)
+    CodiciErrore.SERVER_DA_AGGIORNARE -> R.string.ritiro_errore_server_da_aggiornare
+    CodiciErrore.NON_TROVATO -> R.string.ritiro_errore_non_trovata
+    else -> R.string.ritiro_errore_generico
+}
+
+/**
+ * (0.10) Una proposta che il server dice non più in attesa (`proposta_non_pendente`):
+ * com'è finita, dallo stato letto subito dopo ([statoFinale]). I motivi sono tanti
+ * — un primo tentativo arrivato anche se la risposta si è persa, l'altro genitore,
+ * il figlio che l'ha ritirata o ha tolto la regola — e un "forse" sarebbe spesso
+ * falso. Stato che non si sa (rilettura non riuscita, proposta non trovata): una
+ * frase che non sceglie. [propostaDelFiglio] = a una sua proposta rispondi tu;
+ * a una tua risponde lui.
+ */
+@StringRes
+fun messaggioNonPiuInAttesa(statoFinale: String?, propostaDelFiglio: Boolean): Int = when (statoFinale) {
+    StatiProposta.ACCETTATA ->
+        if (propostaDelFiglio) R.string.non_pendente_accettata else R.string.non_pendente_tua_accettata
+    StatiProposta.RIFIUTATA ->
+        if (propostaDelFiglio) R.string.non_pendente_rifiutata else R.string.non_pendente_tua_rifiutata
+    StatiProposta.RITIRATA ->
+        if (propostaDelFiglio) R.string.non_pendente_ritirata_dal_figlio else R.string.non_pendente_tua_ritirata
+    StatiProposta.ANNULLATA -> R.string.non_pendente_annullata
+    else -> R.string.non_pendente_generico
+}
+
+// --- Le proposte del figlio (0.10) -----------------------------------------------
+
+/** Il nome del figlio da scrivere in una frase; null se non si sa o è vuoto (le frasi dicono "tuo figlio"). */
+fun nomeDaScrivere(nome: String?): String? = nome?.trim()?.takeIf { it.isNotEmpty() }
+
+/** "Luca ti propone:", o "Tuo figlio ti propone:" se il nome non si sa. */
+fun chiTiPropone(parole: Parole, nomeFiglio: String?): String =
+    nomeDaScrivere(nomeFiglio)?.let { parole.testo(R.string.proposta_ti_propone, it) }
+        ?: parole.testo(R.string.proposta_ti_propone_senza_nome)
+
+/**
+ * Che cosa chiede una proposta, detto come le regole: coi parametri PROPOSTI
+ * ("TikTok: al massimo 1 h 30 min al giorno", "Tutto il computer: …", "Social:
+ * …"), oppure "Togliere la regola «TikTok: al massimo 1 h al giorno»" per
+ * un'eliminazione. null se la regola non si conosce (finestra non arrivata) o
+ * se la proposta non porta i parametri: meglio niente che "?: al massimo 0 min".
+ *
+ * Un limite che cambia app (o categoria, o totale) dice la nuova col suo nome
+ * ([bersaglioDellaProposta], coi [nomi] che la finestra conosce): mai un pacchetto.
+ */
+fun descrizioneProposta(
+    parole: Parole,
+    proposta: Proposta,
+    regola: RegolaFinestra?,
+    nomi: Map<String, String> = emptyMap(),
+): String? {
+    if (regola == null) return null
+    if (eliminazione(proposta)) {
+        return parole.testo(R.string.proposta_togliere_regola, descrizioneRegola(parole, regola))
+    }
+    val parametri = proposta.parametriProposti
+    if (parametri.isEmpty()) return null
+    if (regola.tipo != TipiRegola.LIMITE_TEMPO) return descrizioneParametri(parole, regola, parametri)
+    return parole.testo(
+        R.string.regola_limite_tempo,
+        bersaglioDellaProposta(parole, campo(parametri, "app_o_categoria"), nomiColNomeDellaRegola(regola, nomi), regola.dispositivo?.tipo),
+        testoDurata(parole, campo(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
+    )
+}
+
+/**
+ * Il bersaglio di un limite di tempo in una proposta, sempre a parole:
+ * - il totale: "Tutto il telefono" / "Tutto il computer";
+ * - una categoria col suo nome ("Social", "Altre app");
+ * - un'app o un programma col nome che la finestra conosce ([nomi]: fotografie e
+ *   regole); un programma senza nome come "minecraft.exe (programma)", un sito come
+ *   "youtube.com (sito)" — dentro una frase solo "minecraft.exe", "youtube.com";
+ * - un'app di cui non si sa il nome: "Un'altra app". Mai il pacchetto.
+ * [inFrase] = dentro una frase ("Da tutto il telefono … a un'altra app …"): le
+ * parole dell'app in minuscolo; i nomi restano come sono.
+ */
+fun bersaglioDellaProposta(
+    parole: Parole,
+    chiave: String?,
+    nomi: Map<String, String>,
+    tipoDispositivo: String?,
+    inFrase: Boolean = false,
+): String {
+    val pulita = chiave?.trim().orEmpty()
+    val computer = tipoDispositivo == TipiDispositivo.COMPUTER
+    return when {
+        eTotale(pulita) -> parole.testo(
+            when {
+                computer && inFrase -> R.string.bersaglio_totale_computer_in_frase
+                computer -> R.string.bersaglio_totale_computer
+                inFrase -> R.string.bersaglio_totale_telefono_in_frase
+                else -> R.string.bersaglio_totale_telefono
+            },
+        )
+        pulita.startsWith("categoria:") -> etichettaCategoria(pulita)
+        else -> nomeVero(pulita, nomi[pulita])
+            ?: when {
+                pulita.startsWith("sito:") && pulita.length > "sito:".length ->
+                    if (inFrase) pulita.removePrefix("sito:") else etichettaAppOCategoria(pulita)
+                pulita.startsWith("exe:") && pulita.length > "exe:".length ->
+                    if (inFrase) pulita.removePrefix("exe:") else etichettaAppOCategoria(pulita)
+                else -> parole.testo(if (inFrase) R.string.bersaglio_altra_app_in_frase else R.string.bersaglio_altra_app)
+            }
+    }
+}
+
+/** I [nomi] della finestra, più quello che la regola porta per la sua app (il `nome` della finestra). */
+private fun nomiColNomeDellaRegola(regola: RegolaFinestra, nomi: Map<String, String>): Map<String, String> {
+    val chiave = campo(regola.parametri, "app_o_categoria")?.trim() ?: return nomi
+    val nome = nomeVero(chiave, regola.nome) ?: return nomi
+    return nomi + (chiave to nome)
+}
+
+/**
+ * Un cambio di bersaglio raccontato dall'app, con le parole delle persone: "Da
+ * TikTok (1 h) a Instagram (1 h) al giorno", "Da Social (2 h) a un'altra app (1 h)
+ * al giorno". Solo per un limite di tempo IN ATTESA che cambia app, categoria o
+ * totale: il confronto di una pendente è sempre rispetto alla regola di adesso,
+ * quella di una chiusa no. null negli altri casi.
+ */
+fun confrontoDiBersaglio(
+    parole: Parole,
+    proposta: Proposta,
+    regola: RegolaFinestra,
+    nomi: Map<String, String> = emptyMap(),
+): String? {
+    if (regola.tipo != TipiRegola.LIMITE_TEMPO || proposta.stato != StatiProposta.PENDENTE || eliminazione(proposta)) {
+        return null
+    }
+    val prima = campo(regola.parametri, "app_o_categoria")?.trim() ?: return null
+    val dopo = campo(proposta.parametriProposti, "app_o_categoria")?.trim() ?: return null
+    if (prima == dopo || (eTotale(prima) && eTotale(dopo))) return null
+    val minutiPrima = campo(regola.parametri, "minuti_al_giorno")?.toLongOrNull() ?: return null
+    val minutiDopo = campo(proposta.parametriProposti, "minuti_al_giorno")?.toLongOrNull() ?: return null
+    val tutti = nomiColNomeDellaRegola(regola, nomi)
+    val tipo = regola.dispositivo?.tipo
+    return parole.testo(
+        R.string.proposta_confronto_bersaglio,
+        bersaglioDellaProposta(parole, prima, tutti, tipo, inFrase = true),
+        testoDurata(parole, minutiPrima),
+        bersaglioDellaProposta(parole, dopo, tutti, tipo, inFrase = true),
+        testoDurata(parole, minutiDopo),
+    )
+}
+
+/**
+ * true = un confronto del server che racconta un cambio di bersaglio ("da TikTok
+ * (60 min) a Instagram (60 min) al giorno"): il server scrive i bersagli coi nomi,
+ * ma con la chiave com'è quando un nome non è mai arrivato. L'app lo mostra solo
+ * se non sa raccontarlo da sé.
+ */
+fun raccontaUnCambioDiBersaglio(confronto: String): Boolean =
+    confronto.startsWith("da ") && confronto.endsWith(" al giorno")
+
+/**
+ * Su quale dispositivo vale la regola di una proposta, detto quando serve:
+ * - una regola di un computer: "sul computer" (chi legge pensa al telefono, se
+ *   non glielo si dice);
+ * - con più dispositivi ([piuDispositivi]), anche una del telefono: "sul
+ *   telefono"; e il nome, se il dispositivo ne ha uno suo: "sul computer
+ *   «Computer di camera»".
+ * null = non serve: la vita reale è del figlio, e un telefono solo è il caso di
+ * sempre.
+ */
+fun doveValeLaRegola(parole: Parole, regola: RegolaFinestra?, piuDispositivi: Boolean): String? {
+    val dispositivo = regola?.dispositivo ?: return null
+    val computer = dispositivo.tipo == TipiDispositivo.COMPUTER
+    if (!computer && !piuDispositivi) return null
+    val sul = parole.testo(if (computer) R.string.proposta_sul_computer else R.string.proposta_sul_telefono)
+    val nome = dispositivo.nome.trim()
+    val soloIlTipo = nome.isEmpty() || nome.equals(nomeDelDispositivo(parole, null, dispositivo.tipo), ignoreCase = true)
+    return if (piuDispositivi && !soloIlTipo) parole.testo(R.string.proposta_sul_dispositivo_col_nome, sul, nome) else sul
+}
+
+/**
+ * La riga principale di una proposta del figlio: che cosa chiede e, quando
+ * serve, dove vale ("Minecraft: al massimo 2 h al giorno · sul computer"). Se
+ * la regola non si conosce, il confronto del server (ma non un cambio di
+ * bersaglio, che può avere le chiavi tecniche); null se non resta niente.
+ */
+fun rigaProposta(
+    parole: Parole,
+    proposta: Proposta,
+    regola: RegolaFinestra?,
+    piuDispositivi: Boolean,
+    nomi: Map<String, String> = emptyMap(),
+): String? {
+    val cosa = descrizioneProposta(parole, proposta, regola, nomi)
+        ?: return proposta.confronto.takeIf { it.isNotBlank() && !raccontaUnCambioDiBersaglio(it) }
+    val dove = doveValeLaRegola(parole, regola, piuDispositivi) ?: return cosa
+    return parole.testo(R.string.proposta_regola_e_dove, cosa, dove)
+}
+
+/**
+ * Il confronto sotto la riga della proposta:
+ * - un cambio di bersaglio in attesa: la frase dell'app, coi nomi ("Da TikTok
+ *   (1 h) a Instagram (1 h) al giorno", [confrontoDiBersaglio]);
+ * - se no il confronto del server ("+30 min al giorno rispetto ad ora"), la stessa
+ *   frase che vede il figlio — ma non un cambio di bersaglio che l'app non sa
+ *   raccontare (una proposta chiusa: la regola di adesso non è più quella di
+ *   allora), perché il server ci scrive la chiave quando un nome non è mai
+ *   arrivato. La riga dice già il bersaglio nuovo.
+ * null anche quando non aggiunge niente: vuoto, già usato come riga principale
+ * ([rigaProposta] senza la regola o senza i parametri) o un'eliminazione, che la
+ * riga dice già ("Togliere la regola…").
+ */
+fun confrontoDaMostrare(
+    parole: Parole,
+    proposta: Proposta,
+    regola: RegolaFinestra?,
+    nomi: Map<String, String> = emptyMap(),
+): String? {
+    if (regola == null || eliminazione(proposta) || proposta.parametriProposti.isEmpty()) return null
+    confrontoDiBersaglio(parole, proposta, regola, nomi)?.let { return it }
+    return proposta.confronto.takeIf { it.isNotBlank() && !raccontaUnCambioDiBersaglio(it) }
+}
+
+/** Chi ha fatto una proposta, per la storia: "Proposta tua" o "Proposta di Luca"; null per un autore che non si conosce. */
+fun autoreProposta(parole: Parole, proposta: Proposta, nomeFiglio: String?): String? = when (proposta.autore) {
+    AutoriProposta.GENITORE -> parole.testo(R.string.proposta_autore_tua)
+    AutoriProposta.FIGLIO -> nomeDaScrivere(nomeFiglio)?.let { parole.testo(R.string.proposta_autore_figlio, it) }
+        ?: parole.testo(R.string.proposta_autore_figlio_senza_nome)
+    else -> null
+}
+
+/** Com'è finita una proposta, in una parola; uno stato che non si conosce resta com'è. */
+fun testoStatoProposta(parole: Parole, stato: String): String = when (stato) {
+    StatiProposta.PENDENTE -> parole.testo(R.string.proposta_stato_pendente)
+    StatiProposta.ACCETTATA -> parole.testo(R.string.proposta_stato_accettata)
+    StatiProposta.RIFIUTATA -> parole.testo(R.string.proposta_stato_rifiutata)
+    StatiProposta.ANNULLATA -> parole.testo(R.string.proposta_stato_annullata)
+    StatiProposta.RITIRATA -> parole.testo(R.string.proposta_stato_ritirata)
+    else -> stato
+}
+
+/**
+ * Nella scelta del figlio in cima: quante sue proposte aspettano il genitore
+ * ("1 da decidere"); null se nessuna.
+ */
+fun testoDaDecidere(parole: Parole, quante: Int): String? =
+    if (quante > 0) parole.testo(R.string.figlio_da_decidere, quante) else null
+
 /** Che cosa dire quando il server rifiuta una conferma (verdetto). */
 @StringRes
 fun messaggioRifiutoVerdetto(codice: String?): Int = when (codice) {
@@ -846,13 +1136,22 @@ data class TestoNotifica(val titolo: String, val testo: String)
  *
  * Unica per la lista delle notifiche e per le notifiche di sistema della
  * vedetta: le due non possono dire cose diverse sullo stesso fatto.
+ *
+ * (0.10) Per le proposte del figlio servono anche [figli] (il nome di chi
+ * propone), [proposte] (le proposte in attesa lette con le finestre, per id:
+ * che cosa chiede) e [nomi] (i nomi delle app che le finestre conoscono: una
+ * proposta che cambia app la dice col suo nome). Se mancano, la frase si fa con
+ * quello che c'è.
  */
 fun testoNotifica(
     parole: Parole,
     notifica: Notifica,
     regolePerId: Map<Long, RegolaFinestra>,
+    figli: List<Figlio> = emptyList(),
+    proposte: Map<Long, Proposta> = emptyMap(),
+    nomi: Map<String, String> = emptyMap(),
 ): TestoNotifica =
-    fraseNotifica(parole, notifica, regolePerId)
+    fraseNotifica(parole, notifica, regolePerId, figli, proposte, nomi)
         ?: TestoNotifica(parole.testo(etichettaTipoNotifica(notifica.tipo)), notifica.messaggio)
 
 /**
@@ -879,6 +1178,9 @@ private fun etichettaTipoNotifica(tipo: String): Int = when (tipo) {
     // dichiarazioni del figlio (contratto-api.md, notifiche con destinatario).
     "proposta_risposta" -> R.string.tipo_proposta_risposta
     "proposta_annullata" -> R.string.tipo_proposta_annullata
+    // (0.10) Il figlio propone e ritira (contratto v3.4).
+    "nuova_proposta" -> R.string.tipo_nuova_proposta
+    "proposta_ritirata" -> R.string.tipo_proposta_ritirata
     "dichiarazione" -> R.string.tipo_dichiarazione
     // (v3) Il computer che si spegne e si riaccende: non sono interruzioni.
     "sospensione" -> R.string.tipo_computer_spento
@@ -891,6 +1193,9 @@ private fun fraseNotifica(
     parole: Parole,
     notifica: Notifica,
     regolePerId: Map<Long, RegolaFinestra>,
+    figli: List<Figlio>,
+    proposte: Map<Long, Proposta>,
+    nomi: Map<String, String>,
 ): TestoNotifica? {
     val payload = notifica.payload
     val regola = regolaIdNotifica(notifica)?.let { regolePerId[it] }
@@ -934,9 +1239,32 @@ private fun fraseNotifica(
             TestoNotifica(titolo, parole.testo(frase, su))
         }
 
+        // (0.10) Dalla v3.4 si annullano anche le proposte del figlio: allora non è "la tua".
         "proposta_annullata" -> {
             val su = regola?.let { suRegola(parole, it) } ?: return null
-            TestoNotifica(titolo, parole.testo(R.string.notifica_proposta_annullata, su))
+            val frase = if (campo(payload, "autore") == AutoriProposta.FIGLIO) {
+                nomeFiglioDi(notifica, figli)
+                    ?.let { parole.testo(R.string.notifica_proposta_del_figlio_annullata, it, su) }
+                    ?: parole.testo(R.string.notifica_proposta_del_figlio_annullata_senza_nome, su)
+            } else {
+                parole.testo(R.string.notifica_proposta_annullata, su)
+            }
+            TestoNotifica(titolo, frase)
+        }
+
+        // (0.10) "Luca ti propone un cambio" / la regola come sarebbe, e il confronto.
+        "nuova_proposta" -> fraseNuovaProposta(parole, notifica, regola, figli, proposte, nomi)
+
+        // (0.10) "Luca ha ritirato la sua proposta" / "La regola su TikTok resta com'è."
+        "proposta_ritirata" -> {
+            // Il genitore riceve solo i ritiri del figlio: i suoi vanno al figlio.
+            if (campo(payload, "autore") == AutoriProposta.GENITORE) return null
+            val su = regola?.let { suRegola(parole, it) } ?: return null
+            TestoNotifica(
+                titolo = nomeFiglioDi(notifica, figli)?.let { parole.testo(R.string.notifica_ha_ritirato, it) }
+                    ?: parole.testo(R.string.notifica_ha_ritirato_senza_nome),
+                testo = parole.testo(R.string.notifica_regola_resta, su),
+            )
         }
 
         // "Dice di aver fatto: Camminare un'ora (16/09)".
@@ -953,6 +1281,59 @@ private fun fraseNotifica(
 
         else -> null
     }
+}
+
+/** (0.10) Il nome del figlio di una notifica, se la famiglia lo sa e non è vuoto. */
+private fun nomeFiglioDi(notifica: Notifica, figli: List<Figlio>): String? =
+    nomeDaScrivere(figli.firstOrNull { it.id == notifica.figlioId }?.nome)
+
+/**
+ * (0.10) `nuova_proposta` arrivata al genitore: una proposta del figlio
+ * (contratto v3.4). Il titolo dice chi propone ("Luca ti propone un cambio"),
+ * il testo che cosa:
+ * - la proposta letta con la finestra: la regola come sarebbe, coi nomi delle
+ *   app ([nomi]), e sotto il confronto ("TikTok: al massimo 1 h 30 min al giorno"
+ *   / "+30 min al giorno rispetto ad ora"; un cambio di app "Da TikTok (1 h) a
+ *   Instagram (1 h) al giorno");
+ * - un'eliminazione: "Togliere la regola «TikTok: al massimo 1 h al giorno»";
+ * - la proposta non letta (non più in attesa, o finestra non arrivata): su
+ *   quale regola, col confronto del payload ("Proposta su TikTok: +30 min al
+ *   giorno rispetto ad ora") — senza, se è un cambio di app che può avere le
+ *   chiavi tecniche ("Proposta su TikTok").
+ * Su quale dispositivo lo dice già la riga sopra il titolo (etichettaNotifica).
+ * null (regola che non si conosce, o una proposta "del genitore", che al
+ * genitore non arriva) = il messaggio del server.
+ */
+private fun fraseNuovaProposta(
+    parole: Parole,
+    notifica: Notifica,
+    regola: RegolaFinestra?,
+    figli: List<Figlio>,
+    proposte: Map<Long, Proposta>,
+    nomi: Map<String, String>,
+): TestoNotifica? {
+    val payload = notifica.payload
+    if (regola == null || campo(payload, "autore") == AutoriProposta.GENITORE) return null
+    val proposta = campo(payload, "proposta_id")?.toLongOrNull()
+        ?.let { proposte[it] }
+        ?.takeIf { it.regolaId == regola.id }
+    val elimina = (proposta != null && eliminazione(proposta)) ||
+        campo(payload, "direzione") == DirezioniProposta.ELIMINA
+    val testo = if (elimina) {
+        parole.testo(R.string.proposta_togliere_regola, descrizioneRegola(parole, regola))
+    } else {
+        val su = suRegola(parole, regola) ?: return null
+        proposta
+            ?.let { descrizioneProposta(parole, it, regola, nomi) }
+            ?.let { cosa -> listOfNotNull(cosa, confrontoDaMostrare(parole, proposta, regola, nomi)).joinToString("\n") }
+            ?: campo(payload, "confronto")
+                ?.takeIf { it.isNotBlank() && !raccontaUnCambioDiBersaglio(it) }
+                ?.let { parole.testo(R.string.notifica_proposta_su, su, it) }
+            ?: parole.testo(R.string.notifica_proposta_su_regola, su)
+    }
+    val titolo = nomeFiglioDi(notifica, figli)?.let { parole.testo(R.string.notifica_ti_propone, it) }
+        ?: parole.testo(R.string.notifica_ti_propone_senza_nome)
+    return TestoNotifica(titolo, testo)
 }
 
 /** Il `motivo` di un evento del computer: nei dettagli dell'evento, o in cima al payload. */

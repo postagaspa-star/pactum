@@ -3,6 +3,8 @@ package eu.stgm.pactum.genitore.ui
 import eu.stgm.pactum.design.GiornoPatto
 import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.design.segnaleDaStato
+import eu.stgm.pactum.genitore.dati.AutoriProposta
+import eu.stgm.pactum.genitore.dati.DirezioniProposta
 import eu.stgm.pactum.genitore.dati.EventoFinestra
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Notifica
@@ -315,10 +317,161 @@ fun segnoGiaMandato(segnoOggi: Boolean, mandatoIl: LocalDate?, oggi: LocalDate):
 /**
  * Le regole che hanno già una proposta in attesa: il server ne accetta una sola
  * per regola (409 `proposta_gia_pendente`), quindi su queste "Proponi una
- * modifica" non si offre.
+ * modifica" non si offre. (0.10) Vale per le proposte di tutti e due: sulla
+ * stessa regola non ci sono mai due richieste incrociate (contratto v3.4).
  */
 fun regoleConPropostaInAttesa(proposte: List<Proposta>): Set<Long> =
     proposte.filter { it.stato == StatiProposta.PENDENTE }.map { it.regolaId }.toSet()
+
+/**
+ * (0.10) Le regole su cui la proposta in attesa è DEL FIGLIO: lì "Proponi una
+ * modifica" non c'è, e la riga dice che la sua proposta è da decidere.
+ */
+fun regoleConPropostaDelFiglio(proposte: List<Proposta>): Set<Long> =
+    proposte.filter { it.stato == StatiProposta.PENDENTE && it.autore == AutoriProposta.FIGLIO }
+        .map { it.regolaId }
+        .toSet()
+
+// --- Le proposte del figlio (0.10) ---------------------------------------------------
+
+/**
+ * Una proposta appena chiusa da qui: decisa, ritirata, o che il server ha detto
+ * non più in attesa. [alle] = quando, sull'orologio monotono del telefono;
+ * [figlioId] = di chi era (null = server 0.7).
+ *
+ * Fa da ponte fino alla prima lettura riuscita INIZIATA dopo: nei dati letti
+ * prima la sua card non si vede più ([chiusaPrimaDellaLettura]), quelli letti dopo
+ * dicono com'è davvero — anche se, dopo un ripristino del server, lo stesso id
+ * fosse quello di un'altra proposta.
+ */
+data class PropostaChiusa(val figlioId: Long?, val alle: Long)
+
+/**
+ * true = nei dati letti a partire da [lettaAlle] (orologio monotono, quando è
+ * PARTITA la lettura) la proposta [id] risulta ancora com'era prima di essere
+ * chiusa da qui: la card non si mostra. Una lettura partita nello stesso istante,
+ * o dati di cui non si sa quando sono stati letti (null), valgono come vecchi:
+ * vale "dopo" solo una lettura partita dopo, come in [chiusureDaTenere].
+ */
+fun chiusaPrimaDellaLettura(id: Long, giaChiuse: Map<Long, PropostaChiusa>, lettaAlle: Long?): Boolean {
+    val chiusa = giaChiuse[id] ?: return false
+    return lettaAlle == null || lettaAlle <= chiusa.alle
+}
+
+/**
+ * L'elenco delle proposte che "Proposte e conferme" ha in mano: di quale figlio,
+ * e quando è partita la lettura che l'ha portato (null = nessuna lettura ancora
+ * riuscita per quel figlio).
+ */
+data class LetturaElenco(val figlioId: Long?, val iniziataAlle: Long?)
+
+/**
+ * Le chiusure che fanno ancora da ponte. Quella di un figlio si lascia andare
+ * quando nessuna delle due schermate può più avere i dati di prima:
+ * - la finestra della Panoramica di quel figlio è stata riletta con una lettura
+ *   partita dopo ([lettureFinestra]: l'inizio dell'ultima lettura riuscita, per
+ *   figlio — la Panoramica si ricorda la finestra di ogni figlio visto);
+ * - e l'elenco di "Proposte e conferme" ([elenco], null = nessuno) non è di quel
+ *   figlio, oppure è di una lettura partita dopo.
+ * Un elenco di un altro figlio non conta: cambiando figlio l'elenco si rilegge da capo.
+ */
+fun chiusureDaTenere(
+    giaChiuse: Map<Long, PropostaChiusa>,
+    elenco: LetturaElenco?,
+    lettureFinestra: Map<Long?, Long>,
+): Map<Long, PropostaChiusa> = giaChiuse.filterValues { chiusa ->
+    val elencoDiPrima = elenco != null && elenco.figlioId == chiusa.figlioId &&
+        (elenco.iniziataAlle == null || elenco.iniziataAlle <= chiusa.alle)
+    val finestraDiDopo = lettureFinestra[chiusa.figlioId]?.let { it > chiusa.alle } == true
+    elencoDiPrima || !finestraDiDopo
+}
+
+/**
+ * Le proposte del figlio che aspettano il genitore (contratto v3.4): in attesa e
+ * con autore "figlio", una volta ciascuna, dalla più recente. Quelle appena
+ * chiuse da qui ([giaChiuse]) non ci sono, finché i dati sono di una lettura
+ * iniziata prima ([lettaAlle]).
+ */
+fun proposteDaDecidere(
+    proposte: List<Proposta>,
+    giaChiuse: Map<Long, PropostaChiusa> = emptyMap(),
+    lettaAlle: Long? = null,
+): List<Proposta> =
+    proposte
+        .filter { it.stato == StatiProposta.PENDENTE && it.autore == AutoriProposta.FIGLIO }
+        .filterNot { chiusaPrimaDellaLettura(it.id, giaChiuse, lettaAlle) }
+        .distinctBy { it.id }
+        .sortedByDescending { it.id }
+
+/**
+ * Le proposte che aspettano la risposta del FIGLIO: quelle del genitore ancora
+ * in attesa (un autore che non si conosce resta qui, senza "Ritira"). Nell'ordine
+ * del server, dalla più recente. [giaChiuse] e [lettaAlle] come in [proposteDaDecidere].
+ */
+fun proposteInAttesaDelFiglio(
+    proposte: List<Proposta>,
+    giaChiuse: Map<Long, PropostaChiusa> = emptyMap(),
+    lettaAlle: Long? = null,
+): List<Proposta> =
+    proposte
+        .filter { it.stato == StatiProposta.PENDENTE && it.autore != AutoriProposta.FIGLIO }
+        .filterNot { chiusaPrimaDellaLettura(it.id, giaChiuse, lettaAlle) }
+
+/**
+ * L'elenco di "Proposte e conferme": quelle di GET /api/proposte (al massimo le
+ * ultime 50) più le pendenti della finestra che lì mancano — una proposta in
+ * attesa più vecchia delle ultime 50 non deve sparire, né lasciare "Proponi una
+ * modifica" su una regola che ne ha già una. Una volta sola per id; prima
+ * l'ordine del server, poi le aggiunte.
+ */
+fun proposteUnite(elenco: List<Proposta>, pendentiDellaFinestra: List<Proposta>): List<Proposta> {
+    val noti = elenco.map { it.id }.toSet()
+    return elenco + pendentiDellaFinestra.filter { it.id !in noti }.distinctBy { it.id }
+}
+
+/**
+ * true = la regola è di un dispositivo scollegato ([scollegati], v.
+ * dispositiviScollegati): una proposta su di lei non si può più accettare (il
+ * server risponde `dispositivo_revocato`), solo rifiutare.
+ */
+fun suDispositivoScollegato(regola: RegolaFinestra?, scollegati: Set<Long>): Boolean =
+    (regola?.dispositivoId ?: regola?.dispositivo?.id)?.let { it in scollegati } == true
+
+/**
+ * I nomi leggibili che la finestra conosce, per chiave (pacchetti e `exe:`): dalle
+ * fotografie (`uso_recente`, di primo livello e di ogni dispositivo, dal giorno
+ * più vecchio al più recente: vince il più recente) e dal `nome` delle regole.
+ * Servono a dire il bersaglio di una proposta che cambia app ("da TikTok a
+ * Instagram") senza scrivere mai un pacchetto. Solo nomi veri: un `nome` uguale
+ * alla chiave (il ripiego del server) non conta.
+ */
+fun nomiDelleApp(finestra: Finestra): Map<String, String> {
+    val nomi = mutableMapOf<String, String>()
+    fun ricorda(chiave: String?, nome: String?) {
+        val vera = chiave?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        nomeVero(vera, nome)?.let { nomi[vera] = it }
+    }
+    (listOf(finestra.usoRecente) + finestra.dispositivi.map { it.usoRecente }).forEach { giorni ->
+        giorni.forEach { giorno -> giorno.app.forEach { ricorda(it.chiave, it.nome) } }
+    }
+    finestra.regole.forEach { regola ->
+        ricorda((regola.parametri["app_o_categoria"] as? JsonPrimitive)?.contentOrNull, regola.nome)
+    }
+    return nomi
+}
+
+/** La storia: le proposte chiuse, di tutti e due gli autori, nell'ordine del server. */
+fun proposteChiuse(proposte: List<Proposta>): List<Proposta> =
+    proposte.filter { it.stato != StatiProposta.PENDENTE }
+
+/** true = il genitore può ritirare questa proposta: è sua ed è ancora in attesa. */
+fun ritirabile(proposta: Proposta): Boolean =
+    proposta.autore == AutoriProposta.GENITORE && proposta.stato == StatiProposta.PENDENTE
+
+/** true = la proposta chiede di togliere la regola (il marcatore `{"azione": "elimina"}`). */
+fun eliminazione(proposta: Proposta): Boolean =
+    proposta.direzione == DirezioniProposta.ELIMINA ||
+        (proposta.parametriProposti["azione"] as? JsonPrimitive)?.contentOrNull == "elimina"
 
 // --- Tempo: dentro il patto / il resto della giornata ---------------------------
 

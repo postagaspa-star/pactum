@@ -46,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -73,6 +74,7 @@ import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.ModificaStorico
+import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.StatoBonus
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
@@ -97,6 +99,10 @@ import java.time.LocalDate
 // per dispositivo (telefono o computer) col suo stato; le regole raggruppate per
 // dispositivo, poi gli Impegni della vita reale. Su un server 0.7 la finestra
 // non ha `dispositivi` e tutto resta com'era.
+//
+// (0.10) Prima di tutto, le proposte del figlio che aspettano il genitore
+// (contratto v3.4): una card ciascuna, con "Accetta" e "Rifiuta". Se il genitore
+// accetta, la regola cambia subito.
 
 /** Ogni quanto si rilegge la finestra mentre la schermata è in primo piano. */
 private const val INTERVALLO_RILETTURA_MS = 60_000L
@@ -109,9 +115,13 @@ fun FinestraScreen(
     onApriAvvisi: () -> Unit = {},
     vm: FinestraViewModel = viewModel(),
     famigliaVm: FamigliaViewModel = viewModel(),
+    proposteVm: ProposteViewModel = viewModel(),
 ) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
+    // (0.10) Le risposte alle proposte del figlio passano dallo stesso ViewModel di
+    // "Proposte e conferme": le due schermate sanno le stesse cose.
+    val proposte by proposteVm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val figlioId = famiglia.figlioId
 
@@ -146,6 +156,34 @@ fun FinestraScreen(
         // cambia la chiave e cancellerebbe questo effetto a metà snackbar.
         vm.consumaEsitoSegno()
         ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+    }
+
+    // (0.10) Gli esiti delle risposte date da QUI alle proposte del figlio: una frase
+    // in basso, poi la finestra e la famiglia si rileggono (la regola, il numero
+    // accanto al nome). Arrivano solo a questa schermata, uno per volta: quelli di
+    // "Proposte e conferme" restano là.
+    val testi = parole()
+    val figlioMostrato by rememberUpdatedState(figlioId)
+    LaunchedEffect(proposteVm) {
+        proposteVm.esiti(ProposteViewModel.Schermata.PANORAMICA).collect { evento ->
+            val messaggio = when (evento) {
+                is ProposteViewModel.Evento.Decisa ->
+                    testi.testo(messaggioDecisione(evento.esito, evento.eliminazione))
+                is ProposteViewModel.Evento.NonDecisa ->
+                    testi.testo(messaggioRifiutoDecisione(evento.codice, evento.statoFinale))
+                else -> return@collect
+            }
+            vm.aggiorna(figlioMostrato)
+            famigliaVm.aggiorna()
+            ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+        }
+    }
+
+    // (0.10) Ogni finestra nuova si dice al ViewModel delle proposte: quando anche
+    // la Panoramica ha i dati di dopo, una proposta chiusa da qui non fa più da ponte.
+    LaunchedEffect(stato.figlioId, stato.lettaAlle) {
+        val letta = stato.lettaAlle ?: return@LaunchedEffect
+        if (stato.richiesta) proposteVm.finestraLetta(stato.figlioId, letta)
     }
 
     Scaffold(
@@ -203,6 +241,19 @@ fun FinestraScreen(
                         invioSegno = stato.invioSegno,
                         onMandaSegno = { vm.mandaSegno(figlioId) },
                         onApriAvvisi = onApriAvvisi,
+                        // (0.10) Quelle appena decise da qui (o da "Proposte e conferme")
+                        // spariscono subito, finché questa finestra è di prima.
+                        daDecidere = proposteDaDecidere(finestra.propostePendenti, proposte.giaChiuse, stato.lettaAlle),
+                        decisioneInCorso = proposte.invioInCorso,
+                        onDecidi = { proposta, esito, motivazione ->
+                            proposteVm.decidi(
+                                figlioId,
+                                proposta,
+                                esito,
+                                motivazione,
+                                da = ProposteViewModel.Schermata.PANORAMICA,
+                            )
+                        },
                     )
                 }
             }
@@ -251,10 +302,17 @@ private fun ContenutoFinestra(
     invioSegno: Boolean,
     onMandaSegno: () -> Unit,
     onApriAvvisi: () -> Unit,
+    daDecidere: List<Proposta> = emptyList(),
+    decisioneInCorso: Boolean = false,
+    onDecidi: (Proposta, String, String?) -> Unit = { _, _, _ -> },
 ) {
     // Per raccontare storico ed eventi serve la regola: la finestra porta TUTTE
     // le regole (anche eliminate), quindi la mappa è completa.
     val regolePerId = finestra.regole.associateBy { it.id }
+    // (0.10) Per le proposte del figlio: i nomi delle app (una proposta che cambia
+    // app la dice col nome) e i dispositivi scollegati (lì si può solo rifiutare).
+    val nomi = remember(finestra) { nomiDelleApp(finestra) }
+    val scollegati = remember(finestra) { dispositiviScollegati(finestra) }
     val giorni = remember(finestra.striscia) { giorniDaQuadretti(finestra.striscia) }
     // (v3) La finestra per dispositivo; su un server 0.7 uno solo, senza nome.
     val perDispositivo = finestraPerDispositivo(finestra)
@@ -315,6 +373,22 @@ private fun ContenutoFinestra(
                     } ?: stringResource(R.string.finestra_errore),
                 )
             }
+        }
+
+        // (0.10) In cima a tutto, anche alle regole di oggi: le proposte del figlio
+        // che aspettano te. Se accetti, vale subito.
+        items(daDecidere, key = { "da-decidere-${it.id}" }) { proposta ->
+            val regola = regolePerId[proposta.regolaId]
+            CardPropostaDaDecidere(
+                proposta = proposta,
+                regola = regola,
+                nomeFiglio = figlio?.nome,
+                piuDispositivi = piuDispositiviAttivi(finestra),
+                invioInCorso = decisioneInCorso,
+                onDecidi = { esito, motivazione -> onDecidi(proposta, esito, motivazione) },
+                nomi = nomi,
+                scollegata = suDispositivoScollegato(regola, scollegati),
+            )
         }
 
         if (perDispositivo) {

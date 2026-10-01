@@ -1,6 +1,7 @@
 package eu.stgm.pactum.genitore.ui
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import eu.stgm.pactum.genitore.dati.CodiciErrore
@@ -41,6 +42,12 @@ class FinestraViewModel(application: Application) : AndroidViewModel(application
         val errore: Boolean = false,
         /** Quando la finestra mostrata è arrivata: su errore resta quella vecchia. */
         val ricevutaAlle: Instant? = null,
+        /**
+         * (0.10) Quando è PARTITA la lettura della finestra mostrata, sull'orologio
+         * monotono: una proposta decisa dopo non si mostra più in questi dati
+         * (chiusaPrimaDellaLettura).
+         */
+        val lettaAlle: Long? = null,
         val invioSegno: Boolean = false,
         /** Il giorno (del telefono) in cui il segno è partito da qui, per figlio. */
         val segniMandati: Map<Long?, LocalDate> = emptyMap(),
@@ -53,8 +60,8 @@ class FinestraViewModel(application: Application) : AndroidViewModel(application
         fun di(id: Long?): Boolean = richiesta && figlioId == id
     }
 
-    /** L'ultima finestra arrivata per ciascun figlio, e quando. */
-    private data class Ricordata(val finestra: Finestra, val alle: Instant)
+    /** L'ultima finestra arrivata per ciascun figlio, e quando ((0.10) e quando era partita la sua lettura). */
+    private data class Ricordata(val finestra: Finestra, val alle: Instant, val lettaAlle: Long)
 
     private val _stato = MutableStateFlow(StatoFinestra())
     val stato: StateFlow<StatoFinestra> = _stato.asStateFlow()
@@ -75,6 +82,7 @@ class FinestraViewModel(application: Application) : AndroidViewModel(application
                 caricamento = true,
                 finestra = ricordata?.finestra,
                 ricevutaAlle = ricordata?.alle,
+                lettaAlle = ricordata?.lettaAlle,
                 segniMandati = prima.segniMandati,
             )
         } else {
@@ -82,6 +90,7 @@ class FinestraViewModel(application: Application) : AndroidViewModel(application
         }
         lettura?.cancel()
         lettura = viewModelScope.launch {
+            val inizio = SystemClock.elapsedRealtime()
             val impostazioni = Impostazioni(getApplication())
             val configurazione = impostazioni.leggiConfigurazione()
             if (!configurazione.completa) {
@@ -100,7 +109,7 @@ class FinestraViewModel(application: Application) : AndroidViewModel(application
             } else {
                 impostazioni.registraVerificaRiuscita()
                 val adesso = Instant.now()
-                ricordate[figlioId] = Ricordata(finestra, adesso)
+                ricordate[figlioId] = Ricordata(finestra, adesso, inizio)
                 // copy e non uno stato nuovo: un segno in volo non va dimenticato.
                 _stato.value = _stato.value.copy(
                     caricamento = false,
@@ -108,6 +117,7 @@ class FinestraViewModel(application: Application) : AndroidViewModel(application
                     configurazioneMancante = false,
                     errore = false,
                     ricevutaAlle = adesso,
+                    lettaAlle = inizio,
                 )
             }
         }

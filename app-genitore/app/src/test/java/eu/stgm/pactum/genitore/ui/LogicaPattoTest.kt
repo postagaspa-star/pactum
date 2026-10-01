@@ -385,6 +385,207 @@ class LogicaPattoTest {
         assertEquals(setOf(1L), inAttesa)
     }
 
+    // --- 0.10: le proposte del figlio -----------------------------------------------------
+
+    private fun proposta(id: Long, regola: Long, stato: String = "pendente", autore: String = "figlio") =
+        Proposta(id = id, regolaId = regola, stato = stato, autore = autore)
+
+    private val proposteMiste = listOf(
+        proposta(3, regola = 1),
+        proposta(5, regola = 2, autore = "genitore"),
+        proposta(4, regola = 3, stato = "ritirata"),
+        proposta(7, regola = 4),
+        proposta(6, regola = 5, stato = "accettata"),
+        proposta(8, regola = 6, stato = "rifiutata", autore = "genitore"),
+        proposta(9, regola = 7, stato = "annullata"),
+    )
+
+    @Test
+    fun `da decidere solo le proposte del figlio ancora in attesa, dalla piu recente`() {
+        // La 5 è tua (aspetta lui), la 4 è ritirata, la 6 già accettata.
+        assertEquals(listOf(7L, 3L), proposteDaDecidere(proposteMiste).map { it.id })
+        // Nessuna proposta del figlio (o un server vecchio, dove sono tutte tue): niente card.
+        assertTrue(proposteDaDecidere(listOf(proposta(1, regola = 1, autore = "genitore"))).isEmpty())
+        assertTrue(proposteDaDecidere(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `una proposta appena decisa sparisce subito dai dati letti prima, e un id ripetuto non fa due card`() {
+        // Chiusa da qui all'istante 1000: nei dati letti a partire da 900 non c'è più.
+        val chiuse = mapOf(7L to PropostaChiusa(figlioId = 2, alle = 1_000))
+        assertEquals(listOf(3L), proposteDaDecidere(proposteMiste, chiuse, lettaAlle = 900).map { it.id })
+        // Dati di cui non si sa quando sono stati letti: vecchi.
+        assertEquals(listOf(3L), proposteDaDecidere(proposteMiste, chiuse, lettaAlle = null).map { it.id })
+        assertEquals(
+            listOf(3L),
+            proposteDaDecidere(listOf(proposta(3, regola = 1), proposta(3, regola = 1))).map { it.id },
+        )
+    }
+
+    @Test
+    fun `una lettura partita dopo la chiusura dice com'e davvero, anche con un id riusato`() {
+        // Dopo un ripristino del server lo stesso id può essere un'altra proposta:
+        // i dati letti dopo la chiusura la mostrano.
+        val chiuse = mapOf(7L to PropostaChiusa(figlioId = 2, alle = 1_000))
+        assertEquals(listOf(7L, 3L), proposteDaDecidere(proposteMiste, chiuse, lettaAlle = 1_001).map { it.id })
+        assertFalse(chiusaPrimaDellaLettura(7, chiuse, lettaAlle = 1_001))
+        assertTrue(chiusaPrimaDellaLettura(7, chiuse, lettaAlle = 1_000))
+        assertFalse(chiusaPrimaDellaLettura(8, chiuse, lettaAlle = 0))
+    }
+
+    @Test
+    fun `una chiusura fa da ponte finche l'elenco e la finestra di quel figlio non sono stati riletti dopo`() {
+        val chiuse = mapOf(
+            7L to PropostaChiusa(figlioId = 2, alle = 1_000),
+            9L to PropostaChiusa(figlioId = 3, alle = 1_000),
+        )
+        // La finestra del figlio 2 è stata riletta dopo, e l'elenco è suo e nuovo: la 7 va.
+        assertEquals(
+            setOf(9L),
+            chiusureDaTenere(chiuse, LetturaElenco(figlioId = 2, iniziataAlle = 1_100), mapOf(2L to 1_200L)).keys,
+        )
+        // L'elenco è del figlio 2 ma di prima: resta.
+        assertEquals(
+            setOf(7L, 9L),
+            chiusureDaTenere(chiuse, LetturaElenco(figlioId = 2, iniziataAlle = 900), mapOf(2L to 1_200L)).keys,
+        )
+        // La finestra del figlio 2 non è ancora stata riletta dopo: resta.
+        assertEquals(
+            setOf(7L, 9L),
+            chiusureDaTenere(chiuse, LetturaElenco(figlioId = 2, iniziataAlle = 1_100), mapOf(2L to 950L)).keys,
+        )
+        // Un elenco di un altro figlio (o nessun elenco) non tiene niente: si rilegge da capo.
+        assertEquals(setOf(9L), chiusureDaTenere(chiuse, LetturaElenco(figlioId = 3, iniziataAlle = 0), mapOf(2L to 1_200L)).keys)
+        assertEquals(setOf(9L), chiusureDaTenere(chiuse, null, mapOf(2L to 1_200L)).keys)
+        // Un elenco del figlio 2 non ancora letto: per prudenza resta.
+        assertEquals(
+            setOf(7L, 9L),
+            chiusureDaTenere(chiuse, LetturaElenco(figlioId = 2, iniziataAlle = null), mapOf(2L to 1_200L)).keys,
+        )
+    }
+
+    @Test
+    fun `in attesa del figlio solo le tue, e si ritira solo una tua ancora in attesa`() {
+        assertEquals(listOf(5L), proposteInAttesaDelFiglio(proposteMiste).map { it.id })
+        assertTrue(
+            proposteInAttesaDelFiglio(proposteMiste, mapOf(5L to PropostaChiusa(2, alle = 1_000)), lettaAlle = 10).isEmpty(),
+        )
+        // Un autore che non si conosce resta fra quelle in attesa, ma senza "Ritira".
+        val sconosciuta = proposta(10, regola = 9, autore = "nonna")
+        assertEquals(listOf(10L), proposteInAttesaDelFiglio(listOf(sconosciuta)).map { it.id })
+        assertFalse(ritirabile(sconosciuta))
+        assertTrue(ritirabile(proposta(5, regola = 2, autore = "genitore")))
+        assertFalse(ritirabile(proposta(3, regola = 1)))
+        assertFalse(ritirabile(proposta(8, regola = 6, stato = "rifiutata", autore = "genitore")))
+    }
+
+    @Test
+    fun `la storia tiene le chiuse di tutti e due, ritirate comprese`() {
+        assertEquals(listOf(4L, 6L, 8L, 9L), proposteChiuse(proposteMiste).map { it.id })
+    }
+
+    @Test
+    fun `sulla regola con la proposta del figlio non se ne manda un'altra, e si sa che e sua`() {
+        // Una sola proposta in attesa per regola, di chiunque sia (contratto v3.4).
+        assertEquals(setOf(1L, 2L, 4L), regoleConPropostaInAttesa(proposteMiste))
+        assertEquals(setOf(1L, 4L), regoleConPropostaDelFiglio(proposteMiste))
+    }
+
+    @Test
+    fun `l'elenco delle proposte prende anche le pendenti della finestra che mancano, una volta sola`() {
+        val elenco = listOf(proposta(12, regola = 1), proposta(11, regola = 2, stato = "accettata"))
+        // La 3 è in attesa ma più vecchia delle ultime 50: arriva solo dalla finestra.
+        val pendenti = listOf(proposta(12, regola = 1), proposta(3, regola = 5), proposta(3, regola = 5))
+        val unite = proposteUnite(elenco, pendenti)
+        assertEquals(listOf(12L, 11L, 3L), unite.map { it.id })
+        assertEquals(listOf(12L, 3L), proposteDaDecidere(unite).map { it.id })
+        // E la sua regola non offre un'altra proposta.
+        assertTrue(5L in regoleConPropostaInAttesa(unite))
+        assertEquals(elenco, proposteUnite(elenco, emptyList()))
+    }
+
+    @Test
+    fun `una proposta su una regola di un dispositivo scollegato si sa`() {
+        val delComputer = RegolaFinestra(id = 1, tipo = "limite_tempo", dispositivoId = 2)
+        val conRiferimento = RegolaFinestra(
+            id = 2,
+            tipo = "limite_tempo",
+            dispositivo = eu.stgm.pactum.genitore.dati.RiferimentoDispositivo(2, "PC", "computer"),
+        )
+        assertTrue(suDispositivoScollegato(delComputer, setOf(2L)))
+        assertTrue(suDispositivoScollegato(conRiferimento, setOf(2L)))
+        assertFalse(suDispositivoScollegato(delComputer, setOf(3L)))
+        assertFalse(suDispositivoScollegato(RegolaFinestra(id = 3, tipo = "vita_reale"), setOf(2L)))
+        assertFalse(suDispositivoScollegato(null, setOf(2L)))
+    }
+
+    @Test
+    fun `i nomi delle app vengono dalle fotografie e dalle regole, mai una chiave per nome`() {
+        val finestra = Finestra(
+            regole = listOf(
+                RegolaFinestra(
+                    id = 1,
+                    tipo = "limite_tempo",
+                    parametri = buildJsonObject {
+                        put("app_o_categoria", "com.zhiliaoapp.musically")
+                        put("minuti_al_giorno", 60)
+                    },
+                    nome = "TikTok",
+                ),
+                // Il ripiego del server (il nome è il pacchetto): non è un nome.
+                RegolaFinestra(
+                    id = 2,
+                    tipo = "limite_tempo",
+                    parametri = buildJsonObject {
+                        put("app_o_categoria", "com.sconosciuta")
+                        put("minuti_al_giorno", 30)
+                    },
+                    nome = "com.sconosciuta",
+                ),
+            ),
+            usoRecente = listOf(
+                UsoGiorno(giorno = "2026-09-29", app = listOf(UsoApp("com.instagram.android", "Insta (vecchio)"))),
+                UsoGiorno(giorno = "2026-09-30", app = listOf(UsoApp("com.instagram.android", "Instagram"))),
+            ),
+            dispositivi = listOf(
+                eu.stgm.pactum.genitore.dati.DispositivoFinestra(
+                    id = 2,
+                    tipo = "computer",
+                    usoRecente = listOf(
+                        UsoGiorno(
+                            giorno = "2026-09-30",
+                            app = listOf(UsoApp("exe:minecraft.exe", "Minecraft"), UsoApp("exe:foo.exe", "exe:foo.exe")),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        assertEquals(
+            mapOf(
+                "com.zhiliaoapp.musically" to "TikTok",
+                "com.instagram.android" to "Instagram",
+                "exe:minecraft.exe" to "Minecraft",
+            ),
+            nomiDelleApp(finestra),
+        )
+    }
+
+    @Test
+    fun `un'eliminazione si riconosce dalla direzione o dal marcatore`() {
+        assertTrue(eliminazione(Proposta(id = 1, regolaId = 1, stato = "pendente", direzione = "elimina")))
+        assertTrue(
+            eliminazione(
+                Proposta(
+                    id = 2,
+                    regolaId = 1,
+                    stato = "pendente",
+                    parametriProposti = buildJsonObject { put("azione", "elimina") },
+                ),
+            ),
+        )
+        assertFalse(eliminazione(Proposta(id = 3, regolaId = 1, stato = "pendente", direzione = "allenta")))
+    }
+
     // --- tempo: dentro il patto / il resto della giornata ---------------------------
 
     private fun giorno(app: List<UsoApp>, categorie: List<UsoCategoria> = emptyList()) =

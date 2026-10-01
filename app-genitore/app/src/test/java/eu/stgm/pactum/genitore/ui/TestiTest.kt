@@ -3,7 +3,9 @@ package eu.stgm.pactum.genitore.ui
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.Dispositivo
+import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Notifica
+import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.RiferimentoDispositivo
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
@@ -1269,6 +1271,583 @@ class TestiTest {
         assertEquals("Novità da leggere: 12", p.testo(R.string.riassunto_novita_titolo, 12))
         assertEquals("Avvisi: ultimo controllo alle 21:30", p.testo(R.string.avvisi_ultimo_controllo, "alle 21:30"))
         assertEquals("Alcune non si sono segnate (3): riprova.", p.testo(R.string.notifiche_segna_tutte_fallite, 3))
+    }
+
+    // --- 0.10: le proposte del figlio -----------------------------------------------------
+
+    private val luca = Figlio(id = 2, nome = "Luca")
+
+    /** Una notifica del figlio 2 (Luca), come le manda il server v3.4. */
+    private fun delFiglio(tipo: String, payload: JsonObject) = notifica(tipo, payload).copy(figlioId = 2)
+
+    /** Luca propone: TikTok da 1 h a 1 h 30 min al giorno. */
+    private val propostaTiktok = Proposta(
+        id = 9,
+        regolaId = 1,
+        parametriProposti = buildJsonObject {
+            put("app_o_categoria", "com.zhiliaoapp.musically")
+            put("minuti_al_giorno", 90)
+        },
+        motivazione = "sabato niente scuola",
+        confronto = "+30 min al giorno rispetto ad ora",
+        direzione = "allenta",
+        stato = "pendente",
+        autore = "figlio",
+    )
+
+    private val nuovaPropostaTiktok = buildJsonObject {
+        put("proposta_id", 9)
+        put("regola_id", 1)
+        put("confronto", "+30 min al giorno rispetto ad ora")
+        put("direzione", "allenta")
+        put("autore", "figlio")
+    }
+
+    @Test
+    fun `una proposta del figlio - chi propone nel titolo, la regola come sarebbe e il confronto nel testo`() {
+        val t = testoNotifica(
+            p,
+            delFiglio("nuova_proposta", nuovaPropostaTiktok),
+            regole,
+            figli = listOf(luca),
+            proposte = mapOf(9L to propostaTiktok),
+        )
+        assertEquals(
+            TestoNotifica(
+                "Luca ti propone un cambio",
+                "TikTok: al massimo 1 h 30 min al giorno\n+30 min al giorno rispetto ad ora",
+            ),
+            t,
+        )
+    }
+
+    @Test
+    fun `una proposta del figlio senza il suo nome, o senza la proposta letta, si legge lo stesso`() {
+        // Famiglia non arrivata: "Tuo figlio".
+        assertEquals(
+            "Tuo figlio ti propone un cambio",
+            testoNotifica(p, delFiglio("nuova_proposta", nuovaPropostaTiktok), regole, proposte = mapOf(9L to propostaTiktok)).titolo,
+        )
+        // La proposta non è più in attesa (o la finestra non è arrivata): su quale regola, col confronto.
+        assertEquals(
+            TestoNotifica("Luca ti propone un cambio", "Proposta su TikTok: +30 min al giorno rispetto ad ora"),
+            testoNotifica(p, delFiglio("nuova_proposta", nuovaPropostaTiktok), regole, figli = listOf(luca)),
+        )
+        // La regola non si conosce: il tipo e il messaggio del server, niente frase inventata.
+        assertEquals(
+            TestoNotifica("Nuova proposta", "messaggio del server"),
+            testoNotifica(p, delFiglio("nuova_proposta", nuovaPropostaTiktok), emptyMap(), figli = listOf(luca)),
+        )
+    }
+
+    @Test
+    fun `una proposta del figlio di togliere una regola lo dice con la regola di adesso`() {
+        val elimina = buildJsonObject {
+            put("proposta_id", 10)
+            put("regola_id", 3)
+            put("confronto", "propone di eliminare la regola")
+            put("direzione", "elimina")
+            put("autore", "figlio")
+        }
+        val t = testoNotifica(p, delFiglio("nuova_proposta", elimina), regole, figli = listOf(luca))
+        assertEquals(
+            TestoNotifica("Luca ti propone un cambio", "Togliere la regola «Niente telefono dalle 21:00 alle 07:00 (lun, mar)»"),
+            t,
+        )
+    }
+
+    @Test
+    fun `una proposta sul totale del computer non mostra mai la chiave`() {
+        val totaleComputer = totale(180, "computer")
+        val proposta = Proposta(
+            id = 11,
+            regolaId = 30,
+            parametriProposti = buildJsonObject {
+                put("app_o_categoria", "totale")
+                put("minuti_al_giorno", 240)
+            },
+            confronto = "+60 min al giorno rispetto ad ora",
+            direzione = "allenta",
+            stato = "pendente",
+            autore = "figlio",
+        )
+        val t = testoNotifica(
+            p,
+            delFiglio(
+                "nuova_proposta",
+                buildJsonObject {
+                    put("proposta_id", 11)
+                    put("regola_id", 30)
+                    put("autore", "figlio")
+                },
+            ),
+            mapOf(30L to totaleComputer),
+            figli = listOf(luca),
+            proposte = mapOf(11L to proposta),
+        )
+        assertEquals("Tutto il computer: al massimo 4 h al giorno\n+60 min al giorno rispetto ad ora", t.testo)
+        assertFalse(t.testo.contains("totale"))
+    }
+
+    @Test
+    fun `un ritiro del figlio dice chi e che la regola resta com'e`() {
+        val ritiro = buildJsonObject {
+            put("proposta_id", 9)
+            put("regola_id", 1)
+            put("autore", "figlio")
+        }
+        assertEquals(
+            TestoNotifica("Luca ha ritirato la sua proposta", "La regola su TikTok resta com'è."),
+            testoNotifica(p, delFiglio("proposta_ritirata", ritiro), regole, figli = listOf(luca)),
+        )
+        assertEquals(
+            "Tuo figlio ha ritirato la sua proposta",
+            testoNotifica(p, delFiglio("proposta_ritirata", ritiro), regole).titolo,
+        )
+        assertEquals(
+            "La regola sulla fascia 21:00–07:00 resta com'è.",
+            testoNotifica(
+                p,
+                delFiglio(
+                    "proposta_ritirata",
+                    buildJsonObject {
+                        put("regola_id", 3)
+                        put("autore", "figlio")
+                    },
+                ),
+                regole,
+            ).testo,
+        )
+        // Regola che non si conosce: il tipo e il messaggio del server.
+        assertEquals(
+            TestoNotifica("Proposta ritirata", "messaggio del server"),
+            testoNotifica(p, delFiglio("proposta_ritirata", ritiro), emptyMap(), figli = listOf(luca)),
+        )
+    }
+
+    @Test
+    fun `una proposta annullata dice di chi era`() {
+        fun annullata(autore: String?) = testoNotifica(
+            p,
+            delFiglio(
+                "proposta_annullata",
+                buildJsonObject {
+                    put("proposta_id", 9)
+                    put("regola_id", 1)
+                    put("motivo", "regola_eliminata")
+                    if (autore != null) put("autore", autore)
+                },
+            ),
+            regole,
+            figli = listOf(luca),
+        )
+        assertEquals(
+            TestoNotifica("Proposta annullata", "La proposta di Luca su TikTok non vale più: la regola non è più attiva"),
+            annullata("figlio"),
+        )
+        // Le tue, e quelle di un server più vecchio (senza autore), come prima.
+        listOf("genitore", null).forEach { autore ->
+            assertEquals(
+                "La tua proposta su TikTok non vale più: la regola non è più attiva",
+                annullata(autore).testo,
+            )
+        }
+    }
+
+    @Test
+    fun `nelle frasi delle proposte del figlio niente chiavi grezze, null o ISO`() {
+        val frasi = listOf(
+            testoNotifica(p, delFiglio("nuova_proposta", nuovaPropostaTiktok), regole, listOf(luca), mapOf(9L to propostaTiktok)),
+            testoNotifica(p, delFiglio("nuova_proposta", nuovaPropostaTiktok), regole, listOf(luca)),
+            testoNotifica(
+                p,
+                delFiglio(
+                    "proposta_ritirata",
+                    buildJsonObject {
+                        put("regola_id", 2)
+                        put("autore", "figlio")
+                    },
+                ),
+                regole,
+                listOf(luca),
+            ),
+        )
+        frasi.forEach { t ->
+            val tutto = t.titolo + " " + t.testo
+            listOf("null", "categoria:", "com.zhiliaoapp", "autore", "allenta", "pendente", "2026-").forEach {
+                assertFalse("'$it' in «$tutto»", tutto.contains(it))
+            }
+        }
+    }
+
+    @Test
+    fun `la card dice chi propone, cosa, e dove vale solo quando serve`() {
+        assertEquals("Luca ti propone:", chiTiPropone(p, "Luca"))
+        assertEquals("Tuo figlio ti propone:", chiTiPropone(p, "  "))
+        assertEquals("Tuo figlio ti propone:", chiTiPropone(p, null))
+
+        // Un telefono solo: niente "sul telefono".
+        val telefono = RiferimentoDispositivo(1, "Telefono", "telefono")
+        val tiktokSulTelefono = tiktok.copy(dispositivo = telefono)
+        assertEquals("TikTok: al massimo 1 h 30 min al giorno", rigaProposta(p, propostaTiktok, tiktokSulTelefono, false))
+        // Più dispositivi: anche il telefono si dice.
+        assertEquals(
+            "TikTok: al massimo 1 h 30 min al giorno · sul telefono",
+            rigaProposta(p, propostaTiktok, tiktokSulTelefono, true),
+        )
+        // Un computer si dice sempre; col nome suo quando ce ne sono altri.
+        val minecraft = RegolaFinestra(
+            id = 21,
+            tipo = "limite_tempo",
+            parametri = buildJsonObject {
+                put("app_o_categoria", "exe:minecraft.exe")
+                put("minuti_al_giorno", 60)
+            },
+            nome = "Minecraft",
+            dispositivo = RiferimentoDispositivo(2, "Computer di camera", "computer"),
+        )
+        val piuMinecraft = Proposta(
+            id = 12,
+            regolaId = 21,
+            parametriProposti = buildJsonObject {
+                put("app_o_categoria", "exe:minecraft.exe")
+                put("minuti_al_giorno", 120)
+            },
+            stato = "pendente",
+            autore = "figlio",
+        )
+        assertEquals("Minecraft: al massimo 2 h al giorno · sul computer", rigaProposta(p, piuMinecraft, minecraft, false))
+        assertEquals(
+            "Minecraft: al massimo 2 h al giorno · sul computer «Computer di camera»",
+            rigaProposta(p, piuMinecraft, minecraft, true),
+        )
+        val computerSenzaNome = minecraft.copy(dispositivo = RiferimentoDispositivo(2, "Computer", "computer"))
+        assertEquals("sul computer", doveValeLaRegola(p, computerSenzaNome, true))
+        // La vita reale è del figlio: nessun dispositivo da dire.
+        assertNull(doveValeLaRegola(p, camminare, true))
+    }
+
+    @Test
+    fun `il confronto si mostra sotto la regola, tranne quando ripeterebbe la riga`() {
+        assertEquals("+30 min al giorno rispetto ad ora", confrontoDaMostrare(p, propostaTiktok, tiktok))
+        // Regola che non si conosce: il confronto È la riga, non si ripete.
+        assertEquals("+30 min al giorno rispetto ad ora", rigaProposta(p, propostaTiktok, null, false))
+        assertNull(confrontoDaMostrare(p, propostaTiktok, null))
+        // Un'eliminazione lo dice già la riga.
+        val elimina = Proposta(
+            id = 13,
+            regolaId = 1,
+            parametriProposti = buildJsonObject { put("azione", "elimina") },
+            confronto = "propone di eliminare la regola",
+            direzione = "elimina",
+            stato = "pendente",
+            autore = "figlio",
+        )
+        assertEquals("Togliere la regola «TikTok: al massimo 1 h al giorno»", rigaProposta(p, elimina, tiktok, false))
+        assertNull(confrontoDaMostrare(p, elimina, tiktok))
+        // Senza i parametri non si inventa "?: al massimo 0 min": vale il confronto.
+        val senzaParametri = propostaTiktok.copy(parametriProposti = JsonObject(emptyMap()))
+        assertEquals("+30 min al giorno rispetto ad ora", rigaProposta(p, senzaParametri, tiktok, false))
+        assertNull(confrontoDaMostrare(p, senzaParametri, tiktok))
+    }
+
+    // --- 0.10: una proposta che cambia app, categoria o totale: mai una chiave ------------
+
+    /** I nomi che la finestra conosce (fotografie e regole), come li dà nomiDelleApp. */
+    private val nomiNoti = mapOf(
+        "com.zhiliaoapp.musically" to "TikTok",
+        "com.instagram.android" to "Instagram",
+        "exe:minecraft.exe" to "Minecraft",
+    )
+
+    /** Una proposta del figlio sulla regola [regola]: [chiave] per [minuti] al giorno. */
+    private fun cambio(regola: Long, chiave: String, minuti: Int, stato: String = "pendente", confronto: String = "") =
+        Proposta(
+            id = 20,
+            regolaId = regola,
+            parametriProposti = buildJsonObject {
+                put("app_o_categoria", chiave)
+                put("minuti_al_giorno", minuti)
+            },
+            confronto = confronto,
+            direzione = "allenta",
+            stato = stato,
+            autore = "figlio",
+        )
+
+    @Test
+    fun `da un'app a un'altra - i nomi delle app, e il confronto lo racconta l'app`() {
+        // Il server vecchio scriveva le chiavi: "da com.zhiliaoapp.musically (60 min) a …".
+        val proposta = cambio(
+            1,
+            "com.instagram.android",
+            60,
+            confronto = "da com.zhiliaoapp.musically (60 min) a com.instagram.android (60 min) al giorno",
+        )
+        assertEquals("Instagram: al massimo 1 h al giorno", descrizioneProposta(p, proposta, tiktok, nomiNoti))
+        assertEquals("Da TikTok (1 h) a Instagram (1 h) al giorno", confrontoDaMostrare(p, proposta, tiktok, nomiNoti))
+        // Il nome della regola basta per la sua app, anche senza altri nomi.
+        assertEquals(
+            "Da TikTok (1 h) a un'altra app (1 h) al giorno",
+            confrontoDaMostrare(p, proposta, tiktok, emptyMap()),
+        )
+        // Un'app di cui non si sa il nome: mai il pacchetto.
+        assertEquals("Un'altra app: al massimo 1 h al giorno", descrizioneProposta(p, proposta, tiktok, emptyMap()))
+    }
+
+    @Test
+    fun `da una categoria a un'app, e dal totale a un'app`() {
+        val daSocialATiktok = cambio(2, "com.zhiliaoapp.musically", 60)
+        assertEquals("TikTok: al massimo 1 h al giorno", descrizioneProposta(p, daSocialATiktok, social, nomiNoti))
+        assertEquals(
+            "Da Social (2 h) a TikTok (1 h) al giorno",
+            confrontoDaMostrare(p, daSocialATiktok, social, nomiNoti),
+        )
+        val sulTotale = totale(180, "telefono")
+        val dalTotaleAInstagram = cambio(30, "com.instagram.android", 60)
+        assertEquals(
+            "Da tutto il telefono (3 h) a Instagram (1 h) al giorno",
+            confrontoDaMostrare(p, dalTotaleAInstagram, sulTotale, nomiNoti),
+        )
+        // E il contrario: da un'app a tutto il computer.
+        val versoIlTotale = cambio(1, "totale", 240)
+        val tiktokSulComputer = tiktok.copy(dispositivo = RiferimentoDispositivo(2, "PC", "computer"))
+        assertEquals(
+            "Tutto il computer: al massimo 4 h al giorno",
+            descrizioneProposta(p, versoIlTotale, tiktokSulComputer, nomiNoti),
+        )
+        assertEquals(
+            "Da TikTok (1 h) a tutto il computer (4 h) al giorno",
+            confrontoDaMostrare(p, versoIlTotale, tiktokSulComputer, nomiNoti),
+        )
+    }
+
+    @Test
+    fun `sul computer un programma col suo nome, o col file, e un sito col dominio`() {
+        val minecraft = RegolaFinestra(
+            id = 21,
+            tipo = "limite_tempo",
+            parametri = buildJsonObject {
+                put("app_o_categoria", "exe:minecraft.exe")
+                put("minuti_al_giorno", 60)
+            },
+            nome = "Minecraft",
+            dispositivo = RiferimentoDispositivo(2, "PC", "computer"),
+        )
+        val versoRoblox = cambio(21, "exe:robloxplayer.exe", 90)
+        assertEquals(
+            "robloxplayer.exe (programma): al massimo 1 h 30 min al giorno",
+            descrizioneProposta(p, versoRoblox, minecraft, nomiNoti),
+        )
+        assertEquals(
+            "Da Minecraft (1 h) a robloxplayer.exe (1 h 30 min) al giorno",
+            confrontoDaMostrare(p, versoRoblox, minecraft, nomiNoti),
+        )
+        val versoYoutube = cambio(21, "sito:youtube.com", 30)
+        assertEquals("youtube.com (sito): al massimo 30 min al giorno", descrizioneProposta(p, versoYoutube, minecraft, nomiNoti))
+        assertEquals(
+            "Da Minecraft (1 h) a youtube.com (30 min) al giorno",
+            confrontoDaMostrare(p, versoYoutube, minecraft, nomiNoti),
+        )
+        // Coi nomi delle fotografie anche un programma nuovo si legge.
+        assertEquals(
+            "Minecraft: al massimo 2 h al giorno",
+            descrizioneProposta(p, cambio(1, "exe:minecraft.exe", 120), tiktok.copy(dispositivo = RiferimentoDispositivo(2, "PC", "computer")), nomiNoti),
+        )
+    }
+
+    @Test
+    fun `una proposta chiusa su un cambio di app non mostra il confronto del server, la riga si`() {
+        // Chiusa: la regola di adesso non è più quella di allora, l'app non sa ricostruire
+        // il "da"; il testo del server può avere le chiavi.
+        val chiusa = cambio(
+            1,
+            "com.instagram.android",
+            60,
+            stato = "rifiutata",
+            confronto = "da com.zhiliaoapp.musically (60 min) a com.instagram.android (60 min) al giorno",
+        )
+        assertNull(confrontoDaMostrare(p, chiusa, tiktok, nomiNoti))
+        assertEquals("Instagram: al massimo 1 h al giorno", rigaProposta(p, chiusa, tiktok, false, nomiNoti))
+        // Senza la regola la riga non ripiega su quel testo.
+        assertNull(rigaProposta(p, chiusa, null, false, nomiNoti))
+        // Un confronto che non cambia app (+30 min…) resta, anche da chiusa.
+        assertEquals(
+            "+30 min al giorno rispetto ad ora",
+            confrontoDaMostrare(p, propostaTiktok.copy(stato = "accettata"), tiktok, nomiNoti),
+        )
+    }
+
+    @Test
+    fun `la notifica di una proposta che cambia app la dice coi nomi`() {
+        val proposta = cambio(
+            1,
+            "com.instagram.android",
+            60,
+            confronto = "da com.zhiliaoapp.musically (60 min) a com.instagram.android (60 min) al giorno",
+        ).copy(id = 9)
+        val t = testoNotifica(
+            p,
+            delFiglio("nuova_proposta", nuovaPropostaTiktok),
+            regole,
+            figli = listOf(luca),
+            proposte = mapOf(9L to proposta),
+            nomi = nomiNoti,
+        )
+        assertEquals(
+            TestoNotifica(
+                "Luca ti propone un cambio",
+                "Instagram: al massimo 1 h al giorno\nDa TikTok (1 h) a Instagram (1 h) al giorno",
+            ),
+            t,
+        )
+        // Senza la proposta letta, un confronto del payload che cambia app non si scrive.
+        val cambioNelPayload = buildJsonObject {
+            put("proposta_id", 9)
+            put("regola_id", 1)
+            put("confronto", "da com.zhiliaoapp.musically (60 min) a com.instagram.android (60 min) al giorno")
+            put("direzione", "allenta")
+            put("autore", "figlio")
+        }
+        assertEquals(
+            TestoNotifica("Luca ti propone un cambio", "Proposta su TikTok"),
+            testoNotifica(p, delFiglio("nuova_proposta", cambioNelPayload), regole, figli = listOf(luca)),
+        )
+        listOf(t, testoNotifica(p, delFiglio("nuova_proposta", cambioNelPayload), regole)).forEach {
+            assertFalse(it.testo, it.testo.contains("com."))
+        }
+    }
+
+    @Test
+    fun `nella storia si dice chi ha proposto e com'e finita, anche ritirata`() {
+        assertEquals("Proposta tua", autoreProposta(p, propostaTiktok.copy(autore = "genitore"), "Luca"))
+        assertEquals("Proposta di Luca", autoreProposta(p, propostaTiktok, "Luca"))
+        assertEquals("Proposta di tuo figlio", autoreProposta(p, propostaTiktok, null))
+        assertNull(autoreProposta(p, propostaTiktok.copy(autore = "nonna"), "Luca"))
+        assertEquals("Ritirata", testoStatoProposta(p, "ritirata"))
+        assertEquals("Accettata", testoStatoProposta(p, "accettata"))
+        assertEquals("Rifiutata", testoStatoProposta(p, "rifiutata"))
+        assertEquals("Annullata: la regola non è più attiva", testoStatoProposta(p, "annullata"))
+    }
+
+    @Test
+    fun `accanto al nome del figlio, quante proposte aspettano te`() {
+        assertNull(testoDaDecidere(p, 0))
+        assertEquals("1 da decidere", testoDaDecidere(p, 1))
+        assertEquals("3 da decidere", testoDaDecidere(p, 3))
+    }
+
+    @Test
+    fun `dopo la risposta, una frase che dice cosa e successo`() {
+        assertEquals("Fatto: la regola è cambiata.", p.testo(messaggioDecisione("accetta", eliminazione = false)))
+        assertEquals("Fatto: la regola non c'è più.", p.testo(messaggioDecisione("accetta", eliminazione = true)))
+        assertEquals("Hai rifiutato la proposta.", p.testo(messaggioDecisione("rifiuta", eliminazione = false)))
+        assertEquals("Se accetti, vale subito.", p.testo(R.string.proposta_vale_subito))
+        assertEquals("Perché? (facoltativo)", p.testo(R.string.proposta_campo_perche))
+    }
+
+    @Test
+    fun `ogni rifiuto della risposta dice il motivo vero, a parole semplici`() {
+        // Non più in attesa e la rilettura non dice com'è finita: una frase che non sceglie.
+        assertEquals(
+            "È già stata decisa, ritirata o annullata.",
+            p.testo(messaggioRifiutoDecisione(CodiciErrore.PROPOSTA_NON_PENDENTE)),
+        )
+        assertEquals(
+            "Per rispondere alle proposte di tuo figlio serve aggiornare il server di Pactum.",
+            p.testo(messaggioRifiutoDecisione(CodiciErrore.SERVER_DA_AGGIORNARE)),
+        )
+        assertEquals(
+            "Non si può togliere: è l'ultima regola rimasta nel patto. La proposta resta in attesa: puoi rifiutarla.",
+            p.testo(messaggioRifiutoDecisione(CodiciErrore.ULTIMA_REGOLA)),
+        )
+        assertEquals(
+            "Questa regola è di un dispositivo scollegato e non si cambia più. La proposta resta in attesa: puoi rifiutarla.",
+            p.testo(messaggioRifiutoDecisione(CodiciErrore.DISPOSITIVO_REVOCATO)),
+        )
+        assertEquals(
+            "Non trovo più questa proposta: ho riletto le proposte.",
+            p.testo(messaggioRifiutoDecisione(CodiciErrore.NON_TROVATO)),
+        )
+        assertEquals(
+            "Non sono riuscito a mandare la risposta: riprova.",
+            p.testo(messaggioRifiutoDecisione(null)),
+        )
+        assertEquals(
+            "Non sono riuscito a mandare la risposta: riprova.",
+            p.testo(messaggioRifiutoDecisione("motivo_del_futuro")),
+        )
+    }
+
+    @Test
+    fun `una proposta non piu in attesa dice com'e finita davvero, mai un forse`() {
+        val nonPendente = CodiciErrore.PROPOSTA_NON_PENDENTE
+        // Una sua proposta, a cui rispondevi tu.
+        assertEquals("Era già stata accettata.", p.testo(messaggioRifiutoDecisione(nonPendente, "accettata")))
+        assertEquals("Era già stata rifiutata.", p.testo(messaggioRifiutoDecisione(nonPendente, "rifiutata")))
+        assertEquals(
+            "Tuo figlio l'ha ritirata: non è più in attesa.",
+            p.testo(messaggioRifiutoDecisione(nonPendente, "ritirata")),
+        )
+        assertEquals(
+            "Non vale più: la regola non è più attiva.",
+            p.testo(messaggioRifiutoDecisione(nonPendente, "annullata")),
+        )
+        // Una tua, che volevi ritirare: a rispondere era lui.
+        assertEquals("Tuo figlio l'aveva già accettata.", p.testo(messaggioRifiutoRitiro(nonPendente, "accettata")))
+        assertEquals("Tuo figlio l'aveva già rifiutata.", p.testo(messaggioRifiutoRitiro(nonPendente, "rifiutata")))
+        assertEquals("Era già stata ritirata.", p.testo(messaggioRifiutoRitiro(nonPendente, "ritirata")))
+        assertEquals(
+            "Non vale più: la regola non è più attiva.",
+            p.testo(messaggioRifiutoRitiro(nonPendente, "annullata")),
+        )
+        // Rilettura non riuscita, o uno stato che non torna: la frase che non sceglie.
+        listOf(null, "pendente", "stato_del_futuro").forEach { stato ->
+            assertEquals(
+                "È già stata decisa, ritirata o annullata.",
+                p.testo(messaggioRifiutoDecisione(nonPendente, stato)),
+            )
+            assertEquals(
+                "È già stata decisa, ritirata o annullata.",
+                p.testo(messaggioRifiutoRitiro(nonPendente, stato)),
+            )
+        }
+        // Lo stato finale conta solo per "non più in attesa".
+        assertEquals(
+            "Non sono riuscito a mandare la risposta: riprova.",
+            p.testo(messaggioRifiutoDecisione(null, "accettata")),
+        )
+        // Il vecchio "forse" non c'è più.
+        val tutto = File("src/main/res/values/strings.xml").readText()
+        assertFalse(tutto.contains("forse l\\'ha ritirata"))
+    }
+
+    @Test
+    fun `la cornice dice che il figlio puo proporre e che decidi tu`() {
+        val intro = p.testo(R.string.intro_testo)
+        assertTrue(intro, intro.contains("Anche lui può chiederti di cambiare una sua regola: decidi tu."))
+        assertTrue(intro, intro.contains("rispondere alle sue proposte"))
+        assertEquals(
+            "Questa regola è di un dispositivo scollegato e non si cambia più: puoi solo rifiutare la proposta.",
+            p.testo(R.string.proposta_dispositivo_scollegato),
+        )
+    }
+
+    @Test
+    fun `ogni rifiuto del ritiro dice il motivo vero, e un server vecchio va aggiornato`() {
+        assertEquals(
+            "Per ritirare una proposta serve aggiornare il server di Pactum.",
+            p.testo(messaggioRifiutoRitiro(CodiciErrore.SERVER_DA_AGGIORNARE)),
+        )
+        assertEquals(
+            "Non trovo più questa proposta: ho riletto le proposte.",
+            p.testo(messaggioRifiutoRitiro(CodiciErrore.NON_TROVATO)),
+        )
+        assertEquals(
+            "Non sono riuscito a ritirare la proposta: riprova.",
+            p.testo(messaggioRifiutoRitiro(null)),
+        )
+        assertEquals("Proposta ritirata.", p.testo(R.string.proposta_ritirata_fatto))
     }
 
     // --- nessun gergo nelle parole dell'app -------------------------------------------

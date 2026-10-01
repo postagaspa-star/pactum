@@ -22,6 +22,7 @@ import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.Notifica
+import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.SilenzioNoto
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
@@ -45,6 +46,7 @@ import eu.stgm.pactum.genitore.ui.etichettaNotifica
 import eu.stgm.pactum.genitore.ui.idAvvisoSilenzio
 import eu.stgm.pactum.genitore.ui.idDigest
 import eu.stgm.pactum.genitore.ui.istanteServer
+import eu.stgm.pactum.genitore.ui.nomiDelleApp
 import eu.stgm.pactum.genitore.ui.oraOppureDataOra
 import eu.stgm.pactum.genitore.ui.paroleDi
 import eu.stgm.pactum.genitore.ui.partenzaSilenzi
@@ -253,8 +255,7 @@ class Vedetta(context: Context) {
         // secondi: se il server tarda, l'avviso parte col testo base (il tipo e il
         // messaggio del server), meglio che arrivare tardi.
         val nomi = withTimeoutOrNull(CadenzaVedetta.TEMPO_PER_I_NOMI_MS) { nomiPerGliAvvisi(nuove, contesto) }
-        val figli = nomi?.first.orEmpty()
-        val regolePerId = nomi?.second.orEmpty()
+            ?: NomiPerGliAvvisi()
 
         creaCanale(context)
         faiSpazio(inArrivo = nuove.size)
@@ -264,7 +265,7 @@ class Vedetta(context: Context) {
             try {
                 gestore.notify(
                     notifica.id.toInt(),
-                    notificaDiSistema(notifica, regolePerId, figli),
+                    notificaDiSistema(notifica, nomi),
                 )
             } catch (e: SecurityException) {
                 break // permesso revocato tra il controllo e la notify: le altre al giro dopo
@@ -275,20 +276,40 @@ class Vedetta(context: Context) {
     }
 
     /**
+     * Quello che serve per scrivere gli avvisi per bene: la famiglia (di chi è),
+     * le regole (il nome leggibile) e (0.10) le proposte in attesa (che cosa
+     * propone il figlio) coi nomi delle app (una proposta che cambia app la dice
+     * col nome). Vuoto = testo base.
+     */
+    private data class NomiPerGliAvvisi(
+        val figli: List<Figlio> = emptyList(),
+        val regolePerId: Map<Long, RegolaFinestra> = emptyMap(),
+        val proposte: Map<Long, Proposta> = emptyMap(),
+        val nomi: Map<String, String> = emptyMap(),
+    )
+
+    /**
      * La famiglia (di chi è) e le regole delle finestre dei figli delle novità
      * (il nome leggibile): gli id delle regole sono unici su tutto il server,
-     * quindi le regole di più figli stanno in una mappa sola.
+     * quindi le regole di più figli stanno in una mappa sola. (0.10) Dalle stesse
+     * finestre le proposte in attesa, per id, e i nomi delle app: nessuna
+     * richiesta in più.
      */
     private suspend fun nomiPerGliAvvisi(
         nuove: List<Notifica>,
         contesto: Contesto,
-    ): Pair<List<Figlio>, Map<Long, RegolaFinestra>> {
+    ): NomiPerGliAvvisi {
         val figli = (contesto.famiglia() as? EsitoFamiglia.Letta)?.famiglia?.figli.orEmpty()
         val regolePerId = mutableMapOf<Long, RegolaFinestra>()
+        val proposte = mutableMapOf<Long, Proposta>()
+        val nomi = mutableMapOf<String, String>()
         nuove.map { it.figlioId }.distinct().forEach { figlioId ->
-            contesto.finestra(figlioId)?.regole?.forEach { regolePerId[it.id] = it }
+            val finestra = contesto.finestra(figlioId) ?: return@forEach
+            finestra.regole.forEach { regolePerId[it.id] = it }
+            finestra.propostePendenti.forEach { proposte[it.id] = it }
+            nomi.putAll(nomiDelleApp(finestra))
         }
-        return figli to regolePerId
+        return NomiPerGliAvvisi(figli, regolePerId, proposte, nomi)
     }
 
     /**
@@ -511,18 +532,14 @@ class Vedetta(context: Context) {
     }
 
     /** Titolo e frase dalla stessa funzione della lista in app (testoNotifica, Testi.kt). */
-    private fun notificaDiSistema(
-        notifica: Notifica,
-        regolePerId: Map<Long, RegolaFinestra>,
-        figli: List<Figlio>,
-    ): Notification {
-        val testo = testoNotifica(paroleDi(context), notifica, regolePerId)
+    private fun notificaDiSistema(notifica: Notifica, nomi: NomiPerGliAvvisi): Notification {
+        val testo = testoNotifica(paroleDi(context), notifica, nomi.regolePerId, nomi.figli, nomi.proposte, nomi.nomi)
         return notificaBase(
             titolo = testo.titolo,
             testo = testo.testo,
             destinazione = destinazionePerTipo(notifica.tipo),
             // (v3) Di quale figlio (e dispositivo): la stessa riga della lista in app.
-            sopra = etichettaNotifica(notifica, figli),
+            sopra = etichettaNotifica(notifica, nomi.figli),
             figlioId = notifica.figlioId,
         )
     }
@@ -679,9 +696,14 @@ class Vedetta(context: Context) {
          * risposte che toccano al genitore vanno su "Proposte e conferme"; tutto il
          * resto apre la lista delle notifiche sopra la finestra, dove quella
          * stessa notifica si legge per intero e si segna come letta.
+         *
+         * (0.10) Una proposta del figlio (al genitore arrivano solo le sue) apre la
+         * Panoramica di quel figlio, dove la card per decidere sta in cima; un suo
+         * ritiro, "Proposte e conferme", dove la si ritrova nella storia.
          */
-        private fun destinazionePerTipo(tipo: String): String = when (tipo) {
-            "proposta_risposta", "proposta_annullata", "dichiarazione" -> MainActivity.DEST_TURNO
+        internal fun destinazionePerTipo(tipo: String): String = when (tipo) {
+            "nuova_proposta" -> MainActivity.DEST_FINESTRA
+            "proposta_risposta", "proposta_annullata", "proposta_ritirata", "dichiarazione" -> MainActivity.DEST_TURNO
             else -> MainActivity.DEST_NOTIFICHE
         }
     }

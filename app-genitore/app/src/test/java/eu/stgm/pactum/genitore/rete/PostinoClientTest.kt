@@ -2,15 +2,19 @@ package eu.stgm.pactum.genitore.rete
 
 import eu.stgm.pactum.genitore.dati.CodiceAbbinamento
 import eu.stgm.pactum.genitore.dati.CodiciErrore
+import eu.stgm.pactum.genitore.dati.CorpoRispostaProposta
 import eu.stgm.pactum.genitore.dati.CorpoSegno
 import eu.stgm.pactum.genitore.dati.CorpoVerdetto
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.NuovaProposta
 import eu.stgm.pactum.genitore.dati.PaccoNotifiche
+import eu.stgm.pactum.genitore.dati.PaccoProposte
+import eu.stgm.pactum.genitore.dati.PropostaDecisa
 import eu.stgm.pactum.genitore.dati.RiepilogoFinestra
 import eu.stgm.pactum.genitore.dati.SegnoMandato
 import eu.stgm.pactum.genitore.ui.FinestraViewModel.EsitoSegno
 import eu.stgm.pactum.genitore.ui.esitoDelSegno
+import eu.stgm.pactum.genitore.ui.propostaChiusaDopo
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -442,6 +446,200 @@ class PostinoClientTest {
         assertNull(f.bonus)
         assertNull(f.statoSilenzio)
         assertTrue(f.usoRecente.isEmpty())
+    }
+
+    // --- 0.10: le proposte del figlio sul filo (contratto v3.4) --------------------------
+
+    @Test
+    fun `una proposta senza autore e del genitore, come tutte quelle di prima della v3,4`() {
+        val proposte = PostinoClient.json.decodeFromString(
+            PaccoProposte.serializer(),
+            """{ "proposte": [
+                 { "id": 1, "regola_id": 7,
+                   "parametri_proposti": { "app_o_categoria": "totale", "minuti_al_giorno": 200 },
+                   "motivazione": null, "confronto": "+20 min al giorno rispetto ad ora", "direzione": "allenta",
+                   "stato": "pendente", "usata": false, "ts_server": "2026-10-01T10:00:00+00:00", "risposta": null },
+                 { "id": 2, "regola_id": 8, "stato": "ritirata", "autore": "figlio" },
+                 { "id": 3, "regola_id": 9, "stato": "accettata", "autore": null,
+                   "risposta": { "esito": "accetta", "motivazione": "va bene", "ts_server": "2026-10-01T11:00:00+00:00" } } ] }""",
+        ).proposte
+        assertEquals(listOf("genitore", "figlio", "genitore"), proposte.map { it.autore })
+        assertEquals("ritirata", proposte[1].stato)
+        assertEquals("va bene", proposte[2].risposta?.motivazione)
+    }
+
+    @Test
+    fun `la finestra porta le proposte in attesa coi loro autori, un server vecchio nessuna`() {
+        val f = leggiFinestra(
+            """
+            { "proposte_pendenti": [
+                { "id": 12, "regola_id": 1, "autore": "figlio", "stato": "pendente",
+                  "parametri_proposti": { "app_o_categoria": "com.zhiliaoapp.musically", "minuti_al_giorno": 90 },
+                  "motivazione": "sabato niente scuola", "confronto": "+30 min al giorno rispetto ad ora",
+                  "direzione": "allenta", "usata": false, "ts_server": "2026-10-01T15:00:00+00:00", "risposta": null },
+                { "id": 11, "regola_id": 2, "autore": "genitore", "stato": "pendente",
+                  "parametri_proposti": { "azione": "elimina" }, "confronto": "propone di eliminare la regola",
+                  "direzione": "elimina" } ] }
+            """.trimIndent(),
+        )
+        val (delFiglio, delGenitore) = f.propostePendenti
+        assertEquals("figlio", delFiglio.autore)
+        assertEquals("sabato niente scuola", delFiglio.motivazione)
+        assertEquals("genitore", delGenitore.autore)
+        assertEquals("elimina", delGenitore.direzione)
+        // Server più vecchio della v3.4: il campo non c'è (o è null), nessuna proposta.
+        assertTrue(finestra("").propostePendenti.isEmpty())
+        assertTrue(leggiFinestra("""{ "proposte_pendenti": null }""").propostePendenti.isEmpty())
+    }
+
+    @Test
+    fun `la famiglia dice quante proposte di ciascun figlio aspettano il genitore`() {
+        val conProposte = famigliaV3.replace(
+            "\"notifiche_non_lette\": 3,",
+            "\"notifiche_non_lette\": 3, \"proposte_da_decidere\": 2,",
+        )
+        val (andrea, luca) = (PostinoClient.interpretaFamiglia(200, conProposte) as EsitoFamiglia.Letta).famiglia.figli
+        assertEquals(2, andrea.proposteDaDecidere)
+        assertEquals(0, luca.proposteDaDecidere)
+        // Un server più vecchio non lo manda: zero.
+        val vecchia = (PostinoClient.interpretaFamiglia(200, famigliaV3) as EsitoFamiglia.Letta).famiglia.figli
+        assertEquals(listOf(0, 0), vecchia.map { it.proposteDaDecidere })
+    }
+
+    private fun decisione(codice: Int, corpo: String?) = PostinoClient.interpretaDecisione(codice, corpo)
+
+    /** Il dato di un 200 che si legge. */
+    private fun decisa(corpo: String): PropostaDecisa =
+        checkNotNull((decisione(200, corpo) as EsitoScrittura.Riuscito).dato) { "il corpo doveva leggersi: $corpo" }
+
+    @Test
+    fun `la risposta del genitore porta la proposta chiusa e la regola che ne risulta`() {
+        val accettata = decisa(
+            """{ "proposta": { "id": 12, "regola_id": 1, "autore": "figlio", "stato": "accettata", "usata": true,
+                   "confronto": "+30 min al giorno rispetto ad ora", "direzione": "allenta",
+                   "risposta": { "esito": "accetta", "motivazione": null, "ts_server": "2026-10-01T16:00:00+00:00" } },
+                 "regola": { "id": 1, "tipo": "limite_tempo",
+                   "parametri": { "app_o_categoria": "com.zhiliaoapp.musically", "minuti_al_giorno": 90 },
+                   "attiva": true, "figlio_id": 1, "dispositivo_id": 1 } }""",
+        )
+        assertEquals("accettata", accettata.proposta.stato)
+        assertTrue(accettata.proposta.usata)
+        assertEquals("accetta", accettata.proposta.risposta?.esito)
+        assertTrue(accettata.regola != null)
+        // Un'eliminazione accettata (o un rifiuto): niente regola, e va bene lo stesso.
+        val eliminata = decisa(
+            """{ "proposta": { "id": 13, "regola_id": 2, "autore": "figlio", "stato": "accettata" }, "regola": null }""",
+        )
+        assertNull(eliminata.regola)
+    }
+
+    @Test
+    fun `un 2xx e una decisione fatta anche se il corpo non si legge`() {
+        // Su un sì la regola è già cambiata: dire "riprova" farebbe sentire al padre,
+        // riprovando, che la proposta "non è più in attesa".
+        assertEquals(EsitoScrittura.Riuscito(null), decisione(200, "non è json"))
+        assertEquals(EsitoScrittura.Riuscito(null), decisione(204, null))
+        assertEquals(EsitoScrittura.Riuscito(null), decisione(200, """{ "esito": "accetta" }"""))
+        assertEquals(EsitoScrittura.Riuscito(null), PostinoClient.interpretaRitiro(200, "boh"))
+    }
+
+    @Test
+    fun `i rifiuti della risposta del genitore portano su il loro codice`() {
+        listOf("proposta_non_pendente", "ultima_regola", "dispositivo_revocato").forEach { codice ->
+            assertEquals(
+                EsitoScrittura.Rifiutato(codice),
+                decisione(409, """{"detail": {"errore": "$codice"}}"""),
+            )
+        }
+        // Un 404 della rotta: la proposta (o il figlio) non c'è.
+        assertEquals(
+            EsitoScrittura.Rifiutato(CodiciErrore.NON_TROVATO),
+            decisione(404, """{"detail": "proposta non trovata"}"""),
+        )
+        // Una rotta che il server non conosce: va aggiornato, come per il ritiro.
+        assertEquals(
+            EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE),
+            decisione(404, """{"detail": "Not Found"}"""),
+        )
+        assertEquals(
+            EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE),
+            decisione(405, """{"detail": "Method Not Allowed"}"""),
+        )
+        assertEquals(EsitoScrittura.Fallito, decisione(500, null))
+    }
+
+    @Test
+    fun `il corpo della risposta porta il figlio, e non scrive un perche vuoto`() {
+        assertEquals(
+            """{"esito":"rifiuta"}""",
+            jsonScrittura.encodeToString(CorpoRispostaProposta.serializer(), CorpoRispostaProposta("rifiuta")),
+        )
+        assertEquals(
+            """{"esito":"accetta","motivazione":"solo il sabato","figlio_id":2}""",
+            jsonScrittura.encodeToString(
+                CorpoRispostaProposta.serializer(),
+                CorpoRispostaProposta("accetta", "solo il sabato", figlioId = 2),
+            ),
+        )
+    }
+
+    @Test
+    fun `le proposte si chiedono sempre di tutti e due gli autori`() {
+        // Senza `autori=tutti` il server v3.4 manda solo quelle del genitore (app 0.8/0.9).
+        assertEquals("/api/proposte?autori=tutti", PostinoClient.percorsoProposte(null))
+        assertEquals("/api/proposte?figlio_id=2&autori=tutti", PostinoClient.percorsoProposte(2))
+    }
+
+    @Test
+    fun `un ritiro su un server che non lo conosce dice di aggiornare il server`() {
+        // FastAPI su una rotta che non esiste: 404 "Not Found" (o 405 dietro altri giri).
+        assertEquals(
+            EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE),
+            PostinoClient.interpretaRitiro(404, """{"detail": "Not Found"}"""),
+        )
+        assertEquals(
+            EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE),
+            PostinoClient.interpretaRitiro(405, """{"detail": "Method Not Allowed"}"""),
+        )
+        assertEquals(
+            EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE),
+            PostinoClient.interpretaRitiro(404, ""),
+        )
+        // Un 404 detto dalla rotta che c'è: la proposta non c'è più, il server va bene.
+        assertEquals(
+            EsitoScrittura.Rifiutato(CodiciErrore.NON_TROVATO),
+            PostinoClient.interpretaRitiro(404, """{"detail": "proposta non trovata"}"""),
+        )
+    }
+
+    @Test
+    fun `un ritiro riuscito porta la proposta ritirata, uno arrivato tardi il suo codice`() {
+        val ritirata = PostinoClient.interpretaRitiro(
+            200,
+            """{ "id": 5, "regola_id": 1, "autore": "genitore", "stato": "ritirata", "usata": false,
+                 "confronto": "−30 min al giorno rispetto ad ora", "direzione": "stringe" }""",
+        ) as EsitoScrittura.Riuscito
+        assertEquals("ritirata", ritirata.dato?.stato)
+        assertEquals(
+            EsitoScrittura.Rifiutato(CodiciErrore.PROPOSTA_NON_PENDENTE),
+            PostinoClient.interpretaRitiro(409, """{"detail": {"errore": "proposta_non_pendente"}}"""),
+        )
+        // La proposta di un altro: un 403 non è un codice da dire, "riprova".
+        assertEquals(EsitoScrittura.Fallito, PostinoClient.interpretaRitiro(403, """{"detail": "non tua"}"""))
+    }
+
+    @Test
+    fun `la card sparisce solo quando la proposta non e piu in attesa`() {
+        val riuscita = EsitoScrittura.Riuscito(Unit)
+        assertTrue(propostaChiusaDopo(riuscita))
+        assertTrue(propostaChiusaDopo(EsitoScrittura.Rifiutato(CodiciErrore.PROPOSTA_NON_PENDENTE)))
+        assertTrue(propostaChiusaDopo(EsitoScrittura.Rifiutato(CodiciErrore.NON_TROVATO)))
+        // Ultima regola o dispositivo scollegato: resta in attesa, si può ancora rifiutare.
+        assertFalse(propostaChiusaDopo(EsitoScrittura.Rifiutato(CodiciErrore.ULTIMA_REGOLA)))
+        assertFalse(propostaChiusaDopo(EsitoScrittura.Rifiutato(CodiciErrore.DISPOSITIVO_REVOCATO)))
+        assertFalse(propostaChiusaDopo(EsitoScrittura.Rifiutato(null)))
+        // Rete caduta: non si sa niente, la card resta.
+        assertFalse(propostaChiusaDopo(EsitoScrittura.Fallito))
     }
 
     @Test

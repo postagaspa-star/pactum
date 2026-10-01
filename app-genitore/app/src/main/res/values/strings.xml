@@ -41,7 +41,7 @@
 
     <!-- Cornice: cos\'è Pactum e ruolo del genitore (card in cima alla Panoramica) -->
     <string name="intro_titolo">Come funziona Pactum</string>
-    <string name="intro_testo">In Pactum è tuo figlio a darsi le regole. Tu le vedi e puoi proporre modifiche, ma non le imponi. L\'app non blocca niente: è un testimone, non un controllore. Il tuo ruolo è verificare e proporre, con fiducia.</string>
+    <string name="intro_testo">In Pactum è tuo figlio a darsi le regole. Tu le vedi e puoi proporre modifiche, ma non le imponi. Anche lui può chiederti di cambiare una sua regola: decidi tu. L\'app non blocca niente: è un testimone, non un controllore. Il tuo ruolo è verificare, proporre e rispondere alle sue proposte, con fiducia.</string>
     <string name="intro_chiudi">Ho capito</string>
 
     <!-- Finestra (Panoramica) -->
@@ -258,6 +258,9 @@
     <string name="tipo_novita">Novità dal patto</string>
     <string name="tipo_proposta_risposta">Risposta a una proposta</string>
     <string name="tipo_proposta_annullata">Proposta annullata</string>
+    <!-- (0.10) Le proposte del figlio -->
+    <string name="tipo_nuova_proposta">Nuova proposta</string>
+    <string name="tipo_proposta_ritirata">Proposta ritirata</string>
     <string name="tipo_dichiarazione">Dichiarazione del figlio</string>
     <!-- v3: il computer che si spegne e si riaccende. Non sono interruzioni. -->
     <string name="tipo_computer_spento">Computer spento</string>
@@ -281,6 +284,16 @@
     <string name="notifica_proposta_accettata">Ha accettato la tua proposta %1$s</string>
     <string name="notifica_proposta_rifiutata">Ha rifiutato la tua proposta %1$s</string>
     <string name="notifica_proposta_annullata">La tua proposta %1$s non vale più: la regola non è più attiva</string>
+    <!-- (0.10) Le proposte del figlio: chi propone sta nel titolo, la regola nel testo -->
+    <string name="notifica_ti_propone">%1$s ti propone un cambio</string>
+    <string name="notifica_ti_propone_senza_nome">Tuo figlio ti propone un cambio</string>
+    <string name="notifica_proposta_su">Proposta %1$s: %2$s</string>
+    <string name="notifica_proposta_su_regola">Proposta %1$s</string>
+    <string name="notifica_ha_ritirato">%1$s ha ritirato la sua proposta</string>
+    <string name="notifica_ha_ritirato_senza_nome">Tuo figlio ha ritirato la sua proposta</string>
+    <string name="notifica_regola_resta">La regola %1$s resta com\'è.</string>
+    <string name="notifica_proposta_del_figlio_annullata">La proposta di %1$s %2$s non vale più: la regola non è più attiva</string>
+    <string name="notifica_proposta_del_figlio_annullata_senza_nome">La proposta di tuo figlio %1$s non vale più: la regola non è più attiva</string>
     <string name="notifica_dichiarazione_successo">Dice di aver fatto: %1$s (%2$s)</string>
     <string name="notifica_dichiarazione_fallimento">Dice di non aver fatto: %1$s (%2$s)</string>
 
@@ -547,6 +560,76 @@
     <string name="proposta_errore_gia_pendente">C\'è già una proposta in attesa su questa regola.</string>
     <string name="proposta_errore_regola_non_valida">Questa regola non è più attiva.</string>
     <string name="proposta_errore_parametri_non_validi">Qualche valore non va bene: controlla i campi e riprova.</string>
+
+    <!-- (0.10) Le proposte del figlio (contratto v3.4): il figlio chiede un cambio a
+         una sua regola, il genitore decide. Se accetta, vale subito, anche se allenta. -->
+    <string name="proposte_da_decidere">DA DECIDERE</string>
+    <string name="proposta_ti_propone">%1$s ti propone:</string>
+    <string name="proposta_ti_propone_senza_nome">Tuo figlio ti propone:</string>
+    <string name="proposta_togliere_regola">Togliere la regola «%1$s»</string>
+    <!-- Una proposta che cambia app la dice col suo nome; senza nome, mai il pacchetto -->
+    <string name="bersaglio_altra_app">Un\'altra app</string>
+    <string name="bersaglio_altra_app_in_frase">un\'altra app</string>
+    <string name="bersaglio_totale_telefono_in_frase">tutto il telefono</string>
+    <string name="bersaglio_totale_computer_in_frase">tutto il computer</string>
+    <!-- Il cambio di app (o di categoria, o di tutto il dispositivo) detto dall\'app -->
+    <string name="proposta_confronto_bersaglio">Da %1$s (%2$s) a %3$s (%4$s) al giorno</string>
+    <!-- La regola e dove vale: "Minecraft: al massimo 2 h al giorno · sul computer" -->
+    <string name="proposta_regola_e_dove">%1$s · %2$s</string>
+    <string name="proposta_sul_telefono">sul telefono</string>
+    <string name="proposta_sul_computer">sul computer</string>
+    <!-- Con più dispositivi, anche il nome: "sul computer «Computer di camera»" -->
+    <string name="proposta_sul_dispositivo_col_nome">%1$s «%2$s»</string>
+    <string name="proposta_vale_subito">Se accetti, vale subito.</string>
+    <!-- Una proposta su una regola di un dispositivo scollegato si può solo rifiutare -->
+    <string name="proposta_dispositivo_scollegato">Questa regola è di un dispositivo scollegato e non si cambia più: puoi solo rifiutare la proposta.</string>
+    <string name="proposta_accetta">Accetta</string>
+    <string name="proposta_rifiuta">Rifiuta</string>
+    <string name="proposta_accetta_titolo">Accetti la proposta di %1$s?</string>
+    <string name="proposta_accetta_titolo_senza_nome">Accetti la proposta di tuo figlio?</string>
+    <string name="proposta_rifiuta_titolo">Rifiuti la proposta di %1$s?</string>
+    <string name="proposta_rifiuta_titolo_senza_nome">Rifiuti la proposta di tuo figlio?</string>
+    <string name="proposta_rifiuta_spiega">La regola resta com\'è.</string>
+    <string name="proposta_campo_perche">Perché? (facoltativo)</string>
+    <string name="decisione_accettata">Fatto: la regola è cambiata.</string>
+    <string name="decisione_accettata_eliminazione">Fatto: la regola non c\'è più.</string>
+    <string name="decisione_rifiutata">Hai rifiutato la proposta.</string>
+    <string name="decisione_errore_ultima_regola">Non si può togliere: è l\'ultima regola rimasta nel patto. La proposta resta in attesa: puoi rifiutarla.</string>
+    <string name="decisione_errore_dispositivo_scollegato">Questa regola è di un dispositivo scollegato e non si cambia più. La proposta resta in attesa: puoi rifiutarla.</string>
+    <string name="decisione_errore_non_trovata">Non trovo più questa proposta: ho riletto le proposte.</string>
+    <string name="decisione_errore_generico">Non sono riuscito a mandare la risposta: riprova.</string>
+    <string name="decisione_errore_server_da_aggiornare">Per rispondere alle proposte di tuo figlio serve aggiornare il server di Pactum.</string>
+    <!-- Una proposta che non era più in attesa: com\'è finita davvero, dalla rilettura.
+         "Una sua" = di tuo figlio (rispondi tu); "una tua" = l\'hai fatta tu (risponde lui). -->
+    <string name="non_pendente_accettata">Era già stata accettata.</string>
+    <string name="non_pendente_rifiutata">Era già stata rifiutata.</string>
+    <string name="non_pendente_ritirata_dal_figlio">Tuo figlio l\'ha ritirata: non è più in attesa.</string>
+    <string name="non_pendente_tua_accettata">Tuo figlio l\'aveva già accettata.</string>
+    <string name="non_pendente_tua_rifiutata">Tuo figlio l\'aveva già rifiutata.</string>
+    <string name="non_pendente_tua_ritirata">Era già stata ritirata.</string>
+    <string name="non_pendente_annullata">Non vale più: la regola non è più attiva.</string>
+    <string name="non_pendente_generico">È già stata decisa, ritirata o annullata.</string>
+    <!-- Ritirare una proposta tua, finché il figlio non ha risposto -->
+    <string name="proposta_ritira">Ritira</string>
+    <string name="proposta_ritira_titolo">Ritirare la proposta?</string>
+    <string name="proposta_ritira_spiega">Non sarà più in attesa di risposta, e la regola resta com\'è.</string>
+    <string name="proposta_ritirata_fatto">Proposta ritirata.</string>
+    <string name="ritiro_errore_server_da_aggiornare">Per ritirare una proposta serve aggiornare il server di Pactum.</string>
+    <string name="ritiro_errore_non_trovata">Non trovo più questa proposta: ho riletto le proposte.</string>
+    <string name="ritiro_errore_generico">Non sono riuscito a ritirare la proposta: riprova.</string>
+    <!-- Nella storia: chi ha proposto, e com\'è finita -->
+    <string name="proposta_autore_tua">Proposta tua</string>
+    <string name="proposta_autore_figlio">Proposta di %1$s</string>
+    <string name="proposta_autore_figlio_senza_nome">Proposta di tuo figlio</string>
+    <string name="proposta_stato_ritirata">Ritirata</string>
+    <string name="proposta_tua_risposta_accettata">Hai accettato</string>
+    <string name="proposta_tua_risposta_rifiutata">Hai rifiutato</string>
+    <string name="proposta_tua_risposta_motivazione">Hai detto: %1$s</string>
+    <!-- Su una regola con la proposta del figlio in attesa non se ne manda un\'altra -->
+    <string name="proposte_gia_proposta_del_figlio">Su questa regola c\'è già una proposta di %1$s: la trovi qui sopra, da decidere.</string>
+    <string name="proposte_gia_proposta_del_figlio_senza_nome">Su questa regola c\'è già una proposta di tuo figlio: la trovi qui sopra, da decidere.</string>
+    <!-- Nella scelta del figlio in cima: quante sue proposte aspettano te -->
+    <string name="figlio_da_decidere">%1$d da decidere</string>
 
     <!-- Proposte: dialogo di creazione -->
     <string name="proposta_crea_titolo">Proponi una modifica</string>

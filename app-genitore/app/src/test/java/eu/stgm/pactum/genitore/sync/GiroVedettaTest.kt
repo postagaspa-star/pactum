@@ -1,5 +1,6 @@
 package eu.stgm.pactum.genitore.sync
 
+import eu.stgm.pactum.genitore.MainActivity
 import eu.stgm.pactum.genitore.dati.Notifica
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -246,5 +247,19 @@ class GiroVedettaTest {
     fun `il risveglio dura piu del giro piu lungo, e i nomi aspettano meno di una richiesta`() {
         assertTrue(CadenzaVedetta.RISVEGLIO_MASSIMO_MS > CadenzaVedetta.GIRO_MASSIMO_MS)
         assertTrue(CadenzaVedetta.TEMPO_PER_I_NOMI_MS <= 10_000L)
+    }
+
+    // --- 0.10: dove porta il tocco su un avviso --------------------------------------------
+
+    @Test
+    fun `una proposta del figlio apre la Panoramica, dove si decide, e il suo ritiro le proposte`() {
+        assertEquals(MainActivity.DEST_FINESTRA, Vedetta.destinazionePerTipo("nuova_proposta"))
+        assertEquals(MainActivity.DEST_TURNO, Vedetta.destinazionePerTipo("proposta_ritirata"))
+        // I tipi di prima restano dove andavano.
+        assertEquals(MainActivity.DEST_TURNO, Vedetta.destinazionePerTipo("proposta_risposta"))
+        assertEquals(MainActivity.DEST_TURNO, Vedetta.destinazionePerTipo("proposta_annullata"))
+        assertEquals(MainActivity.DEST_TURNO, Vedetta.destinazionePerTipo("dichiarazione"))
+        assertEquals(MainActivity.DEST_NOTIFICHE, Vedetta.destinazionePerTipo("sforamento"))
+        assertEquals(MainActivity.DEST_NOTIFICHE, Vedetta.destinazionePerTipo("tipo_del_futuro"))
     }
 }

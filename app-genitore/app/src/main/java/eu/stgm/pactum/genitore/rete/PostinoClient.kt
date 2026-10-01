@@ -5,6 +5,7 @@ import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.ConfigurazionePostino
 import eu.stgm.pactum.genitore.dati.CorpoNomeFiglio
 import eu.stgm.pactum.genitore.dati.CorpoNuovoDispositivo
+import eu.stgm.pactum.genitore.dati.CorpoRispostaProposta
 import eu.stgm.pactum.genitore.dati.CorpoSegno
 import eu.stgm.pactum.genitore.dati.CorpoVerdetto
 import eu.stgm.pactum.genitore.dati.Dichiarazione
@@ -18,6 +19,7 @@ import eu.stgm.pactum.genitore.dati.PaccoDichiarazioni
 import eu.stgm.pactum.genitore.dati.PaccoNotifiche
 import eu.stgm.pactum.genitore.dati.PaccoProposte
 import eu.stgm.pactum.genitore.dati.Proposta
+import eu.stgm.pactum.genitore.dati.PropostaDecisa
 import eu.stgm.pactum.genitore.dati.SegnoMandato
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -102,6 +104,8 @@ sealed interface EsitoFamiglia {
  *   POST {base}/api/notifiche/{id}/letta     → 2xx = segnata
  *   POST {base}/api/segno {figlio_id}        → il riconoscimento al figlio (v2.4)
  *   POST/PATCH figli, dispositivi, codici    → la famiglia (v3)
+ *   POST {base}/api/proposte/{id}/risposta   → la decisione su una proposta del figlio (v3.4)
+ *   POST {base}/api/proposte/{id}/ritira     → il ritiro di una proposta del genitore (v3.4)
  *   header: Authorization: Bearer <token del genitore>
  *
  * `figlioId` null = server 0.7 (o figlio non ancora noto): la richiesta parte
@@ -145,8 +149,13 @@ class PostinoClient(
             ?.let { decodifica(PaccoNotifiche.serializer(), it) }
             ?.notifiche
 
+    /**
+     * GET /api/proposte. (0.10) Sempre con `autori=tutti` (contratto v3.4): senza,
+     * il server manda solo le proposte del genitore, come alle app 0.8 e 0.9. Un
+     * server più vecchio ignora il parametro (e lì le proposte sono tutte del genitore).
+     */
     suspend fun leggiProposte(figlioId: Long? = null): List<Proposta>? =
-        leggi(conFiglio("/api/proposte", figlioId))
+        leggi(percorsoProposte(figlioId))
             ?.let { decodifica(PaccoProposte.serializer(), it) }
             ?.proposte
 
@@ -202,6 +211,42 @@ class PostinoClient(
         val corpo = json.encodeToString(NuovaProposta.serializer(), nuova)
         val risposta = scrivi("POST", "/api/proposte", corpo) ?: return EsitoScrittura.Fallito
         return interpreta(risposta, Proposta.serializer())
+    }
+
+    /**
+     * (0.10) POST /api/proposte/{id}/risposta col token del genitore (contratto
+     * v3.4): la decisione su una proposta DEL FIGLIO, [esito] `accetta` o
+     * `rifiuta`. `accetta` applica subito la modifica lato server, anche se
+     * allenta. `Rifiutato` = 409 (`proposta_non_pendente`, `ultima_regola`,
+     * `dispositivo_revocato`: in questi ultimi due la proposta resta in attesa) o
+     * 404 (la proposta non c'è più). Il doppio invio non applica due volte: il
+     * server ne fa passare uno solo, l'altro riceve `proposta_non_pendente`.
+     * V. [interpretaDecisione]: conta il 2xx, non la forma del corpo.
+     */
+    suspend fun rispondiProposta(
+        propostaId: Long,
+        esito: String,
+        motivazione: String?,
+        figlioId: Long? = null,
+    ): EsitoScrittura<PropostaDecisa?> {
+        val corpo = json.encodeToString(
+            CorpoRispostaProposta.serializer(),
+            CorpoRispostaProposta(esito, motivazione, figlioId),
+        )
+        val risposta = scrivi("POST", "/api/proposte/$propostaId/risposta", corpo)
+            ?: return EsitoScrittura.Fallito
+        return interpretaDecisione(risposta.codice, risposta.corpo)
+    }
+
+    /**
+     * (0.10) POST /api/proposte/{id}/ritira (contratto v3.4): il genitore ritira
+     * una SUA proposta ancora in attesa. Nessun corpo; la regola non cambia. Un
+     * server più vecchio non conosce la rotta: v. [interpretaRitiro].
+     */
+    suspend fun ritiraProposta(propostaId: Long): EsitoScrittura<Proposta?> {
+        val risposta = richiedi("POST", "/api/proposte/$propostaId/ritira", CORPO_VUOTO)
+            ?: return EsitoScrittura.Fallito
+        return interpretaRitiro(risposta.codice, risposta.corpo)
     }
 
     /** POST /api/dichiarazioni/{id}/verdetto: la dichiarazione aggiornata o l'errore. */
@@ -388,6 +433,13 @@ class PostinoClient(
             if (figlioId == null) percorso else "$percorso?figlio_id=$figlioId"
 
         /**
+         * (0.10) GET /api/proposte con le proposte di tutti e due gli autori
+         * (`autori=tutti`, contratto v3.4), e `figlio_id` quando il figlio è noto.
+         */
+        internal fun percorsoProposte(figlioId: Long?): String =
+            if (figlioId == null) "/api/proposte?autori=tutti" else "/api/proposte?figlio_id=$figlioId&autori=tutti"
+
+        /**
          * (v3.3) Il percorso delle notifiche, con `?dopo_id=n` solo se c'è un id
          * valido (il server rifiuta un numero negativo con un 422).
          */
@@ -428,6 +480,52 @@ class PostinoClient(
          */
         internal fun interpretaSenzaDato(codice: Int, corpo: String?): EsitoScrittura<Unit> =
             if (codice in 200..299) EsitoScrittura.Riuscito(Unit) else rifiuto(codice, corpo)
+
+        /**
+         * (0.10) L'esito di una risposta del genitore a una proposta del figlio.
+         * Qualunque 2xx vuol dire che il server l'ha presa (e, su un sì, che la
+         * regola è già cambiata): il dato è la proposta chiusa se il corpo si legge,
+         * null se no. Un corpo inatteso non deve far dire "riprova" su una decisione
+         * già fatta: riprovando, il padre si sentirebbe dire che la proposta non è
+         * più in attesa. L'app comunque rilegge. Come nel ritiro, una rotta che il
+         * server non conosce (404 "Not Found", 405) vuol dire server da aggiornare;
+         * un 404 della rotta, una proposta (o un figlio) che non c'è. Il resto come
+         * ogni scrittura.
+         */
+        internal fun interpretaDecisione(codice: Int, corpo: String?): EsitoScrittura<PropostaDecisa?> = when {
+            codice in 200..299 -> EsitoScrittura.Riuscito(corpo?.let { decodifica(PropostaDecisa.serializer(), it) })
+            codice == 405 -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            else -> rifiuto(codice, corpo)
+        }
+
+        /**
+         * (0.10) L'esito di POST /api/proposte/{id}/ritira. Come per la decisione,
+         * qualunque 2xx è un ritiro fatto (il dato è la proposta ritirata, se il
+         * corpo si legge). Un server più vecchio della v3.4 non ha la rotta e
+         * risponde 404 o 405 (contratto v3.4, "Compatibilità"): non è un errore da
+         * riprovare, serve aggiornare il server ([CodiciErrore.SERVER_DA_AGGIORNARE]).
+         * Un 404 detto dalla rotta stessa (`{"detail": "proposta non trovata"}`) è
+         * invece una proposta che non c'è più. Il resto come ogni scrittura (409
+         * `proposta_non_pendente`, …).
+         */
+        internal fun interpretaRitiro(codice: Int, corpo: String?): EsitoScrittura<Proposta?> = when {
+            codice in 200..299 -> EsitoScrittura.Riuscito(corpo?.let { decodifica(Proposta.serializer(), it) })
+            codice == 405 -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            else -> rifiuto(codice, corpo)
+        }
+
+        /**
+         * (0.10) true = un 404 della rotta che non esiste: `{"detail": "Not Found"}`,
+         * la risposta di FastAPI a un indirizzo che non conosce, oppure un corpo che
+         * non si legge. Un 404 con un altro `detail` viene da una rotta che c'è.
+         */
+        internal fun rottaSconosciuta(corpo: String?): Boolean {
+            val (_, oggetto) = corpoDelRifiuto(corpo) ?: return true
+            val dettaglio = oggetto["detail"] ?: return true
+            return testo(dettaglio) == "Not Found"
+        }
 
         private fun rifiuto(codice: Int, corpo: String?): EsitoScrittura<Nothing> = when (codice) {
             // 409 = rifiuto del contratto (proposta già pendente, dichiarazione non

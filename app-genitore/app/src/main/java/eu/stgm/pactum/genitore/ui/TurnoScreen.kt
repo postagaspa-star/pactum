@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -42,8 +43,8 @@ import kotlinx.coroutines.launch
 
 /**
  * "Proposte e conferme": le risposte che il genitore deve dare, in una schermata sola
- * (tavola rotonda C3/C4). Prima le proposte (da mandare, in attesa, come sono
- * andate), sotto le dichiarazioni del figlio da confermare.
+ * (tavola rotonda C3/C4). Prima le proposte ((0.10) da decidere, da mandare, in
+ * attesa, come sono andate), sotto le dichiarazioni del figlio da confermare.
  *
  * Riusa i due ViewModel di prima, senza toccarne la logica di rete: ognuno
  * legge i suoi dati e porta i suoi esiti; qui si mettono solo uno sopra l'altro.
@@ -83,29 +84,44 @@ fun TurnoScreen(
     }
 
     // Gli esiti delle proposte: il confronto in un dialogo, gli errori in basso.
-    // Le frasi vengono dal codice `errore` del 409 (Testi.kt).
+    // Le frasi vengono dal codice `errore` del 409 (Testi.kt). (0.10) Arrivano da un
+    // canale di questa schermata, uno per volta: nessuno copre l'altro, e quelli
+    // della Panoramica restano là. Lo snackbar parte in uno scope suo.
     val parole = parole()
     val ambito = rememberCoroutineScope()
-    LaunchedEffect(proposte.evento) {
-        val evento = proposte.evento ?: return@LaunchedEffect
-        // Consumato subito, e lo snackbar parte in uno scope suo: consumare
-        // cambia la chiave e cancellerebbe questo effetto a metà messaggio.
-        proposteVm.consumaEvento()
-        when (evento) {
-            is ProposteViewModel.Evento.Inviata -> {
-                regolaSceltaId = null // chiudi il dialogo di creazione
-                confrontoInviato = evento.confronto
-            }
-            is ProposteViewModel.Evento.Errore -> {
-                // Già una proposta in attesa, o regola non più attiva: riprovare
-                // non serve. Via il dialogo, e si rilegge com'è davvero.
-                if (rifiutoPropostaDefinitivo(evento.codice)) {
-                    regolaSceltaId = null
-                    proposteVm.aggiorna(figlioId)
+    val figlioMostrato by rememberUpdatedState(figlioId)
+    LaunchedEffect(proposteVm) {
+        proposteVm.esiti(ProposteViewModel.Schermata.PROPOSTE).collect { evento ->
+            val messaggio = when (evento) {
+                is ProposteViewModel.Evento.Inviata -> {
+                    regolaSceltaId = null // chiudi il dialogo di creazione
+                    confrontoInviato = evento.confronto
+                    null
                 }
-                val messaggio = parole.testo(messaggioRifiutoProposta(evento.codice))
-                ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+                is ProposteViewModel.Evento.Errore -> {
+                    // Già una proposta in attesa, o regola non più attiva: riprovare
+                    // non serve. Via il dialogo, e si rilegge com'è davvero.
+                    if (rifiutoPropostaDefinitivo(evento.codice)) {
+                        regolaSceltaId = null
+                        proposteVm.aggiorna(figlioMostrato)
+                    }
+                    parole.testo(messaggioRifiutoProposta(evento.codice))
+                }
+                // (0.10) La risposta a una proposta del figlio, e il ritiro di una tua:
+                // l'elenco si rilegge da sé, la famiglia qui (il numero accanto al nome).
+                is ProposteViewModel.Evento.Decisa -> {
+                    famigliaVm.aggiorna()
+                    parole.testo(messaggioDecisione(evento.esito, evento.eliminazione))
+                }
+                is ProposteViewModel.Evento.NonDecisa -> {
+                    famigliaVm.aggiorna()
+                    parole.testo(messaggioRifiutoDecisione(evento.codice, evento.statoFinale))
+                }
+                ProposteViewModel.Evento.Ritirata -> parole.testo(R.string.proposta_ritirata_fatto)
+                is ProposteViewModel.Evento.NonRitirata ->
+                    parole.testo(messaggioRifiutoRitiro(evento.codice, evento.statoFinale))
             }
+            if (messaggio != null) ambito.launch { snackbarHostState.showSnackbar(messaggio) }
         }
     }
 
@@ -184,6 +200,25 @@ fun TurnoScreen(
                             regoleAttive = proposte.regoleAttive,
                             proposte = proposte.proposte,
                             onProponi = { regolaSceltaId = it.id },
+                            // (0.10) Le proposte del figlio da decidere, e il ritiro delle tue.
+                            regolePerId = proposte.regolePerId,
+                            nomeFiglio = famiglia.figlioScelto?.nome,
+                            piuDispositivi = proposte.piuDispositivi,
+                            giaChiuse = proposte.giaChiuse,
+                            lettaAlle = proposte.lettaAlle,
+                            nomi = proposte.nomi,
+                            scollegati = proposte.scollegati,
+                            invioInCorso = proposte.invioInCorso,
+                            onDecidi = { proposta, esito, motivazione ->
+                                proposteVm.decidi(
+                                    figlioId,
+                                    proposta,
+                                    esito,
+                                    motivazione,
+                                    da = ProposteViewModel.Schermata.PROPOSTE,
+                                )
+                            },
+                            onRitira = { proposteVm.ritira(figlioId, it) },
                         )
                         sezioneDichiarazioni(
                             dichiarazioni = verdetti.dichiarazioni,

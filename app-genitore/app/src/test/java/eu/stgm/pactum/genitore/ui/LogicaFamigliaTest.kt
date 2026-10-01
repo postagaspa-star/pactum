@@ -504,6 +504,16 @@ class LogicaFamigliaTest {
         assertEquals(listOf(1L, 5L), regoleProponibili(finestra).map { it.id })
     }
 
+    @Test
+    fun `una proposta dice su quale dispositivo vale solo se il figlio ne ha piu d'uno, scollegati esclusi`() {
+        val computer = telefono.copy(id = 2, tipo = "computer")
+        assertTrue(piuDispositiviAttivi(Finestra(dispositivi = listOf(telefono, computer))))
+        assertFalse(piuDispositiviAttivi(Finestra(dispositivi = listOf(telefono, computer.copy(revocato = true)))))
+        assertFalse(piuDispositiviAttivi(Finestra(dispositivi = listOf(telefono))))
+        // Server 0.7: nessun `dispositivi`, un telefono solo.
+        assertFalse(piuDispositiviAttivi(Finestra()))
+    }
+
     // --- le strisce dei dispositivi -----------------------------------------------------------
 
     @Test

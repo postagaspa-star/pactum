@@ -52,6 +52,11 @@ data class Finestra(
     // striscia del dispositivo), revocati compresi. Vuota = server 0.7: valgono i
     // campi di primo livello, come prima.
     val dispositivi: List<DispositivoFinestra> = emptyList(),
+    // (0.10) Le proposte in attesa del figlio, di tutti e due gli autori, dalla
+    // più recente (contratto v3.4): quelle con autore "figlio" aspettano il
+    // genitore, e la Panoramica le mette in cima. Assente (server più vecchio
+    // della v3.4) = nessuna.
+    @SerialName("proposte_pendenti") val propostePendenti: List<Proposta> = emptyList(),
 )
 
 // --- v3: famiglia, figli e dispositivi ----------------------------------------
@@ -78,6 +83,10 @@ data class Figlio(
     val riepilogo: RiepilogoFinestra? = null,
     @SerialName("notifiche_non_lette") val notificheNonLette: Int = 0,
     val dispositivi: List<Dispositivo> = emptyList(),
+    // (0.10) Quante proposte di questo figlio aspettano il genitore (pendenti con
+    // autore "figlio", contratto v3.4): il numero accanto al suo nome nella scelta
+    // in cima. Assente (server più vecchio) = 0.
+    @SerialName("proposte_da_decidere") val proposteDaDecidere: Int = 0,
 )
 
 /** Un dispositivo come lo racconta GET /api/famiglia (revocati compresi). */
@@ -175,6 +184,17 @@ object CodiciErrore {
     const val TROPPI_TENTATIVI = "troppi_tentativi"
     const val DISPOSITIVO_REVOCATO = "dispositivo_revocato"
     const val NOME_NON_VALIDO = "nome_non_valido"
+
+    // (v3.4) La risposta del genitore a una proposta del figlio, e il ritiro.
+    const val PROPOSTA_NON_PENDENTE = "proposta_non_pendente"
+    const val ULTIMA_REGOLA = "ultima_regola"
+
+    /**
+     * Coniato qui: un server più vecchio della v3.4 non conosce il ritiro di una
+     * proposta (la rotta risponde 404 o 405). Non è un errore da riprovare: serve
+     * aggiornare il server di Pactum.
+     */
+    const val SERVER_DA_AGGIORNARE = "server_da_aggiornare"
 
     /** Coniato qui per il 404 (figlio o dispositivo che non esiste più): il 404 non porta un codice. */
     const val NON_TROVATO = "non_trovato"
@@ -408,6 +428,11 @@ data class PaccoNotifiche(val notifiche: List<Notifica>)
 // Il genitore propone una modifica; il server calcola il `confronto` testuale e
 // la `direzione`, e il figlio accetta/rifiuta. La proposta accettata applica da
 // sola la modifica lato server (contratto-api.md, sezione Proposte).
+//
+// (0.10) Dal contratto v3.4 propone anche il figlio e risponde il genitore: se
+// il genitore accetta, la modifica vale subito, anche se allenta. Chi ha fatto
+// la proposta lo dice `autore`; risponde sempre l'altro, e chi l'ha fatta la può
+// ritirare finché è in attesa.
 
 /** La proposta come la restituisce POST /api/proposte e GET /api/proposte. */
 @Serializable
@@ -422,9 +447,13 @@ data class Proposta(
     val usata: Boolean = false,
     @SerialName("ts_server") val tsServer: String = "",
     val risposta: RispostaProposta? = null,
+    // (0.10) Chi l'ha fatta: "genitore" o "figlio" (contratto v3.4). Le proposte
+    // nate prima della v3.4, e tutte quelle di un server più vecchio, sono del
+    // genitore: assente (o null) vale "genitore".
+    val autore: String = AutoriProposta.GENITORE,
 )
 
-/** La risposta del figlio a una proposta (presente quando ha risposto). */
+/** La risposta a una proposta (presente quando qualcuno ha risposto): del figlio, o (0.10) del genitore. */
 @Serializable
 data class RispostaProposta(
     val esito: String,
@@ -434,6 +463,32 @@ data class RispostaProposta(
 
 @Serializable
 data class PaccoProposte(val proposte: List<Proposta> = emptyList())
+
+/**
+ * (0.10) Corpo di POST /api/proposte/{id}/risposta col token del genitore: la
+ * decisione su una proposta del figlio. Come nel verdetto, `figlio_id` dice di
+ * quale figlio è la proposta (il server risponde 404 se non combacia). I null
+ * non si scrivono: `motivazione` vuota e `figlio_id` sconosciuto restano fuori.
+ */
+@Serializable
+data class CorpoRispostaProposta(
+    val esito: String,
+    val motivazione: String? = null,
+    @SerialName("figlio_id") val figlioId: Long? = null,
+)
+
+/**
+ * (0.10) Risposta di POST /api/proposte/{id}/risposta: la proposta chiusa e la
+ * regola che ne risulta (null se la proposta era di eliminarla, o se è stata
+ * rifiutata). La regola resta un oggetto grezzo: l'app non la usa (rilegge la
+ * finestra), e una sua forma inattesa non deve far sembrare fallita una
+ * risposta andata a buon fine.
+ */
+@Serializable
+data class PropostaDecisa(
+    val proposta: Proposta,
+    val regola: JsonObject? = null,
+)
 
 /**
  * Corpo di POST /api/proposte. Per l'eliminazione, `parametriProposti` è il
@@ -453,6 +508,15 @@ object StatiProposta {
     const val ACCETTATA = "accettata"
     const val RIFIUTATA = "rifiutata"
     const val ANNULLATA = "annullata"
+
+    /** (0.10) Ritirata da chi l'aveva fatta, prima di una risposta (contratto v3.4). */
+    const val RITIRATA = "ritirata"
+}
+
+/** (0.10) Chi ha fatto una proposta (contratto v3.4): risponde sempre l'altro. */
+object AutoriProposta {
+    const val GENITORE = "genitore"
+    const val FIGLIO = "figlio"
 }
 
 object DirezioniProposta {

@@ -478,6 +478,13 @@ fun raggruppaRegole(
 fun dispositiviScollegati(finestra: Finestra): Set<Long> =
     finestra.dispositivi.filter { it.revocato }.map { it.id }.toSet()
 
+/**
+ * (0.10) true = il figlio ha più di un dispositivo non scollegato: allora una
+ * proposta dice anche su quale vale la regola ("sul telefono"). Server 0.7
+ * (nessun `dispositivi`): uno solo.
+ */
+fun piuDispositiviAttivi(finestra: Finestra): Boolean = finestra.dispositivi.count { !it.revocato } > 1
+
 /** Le regole su cui si può proporre: attive e non di un dispositivo scollegato. */
 fun regoleProponibili(finestra: Finestra): List<RegolaFinestra> {
     val scollegati = dispositiviScollegati(finestra)

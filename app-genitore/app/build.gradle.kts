@@ -29,11 +29,10 @@ android {
         minSdk = 26
         targetSdk = 35
         // Nuova funzione = nuovo versionCode, altrimenti l'auto-aggiornamento
-        // non la propone. v0.9.0: Pactum sempre attivo (avvisi entro circa un
-        // minuto, anche a schermo spento) e il limite su tutto il dispositivo
-        // (contratto v3.3).
-        versionCode = 9
-        versionName = "0.9.0"
+        // non la propone. v0.10.0: le proposte del figlio (contratto v3.4) — il
+        // genitore le accetta (valgono subito) o le rifiuta, e ritira le sue.
+        versionCode = 10
+        versionName = "0.10.0"
     }
 
     signingConfigs {

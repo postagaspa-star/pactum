@@ -36,7 +36,12 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
@@ -251,16 +256,20 @@ fun IconaDispositivo(
  * chip per figlio (la scelta resta ricordata) col numero delle sue notifiche non
  * lette; con un figlio solo, il suo nome e basta. Sul server 0.7 (o finché la
  * famiglia non si conosce) non c'è niente: l'app è quella di prima.
+ *
+ * (0.10) Accanto al nome, quante sue proposte aspettano il genitore ("Luca · 1
+ * da decidere"): con più figli si vede chi aspetta, senza aprirli uno per uno.
  */
 @Composable
 fun IntestazioneFiglio(famiglia: FamigliaViewModel.StatoFamiglia, onScegli: (Long) -> Unit) {
     if (famiglia.serverVecchio || famiglia.figli.isEmpty()) return
     val scelto = famiglia.figlioScelto
+    val p = parole()
     if (!famiglia.piuFigli) {
         val nome = scelto?.nome?.trim().orEmpty()
         if (nome.isEmpty()) return
         Text(
-            text = nome,
+            text = nomeConDaDecidere(nome, testoDaDecidere(p, scelto?.proposteDaDecidere ?: 0)),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier
                 .fillMaxWidth()
@@ -288,7 +297,9 @@ fun IntestazioneFiglio(famiglia: FamigliaViewModel.StatoFamiglia, onScegli: (Lon
             FilterChip(
                 selected = figlio.id == scelto?.id,
                 onClick = { onScegli(figlio.id) },
-                label = { Text(figlio.nome.ifBlank { senzaNome }) },
+                label = {
+                    Text(nomeConDaDecidere(figlio.nome.ifBlank { senzaNome }, testoDaDecidere(p, figlio.proposteDaDecidere)))
+                },
                 trailingIcon = if (etichettaNonLette != null) {
                     {
                         // Il blu dell'app, come il badge della campanella: mai il
@@ -305,6 +316,21 @@ fun IntestazioneFiglio(famiglia: FamigliaViewModel.StatoFamiglia, onScegli: (Lon
                     null
                 },
             )
+        }
+    }
+}
+
+/**
+ * (0.10) Il nome del figlio e, se ce ne sono, le sue proposte da decidere nel blu
+ * dell'app ("Luca · 1 da decidere"): si notano, senza il rosso del patto.
+ */
+@Composable
+private fun nomeConDaDecidere(nome: String, daDecidere: String?): AnnotatedString = buildAnnotatedString {
+    append(nome)
+    if (daDecidere != null) {
+        append(" · ")
+        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)) {
+            append(daDecidere)
         }
     }
 }

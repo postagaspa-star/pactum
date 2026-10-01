@@ -31,8 +31,10 @@ android {
         // Nuova funzione = nuovo versionCode, altrimenti l'auto-aggiornamento
         // non la propone. v0.10.0: le proposte del figlio (contratto v3.4) — il
         // genitore le accetta (valgono subito) o le rifiuta, e ritira le sue.
-        versionCode = 10
-        versionName = "0.10.0"
+        // v0.11.0: le Sessioni (contratto v3.5) — il genitore approva (o no) le
+        // sessioni del figlio e ogni loro cambio, e vede quelle fatte.
+        versionCode = 11
+        versionName = "0.11.0"
     }
 
     signingConfigs {

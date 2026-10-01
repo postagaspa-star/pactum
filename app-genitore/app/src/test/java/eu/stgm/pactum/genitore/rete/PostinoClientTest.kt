@@ -3,6 +3,7 @@ package eu.stgm.pactum.genitore.rete
 import eu.stgm.pactum.genitore.dati.CodiceAbbinamento
 import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.CorpoRispostaProposta
+import eu.stgm.pactum.genitore.dati.CorpoRispostaSessione
 import eu.stgm.pactum.genitore.dati.CorpoSegno
 import eu.stgm.pactum.genitore.dati.CorpoVerdetto
 import eu.stgm.pactum.genitore.dati.Finestra
@@ -12,6 +13,7 @@ import eu.stgm.pactum.genitore.dati.PaccoProposte
 import eu.stgm.pactum.genitore.dati.PropostaDecisa
 import eu.stgm.pactum.genitore.dati.RiepilogoFinestra
 import eu.stgm.pactum.genitore.dati.SegnoMandato
+import eu.stgm.pactum.genitore.dati.Sessione
 import eu.stgm.pactum.genitore.ui.FinestraViewModel.EsitoSegno
 import eu.stgm.pactum.genitore.ui.esitoDelSegno
 import eu.stgm.pactum.genitore.ui.propostaChiusaDopo
@@ -640,6 +642,228 @@ class PostinoClientTest {
         assertFalse(propostaChiusaDopo(EsitoScrittura.Rifiutato(null)))
         // Rete caduta: non si sa niente, la card resta.
         assertFalse(propostaChiusaDopo(EsitoScrittura.Fallito))
+    }
+
+    // --- 0.11: le sessioni sul filo (contratto v3.5) --------------------------------------
+
+    /** Una finestra v3.5 com'è scritta nel contratto, con una sessione per tipo. */
+    private val finestraConSessioni = """
+        { "sessioni": [
+            { "id": 3, "dispositivo_id": 1, "dispositivo": { "id": 1, "nome": "Telefono", "tipo": "telefono" },
+              "nome": "Studio", "app": ["eu.spaggiari.classevivafamiglia", "gruppo:apk"],
+              "nomi": { "eu.spaggiari.classevivafamiglia": "ClasseViva", "gruppo:apk": "App installate da APK" },
+              "stato": "approvata",
+              "modifica_in_attesa": { "nome": "Compiti", "app": ["eu.spaggiari.classevivafamiglia"],
+                                      "nomi": { "eu.spaggiari.classevivafamiglia": "ClasseViva" },
+                                      "richiesta_ts": "2026-10-01T15:30:00+00:00" },
+              "motivazione": null, "versione": 4,
+              "creata_ts": "2026-10-01T13:00:00+00:00", "approvata_ts": "2026-10-01T13:05:00+00:00" },
+            { "id": 4, "dispositivo_id": 1, "nome": "Lavoro", "app": ["com.slack"], "nomi": null,
+              "stato": "in_attesa", "modifica_in_attesa": null, "motivazione": null } ],
+          "sessioni_da_approvare": 2,
+          "sessioni_svolte": [
+            { "id": 12, "sessione_id": 3, "dispositivo_id": 1, "nome": "Studio",
+              "app": ["eu.spaggiari.classevivafamiglia"], "nomi": { "eu.spaggiari.classevivafamiglia": "ClasseViva" },
+              "inizio_ts": "2026-10-01T13:02:00+00:00", "durata_minuti": 120,
+              "fine_prevista_ts": "2026-10-01T15:02:00+00:00", "fine_ts": "2026-10-01T14:40:00+00:00",
+              "chiusura": "terminata", "in_corso": false },
+            { "id": 13, "sessione_id": 4, "dispositivo_id": 1, "nome": "Lavoro", "app": ["com.slack"], "nomi": {},
+              "inizio_ts": "2026-10-01T16:30:00+00:00", "durata_minuti": 60,
+              "fine_prevista_ts": "2026-10-01T17:30:00+00:00", "fine_ts": null, "chiusura": null, "in_corso": true } ],
+          "uso_recente": [ { "giorno": "2026-10-01", "totale_minuti": 95, "sessioni_minuti": 80, "app": [], "categorie": [] } ],
+          "dispositivi": [ { "id": 1, "nome": "Telefono", "tipo": "telefono",
+              "uso_recente": [ { "giorno": "2026-09-30", "totale_minuti": 120, "app": [], "categorie": [] },
+                               { "giorno": "2026-10-01", "totale_minuti": 95, "sessioni_minuti": 80,
+                                 "app": [], "categorie": [] } ] } ] }
+    """.trimIndent()
+
+    @Test
+    fun `la finestra porta le sessioni, quante aspettano e quelle fatte`() {
+        val f = leggiFinestra(finestraConSessioni)
+        val (studio, lavoro) = f.sessioni
+        assertEquals("Studio", studio.nome)
+        assertEquals(listOf("eu.spaggiari.classevivafamiglia", "gruppo:apk"), studio.app)
+        assertEquals("ClasseViva", studio.nomi["eu.spaggiari.classevivafamiglia"])
+        assertEquals("telefono", studio.dispositivo?.tipo)
+        assertEquals("approvata", studio.stato)
+        assertEquals("Compiti", studio.modificaInAttesa?.nome)
+        assertEquals(listOf("eu.spaggiari.classevivafamiglia"), studio.modificaInAttesa?.app)
+        assertEquals("2026-10-01T15:30:00+00:00", studio.modificaInAttesa?.richiestaTs)
+        assertEquals(4, studio.versione)
+        assertEquals("2026-10-01T13:05:00+00:00", studio.approvataTs)
+        // Nomi a null, nessun cambio, nessuna versione: vuoti e null, non un errore.
+        assertTrue(lavoro.nomi.isEmpty())
+        assertNull(lavoro.modificaInAttesa)
+        assertNull(lavoro.versione)
+        assertEquals("in_attesa", lavoro.stato)
+        assertEquals(2, f.sessioniDaApprovare)
+        val (chiusaPrima, inCorso) = f.sessioniSvolte
+        assertEquals("terminata", chiusaPrima.chiusura)
+        assertEquals(120, chiusaPrima.durataMinuti)
+        assertEquals("2026-10-01T14:40:00+00:00", chiusaPrima.fineTs)
+        assertEquals(3L, chiusaPrima.sessioneId)
+        assertTrue(inCorso.inCorso)
+        assertNull(inCorso.chiusura)
+        assertNull(inCorso.fineTs)
+    }
+
+    @Test
+    fun `i minuti in sessione arrivano nel giorno, e mancano dove il telefono non li manda`() {
+        val f = leggiFinestra(finestraConSessioni)
+        assertEquals(80, f.usoRecente.single().sessioniMinuti)
+        val (ieri, oggi) = f.dispositivi.single().usoRecente
+        assertNull(ieri.sessioniMinuti)
+        assertEquals(80, oggi.sessioniMinuti)
+        assertNull(leggiFinestra("""{ "uso_recente": [ { "giorno": "2026-10-01", "sessioni_minuti": null } ] }""").usoRecente.single().sessioniMinuti)
+    }
+
+    @Test
+    fun `un modifica_in_attesa senza qualche campo vale come adesso per quei campi`() {
+        val sessione = PostinoClient.json.decodeFromString(
+            Sessione.serializer(),
+            """{ "id": 3, "nome": "Studio", "app": ["gruppo:apk"], "stato": "approvata",
+                 "modifica_in_attesa": { "app": ["com.duolingo", "gruppo:apk"] } }""",
+        )
+        assertNull(sessione.modificaInAttesa?.nome)
+        assertNull(sessione.modificaInAttesa?.nomi)
+        assertEquals(listOf("com.duolingo", "gruppo:apk"), sessione.modificaInAttesa?.app)
+    }
+
+    @Test
+    fun `un server piu vecchio della v3,5 non manda niente delle sessioni, e la finestra si legge`() {
+        val vecchia = finestra("")
+        assertTrue(vecchia.sessioni.isEmpty())
+        assertEquals(0, vecchia.sessioniDaApprovare)
+        assertTrue(vecchia.sessioniSvolte.isEmpty())
+        val aNull = leggiFinestra("""{ "sessioni": null, "sessioni_da_approvare": null, "sessioni_svolte": null }""")
+        assertTrue(aNull.sessioni.isEmpty())
+        assertEquals(0, aNull.sessioniDaApprovare)
+        assertTrue(aNull.sessioniSvolte.isEmpty())
+    }
+
+    @Test
+    fun `la famiglia dice quante sessioni di ciascun figlio aspettano il genitore`() {
+        val conSessioni = famigliaV3.replace(
+            "\"notifiche_non_lette\": 3,",
+            "\"notifiche_non_lette\": 3, \"proposte_da_decidere\": 1, \"sessioni_da_approvare\": 2,",
+        )
+        val (andrea, luca) = (PostinoClient.interpretaFamiglia(200, conSessioni) as EsitoFamiglia.Letta).famiglia.figli
+        assertEquals(2, andrea.sessioniDaApprovare)
+        assertEquals(1, andrea.proposteDaDecidere)
+        assertEquals(0, luca.sessioniDaApprovare)
+        // Un server più vecchio non lo manda: zero.
+        val vecchia = (PostinoClient.interpretaFamiglia(200, famigliaV3) as EsitoFamiglia.Letta).famiglia.figli
+        assertEquals(listOf(0, 0), vecchia.map { it.sessioniDaApprovare })
+    }
+
+    @Test
+    fun `le sessioni del figlio si leggono, e un server vecchio va aggiornato`() {
+        assertEquals("/api/sessioni?figlio_id=2", PostinoClient.conFiglio("/api/sessioni", 2))
+        val lette = PostinoClient.interpretaSessioni(
+            200,
+            """{ "sessioni": [ { "id": 3, "nome": "Studio", "app": ["gruppo:apk"], "stato": "in_attesa" } ] }""",
+        ) as EsitoSessioni.Lette
+        assertEquals(listOf(3L), lette.sessioni.map { it.id })
+        assertEquals(EsitoSessioni.Lette(emptyList()), PostinoClient.interpretaSessioni(200, """{ "sessioni": [] }"""))
+        // La rotta che il server non conosce: server più vecchio della v3.5.
+        assertEquals(EsitoSessioni.ServerVecchio, PostinoClient.interpretaSessioni(404, """{"detail": "Not Found"}"""))
+        assertEquals(EsitoSessioni.ServerVecchio, PostinoClient.interpretaSessioni(405, """{"detail": "Method Not Allowed"}"""))
+        // Un 404 della rotta (il figlio non c'è), un errore, un corpo che non si legge: da ritentare.
+        assertEquals(EsitoSessioni.Fallita, PostinoClient.interpretaSessioni(404, """{"detail": "figlio non trovato"}"""))
+        assertEquals(EsitoSessioni.Fallita, PostinoClient.interpretaSessioni(500, null))
+        assertEquals(EsitoSessioni.Fallita, PostinoClient.interpretaSessioni(200, "non è json"))
+    }
+
+    private fun rispostaSessione(codice: Int, corpo: String?) = PostinoClient.interpretaRispostaSessione(codice, corpo)
+
+    @Test
+    fun `la risposta a una sessione - un 2xx e fatta, anche col corpo che non si legge`() {
+        val approvata = rispostaSessione(
+            200,
+            """{ "id": 3, "nome": "Studio", "app": ["gruppo:apk"], "stato": "approvata",
+                 "modifica_in_attesa": null, "versione": 3, "approvata_ts": "2026-10-01T13:05:00+00:00" }""",
+        ) as EsitoRispostaSessione.Decisa
+        assertEquals("approvata", approvata.sessione?.stato)
+        assertEquals(3, approvata.sessione?.versione)
+        assertEquals(EsitoRispostaSessione.Decisa(null), rispostaSessione(200, "boh"))
+        assertEquals(EsitoRispostaSessione.Decisa(null), rispostaSessione(204, null))
+    }
+
+    @Test
+    fun `una richiesta cambiata non decide niente, e porta la sessione com'e adesso`() {
+        // Come la manda FastAPI: dentro `detail`.
+        val cambiata = rispostaSessione(
+            409,
+            """{"detail": {"errore": "richiesta_cambiata",
+                 "sessione": { "id": 3, "nome": "Studio", "app": ["com.duolingo", "gruppo:apk"],
+                               "stato": "in_attesa", "versione": 5 } } }""",
+        ) as EsitoRispostaSessione.Cambiata
+        assertEquals(5, cambiata.sessione?.versione)
+        assertEquals(listOf("com.duolingo", "gruppo:apk"), cambiata.sessione?.app)
+        // Come la scrive il contratto: in cima.
+        val inCima = rispostaSessione(
+            409,
+            """{"errore": "richiesta_cambiata", "sessione": { "id": 3, "nome": "Studio", "stato": "approvata", "versione": 6 } }""",
+        ) as EsitoRispostaSessione.Cambiata
+        assertEquals("approvata", inCima.sessione?.stato)
+        // Senza la sessione (o con una che non si legge): cambiata lo stesso, e si rilegge.
+        assertEquals(
+            EsitoRispostaSessione.Cambiata(null),
+            rispostaSessione(409, """{"detail": {"errore": "richiesta_cambiata"}}"""),
+        )
+        assertEquals(
+            EsitoRispostaSessione.Cambiata(null),
+            rispostaSessione(409, """{"detail": {"errore": "richiesta_cambiata", "sessione": {"nome": "senza id"}}}"""),
+        )
+    }
+
+    @Test
+    fun `i rifiuti della risposta a una sessione portano su il loro codice`() {
+        listOf("niente_da_decidere", "dispositivo_revocato").forEach { codice ->
+            assertEquals(
+                EsitoRispostaSessione.Rifiutata(codice),
+                rispostaSessione(409, """{"detail": {"errore": "$codice"}}"""),
+            )
+        }
+        // Server più vecchio della v3.5: "Per le sessioni serve aggiornare il server di Pactum".
+        assertEquals(
+            EsitoRispostaSessione.Rifiutata(CodiciErrore.SERVER_DA_AGGIORNARE),
+            rispostaSessione(404, """{"detail": "Not Found"}"""),
+        )
+        assertEquals(
+            EsitoRispostaSessione.Rifiutata(CodiciErrore.SERVER_DA_AGGIORNARE),
+            rispostaSessione(405, """{"detail": "Method Not Allowed"}"""),
+        )
+        assertEquals(EsitoRispostaSessione.Rifiutata(CodiciErrore.SERVER_DA_AGGIORNARE), rispostaSessione(404, ""))
+        // Il 404 della rotta che c'è (contratto v3.5): la sessione non c'è più.
+        assertEquals(
+            EsitoRispostaSessione.Rifiutata(CodiciErrore.NON_TROVATO),
+            rispostaSessione(404, """{"detail": "sessione non trovata"}"""),
+        )
+        assertEquals(
+            EsitoRispostaSessione.Rifiutata(PostinoClient.PARAMETRI_NON_VALIDI),
+            rispostaSessione(422, """{"detail": [{"msg": "motivazione"}]}"""),
+        )
+        assertEquals(EsitoRispostaSessione.Fallita, rispostaSessione(500, null))
+        assertEquals(EsitoRispostaSessione.Fallita, rispostaSessione(403, """{"detail": "ruolo sbagliato"}"""))
+    }
+
+    @Test
+    fun `il corpo della risposta porta la versione vista e il figlio, e non scrive un perche vuoto`() {
+        assertEquals(
+            """{"esito":"approva","versione":4,"figlio_id":2}""",
+            jsonScrittura.encodeToString(
+                CorpoRispostaSessione.serializer(),
+                CorpoRispostaSessione("approva", versione = 4, figlioId = 2),
+            ),
+        )
+        assertEquals(
+            """{"esito":"rifiuta","versione":7,"motivazione":"prima i compiti"}""",
+            jsonScrittura.encodeToString(
+                CorpoRispostaSessione.serializer(),
+                CorpoRispostaSessione("rifiuta", versione = 7, motivazione = "prima i compiti"),
+            ),
+        )
     }
 
     @Test

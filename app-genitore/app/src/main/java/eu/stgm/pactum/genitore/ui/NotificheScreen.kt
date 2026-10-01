@@ -196,7 +196,8 @@ fun NotificheScreen(
                                 RigaNotifica(
                                     notifica = notifica,
                                     // (0.10) Con la famiglia (chi propone), le proposte
-                                    // (che cosa) e i nomi delle app (mai un pacchetto).
+                                    // (che cosa) e i nomi delle app (mai un pacchetto);
+                                    // (0.11) e le sessioni (quali app chiede).
                                     testo = testoNotifica(
                                         parole(),
                                         notifica,
@@ -204,6 +205,7 @@ fun NotificheScreen(
                                         famiglia.figli,
                                         stato.propostePerId,
                                         stato.nomi,
+                                        stato.sessioniPerId,
                                     ),
                                     diChi = etichettaNotifica(notifica, famiglia.figli),
                                     onSegnaLetta = { vm.segnaLetta(notifica) },
@@ -283,5 +285,7 @@ private fun iconaTipo(tipo: String): Painter = when (tipo) {
         painterResource(R.drawable.ic_scheda_turno)
     // (v3) Il computer spento o riacceso.
     "sospensione", "ripresa" -> painterResource(R.drawable.ic_dispositivo_computer)
+    // (0.11) Le sessioni: sono del telefono.
+    "sessione_da_approvare", "sessione_eliminata" -> painterResource(R.drawable.ic_dispositivo_telefono)
     else -> painterResource(R.drawable.ic_notifica_binocolo)
 }

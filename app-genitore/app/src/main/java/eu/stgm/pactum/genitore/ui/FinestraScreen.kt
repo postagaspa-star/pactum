@@ -103,6 +103,10 @@ import java.time.LocalDate
 // (0.10) Prima di tutto, le proposte del figlio che aspettano il genitore
 // (contratto v3.4): una card ciascuna, con "Accetta" e "Rifiuta". Se il genitore
 // accetta, la regola cambia subito.
+//
+// (0.11) Insieme a loro, le sessioni che aspettano il genitore (contratto v3.5):
+// una card ciascuna, con "Approva" e "Non approvare". Prima della storia, la
+// sezione Sessioni: quelle fatte negli 8 giorni e quelle approvate.
 
 /** Ogni quanto si rilegge la finestra mentre la schermata è in primo piano. */
 private const val INTERVALLO_RILETTURA_MS = 60_000L
@@ -177,6 +181,23 @@ fun FinestraScreen(
             famigliaVm.aggiorna()
             ambito.launch { snackbarHostState.showSnackbar(messaggio) }
         }
+    }
+
+    // (0.11) L'esito della risposta a una sessione: una frase in basso. La finestra
+    // si rilegge da sé (FinestraViewModel); qui la famiglia, per il numero accanto al
+    // nome. Se nel frattempo il genitore guarda un altro figlio, la frase dice di chi era.
+    LaunchedEffect(stato.esitoSessione) {
+        val arrivato = stato.esitoSessione ?: return@LaunchedEffect
+        // Consumato subito, e la frase in uno scope suo (come il segno).
+        vm.consumaEsitoSessione()
+        if (daRileggereDopo(arrivato.esito)) famigliaVm.aggiorna()
+        val frase = testi.testo(messaggioEsitoSessione(arrivato.esito))
+        val messaggio = if (arrivato.figlioId != figlioMostrato) {
+            esitoPerIlFiglio(testi, famiglia.figli.firstOrNull { it.id == arrivato.figlioId }?.nome, frase)
+        } else {
+            frase
+        }
+        ambito.launch { snackbarHostState.showSnackbar(messaggio) }
     }
 
     // (0.10) Ogni finestra nuova si dice al ViewModel delle proposte: quando anche
@@ -254,6 +275,22 @@ fun FinestraScreen(
                                 da = ProposteViewModel.Schermata.PANORAMICA,
                             )
                         },
+                        // (0.11) Le sessioni da approvare: quelle appena decise da qui
+                        // spariscono subito, finché questa finestra è di prima; quelle
+                        // dei telefoni scollegati non ci sono (non si approvano più).
+                        sessioniDaDecidere = sessioniDaApprovare(
+                            finestra.sessioni,
+                            stato.sessioniDecise,
+                            stato.lettaAlle,
+                            dispositiviScollegati(finestra),
+                        ),
+                        decisioneSessioneInCorso = stato.invioSessione,
+                        onDecidiSessione = { richiesta, esito, motivazione ->
+                            vm.decidiSessione(figlioId, richiesta, esito, motivazione)
+                        },
+                        onAvvisoSessione = { messaggio ->
+                            ambito.launch { snackbarHostState.showSnackbar(testi.testo(messaggio)) }
+                        },
                     )
                 }
             }
@@ -305,6 +342,10 @@ private fun ContenutoFinestra(
     daDecidere: List<Proposta> = emptyList(),
     decisioneInCorso: Boolean = false,
     onDecidi: (Proposta, String, String?) -> Unit = { _, _, _ -> },
+    sessioniDaDecidere: List<SessioneDaApprovare> = emptyList(),
+    decisioneSessioneInCorso: Boolean = false,
+    onDecidiSessione: (SessioneDaApprovare, String, String?) -> Unit = { _, _, _ -> },
+    onAvvisoSessione: (Int) -> Unit = {},
 ) {
     // Per raccontare storico ed eventi serve la regola: la finestra porta TUTTE
     // le regole (anche eliminate), quindi la mappa è completa.
@@ -349,6 +390,33 @@ private fun ContenutoFinestra(
     val regoleDiOggi = remember(finestra) {
         oggiDelPatto?.let { regoleDelGiorno(finestra, it) }.orEmpty()
     }
+    // (0.11) Le sessioni: quelle fatte negli 8 giorni (raccontate rispetto ad
+    // adesso: una "in corso" letta prima della fine prevista è finita), quelle
+    // approvate, e il nome del telefono quando il figlio ne ha più d'uno.
+    val svolte = remember(finestra) { sessioniSvolteRaccontate(finestra.sessioniSvolte, Instant.now()) }
+    val approvate = remember(finestra) { sessioniApprovate(finestra.sessioni, scollegati) }
+    val nonPiuValide = remember(finestra) { sessioniNonPiuValide(finestra.sessioni, scollegati) }
+    val conPiuTelefoni = remember(finestra) { piuTelefoni(finestra) }
+    val telefonoDi: (Long?) -> String? = { id -> if (conPiuTelefoni) nomeDispositivo(id, dispositivi) else null }
+
+    // (0.11) La domanda aperta su una sessione (approva / non approvare): quale, con
+    // quale gesto, e la versione che il genitore aveva davanti. [vista] = il
+    // contenuto di allora: si mostra e si risponde su quello, mai su quello che il
+    // giro di ogni minuto porta dopo. Se la card cambia (o sparisce) mentre la
+    // domanda è aperta, la domanda si chiude e lo si dice; ritrovata dopo che
+    // Android ha chiuso l'app, vale solo sulla stessa versione, se no si lascia cadere.
+    var domanda by rememberSaveable(stateSaver = SalvaDomandaSessione) { mutableStateOf<DomandaSessione?>(null) }
+    var vista by remember { mutableStateOf<SessioneDaApprovare?>(null) }
+    var apertaQui by remember { mutableStateOf(false) }
+    val statoDellaDomanda = domanda?.let { statoDomanda(it, sessioniDaDecidere) }
+    LaunchedEffect(domanda, statoDellaDomanda) {
+        if (domanda == null || statoDellaDomanda == null || statoDellaDomanda == StatoDomanda.VALIDA) return@LaunchedEffect
+        val avvisa = apertaQui
+        domanda = null
+        vista = null
+        apertaQui = false
+        if (avvisa) messaggioDomandaChiusa(statoDellaDomanda)?.let(onAvvisoSessione)
+    }
 
     // "Ho capito" vale per sempre: sta in DataStore, non nello stato della
     // schermata. null = non ancora letto, e la scheda non lampeggia.
@@ -359,6 +427,9 @@ private fun ContenutoFinestra(
 
     var tuttiDaGuardare by rememberSaveable { mutableStateOf(false) }
     var storiaAperta by rememberSaveable { mutableStateOf(false) }
+    // (0.11) Le sessioni fatte oltre le prime cinque, e quelle approvate: chiuse di default.
+    var tutteLeSvolte by rememberSaveable { mutableStateOf(false) }
+    var approvateAperte by rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -388,6 +459,27 @@ private fun ContenutoFinestra(
                 onDecidi = { esito, motivazione -> onDecidi(proposta, esito, motivazione) },
                 nomi = nomi,
                 scollegata = suDispositivoScollegato(regola, scollegati),
+            )
+        }
+
+        // (0.11) Insieme alle proposte, le sessioni che aspettano te: una nuova, o
+        // un cambio della lista di una già approvata. La domanda si apre su quello che
+        // la card mostra in quel momento, versione compresa.
+        items(sessioniDaDecidere, key = { "sessione-da-approvare-${it.sessione.id}" }) { richiesta ->
+            CardSessioneDaApprovare(
+                richiesta = richiesta,
+                nomeFiglio = figlio?.nome,
+                dove = doveSta(parole(), telefonoDellaSessione(richiesta.sessione, dispositivi), piuDispositiviAttivi(finestra)),
+                nomiFinestra = nomi,
+                invioInCorso = decisioneSessioneInCorso,
+                onApri = { esito ->
+                    val versione = richiesta.sessione.versione
+                    if (versione != null) {
+                        domanda = DomandaSessione(richiesta.sessione.id, esito, versione)
+                        vista = richiesta
+                        apertaQui = true
+                    }
+                },
             )
         }
 
@@ -530,6 +622,22 @@ private fun ContenutoFinestra(
             }
         }
 
+        // --- (0.11) Le sessioni ---------------------------------------------------
+        // Quelle fatte negli 8 giorni (inizio, durata, fine, chiusure anticipate) e
+        // quelle approvate con le loro app. Senza sessioni (o su un server più
+        // vecchio della v3.5) la sezione non c'è.
+        sezioneSessioni(
+            svolte = svolte,
+            approvate = approvate,
+            nonPiuValide = nonPiuValide,
+            nomiFinestra = nomi,
+            telefono = telefonoDi,
+            tutteLeSvolte = tutteLeSvolte,
+            onTutteLeSvolte = { tutteLeSvolte = !tutteLeSvolte },
+            approvateAperte = approvateAperte,
+            onApprovate = { approvateAperte = !approvateAperte },
+        )
+
         // --- 3. La storia -------------------------------------------------------
         if (finestra.storicoModifiche.isNotEmpty()) {
             item {
@@ -553,6 +661,33 @@ private fun ContenutoFinestra(
                     }
                 }
             }
+        }
+    }
+
+    // (0.11) La domanda aperta, solo finché la card ha ancora la versione vista: si
+    // mostra il contenuto di allora, e si risponde con quella versione.
+    val aperta = domanda
+    if (aperta != null && statoDellaDomanda == StatoDomanda.VALIDA) {
+        val corrente = sessioniDaDecidere.firstOrNull { it.sessione.id == aperta.sessioneId }
+        val contenuto = vista?.takeIf { it.sessione.id == aperta.sessioneId && it.sessione.versione == aperta.versione }
+            ?: corrente
+        if (contenuto != null) {
+            val chiudi = {
+                domanda = null
+                vista = null
+                apertaQui = false
+            }
+            DialogoDecisioneSessione(
+                esito = aperta.esito,
+                richiesta = contenuto,
+                nomeFiglio = figlio?.nome,
+                nomiFinestra = nomi,
+                onConferma = { motivazione ->
+                    chiudi()
+                    onDecidiSessione(contenuto, aperta.esito, motivazione)
+                },
+                onAnnulla = chiudi,
+            )
         }
     }
 }

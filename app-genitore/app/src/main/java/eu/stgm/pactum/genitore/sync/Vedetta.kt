@@ -24,6 +24,7 @@ import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.Sessione
 import eu.stgm.pactum.genitore.dati.SilenzioNoto
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
 import eu.stgm.pactum.genitore.dati.TipiDispositivo
@@ -279,21 +280,23 @@ class Vedetta(context: Context) {
      * Quello che serve per scrivere gli avvisi per bene: la famiglia (di chi è),
      * le regole (il nome leggibile) e (0.10) le proposte in attesa (che cosa
      * propone il figlio) coi nomi delle app (una proposta che cambia app la dice
-     * col nome). Vuoto = testo base.
+     * col nome). (0.11) E le sessioni: quali app chiede una sessione da approvare.
+     * Vuoto = testo base.
      */
     private data class NomiPerGliAvvisi(
         val figli: List<Figlio> = emptyList(),
         val regolePerId: Map<Long, RegolaFinestra> = emptyMap(),
         val proposte: Map<Long, Proposta> = emptyMap(),
         val nomi: Map<String, String> = emptyMap(),
+        val sessioni: Map<Long, Sessione> = emptyMap(),
     )
 
     /**
      * La famiglia (di chi è) e le regole delle finestre dei figli delle novità
      * (il nome leggibile): gli id delle regole sono unici su tutto il server,
      * quindi le regole di più figli stanno in una mappa sola. (0.10) Dalle stesse
-     * finestre le proposte in attesa, per id, e i nomi delle app: nessuna
-     * richiesta in più.
+     * finestre le proposte in attesa, per id, e i nomi delle app; (0.11) e le
+     * sessioni, per id: nessuna richiesta in più.
      */
     private suspend fun nomiPerGliAvvisi(
         nuove: List<Notifica>,
@@ -303,13 +306,15 @@ class Vedetta(context: Context) {
         val regolePerId = mutableMapOf<Long, RegolaFinestra>()
         val proposte = mutableMapOf<Long, Proposta>()
         val nomi = mutableMapOf<String, String>()
+        val sessioni = mutableMapOf<Long, Sessione>()
         nuove.map { it.figlioId }.distinct().forEach { figlioId ->
             val finestra = contesto.finestra(figlioId) ?: return@forEach
             finestra.regole.forEach { regolePerId[it.id] = it }
             finestra.propostePendenti.forEach { proposte[it.id] = it }
             nomi.putAll(nomiDelleApp(finestra))
+            finestra.sessioni.forEach { sessioni[it.id] = it }
         }
-        return NomiPerGliAvvisi(figli, regolePerId, proposte, nomi)
+        return NomiPerGliAvvisi(figli, regolePerId, proposte, nomi, sessioni)
     }
 
     /**
@@ -533,7 +538,15 @@ class Vedetta(context: Context) {
 
     /** Titolo e frase dalla stessa funzione della lista in app (testoNotifica, Testi.kt). */
     private fun notificaDiSistema(notifica: Notifica, nomi: NomiPerGliAvvisi): Notification {
-        val testo = testoNotifica(paroleDi(context), notifica, nomi.regolePerId, nomi.figli, nomi.proposte, nomi.nomi)
+        val testo = testoNotifica(
+            paroleDi(context),
+            notifica,
+            nomi.regolePerId,
+            nomi.figli,
+            nomi.proposte,
+            nomi.nomi,
+            nomi.sessioni,
+        )
         return notificaBase(
             titolo = testo.titolo,
             testo = testo.testo,
@@ -700,9 +713,12 @@ class Vedetta(context: Context) {
          * (0.10) Una proposta del figlio (al genitore arrivano solo le sue) apre la
          * Panoramica di quel figlio, dove la card per decidere sta in cima; un suo
          * ritiro, "Proposte e conferme", dove la si ritrova nella storia.
+         *
+         * (0.11) Anche una sessione da approvare apre la Panoramica di quel figlio:
+         * la sua card sta in cima. Una sessione eliminata apre la lista, come il resto.
          */
         internal fun destinazionePerTipo(tipo: String): String = when (tipo) {
-            "nuova_proposta" -> MainActivity.DEST_FINESTRA
+            "nuova_proposta", "sessione_da_approvare" -> MainActivity.DEST_FINESTRA
             "proposta_risposta", "proposta_annullata", "proposta_ritirata", "dichiarazione" -> MainActivity.DEST_TURNO
             else -> MainActivity.DEST_NOTIFICHE
         }

@@ -13,10 +13,13 @@ import eu.stgm.pactum.genitore.dati.DirezioniProposta
 import eu.stgm.pactum.genitore.dati.Dispositivo
 import eu.stgm.pactum.genitore.dati.EsitiDichiarazione
 import eu.stgm.pactum.genitore.dati.EsitiRisposta
+import eu.stgm.pactum.genitore.dati.EsitiSessione
 import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.RiferimentoDispositivo
+import eu.stgm.pactum.genitore.dati.Sessione
 import eu.stgm.pactum.genitore.dati.StatiProposta
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
 import eu.stgm.pactum.genitore.dati.TipiDispositivo
@@ -255,7 +258,8 @@ fun nomeVero(chiave: String, nome: String?): String? =
             PREFISSI_TECNICI.none { candidato.startsWith(it) }
     }
 
-private val PREFISSI_TECNICI = listOf("exe:", "sito:", "categoria:")
+// (0.11) Anche "gruppo:" (gruppo:apk, le sessioni): una chiave, mai un nome.
+private val PREFISSI_TECNICI = listOf("exe:", "sito:", "categoria:", "gruppo:")
 
 @Composable
 fun testoDurata(minuti: Long): String = testoDurata(parole(), minuti)
@@ -1023,8 +1027,16 @@ fun raccontaUnCambioDiBersaglio(confronto: String): Boolean =
  * null = non serve: la vita reale è del figlio, e un telefono solo è il caso di
  * sempre.
  */
-fun doveValeLaRegola(parole: Parole, regola: RegolaFinestra?, piuDispositivi: Boolean): String? {
-    val dispositivo = regola?.dispositivo ?: return null
+fun doveValeLaRegola(parole: Parole, regola: RegolaFinestra?, piuDispositivi: Boolean): String? =
+    doveSta(parole, regola?.dispositivo, piuDispositivi)
+
+/**
+ * Come [doveValeLaRegola], per un dispositivo qualunque: (0.11) anche per una
+ * sessione, che è sempre di un telefono ("sul telefono «Telefono di Luca»" quando
+ * il figlio ha più dispositivi). null = non serve, o il dispositivo non si sa.
+ */
+fun doveSta(parole: Parole, dispositivo: RiferimentoDispositivo?, piuDispositivi: Boolean): String? {
+    if (dispositivo == null) return null
     val computer = dispositivo.tipo == TipiDispositivo.COMPUTER
     if (!computer && !piuDispositivi) return null
     val sul = parole.testo(if (computer) R.string.proposta_sul_computer else R.string.proposta_sul_telefono)
@@ -1101,6 +1113,328 @@ fun testoStatoProposta(parole: Parole, stato: String): String = when (stato) {
 fun testoDaDecidere(parole: Parole, quante: Int): String? =
     if (quante > 0) parole.testo(R.string.figlio_da_decidere, quante) else null
 
+// --- Le sessioni (0.11) -----------------------------------------------------------
+
+/** Il nome di una sessione da scrivere fra «»; senza nome (non dovrebbe succedere) "Sessione". */
+fun nomeSessione(parole: Parole, nome: String?): String =
+    nome?.trim()?.takeIf { it.isNotEmpty() } ?: parole.testo(R.string.sessione_senza_nome)
+
+/**
+ * "Luca chiede di approvare la sessione «Studio»", o per un cambio a una sessione
+ * già approvata "Luca chiede di cambiare la sessione «Studio»"; "Tuo figlio…" se il
+ * nome non si sa. Lo stesso titolo nella card della Panoramica e nella notifica.
+ */
+fun chiedeLaSessione(parole: Parole, nomeFiglio: String?, nome: String?, cambio: Boolean): String {
+    val chi = nomeDaScrivere(nomeFiglio)
+    val sessione = nomeSessione(parole, nome)
+    return when {
+        cambio && chi != null -> parole.testo(R.string.sessione_chiede_cambiare, chi, sessione)
+        cambio -> parole.testo(R.string.sessione_chiede_cambiare_senza_nome, sessione)
+        chi != null -> parole.testo(R.string.sessione_chiede_approvare, chi, sessione)
+        else -> parole.testo(R.string.sessione_chiede_approvare_senza_nome, sessione)
+    }
+}
+
+/** "Se approvi, Luca potrà avviarla quando vuole, per quanto vuole." (o "tuo figlio"). */
+fun seApproviLaSessione(parole: Parole, nomeFiglio: String?): String =
+    nomeDaScrivere(nomeFiglio)?.let { parole.testo(R.string.sessione_se_approvi, it) }
+        ?: parole.testo(R.string.sessione_se_approvi_senza_nome)
+
+/**
+ * Un'app a parole: il suo nome e, se la sessione la chiama in un altro modo, anche
+ * quello: "TikTok (nella sessione si chiama «Calcolatrice»)".
+ */
+fun testoNomeApp(parole: Parole, app: NomeApp): String =
+    app.nellaSessione?.let { parole.testo(R.string.sessione_app_chiamata, app.nome, it) } ?: app.nome
+
+/**
+ * Le app di una sessione in una riga, fuori dalla card che le spiega (notifiche,
+ * "Restano", sessioni approvate): "ClasseViva, Classroom e le app installate fuori
+ * dal Play Store", "ClasseViva e 2 app senza nome". Un'app che la sessione chiama
+ * in un altro modo lo dice ([testoNomeApp]). Al massimo [APP_VISIBILI] nomi, poi
+ * "altre N app". In testa a una riga ([inFrase] false) il gruppo da solo comincia
+ * con la maiuscola. Mai una chiave tecnica, mai la parola "APK". null = nessuna app.
+ */
+fun elencoAppSessione(parole: Parole, app: AppDellaSessione, inFrase: Boolean = false): String? {
+    if (!inFrase && app.gruppoApk && app.nomi.isEmpty() && app.senzaNome.isEmpty()) {
+        return parole.testo(R.string.sessione_app_fuori_store)
+    }
+    val visibili = app.nomi.take(APP_VISIBILI)
+    val altre = app.nomi.size - visibili.size
+    val parti = buildList {
+        visibili.forEach { add(testoNomeApp(parole, it)) }
+        if (altre > 0) add(parole.testo(R.string.sessione_altre_app, altre))
+        if (app.senzaNome.isNotEmpty()) add(parole.testo(R.string.sessione_app_senza_nome, app.senzaNome.size))
+        if (app.gruppoApk) add(parole.testo(R.string.sessione_app_fuori_store_in_frase))
+    }
+    return when (parti.size) {
+        0 -> null
+        1 -> parti.single()
+        else -> parole.testo(R.string.elenco_ultimo, parti.dropLast(1).joinToString(", "), parti.last())
+    }
+}
+
+/**
+ * Un'app che resta nella sessione ma cambia nome: "«Classe Viva» → «ClasseViva»".
+ * Se i dati d'uso del telefono la chiamano in un altro modo ancora, prima di tutto
+ * quello, perché un nome nuovo non nasconda l'app vera: "TikTok: «TikTok» →
+ * «Calcolatrice»".
+ */
+fun testoNomeCambiato(parole: Parole, cambiato: NomeCambiato, nomiFinestra: Map<String, String> = emptyMap()): String {
+    val daA = parole.testo(R.string.sessione_nome_app_da_a, cambiato.prima, cambiato.dopo)
+    val dallUso = nomeSecondoLUso(cambiato.chiave, nomiFinestra)?.takeIf { !it.equals(cambiato.dopo, ignoreCase = true) }
+    return dallUso?.let { parole.testo(R.string.sessione_nome_app_di, it, daA) } ?: daA
+}
+
+/**
+ * Che cosa cambia un cambio chiesto su una sessione approvata, una riga per cosa:
+ * "Nuovo nome: «Compiti»", "Aggiunge Duolingo e le app installate fuori dal Play
+ * Store", "Toglie YouTube", "Cambiano solo i nomi delle app: «Classe Viva» →
+ * «ClasseViva»" (o "Cambiano anche i nomi…" insieme ad altro). Un cambio che non
+ * cambia niente lo dice. I nomi delle app dai dati d'uso ([nomiFinestra]), poi
+ * dalla sessione e dal cambio. Vuota se non è un cambio.
+ */
+fun righeCambioSessione(
+    parole: Parole,
+    richiesta: SessioneDaApprovare,
+    nomiFinestra: Map<String, String> = emptyMap(),
+): List<String> {
+    val differenze = richiesta.differenze ?: return emptyList()
+    if (differenze.vuoto) return listOf(parole.testo(R.string.sessione_non_cambia_niente))
+    fun elenco(chiavi: List<String>): String? =
+        elencoAppSessione(parole, appDellaSessione(chiavi, richiesta.nomi, nomiFinestra), inFrase = true)
+    val nomiCambiati = differenze.nomiCambiati
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString(", ") { testoNomeCambiato(parole, it, nomiFinestra) }
+        ?.let {
+            parole.testo(
+                if (differenze.soloNomi) R.string.notifica_sessione_solo_nomi else R.string.notifica_sessione_anche_nomi,
+                it,
+            )
+        }
+    return listOfNotNull(
+        differenze.nuovoNome?.let { parole.testo(R.string.sessione_nuovo_nome, it) },
+        elenco(differenze.aggiunte)?.let { parole.testo(R.string.notifica_sessione_aggiunge, it) },
+        elenco(differenze.tolte)?.let { parole.testo(R.string.notifica_sessione_toglie, it) },
+        nomiCambiati,
+    )
+}
+
+/**
+ * Una sessione fatta in una riga, negli orari del telefono: "Studio · oggi
+ * 15:02–16:40 · chiusa prima (prevista 2 h)", "Studio · ieri 15:00–17:00 · 2 h";
+ * una in corso con l'inizio e la durata scelta: "Lavoro · iniziata alle 15:02 · 2
+ * h, fino alle 17:02". Senza la fine vera (un dato che manca) "oggi dalle 15:02";
+ * senza la durata prevista "chiusa prima" e basta. Mai un orario inventato.
+ */
+fun testoSessioneSvolta(
+    parole: Parole,
+    sessione: SessioneRaccontata,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    val nome = nomeSessione(parole, sessione.svolta.nome)
+    if (sessione.fine == FineSessione.IN_CORSO) {
+        val iniziata = iniziataQuando(parole, sessione.inizio, zona, oggi)
+        val finePrevista = sessione.finePrevista
+        val durata = sessione.durataPrevista
+        if (finePrevista == null || durata == null) {
+            return parole.testo(R.string.sessione_svolta_in_corso_senza_fine, nome, iniziata)
+        }
+        return parole.testo(
+            R.string.sessione_svolta_in_corso,
+            nome,
+            iniziata,
+            testoDurata(parole, durata),
+            finoAlle(parole, finePrevista, zona, oggi),
+        )
+    }
+    val quando = quandoSessione(parole, sessione.inizio, sessione.finitaAlle, zona, oggi)
+    val prevista = sessione.durataPrevista?.let { testoDurata(parole, it) }
+    return when (sessione.fine) {
+        FineSessione.CHIUSA_PRIMA -> if (prevista != null) {
+            parole.testo(R.string.sessione_svolta_chiusa_prima, nome, quando, prevista)
+        } else {
+            parole.testo(R.string.sessione_svolta_chiusa_prima_senza_durata, nome, quando)
+        }
+        FineSessione.COMPLETA -> {
+            val durata = prevista
+                ?: sessione.finitaAlle
+                    ?.let { Duration.between(sessione.inizio, it).toMinutes() }
+                    ?.takeIf { it > 0 }
+                    ?.let { testoDurata(parole, it) }
+            if (durata != null) {
+                parole.testo(R.string.sessione_svolta_completa, nome, quando, durata)
+            } else {
+                parole.testo(R.string.sessione_svolta, nome, quando)
+            }
+        }
+        else -> parole.testo(R.string.sessione_svolta, nome, quando)
+    }
+}
+
+/**
+ * Quando è stata una sessione: "oggi 15:02–16:40", "ieri 23:30 – oggi 00:45", "29/09
+ * 15:00–17:00"; senza la fine (o con una fine prima dell'inizio) "oggi dalle 15:02".
+ */
+fun quandoSessione(
+    parole: Parole,
+    inizio: Instant,
+    fine: Instant?,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    val da = inizio.atZone(zona)
+    val giorno = giornoDellaSessione(parole, da.toLocalDate(), oggi)
+    if (fine == null || fine.isBefore(inizio)) {
+        return parole.testo(R.string.sessione_dalle, giorno, formatoOra.format(da))
+    }
+    val a = fine.atZone(zona)
+    return if (a.toLocalDate() == da.toLocalDate()) {
+        parole.testo(R.string.sessione_ore, giorno, formatoOra.format(da), formatoOra.format(a))
+    } else {
+        parole.testo(
+            R.string.sessione_ore_due_giorni,
+            giorno,
+            formatoOra.format(da),
+            giornoDellaSessione(parole, a.toLocalDate(), oggi),
+            formatoOra.format(a),
+        )
+    }
+}
+
+/** "iniziata alle 15:02" oggi, "iniziata ieri alle 23:30", "iniziata il 29/09 alle 15:02". */
+fun iniziataQuando(
+    parole: Parole,
+    inizio: Instant,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    val locale = inizio.atZone(zona)
+    val ora = formatoOra.format(locale)
+    return when (locale.toLocalDate()) {
+        oggi -> parole.testo(R.string.sessione_iniziata_alle, ora)
+        oggi.minusDays(1) -> parole.testo(R.string.sessione_iniziata_ieri, ora)
+        else -> parole.testo(R.string.sessione_iniziata_il, formatoGiornoBreve.format(locale), ora)
+    }
+}
+
+/** "oggi", "ieri", oppure "29/09". */
+private fun giornoDellaSessione(parole: Parole, data: LocalDate, oggi: LocalDate): String = when (data) {
+    oggi -> parole.testo(R.string.sessione_oggi)
+    oggi.minusDays(1) -> parole.testo(R.string.sessione_ieri)
+    else -> formatoGiornoBreve.format(data)
+}
+
+/**
+ * Quando il figlio ha chiesto un cambio ([richiestaTs], il `richiesta_ts` del
+ * cambio), negli orari del telefono: "chiesto alle 15:02" oggi, "chiesto ieri alle
+ * 15:02", "chiesto il 28/09 alle 15:02". null se l'orario non c'è o non si legge.
+ */
+fun quandoChiesta(
+    parole: Parole,
+    richiestaTs: String?,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String? {
+    val locale = istanteServer(richiestaTs)?.atZone(zona) ?: return null
+    val ora = formatoOra.format(locale)
+    return when (locale.toLocalDate()) {
+        oggi -> parole.testo(R.string.sessione_chiesto_alle, ora)
+        oggi.minusDays(1) -> parole.testo(R.string.sessione_chiesto_ieri, ora)
+        else -> parole.testo(R.string.sessione_chiesto_il, formatoGiornoBreve.format(locale), ora)
+    }
+}
+
+/** "fino alle 18:30", "fino a domani alle 01:30", "fino al 03/10 alle 18:30". */
+fun finoAlle(
+    parole: Parole,
+    istante: Instant,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    val locale = istante.atZone(zona)
+    val ora = formatoOra.format(locale)
+    return when (locale.toLocalDate()) {
+        oggi -> parole.testo(R.string.sessione_fino_alle, ora)
+        oggi.plusDays(1) -> parole.testo(R.string.sessione_fino_a_domani, ora)
+        else -> parole.testo(R.string.sessione_fino_al_giorno, formatoGiornoBreve.format(locale), ora)
+    }
+}
+
+/**
+ * Nel Tempo, sotto il totale del giorno, con le stesse parole dell'app del figlio:
+ * "In più 1 h 20 min in sessione, che non contano." (un minuto solo: "…che non
+ * conta."): i minuti passati nelle app di una sessione, che il totale non conta.
+ * null se non ce ne sono, o se il telefono (o il server) non lo dice.
+ */
+fun testoInSessione(parole: Parole, minuti: Int?): String? {
+    val inSessione = minuti?.takeIf { it > 0 } ?: return null
+    return if (inSessione == 1) {
+        parole.testo(R.string.tempo_in_sessione_un_minuto)
+    } else {
+        parole.testo(R.string.tempo_in_sessione, testoDurata(parole, inSessione.toLong()))
+    }
+}
+
+/**
+ * Perché si è chiusa da sola la domanda aperta su una sessione ([StatoDomanda]):
+ * il figlio l'ha cambiata, o non aspetta più il genitore. null = la domanda vale.
+ */
+@StringRes
+fun messaggioDomandaChiusa(stato: StatoDomanda): Int? = when (stato) {
+    StatoDomanda.VALIDA -> null
+    StatoDomanda.CAMBIATA -> R.string.sessione_cambiata_mentre_decidevi
+    StatoDomanda.NON_PIU_DA_DECIDERE -> R.string.sessione_niente_da_decidere
+}
+
+/**
+ * Un esito detto mentre si guarda un altro figlio: col nome di quello su cui si è
+ * deciso ("Luca · Fatto: la sessione è approvata."). Senza nome, com'è.
+ */
+fun esitoPerIlFiglio(parole: Parole, nomeFiglio: String?, messaggio: String): String =
+    nomeDaScrivere(nomeFiglio)?.let { parole.testo(R.string.sessione_esito_di, it, messaggio) } ?: messaggio
+
+/**
+ * Che cosa dire dopo la risposta del genitore a una sessione, ciascun rifiuto col
+ * suo motivo vero. "Niente da decidere" dice com'è davvero, dalla rilettura
+ * ([messaggioSessioneRiletta]); una richiesta cambiata (la `versione` non era più
+ * quella) chiede di guardarla di nuovo. Un server più vecchio della v3.5 va
+ * aggiornato. Rete caduta o un rifiuto che non si conosce: "riprova".
+ */
+@StringRes
+fun messaggioEsitoSessione(esito: EsitoSessione): Int = when (esito) {
+    is EsitoSessione.Decisa -> when {
+        esito.esito == EsitiSessione.APPROVA && esito.cambio -> R.string.sessione_fatto_cambio_approvato
+        esito.esito == EsitiSessione.APPROVA -> R.string.sessione_fatto_approvata
+        esito.cambio -> R.string.sessione_fatto_cambio_non_approvato
+        else -> R.string.sessione_fatto_non_approvata
+    }
+    is EsitoSessione.NonDecisa -> when (esito.codice) {
+        CodiciErrore.NIENTE_DA_DECIDERE -> messaggioSessioneRiletta(esito.riletta)
+        CodiciErrore.RICHIESTA_CAMBIATA -> R.string.sessione_cambiata_nel_frattempo
+        CodiciErrore.NON_TROVATO -> R.string.sessione_eliminata_dal_figlio
+        CodiciErrore.DISPOSITIVO_REVOCATO -> R.string.sessione_errore_telefono_scollegato
+        CodiciErrore.SERVER_DA_AGGIORNARE -> R.string.sessione_errore_server_da_aggiornare
+        PostinoClient.PARAMETRI_NON_VALIDI -> R.string.sessione_errore_non_accettata
+        else -> R.string.decisione_errore_generico
+    }
+}
+
+/**
+ * Una sessione su cui non c'era più niente da decidere: com'è davvero, dalla
+ * rilettura. Stato che non si sa: una frase che non sceglie, mai un "forse".
+ */
+@StringRes
+fun messaggioSessioneRiletta(riletta: SessioneRiletta?): Int = when (riletta) {
+    SessioneRiletta.APPROVATA -> R.string.sessione_gia_approvata
+    SessioneRiletta.NON_APPROVATA -> R.string.sessione_gia_non_approvata
+    SessioneRiletta.CAMBIO_DECISO -> R.string.sessione_cambio_gia_deciso
+    SessioneRiletta.ELIMINATA -> R.string.sessione_eliminata_dal_figlio
+    SessioneRiletta.CAMBIATA -> R.string.sessione_cambiata_nel_frattempo
+    SessioneRiletta.NON_SI_SA, null -> R.string.sessione_niente_da_decidere
+}
+
 /** Che cosa dire quando il server rifiuta una conferma (verdetto). */
 @StringRes
 fun messaggioRifiutoVerdetto(codice: String?): Int = when (codice) {
@@ -1142,6 +1476,9 @@ data class TestoNotifica(val titolo: String, val testo: String)
  * che cosa chiede) e [nomi] (i nomi delle app che le finestre conoscono: una
  * proposta che cambia app la dice col suo nome). Se mancano, la frase si fa con
  * quello che c'è.
+ *
+ * (0.11) Per le sessioni da approvare servono anche [sessioni] (lette con le
+ * finestre, per id): quali app chiede, o che cosa cambia.
  */
 fun testoNotifica(
     parole: Parole,
@@ -1150,8 +1487,9 @@ fun testoNotifica(
     figli: List<Figlio> = emptyList(),
     proposte: Map<Long, Proposta> = emptyMap(),
     nomi: Map<String, String> = emptyMap(),
+    sessioni: Map<Long, Sessione> = emptyMap(),
 ): TestoNotifica =
-    fraseNotifica(parole, notifica, regolePerId, figli, proposte, nomi)
+    fraseNotifica(parole, notifica, regolePerId, figli, proposte, nomi, sessioni)
         ?: TestoNotifica(parole.testo(etichettaTipoNotifica(notifica.tipo)), notifica.messaggio)
 
 /**
@@ -1181,6 +1519,9 @@ private fun etichettaTipoNotifica(tipo: String): Int = when (tipo) {
     // (0.10) Il figlio propone e ritira (contratto v3.4).
     "nuova_proposta" -> R.string.tipo_nuova_proposta
     "proposta_ritirata" -> R.string.tipo_proposta_ritirata
+    // (0.11) Le sessioni del figlio (contratto v3.5).
+    "sessione_da_approvare" -> R.string.tipo_sessione_da_approvare
+    "sessione_eliminata" -> R.string.tipo_sessione_eliminata
     "dichiarazione" -> R.string.tipo_dichiarazione
     // (v3) Il computer che si spegne e si riaccende: non sono interruzioni.
     "sospensione" -> R.string.tipo_computer_spento
@@ -1196,6 +1537,7 @@ private fun fraseNotifica(
     figli: List<Figlio>,
     proposte: Map<Long, Proposta>,
     nomi: Map<String, String>,
+    sessioni: Map<Long, Sessione>,
 ): TestoNotifica? {
     val payload = notifica.payload
     val regola = regolaIdNotifica(notifica)?.let { regolePerId[it] }
@@ -1267,6 +1609,19 @@ private fun fraseNotifica(
             )
         }
 
+        // (0.11) "Luca chiede di approvare la sessione «Studio»" / le sue app.
+        "sessione_da_approvare" -> fraseSessioneDaApprovare(parole, notifica, figli, sessioni, nomi)
+
+        // (0.11) "Luca ha eliminato la sessione «Studio»" / la storia resta.
+        "sessione_eliminata" -> {
+            val nome = campo(payload, "nome")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            TestoNotifica(
+                titolo = nomeFiglioDi(notifica, figli)?.let { parole.testo(R.string.notifica_sessione_eliminata, it, nome) }
+                    ?: parole.testo(R.string.notifica_sessione_eliminata_senza_nome, nome),
+                testo = parole.testo(R.string.notifica_sessione_eliminata_testo),
+            )
+        }
+
         // "Dice di aver fatto: Camminare un'ora (16/09)".
         "dichiarazione" -> {
             val cosa = regola?.let { campo(it.parametri, "descrizione") } ?: return null
@@ -1334,6 +1689,45 @@ private fun fraseNuovaProposta(
     val titolo = nomeFiglioDi(notifica, figli)?.let { parole.testo(R.string.notifica_ti_propone, it) }
         ?: parole.testo(R.string.notifica_ti_propone_senza_nome)
     return TestoNotifica(titolo, testo)
+}
+
+/**
+ * (0.11) `sessione_da_approvare` arrivata al genitore (contratto v3.5). Il titolo
+ * dice chi chiede e quale sessione: "Luca chiede di approvare la sessione
+ * «Studio»", o per un cambio "Luca chiede di cambiare la sessione «Studio»" (col
+ * nome di adesso, quello che il genitore conosce). Il testo, se la sessione è
+ * stata letta con la finestra ([sessioni]) e chiede ancora quella cosa: le sue app
+ * ("ClasseViva e le app installate fuori dal Play Store") e che cosa vuol dire, o per un cambio
+ * che cosa cambia ("Nuovo nome: «Compiti»", "Aggiunge Duolingo", "Toglie
+ * YouTube"). Se no, per un cambio che rinomina il nome nuovo del payload
+ * (`nuovo_nome`), e per il resto che cosa vuol dire una sessione. Senza il nome
+ * della sessione (null) il messaggio del server, che dice già la stessa cosa.
+ */
+private fun fraseSessioneDaApprovare(
+    parole: Parole,
+    notifica: Notifica,
+    figli: List<Figlio>,
+    sessioni: Map<Long, Sessione>,
+    nomi: Map<String, String>,
+): TestoNotifica? {
+    val payload = notifica.payload
+    val sessione = campo(payload, "sessione_id")?.toLongOrNull()?.let { sessioni[it] }
+    val nome = campo(payload, "nome")?.trim()?.takeIf { it.isNotEmpty() }
+        ?: sessione?.nome?.trim()?.takeIf { it.isNotEmpty() }
+        ?: return null
+    val cambio = campo(payload, "cambio")?.toBooleanStrictOrNull() ?: false
+    val nuovoNome = campo(payload, "nuovo_nome")?.trim()?.takeIf { cambio && it.isNotEmpty() && it != nome }
+    val richiesta = sessione?.let(::richiestaInAttesa)?.takeIf { it.cambio == cambio }
+    val nonConta = parole.testo(R.string.sessione_non_conta)
+    val testo = when {
+        richiesta == null -> null
+        cambio -> righeCambioSessione(parole, richiesta, nomi).takeIf { it.isNotEmpty() }?.joinToString("\n")
+        else -> elencoAppSessione(parole, appDellaSessione(richiesta.app, richiesta.nomi, nomi))?.let { "$it\n$nonConta" }
+    }
+    return TestoNotifica(
+        titolo = chiedeLaSessione(parole, nomeFiglioDi(notifica, figli), nome, cambio),
+        testo = testo ?: nuovoNome?.let { parole.testo(R.string.sessione_nuovo_nome, it) } ?: nonConta,
+    )
 }
 
 /** Il `motivo` di un evento del computer: nei dettagli dell'evento, o in cima al payload. */

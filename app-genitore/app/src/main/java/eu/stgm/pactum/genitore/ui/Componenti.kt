@@ -259,6 +259,7 @@ fun IconaDispositivo(
  *
  * (0.10) Accanto al nome, quante sue proposte aspettano il genitore ("Luca · 1
  * da decidere"): con più figli si vede chi aspetta, senza aprirli uno per uno.
+ * (0.11) Il numero conta anche le sue sessioni da approvare (quanteDaDecidere).
  */
 @Composable
 fun IntestazioneFiglio(famiglia: FamigliaViewModel.StatoFamiglia, onScegli: (Long) -> Unit) {
@@ -269,7 +270,7 @@ fun IntestazioneFiglio(famiglia: FamigliaViewModel.StatoFamiglia, onScegli: (Lon
         val nome = scelto?.nome?.trim().orEmpty()
         if (nome.isEmpty()) return
         Text(
-            text = nomeConDaDecidere(nome, testoDaDecidere(p, scelto?.proposteDaDecidere ?: 0)),
+            text = nomeConDaDecidere(nome, testoDaDecidere(p, scelto?.let(::quanteDaDecidere) ?: 0)),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier
                 .fillMaxWidth()
@@ -298,7 +299,7 @@ fun IntestazioneFiglio(famiglia: FamigliaViewModel.StatoFamiglia, onScegli: (Lon
                 selected = figlio.id == scelto?.id,
                 onClick = { onScegli(figlio.id) },
                 label = {
-                    Text(nomeConDaDecidere(figlio.nome.ifBlank { senzaNome }, testoDaDecidere(p, figlio.proposteDaDecidere)))
+                    Text(nomeConDaDecidere(figlio.nome.ifBlank { senzaNome }, testoDaDecidere(p, quanteDaDecidere(figlio))))
                 },
                 trailingIcon = if (etichettaNonLette != null) {
                     {

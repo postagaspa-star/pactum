@@ -57,6 +57,13 @@ data class Finestra(
     // genitore, e la Panoramica le mette in cima. Assente (server più vecchio
     // della v3.4) = nessuna.
     @SerialName("proposte_pendenti") val propostePendenti: List<Proposta> = emptyList(),
+    // (0.11) Le sessioni del figlio (contratto v3.5): quelle non eliminate di tutti
+    // i suoi telefoni, quante aspettano il genitore (sessioni nuove più cambi) e
+    // quelle fatte negli 8 giorni, dalla più recente. Assenti (server più vecchio
+    // della v3.5) = nessuna, e la Panoramica non ne parla.
+    val sessioni: List<Sessione> = emptyList(),
+    @SerialName("sessioni_da_approvare") val sessioniDaApprovare: Int = 0,
+    @SerialName("sessioni_svolte") val sessioniSvolte: List<SessioneSvolta> = emptyList(),
 )
 
 // --- v3: famiglia, figli e dispositivi ----------------------------------------
@@ -87,6 +94,9 @@ data class Figlio(
     // autore "figlio", contratto v3.4): il numero accanto al suo nome nella scelta
     // in cima. Assente (server più vecchio) = 0.
     @SerialName("proposte_da_decidere") val proposteDaDecidere: Int = 0,
+    // (0.11) Quante sue sessioni aspettano il genitore (nuove più cambi, contratto
+    // v3.5): si sommano alle proposte nel numero accanto al nome. Assente = 0.
+    @SerialName("sessioni_da_approvare") val sessioniDaApprovare: Int = 0,
 )
 
 /** Un dispositivo come lo racconta GET /api/famiglia (revocati compresi). */
@@ -189,10 +199,22 @@ object CodiciErrore {
     const val PROPOSTA_NON_PENDENTE = "proposta_non_pendente"
     const val ULTIMA_REGOLA = "ultima_regola"
 
+    // (v3.5) La risposta del genitore a una sessione: non c'era niente in attesa.
+    const val NIENTE_DA_DECIDERE = "niente_da_decidere"
+
+    /**
+     * (v3.5) La `versione` mandata con la risposta non è più quella della sessione:
+     * nel frattempo è cambiata (il figlio ha cambiato la richiesta, o qualcuno ha
+     * già deciso). Niente è stato deciso, e il 409 porta la sessione com'è adesso:
+     * il genitore non approva mai una lista che non ha visto.
+     */
+    const val RICHIESTA_CAMBIATA = "richiesta_cambiata"
+
     /**
      * Coniato qui: un server più vecchio della v3.4 non conosce il ritiro di una
      * proposta (la rotta risponde 404 o 405). Non è un errore da riprovare: serve
-     * aggiornare il server di Pactum.
+     * aggiornare il server di Pactum. (0.11) Lo stesso per le sessioni: un server
+     * più vecchio della v3.5 non conosce /api/sessioni.
      */
     const val SERVER_DA_AGGIORNARE = "server_da_aggiornare"
 
@@ -294,6 +316,10 @@ data class UsoGiorno(
     val limite: Int? = null,
     @SerialName("regola_id") val regolaId: Long? = null,
     val bonus: Int = 0,
+    // (0.11) I minuti del giorno NON contati perché passati in una sessione, nelle
+    // sue app (contratto v3.5): sono fuori da `totale_minuti`, e il Tempo li dice
+    // a parte. Assente (server o telefono più vecchi) = null: non se ne parla.
+    @SerialName("sessioni_minuti") val sessioniMinuti: Int? = null,
 )
 
 /** Una app della fotografia: `nome` risolto sul telefono del figlio (fallback: il pacchetto). */
@@ -528,6 +554,118 @@ object DirezioniProposta {
 object EsitiRisposta {
     const val ACCETTA = "accetta"
     const val RIFIUTA = "rifiuta"
+}
+
+// --- Sessioni (0.11, contratto v3.5) -----------------------------------------------
+// Una sessione ("Studio", "Lavoro") è una lista di app del telefono del figlio,
+// più `gruppo:apk` = tutte le app installate fuori dal Play Store, anche quelle
+// installate dopo. La crea il figlio; il genitore la approva una volta, e di nuovo
+// a ogni cambio della lista (`modifica_in_attesa`); il figlio la avvia quando
+// vuole, per quanto vuole, e la può chiudere prima. Durante la sessione il tempo
+// nelle sue app non conta, e il telefono copre le altre app. Il genitore vede
+// inizio, durata, fine e chiusure anticipate: mai quali app il figlio ha provato
+// ad aprire.
+
+/** Una sessione come la manda il server (GET /api/finestra, GET /api/sessioni). */
+@Serializable
+data class Sessione(
+    val id: Long,
+    @SerialName("dispositivo_id") val dispositivoId: Long? = null,
+    val dispositivo: RiferimentoDispositivo? = null,
+    val nome: String = "",
+    /** I pacchetti Android, e `gruppo:apk`. */
+    val app: List<String> = emptyList(),
+    /** Le etichette leggibili delle chiavi, risolte sul telefono del figlio. */
+    val nomi: Map<String, String> = emptyMap(),
+    val stato: String = "",
+    /** Un cambio chiesto su una sessione già approvata; null = nessuno. */
+    @SerialName("modifica_in_attesa") val modificaInAttesa: ModificaSessione? = null,
+    /** Il perché dell'ultimo "non approvare" del genitore. */
+    val motivazione: String? = null,
+    /**
+     * Aumenta a ogni cambio della sessione (creazione, ogni cambio chiesto dal
+     * figlio, ogni decisione). La risposta del genitore porta quella che aveva
+     * sullo schermo: se nel frattempo è cambiata, il server non decide niente
+     * (409 `richiesta_cambiata`). null = server che non la manda.
+     */
+    val versione: Int? = null,
+    @SerialName("creata_ts") val creataTs: String? = null,
+    @SerialName("approvata_ts") val approvataTs: String? = null,
+)
+
+/**
+ * Il cambio chiesto su una sessione approvata: il nome, le app e i nomi come
+ * sarebbero dopo (il server lo manda sempre completo), e quando il figlio l'ha
+ * chiesto. Per tolleranza un campo che manca (null) vale "come adesso".
+ */
+@Serializable
+data class ModificaSessione(
+    val nome: String? = null,
+    val app: List<String>? = null,
+    val nomi: Map<String, String>? = null,
+    @SerialName("richiesta_ts") val richiestaTs: String? = null,
+)
+
+/**
+ * Una sessione fatta (o in corso): nome, app e nomi congelati all'avvio. Una
+ * sessione scaduta il server la chiude da sé quando legge (`chiusura: "scaduta"`,
+ * `fine_ts` = `fine_prevista_ts`); una chiusa prima dal figlio ha `chiusura:
+ * "terminata"`. In corso: `chiusura` e `fine_ts` null.
+ */
+@Serializable
+data class SessioneSvolta(
+    val id: Long,
+    @SerialName("sessione_id") val sessioneId: Long? = null,
+    @SerialName("dispositivo_id") val dispositivoId: Long? = null,
+    val nome: String = "",
+    val app: List<String> = emptyList(),
+    val nomi: Map<String, String> = emptyMap(),
+    @SerialName("inizio_ts") val inizioTs: String? = null,
+    @SerialName("durata_minuti") val durataMinuti: Int? = null,
+    @SerialName("fine_prevista_ts") val finePrevistaTs: String? = null,
+    @SerialName("fine_ts") val fineTs: String? = null,
+    val chiusura: String? = null,
+    @SerialName("in_corso") val inCorso: Boolean = false,
+)
+
+@Serializable
+data class PaccoSessioni(val sessioni: List<Sessione> = emptyList())
+
+/**
+ * Corpo di POST /api/sessioni/{id}/risposta: [esito] `approva` o `rifiuta`, la
+ * [versione] della sessione che il genitore ha sullo schermo, il perché
+ * facoltativo (al massimo [MASSIMO_MOTIVAZIONE_SESSIONE] caratteri) e il figlio
+ * (404 se non combacia). I null non si scrivono.
+ */
+@Serializable
+data class CorpoRispostaSessione(
+    val esito: String,
+    val versione: Int? = null,
+    val motivazione: String? = null,
+    @SerialName("figlio_id") val figlioId: Long? = null,
+)
+
+/** Quanti caratteri al massimo per il perché di una risposta a una sessione (contratto v3.5). */
+const val MASSIMO_MOTIVAZIONE_SESSIONE = 500
+
+object StatiSessione {
+    const val IN_ATTESA = "in_attesa"
+    const val APPROVATA = "approvata"
+    const val RIFIUTATA = "rifiutata"
+}
+
+object EsitiSessione {
+    const val APPROVA = "approva"
+    const val RIFIUTA = "rifiuta"
+}
+
+/** Come si è chiusa una sessione fatta; null = ancora in corso. */
+object ChiusureSessione {
+    /** Finita da sola, alla fine prevista. */
+    const val SCADUTA = "scaduta"
+
+    /** Chiusa prima dal figlio, con "Termina la sessione". */
+    const val TERMINATA = "terminata"
 }
 
 // --- Dichiarazioni e verdetti (tappa 5) -------------------------------------

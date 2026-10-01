@@ -9,6 +9,8 @@ import eu.stgm.pactum.genitore.dati.Medie
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.QuadrettoSemaforo
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.RiferimentoDispositivo
+import eu.stgm.pactum.genitore.dati.Sessione
 import eu.stgm.pactum.genitore.dati.SilenzioNoto
 import eu.stgm.pactum.genitore.dati.SitiGiorno
 import eu.stgm.pactum.genitore.dati.SitoVisitato
@@ -484,6 +486,29 @@ fun dispositiviScollegati(finestra: Finestra): Set<Long> =
  * (nessun `dispositivi`): uno solo.
  */
 fun piuDispositiviAttivi(finestra: Finestra): Boolean = finestra.dispositivi.count { !it.revocato } > 1
+
+/**
+ * (0.11) true = il figlio ha più di un telefono (anche scollegato, se c'è la sua
+ * storia): le sessioni, che sono dei telefoni, dicono su quale.
+ */
+fun piuTelefoni(finestra: Finestra): Boolean = finestra.dispositivi.count { it.tipo == TipiDispositivo.TELEFONO } > 1
+
+/**
+ * (0.11) Il telefono di una sessione: quello che la sessione allega, oppure quello
+ * della finestra col suo `dispositivo_id`. null se non si sa.
+ */
+fun telefonoDellaSessione(sessione: Sessione, dispositivi: List<VistaDispositivo>): RiferimentoDispositivo? =
+    sessione.dispositivo
+        ?: dispositivi.firstOrNull { it.id != null && it.id == sessione.dispositivoId }
+            ?.let { vista -> vista.id?.let { RiferimentoDispositivo(it, vista.nome.orEmpty(), vista.tipo) } }
+
+/**
+ * (0.11) Quante cose di [figlio] aspettano il genitore: le sue proposte (contratto
+ * v3.4) più le sue sessioni da approvare, nuove o cambiate (v3.5). È il numero
+ * accanto al suo nome in cima alle schermate.
+ */
+fun quanteDaDecidere(figlio: Figlio): Int =
+    figlio.proposteDaDecidere.coerceAtLeast(0) + figlio.sessioniDaApprovare.coerceAtLeast(0)
 
 /** Le regole su cui si può proporre: attive e non di un dispositivo scollegato. */
 fun regoleProponibili(finestra: Finestra): List<RegolaFinestra> {

@@ -261,6 +261,9 @@
     <!-- (0.10) Le proposte del figlio -->
     <string name="tipo_nuova_proposta">Nuova proposta</string>
     <string name="tipo_proposta_ritirata">Proposta ritirata</string>
+    <!-- (0.11) Le sessioni del figlio -->
+    <string name="tipo_sessione_da_approvare">Sessione da approvare</string>
+    <string name="tipo_sessione_eliminata">Sessione eliminata</string>
     <string name="tipo_dichiarazione">Dichiarazione del figlio</string>
     <!-- v3: il computer che si spegne e si riaccende. Non sono interruzioni. -->
     <string name="tipo_computer_spento">Computer spento</string>
@@ -296,6 +299,15 @@
     <string name="notifica_proposta_del_figlio_annullata_senza_nome">La proposta di tuo figlio %1$s non vale più: la regola non è più attiva</string>
     <string name="notifica_dichiarazione_successo">Dice di aver fatto: %1$s (%2$s)</string>
     <string name="notifica_dichiarazione_fallimento">Dice di non aver fatto: %1$s (%2$s)</string>
+    <!-- (0.11) Le sessioni: chi chiede sta nel titolo (sessione_chiede_*), le app nel
+         testo. Un cambio dice che cosa cambia, una riga per cosa. -->
+    <string name="notifica_sessione_aggiunge">Aggiunge %1$s</string>
+    <string name="notifica_sessione_toglie">Toglie %1$s</string>
+    <string name="notifica_sessione_solo_nomi">Cambiano solo i nomi delle app: %1$s</string>
+    <string name="notifica_sessione_anche_nomi">Cambiano anche i nomi delle app: %1$s</string>
+    <string name="notifica_sessione_eliminata">%1$s ha eliminato la sessione «%2$s»</string>
+    <string name="notifica_sessione_eliminata_senza_nome">Tuo figlio ha eliminato la sessione «%1$s»</string>
+    <string name="notifica_sessione_eliminata_testo">Le sessioni già fatte restano nella Panoramica.</string>
 
     <!-- Canale notifiche di sistema -->
     <string name="canale_patto_nome">Avvisi del patto</string>
@@ -422,6 +434,10 @@
     <string name="tempo_resto_della_giornata">IL RESTO DELLA GIORNATA</string>
     <string name="tempo_limite">limite %1$s</string>
     <string name="tempo_oltre">%1$s oltre</string>
+    <!-- (0.11) Il tempo passato nelle app di una sessione: fuori dal totale, detto a parte,
+         con le stesse parole dell'app del figlio -->
+    <string name="tempo_in_sessione">In più %1$s in sessione, che non contano.</string>
+    <string name="tempo_in_sessione_un_minuto">In più 1 min in sessione, che non conta.</string>
     <!-- v3, computer: stessi testi, detti del computer -->
     <string name="tempo_nessuna_fotografia_computer">Il computer non ha ancora inviato i dati di utilizzo.</string>
     <string name="tempo_nessun_dato_spiega_computer">Il computer non ha inviato i dati di questo giorno. Non significa zero utilizzo: i dati semplicemente non sono arrivati.</string>
@@ -628,8 +644,122 @@
     <!-- Su una regola con la proposta del figlio in attesa non se ne manda un\'altra -->
     <string name="proposte_gia_proposta_del_figlio">Su questa regola c\'è già una proposta di %1$s: la trovi qui sopra, da decidere.</string>
     <string name="proposte_gia_proposta_del_figlio_senza_nome">Su questa regola c\'è già una proposta di tuo figlio: la trovi qui sopra, da decidere.</string>
-    <!-- Nella scelta del figlio in cima: quante sue proposte aspettano te -->
+    <!-- Nella scelta del figlio in cima: quante sue proposte (e, dalla 0.11, sessioni) aspettano te -->
     <string name="figlio_da_decidere">%1$d da decidere</string>
+
+    <!-- (0.11) Le sessioni (contratto v3.5): il figlio sceglie alcune app del telefono
+         ("Studio", "Lavoro"); il genitore approva la sessione una volta, e di nuovo a
+         ogni cambio della lista. Il figlio la avvia quando vuole, per quanto vuole:
+         durante la sessione il tempo in quelle app non conta, e il telefono copre le
+         altre app. Il genitore vede inizio, durata, fine e chiusure anticipate. -->
+    <string name="sessione_tag">sessione</string>
+    <string name="sessione_chiede_approvare">%1$s chiede di approvare la sessione «%2$s»</string>
+    <string name="sessione_chiede_approvare_senza_nome">Tuo figlio chiede di approvare la sessione «%1$s»</string>
+    <string name="sessione_chiede_cambiare">%1$s chiede di cambiare la sessione «%2$s»</string>
+    <string name="sessione_chiede_cambiare_senza_nome">Tuo figlio chiede di cambiare la sessione «%1$s»</string>
+    <string name="sessione_senza_nome">Sessione</string>
+    <string name="sessione_le_app">LE APP DELLA SESSIONE</string>
+    <string name="sessione_aggiunge">AGGIUNGE</string>
+    <string name="sessione_toglie">TOGLIE</string>
+    <string name="sessione_restano">Restano: %1$s</string>
+    <string name="sessione_nuovo_nome">Nuovo nome: «%1$s»</string>
+    <!-- Un cambio che rinomina solo alcune app (o anche): il nome di prima e quello nuovo -->
+    <string name="sessione_cambiano_solo_i_nomi">CAMBIANO SOLO I NOMI</string>
+    <string name="sessione_cambiano_anche_i_nomi">CAMBIANO ANCHE I NOMI</string>
+    <string name="sessione_nome_app_da_a">«%1$s» → «%2$s»</string>
+    <!-- Se i dati d\'uso del telefono la chiamano in un altro modo, prima quel nome -->
+    <string name="sessione_nome_app_di">%1$s: %2$s</string>
+    <string name="sessione_non_cambia_niente">Non cambia niente: stesse app, stesso nome.</string>
+    <!-- Il nome dei dati d\'uso del telefono, e accanto quello che le dà la sessione se è un altro -->
+    <string name="sessione_app_chiamata">%1$s (nella sessione si chiama «%2$s»)</string>
+    <!-- gruppo:apk: tutte le app installate fuori dal Play Store, anche quelle di dopo.
+         "APK" solo nella card che lo spiega; altrove "fuori dal Play Store". -->
+    <string name="sessione_app_apk">App installate da APK</string>
+    <string name="sessione_app_apk_spiega">Tutte le app installate fuori dal Play Store, comprese quelle che installerà dopo.</string>
+    <string name="sessione_app_fuori_store">Le app installate fuori dal Play Store</string>
+    <string name="sessione_app_fuori_store_in_frase">le app installate fuori dal Play Store</string>
+    <!-- Fuori dalla card un\'app senza nome si conta; sulla card da approvare si mostra la
+         sua chiave, piccola, così il genitore non approva un\'app che non riconosce -->
+    <string name="sessione_app_senza_nome">%1$d app senza nome</string>
+    <string name="sessione_app_pacchetto">App senza nome: %1$s</string>
+    <string name="sessione_altre_app">altre %1$d app</string>
+    <string name="sessione_e_altre_app">e altre %1$d app</string>
+    <string name="sessione_non_conta">Durante la sessione il tempo nelle app della sessione non conta; le altre app sono coperte da una schermata.</string>
+    <string name="sessione_se_approvi">Se approvi, %1$s potrà avviarla quando vuole, per quanto vuole.</string>
+    <string name="sessione_se_approvi_senza_nome">Se approvi, tuo figlio potrà avviarla quando vuole, per quanto vuole.</string>
+    <string name="sessione_cambio_se_approvi">Se approvi, il cambio vale dalla prossima volta che la avvia. Finché non decidi, resta com\'è adesso.</string>
+    <!-- Quando il figlio ha chiesto un cambio (richiesta_ts), negli orari del telefono -->
+    <string name="sessione_chiesto_alle">chiesto alle %1$s</string>
+    <string name="sessione_chiesto_ieri">chiesto ieri alle %1$s</string>
+    <string name="sessione_chiesto_il">chiesto il %1$s alle %2$s</string>
+    <string name="sessione_perche_massimo">Al massimo %1$d caratteri</string>
+    <string name="sessione_approva">Approva</string>
+    <string name="sessione_non_approvare">Non approvare</string>
+    <string name="sessione_approva_titolo">Approvi la sessione «%1$s»?</string>
+    <string name="sessione_approva_cambio_titolo">Approvi il cambio alla sessione «%1$s»?</string>
+    <string name="sessione_non_approvare_titolo">Non approvi la sessione «%1$s»?</string>
+    <string name="sessione_non_approvare_cambio_titolo">Non approvi il cambio alla sessione «%1$s»?</string>
+    <string name="sessione_non_approvare_spiega">Non si potrà avviare. Tuo figlio può cambiarla e chiedertela di nuovo.</string>
+    <string name="sessione_non_approvare_cambio_spiega">La sessione resta com\'è adesso.</string>
+    <!-- Dopo la risposta, una frase che dice che cosa è successo -->
+    <string name="sessione_fatto_approvata">Fatto: la sessione è approvata.</string>
+    <string name="sessione_fatto_cambio_approvato">Fatto: il cambio è approvato.</string>
+    <string name="sessione_fatto_non_approvata">Non hai approvato la sessione.</string>
+    <string name="sessione_fatto_cambio_non_approvato">Non hai approvato il cambio: la sessione resta com\'era.</string>
+    <string name="sessione_errore_server_da_aggiornare">Per le sessioni serve aggiornare il server di Pactum.</string>
+    <string name="sessione_errore_non_accettata">Il server non ha accettato la risposta: controlla che l\'app e il server di Pactum siano aggiornati.</string>
+    <string name="sessione_errore_telefono_scollegato">Questo telefono è stato scollegato: la sessione non si può più approvare.</string>
+    <!-- La risposta porta la versione che hai sullo schermo: se nel frattempo il figlio
+         ha cambiato la richiesta, il server non decide niente e manda quella nuova -->
+    <string name="sessione_cambiata_nel_frattempo">Tuo figlio ha appena cambiato la richiesta: guardala di nuovo prima di decidere.</string>
+    <!-- La domanda (approva / non approvare) si chiude da sola se la richiesta cambia mentre è aperta -->
+    <string name="sessione_cambiata_mentre_decidevi">Tuo figlio l\'ha appena cambiata: guardala di nuovo.</string>
+    <!-- Un esito arrivato mentre guardi un altro figlio: di chi era -->
+    <string name="sessione_esito_di">%1$s · %2$s</string>
+    <!-- Non c\'era più niente da decidere: com\'è davvero, dalla rilettura -->
+    <string name="sessione_gia_approvata">Era già stata approvata.</string>
+    <string name="sessione_gia_non_approvata">Era già stata decisa: non approvata.</string>
+    <string name="sessione_cambio_gia_deciso">Il cambio era già stato deciso.</string>
+    <string name="sessione_eliminata_dal_figlio">Tuo figlio l\'ha eliminata: non c\'è più niente da decidere.</string>
+    <string name="sessione_niente_da_decidere">Non c\'è più niente da decidere: è già stata decisa, o tuo figlio l\'ha eliminata.</string>
+    <!-- Nella Panoramica: le sessioni fatte negli 8 giorni, e quelle approvate -->
+    <string name="sezione_sessioni">Sessioni</string>
+    <string name="sessioni_spiega">Le avvia tuo figlio quando vuole. Durante una sessione il tempo nelle app della sessione non conta; le altre app sono coperte da una schermata.</string>
+    <string name="sessioni_ultimi_giorni">ULTIMI 8 GIORNI</string>
+    <string name="sessioni_nessuna_svolta">Nessuna sessione negli ultimi 8 giorni.</string>
+    <plurals name="sessioni_altre">
+        <item quantity="one">Mostra un\'altra sessione</item>
+        <item quantity="other">Mostra le altre %1$d sessioni</item>
+    </plurals>
+    <string name="sessioni_meno">Mostra meno</string>
+    <string name="sessioni_approvate">Sessioni approvate (%1$d)</string>
+    <!-- Le sessioni di un telefono scollegato: non si avviano più, e non c\'è niente da decidere -->
+    <string name="sessioni_non_piu_valide">NON PIÙ VALIDE</string>
+    <string name="sessione_non_piu_valida">%1$s · non più valida: il telefono è scollegato</string>
+    <!-- Una sessione fatta in una riga: "Studio · oggi 15:02–16:40 · chiusa prima (prevista 2 h)",
+         "Lavoro · iniziata alle 15:02 · 2 h, fino alle 17:02", "Studio · ieri 15:00–17:00 · 2 h" -->
+    <string name="sessione_svolta_in_corso">%1$s · %2$s · %3$s, %4$s</string>
+    <string name="sessione_svolta_in_corso_senza_fine">%1$s · %2$s · in corso</string>
+    <string name="sessione_iniziata_alle">iniziata alle %1$s</string>
+    <string name="sessione_iniziata_ieri">iniziata ieri alle %1$s</string>
+    <string name="sessione_iniziata_il">iniziata il %1$s alle %2$s</string>
+    <string name="sessione_svolta_chiusa_prima">%1$s · %2$s · chiusa prima (prevista %3$s)</string>
+    <string name="sessione_svolta_chiusa_prima_senza_durata">%1$s · %2$s · chiusa prima</string>
+    <string name="sessione_svolta_completa">%1$s · %2$s · %3$s</string>
+    <string name="sessione_svolta">%1$s · %2$s</string>
+    <string name="sessione_fino_alle">fino alle %1$s</string>
+    <string name="sessione_fino_a_domani">fino a domani alle %1$s</string>
+    <string name="sessione_fino_al_giorno">fino al %1$s alle %2$s</string>
+    <string name="sessione_oggi">oggi</string>
+    <string name="sessione_ieri">ieri</string>
+    <string name="sessione_ore">%1$s %2$s–%3$s</string>
+    <string name="sessione_ore_due_giorni">%1$s %2$s – %3$s %4$s</string>
+    <string name="sessione_dalle">%1$s dalle %2$s</string>
+    <!-- In "Proposte e conferme": il numero accanto al nome conta anche le sessioni -->
+    <plurals name="turno_sessioni_da_approvare">
+        <item quantity="one">Una sessione aspetta che tu la approvi: la trovi nella Panoramica.</item>
+        <item quantity="other">%1$d sessioni aspettano che tu le approvi: le trovi nella Panoramica.</item>
+    </plurals>
 
     <!-- Proposte: dialogo di creazione -->
     <string name="proposta_crea_titolo">Proponi una modifica</string>

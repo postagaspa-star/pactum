@@ -8,6 +8,7 @@ import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.Sessione
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,6 +34,12 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
         val propostePerId: Map<Long, Proposta> = emptyMap(),
         /** (0.10) I nomi delle app che le stesse finestre conoscono: una proposta che cambia app la dice col nome. */
         val nomi: Map<String, String> = emptyMap(),
+        /**
+         * (0.11) Le sessioni lette con le stesse finestre, per id: dicono quali app
+         * chiede una `sessione_da_approvare`. Come le proposte, una poi decisa resta
+         * qui com'era.
+         */
+        val sessioniPerId: Map<Long, Sessione> = emptyMap(),
         val configurazioneMancante: Boolean = false,
         val errore: Boolean = false,
         /**
@@ -79,6 +86,7 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
                 regolePerId = contesto.regolePerId,
                 propostePerId = contesto.propostePerId,
                 nomi = contesto.nomi,
+                sessioniPerId = contesto.sessioniPerId,
                 configurazioneMancante = false,
                 errore = false,
                 primaLetturaFatta = true,
@@ -101,30 +109,39 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
      * (0.10) Dalle stesse finestre, le proposte in attesa (anche i loro id sono
      * unici su tutto il server) e i nomi delle app: una `nuova_proposta` porta un
      * `regola_id`, quindi quando arriva la finestra del suo figlio si rilegge comunque.
+     *
+     * (0.11) E le sessioni: una `sessione_da_approvare` NUOVA rilegge la finestra
+     * del suo figlio (quali app chiede). Solo le nuove: una sessione poi eliminata
+     * non c'è più nella finestra, e cercarla a ogni rilettura del badge farebbe
+     * scaricare la finestra ogni minuto.
      */
     private suspend fun contestoAggiornato(
         postino: PostinoClient,
         notifiche: List<Notifica>,
         prima: StatoNotifiche,
     ): StatoNotifiche {
-        val conRegola = notifiche.filter { regolaIdNotifica(it) != null }
-        if (conRegola.isEmpty()) return prima
         val giaViste = prima.notifiche.map { it.id }.toSet()
-        val daRileggere = conRegola
-            .filter { it.id !in giaViste || regolaIdNotifica(it) !in prima.regolePerId }
+        val conRegola = notifiche.filter { regolaIdNotifica(it) != null }
+        val sessioniNuove = notifiche.filter { it.tipo == TIPO_SESSIONE_DA_APPROVARE && it.id !in giaViste }
+        if (conRegola.isEmpty() && sessioniNuove.isEmpty()) return prima
+        val daRileggere = (
+            conRegola.filter { it.id !in giaViste || regolaIdNotifica(it) !in prima.regolePerId } + sessioniNuove
+            )
             .map { it.figlioId }
             .distinct()
         if (daRileggere.isEmpty()) return prima
         val regole = prima.regolePerId.toMutableMap()
         val proposte = prima.propostePerId.toMutableMap()
         val nomi = prima.nomi.toMutableMap()
+        val sessioni = prima.sessioniPerId.toMutableMap()
         daRileggere.forEach { figlioId ->
             val finestra = postino.leggiFinestra(figlioId) ?: return@forEach
             finestra.regole.forEach { regole[it.id] = it }
             finestra.propostePendenti.forEach { proposte[it.id] = it }
             nomi.putAll(nomiDelleApp(finestra))
+            finestra.sessioni.forEach { sessioni[it.id] = it }
         }
-        return prima.copy(regolePerId = regole, propostePerId = proposte, nomi = nomi)
+        return prima.copy(regolePerId = regole, propostePerId = proposte, nomi = nomi, sessioniPerId = sessioni)
     }
 
     fun segnaLetta(notifica: Notifica) {
@@ -187,5 +204,9 @@ class NotificheViewModel(application: Application) : AndroidViewModel(applicatio
     fun dimentica() {
         _stato.value = StatoNotifiche()
         aggiorna()
+    }
+
+    private companion object {
+        const val TIPO_SESSIONE_DA_APPROVARE = "sessione_da_approvare"
     }
 }

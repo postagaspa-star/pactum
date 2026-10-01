@@ -693,6 +693,8 @@ private fun SchedaGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
  * racconta la serata. Senza fotografia lo si dice, esplicito.
  * (v3.3) Con un limite su tutto il dispositivo, sotto il valore il limite come
  * per le app: la barra sul limite del giorno e "limite 3 h", "20 min oltre".
+ * (0.11) Il tempo passato in sessione, nelle sue app, non è nel totale: se ce
+ * n'è, una riga lo dice a parte ("In sessione: 1 h 20 min (non contati)").
  */
 @Composable
 private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
@@ -725,6 +727,15 @@ private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
         )
         val limiteTotale = voceTotale(giorno)
         if (limiteTotale != null) LimiteDelTotale(limiteTotale)
+        val inSessione = testoInSessione(parole(), giorno.sessioniMinuti)
+        if (inSessione != null) {
+            Text(
+                text = inSessione,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = if (limiteTotale != null) Spazi.s else Spazi.xs),
+            )
+        }
         val fotografia = istanteServer(giorno.aggiornatoTs)
         if (fotografia != null) {
             Text(

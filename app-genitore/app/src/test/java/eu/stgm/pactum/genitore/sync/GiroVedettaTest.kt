@@ -262,4 +262,15 @@ class GiroVedettaTest {
         assertEquals(MainActivity.DEST_NOTIFICHE, Vedetta.destinazionePerTipo("sforamento"))
         assertEquals(MainActivity.DEST_NOTIFICHE, Vedetta.destinazionePerTipo("tipo_del_futuro"))
     }
+
+    // --- 0.11: le sessioni ---------------------------------------------------------------
+
+    @Test
+    fun `una sessione da approvare apre la Panoramica, dove si decide, e una eliminata la lista`() {
+        assertEquals(MainActivity.DEST_FINESTRA, Vedetta.destinazionePerTipo("sessione_da_approvare"))
+        assertEquals(MainActivity.DEST_NOTIFICHE, Vedetta.destinazionePerTipo("sessione_eliminata"))
+        // Le notifiche delle sessioni si avvisano e si ricordano come tutte le altre.
+        val sessione = Notifica(id = 41, tipo = "sessione_da_approvare", messaggio = "m", tsServer = "2026-10-01T10:00:00+00:00")
+        assertEquals(listOf(41L), novitaDaAvvisare(listOf(sessione, sessione), setOf(40L)).map { it.id })
+    }
 }

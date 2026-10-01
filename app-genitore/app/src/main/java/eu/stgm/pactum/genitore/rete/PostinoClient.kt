@@ -6,6 +6,7 @@ import eu.stgm.pactum.genitore.dati.ConfigurazionePostino
 import eu.stgm.pactum.genitore.dati.CorpoNomeFiglio
 import eu.stgm.pactum.genitore.dati.CorpoNuovoDispositivo
 import eu.stgm.pactum.genitore.dati.CorpoRispostaProposta
+import eu.stgm.pactum.genitore.dati.CorpoRispostaSessione
 import eu.stgm.pactum.genitore.dati.CorpoSegno
 import eu.stgm.pactum.genitore.dati.CorpoVerdetto
 import eu.stgm.pactum.genitore.dati.Dichiarazione
@@ -18,9 +19,11 @@ import eu.stgm.pactum.genitore.dati.NuovaProposta
 import eu.stgm.pactum.genitore.dati.PaccoDichiarazioni
 import eu.stgm.pactum.genitore.dati.PaccoNotifiche
 import eu.stgm.pactum.genitore.dati.PaccoProposte
+import eu.stgm.pactum.genitore.dati.PaccoSessioni
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.PropostaDecisa
 import eu.stgm.pactum.genitore.dati.SegnoMandato
+import eu.stgm.pactum.genitore.dati.Sessione
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -95,6 +98,33 @@ sealed interface EsitoFamiglia {
 }
 
 /**
+ * (0.11) L'esito di GET /api/sessioni?figlio_id=n (contratto v3.5). Un server più
+ * vecchio della v3.5 non conosce la rotta (404 "Not Found", o 405): per le
+ * sessioni serve aggiornare il server di Pactum.
+ */
+sealed interface EsitoSessioni {
+    data class Lette(val sessioni: List<Sessione>) : EsitoSessioni
+    data object ServerVecchio : EsitoSessioni
+    data object Fallita : EsitoSessioni
+}
+
+/**
+ * (0.11) L'esito di POST /api/sessioni/{id}/risposta (contratto v3.5).
+ * - [Decisa]: il server l'ha presa; la sessione aggiornata, se il corpo si legge.
+ * - [Cambiata]: 409 `richiesta_cambiata`, la `versione` mandata non è più quella:
+ *   niente è stato deciso; la sessione com'è adesso, se il server l'ha mandata.
+ * - [Rifiutata]: un altro rifiuto col suo codice (`niente_da_decidere`,
+ *   `dispositivo_revocato`, `non_trovato`, server da aggiornare, 422…).
+ * - [Fallita]: rete caduta o risposta che non si capisce.
+ */
+sealed interface EsitoRispostaSessione {
+    data class Decisa(val sessione: Sessione?) : EsitoRispostaSessione
+    data class Cambiata(val sessione: Sessione?) : EsitoRispostaSessione
+    data class Rifiutata(val codice: String?) : EsitoRispostaSessione
+    data object Fallita : EsitoRispostaSessione
+}
+
+/**
  * Client verso il server, lato genitore. Protocollo: docs/contratto-api.md
  * (fonte di verità — ogni modifica passa prima da lì).
  *
@@ -106,6 +136,8 @@ sealed interface EsitoFamiglia {
  *   POST/PATCH figli, dispositivi, codici    → la famiglia (v3)
  *   POST {base}/api/proposte/{id}/risposta   → la decisione su una proposta del figlio (v3.4)
  *   POST {base}/api/proposte/{id}/ritira     → il ritiro di una proposta del genitore (v3.4)
+ *   GET  {base}/api/sessioni?figlio_id=n     → le sessioni del figlio (v3.5)
+ *   POST {base}/api/sessioni/{id}/risposta   → la decisione su una sessione (v3.5)
  *   header: Authorization: Bearer <token del genitore>
  *
  * `figlioId` null = server 0.7 (o figlio non ancora noto): la richiesta parte
@@ -247,6 +279,41 @@ class PostinoClient(
         val risposta = richiedi("POST", "/api/proposte/$propostaId/ritira", CORPO_VUOTO)
             ?: return EsitoScrittura.Fallito
         return interpretaRitiro(risposta.codice, risposta.corpo)
+    }
+
+    /**
+     * (0.11) GET /api/sessioni?figlio_id=n (contratto v3.5): le sessioni non
+     * eliminate di tutti i telefoni del figlio (revocati compresi). Serve a
+     * rileggere com'è una sessione quando il server dice che non c'era niente da
+     * decidere. V. [interpretaSessioni].
+     */
+    suspend fun leggiSessioni(figlioId: Long? = null): EsitoSessioni {
+        val risposta = richiedi("GET", conFiglio("/api/sessioni", figlioId), null) ?: return EsitoSessioni.Fallita
+        return interpretaSessioni(risposta.codice, risposta.corpo)
+    }
+
+    /**
+     * (0.11) POST /api/sessioni/{id}/risposta (contratto v3.5): il genitore approva
+     * ([esito] `approva`) o non approva (`rifiuta`, col perché facoltativo) quello
+     * che è in attesa: una sessione nuova o un cambio della lista. [versione] è
+     * quella della sessione che ha sullo schermo: se nel frattempo è cambiata, il
+     * server non decide niente e manda la sessione com'è adesso. V.
+     * [interpretaRispostaSessione].
+     */
+    suspend fun rispondiSessione(
+        sessioneId: Long,
+        esito: String,
+        versione: Int?,
+        motivazione: String?,
+        figlioId: Long? = null,
+    ): EsitoRispostaSessione {
+        val corpo = json.encodeToString(
+            CorpoRispostaSessione.serializer(),
+            CorpoRispostaSessione(esito, versione, motivazione, figlioId),
+        )
+        val risposta = scrivi("POST", "/api/sessioni/$sessioneId/risposta", corpo)
+            ?: return EsitoRispostaSessione.Fallita
+        return interpretaRispostaSessione(risposta.codice, risposta.corpo)
     }
 
     /** POST /api/dichiarazioni/{id}/verdetto: la dichiarazione aggiornata o l'errore. */
@@ -514,6 +581,61 @@ class PostinoClient(
             codice == 405 -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
             codice == 404 && rottaSconosciuta(corpo) -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
             else -> rifiuto(codice, corpo)
+        }
+
+        /**
+         * (0.11) GET /api/sessioni dal codice HTTP. Come per il ritiro, una rotta che
+         * il server non conosce (404 "Not Found", 405) vuol dire server più vecchio
+         * della v3.5. Tutto il resto che non è un elenco leggibile è un fallimento.
+         */
+        internal fun interpretaSessioni(codice: Int, corpo: String?): EsitoSessioni = when {
+            codice in 200..299 ->
+                corpo?.let { decodifica(PaccoSessioni.serializer(), it) }
+                    ?.let { EsitoSessioni.Lette(it.sessioni) }
+                    ?: EsitoSessioni.Fallita
+            codice == 405 -> EsitoSessioni.ServerVecchio
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoSessioni.ServerVecchio
+            else -> EsitoSessioni.Fallita
+        }
+
+        /**
+         * (0.11) L'esito della risposta del genitore a una sessione. Come per le
+         * proposte, qualunque 2xx vuol dire che il server l'ha presa: la sessione
+         * aggiornata se il corpo si legge, null se no — un corpo inatteso non fa
+         * dire "riprova" su una decisione già fatta. Il 409 `richiesta_cambiata`
+         * porta la sessione com'è adesso ([sessioneDelRifiuto]). Una rotta che il
+         * server non conosce (404 "Not Found", 405) = server da aggiornare; un 404
+         * della rotta (`{"detail": "sessione non trovata"}`), una sessione (o un
+         * figlio) che non c'è. Il resto come ogni scrittura (409
+         * `niente_da_decidere`, `dispositivo_revocato`, 422).
+         */
+        internal fun interpretaRispostaSessione(codice: Int, corpo: String?): EsitoRispostaSessione = when {
+            codice in 200..299 -> EsitoRispostaSessione.Decisa(corpo?.let { decodifica(Sessione.serializer(), it) })
+            codice == 405 -> EsitoRispostaSessione.Rifiutata(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoRispostaSessione.Rifiutata(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 409 && codiceErrore(corpo) == CodiciErrore.RICHIESTA_CAMBIATA ->
+                EsitoRispostaSessione.Cambiata(sessioneDelRifiuto(corpo))
+            else -> when (val esito = rifiuto(codice, corpo)) {
+                is EsitoScrittura.Rifiutato -> EsitoRispostaSessione.Rifiutata(esito.errore)
+                else -> EsitoRispostaSessione.Fallita
+            }
+        }
+
+        /**
+         * (0.11) La sessione com'è adesso, dentro un 409 `richiesta_cambiata`: in
+         * `detail` (come la manda FastAPI) o in cima, come la scrive il contratto.
+         * null se manca o non si legge: allora si rilegge la finestra.
+         */
+        internal fun sessioneDelRifiuto(corpo: String?): Sessione? {
+            val (dettaglio, oggetto) = corpoDelRifiuto(corpo) ?: return null
+            val elemento = dettaglio?.get("sessione") as? JsonObject ?: oggetto["sessione"] as? JsonObject ?: return null
+            return try {
+                json.decodeFromJsonElement(Sessione.serializer(), elemento)
+            } catch (e: SerializationException) {
+                null
+            } catch (e: IllegalArgumentException) {
+                null
+            }
         }
 
         /**

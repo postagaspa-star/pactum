@@ -219,6 +219,9 @@ fun TurnoScreen(
                                 )
                             },
                             onRitira = { proposteVm.ritira(figlioId, it) },
+                            // (0.11) Il numero accanto al nome conta anche le sessioni:
+                            // una riga dice dove si decidono.
+                            sessioniDaApprovare = famiglia.figlioScelto?.sessioniDaApprovare ?: 0,
                         )
                         sezioneDichiarazioni(
                             dichiarazioni = verdetti.dichiarazioni,

@@ -33,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -76,6 +77,9 @@ import kotlinx.serialization.json.putJsonArray
  * l'elenco è di una lettura partita prima ([lettaAlle]). [nomi] = i nomi delle
  * app (una proposta che cambia app la dice col nome); [scollegati] = i
  * dispositivi scollegati (lì una proposta si può solo rifiutare).
+ *
+ * (0.11) [sessioniDaApprovare] = quante sessioni del figlio aspettano te: si
+ * decidono nella Panoramica, e una riga lo dice (il numero accanto al nome le conta).
  */
 internal fun LazyListScope.sezioneProposte(
     regoleAttive: List<RegolaFinestra>,
@@ -91,6 +95,7 @@ internal fun LazyListScope.sezioneProposte(
     invioInCorso: Boolean = false,
     onDecidi: (Proposta, String, String?) -> Unit = { _, _, _ -> },
     onRitira: (Proposta) -> Unit = {},
+    sessioniDaApprovare: Int = 0,
 ) {
     val daDecidere = proposteDaDecidere(proposte, giaChiuse, lettaAlle)
     val pendenti = proposteInAttesaDelFiglio(proposte, giaChiuse, lettaAlle)
@@ -101,6 +106,13 @@ internal fun LazyListScope.sezioneProposte(
     val conPropostaDelFiglio = regoleConPropostaDelFiglio(ancoraAperte)
 
     item { TitoloSezione(stringResource(R.string.turno_sezione_proposte)) }
+
+    // (0.11) Le sessioni da approvare non stanno qui ma nella Panoramica: si dice.
+    if (sessioniDaApprovare > 0) {
+        item {
+            RigaVuota(pluralStringResource(R.plurals.turno_sessioni_da_approvare, sessioniDaApprovare, sessioniDaApprovare))
+        }
+    }
 
     // (0.10) Prima quello che aspetta te.
     if (daDecidere.isNotEmpty()) {

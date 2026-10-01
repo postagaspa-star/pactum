@@ -21,6 +21,8 @@ CHIAVI_ATTESE = {
     "dispositivo",
     "striscia_dispositivo",
     "dispositivi",
+    # (v3.4)
+    "proposte_inviate",
 }
 
 

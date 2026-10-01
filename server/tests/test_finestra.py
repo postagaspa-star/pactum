@@ -24,6 +24,7 @@ CHIAVI_ATTESE = {
     "riepilogo",
     "segno_oggi",
     "dispositivi",  # (v3)
+    "proposte_pendenti",  # (v3.4)
 }
 
 

@@ -334,7 +334,11 @@ def test_forma_della_famiglia(client, orologio):
     famiglia = _famiglia(client)
     assert [f["id"] for f in famiglia["figli"]] == [1, luca["id"]]
     primo, secondo = famiglia["figli"]
-    assert set(primo) == {"id", "nome", "striscia", "riepilogo", "notifiche_non_lette", "dispositivi"}
+    assert set(primo) == {
+        "id", "nome", "striscia", "riepilogo", "notifiche_non_lette", "dispositivi",
+        "proposte_da_decidere",  # (v3.4)
+    }
+    assert primo["proposte_da_decidere"] == 0
     assert len(primo["striscia"]) == 8
     assert primo["notifiche_non_lette"] == 0 and secondo["notifiche_non_lette"] == 1
     assert secondo["riepilogo"] == {"giorni_fuori_regola": 0, "interruzioni": 1}

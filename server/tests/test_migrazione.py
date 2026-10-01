@@ -88,6 +88,7 @@ def test_migrazione_da_v1(tmp_path):
     assert proposta["regola_id"] == 1
     assert proposta["motivazione"] == "meno tempo"  # i dati sopravvivono
     assert proposta["confronto"] is None
+    assert proposta["autore"] == "genitore"  # (v3.4) prima proponeva solo il genitore
 
     # il nuovo vocabolario stato e' davvero in vigore (il vecchio CHECK e' sparito)
     conn.execute(
@@ -184,6 +185,27 @@ def _db_v2_pre21(path):
     conn.close()
 
 
+@pytest.mark.parametrize("crea", [_db_v1, _db_v2_pre21], ids=["v1", "v2"])
+def test_le_ricostruzioni_non_riciclano_gli_id_delle_proposte(tmp_path, crea):
+    """(v3.4) Le ricostruzioni della tabella proposte (v1, v2.1, v3.4) non perdono il
+    contatore dell'AUTOINCREMENT: l'id di una proposta tolta a mano non torna."""
+    path = str(tmp_path / "vecchio.db")
+    crea(path)
+    conn = sqlite3.connect(path)
+    conn.execute("UPDATE sqlite_sequence SET seq = 40 WHERE name = 'proposte'")
+    conn.commit()
+    conn.close()
+
+    db.init_db(path, 30, 90)
+
+    conn = sqlite3.connect(path)
+    nuova = conn.execute(
+        "INSERT INTO proposte (regola_id, stato, usata, ts_server) VALUES (1, 'pendente', 0, ?)", (TS,)
+    ).lastrowid
+    conn.close()
+    assert nuova == 41
+
+
 def test_migrazione_siti_giornalieri_su_db_esistente(tmp_path):
     """v2.2 -> v2.3: un database esistente (senza i siti) guadagna la tabella
     siti_giornalieri completa, senza toccare i dati che c'erano gia'."""
@@ -271,6 +293,9 @@ def test_migrazione_da_v2_a_v21(tmp_path):
     assert proposta["parametri_proposti"] == '{"azione": "elimina"}'
     conn.execute("UPDATE proposte SET stato = 'annullata' WHERE id = 5")  # non solleva piu'
     assert conn.execute("SELECT stato FROM proposte WHERE id = 5").fetchone()["stato"] == "annullata"
+    # (v3.4) e poi anche 'ritirata', con l'autore delle proposte di prima
+    conn.execute("UPDATE proposte SET stato = 'ritirata' WHERE id = 5")
+    assert proposta["autore"] == "genitore"
 
     # dichiarazioni: arbitro_nome aggiunto (NULL sulle righe vecchie), dati vivi
     assert "arbitro_nome" in _colonne(conn, "dichiarazioni")

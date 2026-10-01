@@ -60,6 +60,46 @@ CREATE TABLE IF NOT EXISTS siti_giornalieri (
 );
 """
 
+# Proposte (tappa 5). Chi propone non impone mai: propone.
+# parametri_proposti (JSON) sono i parametri ESATTI concordati: la modifica
+# concordata li applica tali e quali (chi risponde non puo' cambiarli al volo).
+# Per una proposta di ELIMINAZIONE il valore e' il marcatore {"azione": "elimina"}.
+# confronto/direzione li calcola il server alla creazione (differenza vs valore
+# attuale, testo per la notifica). risposta_* si riempiono quando l'altro
+# accetta/rifiuta; usata=1 quando la modifica concordata e' stata applicata
+# (con l'auto-applicazione avviene insieme all'accettazione).
+# (v3.4) autore: chi ha proposto, 'genitore' o 'figlio' (da uno qualsiasi dei suoi
+# dispositivi); risponde sempre l'altro. Il default 'genitore' e' la storia: prima
+# della v3.4 proponeva solo il genitore. 'ritirata': chi l'aveva fatta l'ha ritirata
+# prima della risposta. La stessa definizione serve allo SCHEMA e alla migrazione
+# (_migra_v34): un database nuovo e uno migrato hanno la stessa tabella.
+TABELLA_PROPOSTE = """
+CREATE TABLE IF NOT EXISTS proposte (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    regola_id INTEGER NOT NULL REFERENCES regole(id),
+    parametri_proposti TEXT,
+    motivazione TEXT,
+    confronto TEXT,
+    direzione TEXT,
+    stato TEXT NOT NULL DEFAULT 'pendente'
+        CHECK (stato IN ('pendente', 'accettata', 'rifiutata', 'annullata', 'ritirata')),
+    usata INTEGER NOT NULL DEFAULT 0,
+    risposta_esito TEXT,
+    risposta_motivazione TEXT,
+    risposta_ts TEXT,
+    ts_server TEXT NOT NULL,
+    autore TEXT NOT NULL DEFAULT 'genitore' CHECK (autore IN ('genitore', 'figlio'))
+);
+"""
+
+# (v3.4) Le colonne di TABELLA_PROPOSTE, nell'ordine: la migrazione copia quelle che
+# la tabella vecchia ha gia', le altre (autore) prendono il default.
+COLONNE_PROPOSTE = [
+    "id", "regola_id", "parametri_proposti", "motivazione", "confronto", "direzione",
+    "stato", "usata", "risposta_esito", "risposta_motivazione", "risposta_ts", "ts_server",
+    "autore",
+]
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS patto (
     chiave TEXT PRIMARY KEY,
@@ -147,30 +187,7 @@ CREATE TABLE IF NOT EXISTS storico_modifiche (
     concordata INTEGER NOT NULL DEFAULT 0,
     ts_server TEXT NOT NULL
 );
-
--- Proposte del genitore (tappa 5). Il genitore non impone mai: propone.
--- parametri_proposti (JSON) sono i parametri ESATTI concordati: la modifica
--- concordata li applica tali e quali (il figlio non puo' cambiarli al volo).
--- Per una proposta di ELIMINAZIONE il valore e' il marcatore {"azione": "elimina"}.
--- confronto/direzione li calcola il server alla creazione (differenza vs valore
--- attuale, testo per la notifica al figlio). risposta_* si riempiono quando il
--- figlio accetta/rifiuta; usata=1 quando la modifica concordata e' stata applicata
--- (con l'auto-applicazione avviene insieme all'accettazione).
-CREATE TABLE IF NOT EXISTS proposte (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    regola_id INTEGER NOT NULL REFERENCES regole(id),
-    parametri_proposti TEXT,
-    motivazione TEXT,
-    confronto TEXT,
-    direzione TEXT,
-    stato TEXT NOT NULL DEFAULT 'pendente' CHECK (stato IN ('pendente', 'accettata', 'rifiutata', 'annullata')),
-    usata INTEGER NOT NULL DEFAULT 0,
-    risposta_esito TEXT,
-    risposta_motivazione TEXT,
-    risposta_ts TEXT,
-    ts_server TEXT NOT NULL
-);
-
+""" + TABELLA_PROPOSTE + """
 -- Dichiarazioni del figlio sulle regole di vita reale (tappa 5).
 -- Fallimento = creduto sulla parola -> stato 'registrata'. Successo = serve il
 -- verdetto del genitore/arbitro -> 'in_attesa'. Il verdetto porta a 'confermata',
@@ -272,6 +289,8 @@ CREATE TABLE notifiche_lette (
 
 # (v3.1) La copia completa fatta prima della migrazione v3: <db>.prima-v3-<data>.
 SUFFISSO_COPIA_V3 = ".prima-v3-"
+# (v3.4) E quella prima della migrazione delle proposte: <db>.prima-v3.4-<data>.
+SUFFISSO_COPIA_V34 = ".prima-v3.4-"
 
 # Le tabelle che dicono se un database ha gia' una storia (_ci_sono_dati).
 TABELLE_STORIA = ("regole", "eventi", "battiti", "bonus", "notifiche")
@@ -353,6 +372,10 @@ def _migra(conn: sqlite3.Connection, crea_famiglia: bool = False) -> None:
     """Micro-migrazioni per database creati con schemi precedenti. SCHEMA
     (CREATE TABLE IF NOT EXISTS) gira prima: le tabelle nuove (dichiarazioni)
     nascono gia' bene, qui si aggiornano solo quelle preesistenti."""
+    # (v3.4) Il contatore dell'AUTOINCREMENT delle proposte, letto prima di tutto: le
+    # ricostruzioni v1 e v2.1 qui sotto lo perdono (riparte dall'id piu' alto rimasto)
+    # e _migra_v34 lo rimette, cosi' l'id di una proposta tolta a mano non torna.
+    contatore_proposte = _contatore(conn, "proposte")
     if "totale_minuti" not in _colonne(conn, "uso_giornaliero"):
         conn.execute(
             "ALTER TABLE uso_giornaliero ADD COLUMN totale_minuti INTEGER NOT NULL DEFAULT 0"
@@ -476,6 +499,9 @@ def _migra(conn: sqlite3.Connection, crea_famiglia: bool = False) -> None:
     _migra_v3(conn, crea_famiglia)
     conn.executescript("BEGIN;" + INDICI_V3 + "COMMIT;")
     _migra_letture(conn)
+    # (v3.4) autore e 'ritirata': dopo i rami v1 e v2.1 qui sopra, che lasciano la
+    # tabella nella forma v2.1, anche un database vecchissimo arriva alla v3.4.
+    _migra_v34(conn, contatore_proposte)
 
 
 def _ci_sono_dati(conn: sqlite3.Connection) -> bool:
@@ -520,22 +546,49 @@ def _va_migrato_a_v3(conn: sqlite3.Connection) -> bool:
     return bool(colonne_mancanti or da_ricostruire) or _senza_figli(conn)
 
 
-def _percorso_copia(db_path: str, ora: datetime) -> str:
+def _percorso_copia(db_path: str, ora: datetime, suffisso: str = SUFFISSO_COPIA_V3) -> str:
     """<db>.prima-v3-AAAAMMGG-HHMMSS accanto al database, con l'ora del patto (quella
     che legge chi apre la cartella). Una copia non si sovrascrive mai: se il nome e'
     gia' preso (un avvio che non era riuscito a migrare, nello stesso secondo) si
-    aggiunge -2, -3..."""
-    base = f"{db_path}{SUFFISSO_COPIA_V3}{ora.astimezone(config.fuso_patto()):%Y%m%d-%H%M%S}"
+    aggiunge -2, -3... (v3.4) `suffisso` dice quale migrazione: .prima-v3- o
+    .prima-v3.4-."""
+    base = f"{db_path}{suffisso}{ora.astimezone(config.fuso_patto()):%Y%m%d-%H%M%S}"
     percorso, numero = base, 2
     while os.path.exists(percorso) or os.path.exists(percorso + ".parziale"):
         percorso, numero = f"{base}-{numero}", numero + 1
     return percorso
 
 
-def _copia_prima_della_migrazione(conn: sqlite3.Connection, db_path: str) -> str:
+def _copia_gia_fatta(db_path: str, suffisso: str) -> str | None:
+    """(v3.4) La copia di sicurezza di quella migrazione, se accanto al database ce
+    n'e' gia' una; il `.parziale` di una copia interrotta non conta, non e' una copia
+    buona. None se non c'e'."""
+    cartella = os.path.dirname(os.path.abspath(db_path))
+    prefisso = os.path.basename(db_path) + suffisso
+    try:
+        nomi = sorted(
+            nome
+            for nome in os.listdir(cartella)
+            if nome.startswith(prefisso)
+            and not nome.endswith(".parziale")
+            and os.path.isfile(os.path.join(cartella, nome))
+        )
+    except OSError:
+        return None
+    return os.path.join(cartella, nomi[0]) if nomi else None
+
+
+def _copia_prima_della_migrazione(
+    conn: sqlite3.Connection,
+    db_path: str,
+    suffisso: str = SUFFISSO_COPIA_V3,
+    migrazione: str = "v3",
+) -> str:
     """(v3.1) Contratto, "Migrazione" punto 5: prima di toccare un database che ha gia'
     una storia, una copia completa accanto al file. Se non riesce il server NON parte:
-    meglio fermo che migrato senza rete di sicurezza.
+    meglio fermo che migrato senza rete di sicurezza. (v3.4) Vale per ogni migrazione
+    che tocca un database con una storia: `suffisso` e `migrazione` dicono quale, nel
+    nome del file e nel log.
 
     VACUUM INTO scrive una copia coerente (una fotografia del database, come un
     backup) ma non la forza su disco: lo fa os.fsync, perche' la copia serve proprio
@@ -543,8 +596,24 @@ def _copia_prima_della_migrazione(conn: sqlite3.Connection, db_path: str) -> str
     `.parziale` e prende il suo nome solo quando e' completa e su disco: un file
     `.prima-v3-...` e' sempre una copia buona. Se non riesce, la copia a meta' si
     toglie: non serve a niente e occuperebbe il disco del NAS (con il disco pieno,
-    anche quello degli altri servizi)."""
-    percorso = _percorso_copia(db_path, clock.now())
+    anche quello degli altri servizi).
+
+    (v3.4) Una copia per migrazione, non una per avvio: se c'e' gia' (un avvio di
+    prima l'ha fatta e poi non e' riuscito a migrare) non se ne fa un'altra. La
+    migrazione non riuscita non ha toccato i dati (e' una transazione sola), quindi
+    quella copia vale ancora; e un server che in Docker riparte da solo in un giro
+    di errori non riempie il disco del NAS di copie uguali."""
+    gia_fatta = _copia_gia_fatta(db_path, suffisso)
+    if gia_fatta is not None:
+        log.info(
+            "Copia di sicurezza prima della migrazione %s: c'e' gia' (%s), non ne faccio"
+            " un'altra",
+            migrazione,
+            gia_fatta,
+        )
+        return gia_fatta
+    # Argomenti per posizione: i test sostituiscono _percorso_copia con una lambda.
+    percorso = _percorso_copia(db_path, clock.now(), suffisso)
     parziale = percorso + ".parziale"
     creato = False
     try:
@@ -563,14 +632,14 @@ def _copia_prima_della_migrazione(conn: sqlite3.Connection, db_path: str) -> str
             except OSError:
                 pass
         messaggio = (
-            f"MIGRAZIONE v3 FERMATA: non riesco a fare la copia di sicurezza del database"
-            f" ({percorso}): {errore}. Il database NON e' stato toccato e il server NON"
-            f" parte. Controlla lo spazio libero e i permessi della cartella"
+            f"MIGRAZIONE {migrazione} FERMATA: non riesco a fare la copia di sicurezza del"
+            f" database ({percorso}): {errore}. Il database NON e' stato toccato e il server"
+            f" NON parte. Controlla lo spazio libero e i permessi della cartella"
             f" {os.path.dirname(os.path.abspath(db_path))}, poi riavvia."
         )
         log.error(messaggio)
         raise RuntimeError(messaggio) from errore
-    log.info("Copia di sicurezza prima della migrazione v3: %s", percorso)
+    log.info("Copia di sicurezza prima della migrazione %s: %s", migrazione, percorso)
     return percorso
 
 
@@ -721,6 +790,123 @@ def _migra_letture(conn: sqlite3.Connection) -> None:
         raise
 
 
+def _proposte_prima_della_v34(conn: sqlite3.Connection) -> bool:
+    """(v3.4) La tabella proposte c'e' ma non ha ancora la forma della v3.4: la colonna
+    autore e lo stato 'ritirata' nel CHECK. Una tabella che non c'e' nasce gia' giusta
+    dallo SCHEMA."""
+    riga = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'proposte'"
+    ).fetchone()
+    return riga is not None and (
+        "autore" not in _colonne(conn, "proposte") or "'ritirata'" not in riga[0]
+    )
+
+
+def _va_migrato_a_v34(conn: sqlite3.Connection) -> bool:
+    """(v3.4) Un database con una storia la cui tabella proposte va rifatta: prima si
+    copia (contratto, "v3.4 — Compatibilita'"). Un database nuovo o gia' v3.4 no."""
+    return _ci_sono_dati(conn) and _proposte_prima_della_v34(conn)
+
+
+def _contatore(conn: sqlite3.Connection, tabella: str) -> int | None:
+    """Il contatore dell'AUTOINCREMENT di una tabella: l'id piu' alto mai dato, anche
+    se quella riga poi e' stata tolta. None se la tabella non ha ancora dato id."""
+    if "sqlite_sequence" not in _tabelle(conn):
+        return None
+    riga = conn.execute("SELECT seq FROM sqlite_sequence WHERE name = ?", (tabella,)).fetchone()
+    return riga[0] if riga is not None else None
+
+
+def _copia_proposte(conn: sqlite3.Connection, vecchia: str) -> None:
+    """Le righe della tabella vecchia nella nuova, tali e quali, id compresi. Le
+    colonne che la vecchia non ha prendono il default: autore = 'genitore', perche'
+    prima della v3.4 proponeva solo il genitore. Una colonna che il server non conosce
+    (aggiunta a mano) non passa nella tabella nuova: lo dice il log, e resta nella
+    copia di sicurezza .prima-v3.4-."""
+    presenti = _colonne(conn, vecchia)
+    sconosciute = sorted(presenti - set(COLONNE_PROPOSTE))
+    if sconosciute:
+        log.warning(
+            "MIGRAZIONE v3.4: la tabella proposte ha colonne che il server non conosce (%s):"
+            " non passano nella tabella nuova, restano solo nella copia di sicurezza"
+            " .prima-v3.4-.",
+            ", ".join(sconosciute),
+        )
+    elenco = ", ".join(c for c in COLONNE_PROPOSTE if c in presenti)
+    conn.execute(f"INSERT INTO proposte ({elenco}) SELECT {elenco} FROM {vecchia}")
+
+
+def _migra_v34(conn: sqlite3.Connection, contatore_minimo: int | None = None) -> None:
+    """(v3.4) Le proposte del figlio: la tabella proposte prende la colonna autore
+    ('genitore' per tutte le righe che ci sono gia') e lo stato 'ritirata'. SQLite
+    non altera un CHECK: la tabella si ricostruisce come per la v2.1, ma tutta dentro
+    UNA transazione (contratto, "v3.4 — Compatibilita'"): se qualcosa va storto a
+    meta' (anche un riavvio del NAS) il database resta com'era e il prossimo avvio
+    riprova da capo. Sulla tabella gia' in forma v3.4 non fa niente.
+
+    Restano gli id (le notifiche li citano nel payload) e anche il contatore
+    dell'AUTOINCREMENT, cosi' l'id di una proposta tolta a mano non torna mai a una
+    proposta nuova: il piu' alto tra quello di adesso e `contatore_minimo` (letto da
+    _migra prima delle ricostruzioni v1 e v2.1, che lo perdono). Indici e trigger
+    della tabella vecchia si rifanno sulla nuova; viste, trigger e chiavi esterne di
+    altre tabelle che nominano proposte restano come sono (legacy_alter_table)."""
+    if not _proposte_prima_della_v34(conn):
+        return
+    # PRAGMA foreign_keys si cambia solo fuori da una transazione: spento durante la
+    # ricostruzione, come nella v3 (i riferimenti a regole si copiano come sono).
+    # legacy_alter_table: senza, il RENAME riscriverebbe "proposte" in _proposte_v33
+    # dentro viste, trigger e chiavi esterne di altre tabelle, che dopo il DROP
+    # punterebbero a una tabella che non c'e' piu'. Cosi' restano su "proposte",
+    # cioe' sulla tabella nuova. Si cambia fuori dalla transazione, come foreign_keys.
+    conn.commit()
+    legacy_prima = conn.execute("PRAGMA legacy_alter_table").fetchone()[0]
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("PRAGMA legacy_alter_table=ON")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if _proposte_prima_della_v34(conn):  # riletto dentro il lock
+                # Prima di rinominare: indici e trigger di proposte se ne vanno col
+                # DROP della tabella vecchia e si rifanno, uguali, sulla nuova. Prima
+                # gli indici, poi i trigger, e tutti dopo la copia delle righe: la
+                # copia non deve far scattare nessun trigger.
+                da_rifare = [
+                    r[0]
+                    for r in conn.execute(
+                        "SELECT sql FROM sqlite_master WHERE type IN ('index', 'trigger')"
+                        " AND tbl_name = 'proposte' AND sql IS NOT NULL"
+                        " ORDER BY type = 'trigger', name"
+                    )
+                ]
+                contatori = [
+                    c for c in (_contatore(conn, "proposte"), contatore_minimo) if c is not None
+                ]
+                conn.execute("ALTER TABLE proposte RENAME TO _proposte_v33")
+                conn.execute(TABELLA_PROPOSTE)
+                _copia_proposte(conn, "_proposte_v33")
+                conn.execute("DROP TABLE _proposte_v33")
+                for sql in da_rifare:
+                    conn.execute(sql)
+                if contatori:
+                    contatore = max(contatori)
+                    rimesso = conn.execute(
+                        "UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'proposte'",
+                        (contatore,),
+                    ).rowcount
+                    if not rimesso:  # tabella vuota: la copia non ha scritto il contatore
+                        conn.execute(
+                            "INSERT INTO sqlite_sequence (name, seq) VALUES ('proposte', ?)",
+                            (contatore,),
+                        )
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    finally:
+        conn.execute(f"PRAGMA legacy_alter_table={'ON' if legacy_prima else 'OFF'}")
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
 def _sincronizza_credenziali(
     conn: sqlite3.Connection, token_figlio: str | None, token_genitore: str | None
 ) -> None:
@@ -789,8 +975,13 @@ def init_db(
         # (v3.1) Prima di scrivere qualsiasi cosa (anche solo le tabelle nuove dello
         # SCHEMA): un database con una storia da migrare alla v3 si copia accanto al
         # file. Se la copia non riesce, init_db si ferma qui e il server non parte.
+        # (v3.4) Lo stesso per la migrazione delle proposte, con la sua copia. Si
+        # decide tutto qui, sul database com'e' arrivato: un database v2.4 che fa
+        # tutte e due le migrazioni ha le due copie, tutte e due di prima di toccarlo.
         if _va_migrato_a_v3(conn):
             _copia_prima_della_migrazione(conn, db_path)
+        if _va_migrato_a_v34(conn):
+            _copia_prima_della_migrazione(conn, db_path, SUFFISSO_COPIA_V34, "v3.4")
         # Tutto lo schema in una transazione: una scrittura sola su disco invece di
         # una per tabella (su Windows ogni transazione e' un file di journal in piu').
         conn.executescript("BEGIN;" + SCHEMA + "COMMIT;")
@@ -837,7 +1028,17 @@ def accoda_notifica(
 ) -> None:
     """(v3) Ogni notifica dice di quale figlio parla e, se riguarda un dispositivo
     (una sua regola, un suo evento, un suo bonus), di quale: NULL per quelle del
-    figlio, che arrivano a tutti i suoi dispositivi."""
+    figlio, che arrivano a tutti i suoi dispositivi. (v3.4) Una notifica per il
+    figlio che andrebbe a un dispositivo revocato (per esempio il genitore che ritira
+    una sua proposta su una regola di quel dispositivo) va invece a tutto il figlio:
+    un dispositivo revocato non legge piu' niente. Per il genitore il dispositivo
+    resta: dice soltanto di quale dispositivo e' la regola."""
+    if destinatario == "figlio" and dispositivo_id is not None:
+        revocato = conn.execute(
+            "SELECT 1 FROM dispositivi WHERE id = ? AND revocato_ts IS NOT NULL", (dispositivo_id,)
+        ).fetchone()
+        if revocato is not None:
+            dispositivo_id = None
     conn.execute(
         "INSERT INTO notifiche"
         " (destinatario, tipo, messaggio, payload, ts_server, figlio_id, dispositivo_id)"

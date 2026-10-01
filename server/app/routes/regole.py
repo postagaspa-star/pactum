@@ -134,10 +134,14 @@ def applica_modifica(
     parametri_dopo: dict,
     concordata: bool,
     ora: datetime,
+    avvisa_genitore: bool = True,
 ) -> sqlite3.Row:
     """Scrive la modifica di una regola attiva (senza controllare il lock: lo fa
     chi chiama), la registra nello storico e notifica il genitore. Condivisa dal
-    PATCH col figlio e dall'auto-applicazione di una proposta accettata."""
+    PATCH col figlio e dall'auto-applicazione di una proposta accettata.
+    (v3.4) avvisa_genitore=False quando la modifica l'ha appena decisa il genitore
+    stesso, accettando una proposta del figlio: lo storico la registra come sempre,
+    la notifica modifica_regola sarebbe un doppione."""
     parametri_prima = json.loads(riga["parametri"])
     direzione = "allenta" if lock.allenta(riga["tipo"], parametri_prima, parametri_dopo) else "stringe"
     ts = clock.iso(ora)
@@ -148,31 +152,37 @@ def applica_modifica(
     registra_modifica(
         conn, riga["id"], "modifica", direzione, parametri_prima, parametri_dopo, concordata, ts
     )
-    accoda_notifica(
-        conn,
-        "modifica_regola",
-        f"Regola {riga['id']} ({riga['tipo']}) modificata ({direzione})",
-        {
-            "regola_id": riga["id"],
-            "azione": "modifica",
-            "direzione": direzione,
-            "concordata": concordata,
-            "prima": parametri_prima,
-            "dopo": parametri_dopo,
-        },
-        ts,
-        figlio_id=riga["figlio_id"],
-        dispositivo_id=riga["dispositivo_id"],
-    )
+    if avvisa_genitore:
+        accoda_notifica(
+            conn,
+            "modifica_regola",
+            f"Regola {riga['id']} ({riga['tipo']}) modificata ({direzione})",
+            {
+                "regola_id": riga["id"],
+                "azione": "modifica",
+                "direzione": direzione,
+                "concordata": concordata,
+                "prima": parametri_prima,
+                "dopo": parametri_dopo,
+            },
+            ts,
+            figlio_id=riga["figlio_id"],
+            dispositivo_id=riga["dispositivo_id"],
+        )
     return conn.execute("SELECT * FROM regole WHERE id = ?", (riga["id"],)).fetchone()
 
 
 def applica_eliminazione(
-    conn: sqlite3.Connection, riga: sqlite3.Row, concordata: bool, ora: datetime
+    conn: sqlite3.Connection,
+    riga: sqlite3.Row,
+    concordata: bool,
+    ora: datetime,
+    avvisa_genitore: bool = True,
 ) -> None:
     """Soft-delete di una regola attiva (senza controllare lock ne' ultima_regola:
     lo fa chi chiama), registrato e notificato. Condivisa dal DELETE del figlio e
-    dall'auto-applicazione di una proposta di eliminazione accettata."""
+    dall'auto-applicazione di una proposta di eliminazione accettata. (v3.4)
+    avvisa_genitore come in applica_modifica."""
     ts = clock.iso(ora)
     parametri_prima = json.loads(riga["parametri"])
     conn.execute(
@@ -181,28 +191,31 @@ def applica_eliminazione(
     registra_modifica(
         conn, riga["id"], "eliminazione", "allenta", parametri_prima, None, concordata, ts
     )
-    accoda_notifica(
-        conn,
-        "modifica_regola",
-        f"Regola {riga['id']} ({riga['tipo']}) eliminata",
-        {
-            "regola_id": riga["id"],
-            "azione": "eliminazione",
-            "concordata": concordata,
-            "prima": parametri_prima,
-        },
-        ts,
-        figlio_id=riga["figlio_id"],
-        dispositivo_id=riga["dispositivo_id"],
-    )
+    if avvisa_genitore:
+        accoda_notifica(
+            conn,
+            "modifica_regola",
+            f"Regola {riga['id']} ({riga['tipo']}) eliminata",
+            {
+                "regola_id": riga["id"],
+                "azione": "eliminazione",
+                "concordata": concordata,
+                "prima": parametri_prima,
+            },
+            ts,
+            figlio_id=riga["figlio_id"],
+            dispositivo_id=riga["dispositivo_id"],
+        )
 
 
 def _annulla_proposte_pendenti(conn: sqlite3.Connection, riga: sqlite3.Row, ts: str) -> None:
     """L'eliminazione diretta di una regola annulla le sue proposte pendenti (v2.1):
     non ha senso rispondere a una proposta su una regola che non esiste piu'. Il
-    genitore viene avvisato; rispondere a una annullata -> 409 proposta_non_pendente."""
+    genitore viene avvisato; rispondere a una annullata -> 409 proposta_non_pendente.
+    (v3.4) Di tutti e due gli autori; l'avviso va sempre al genitore (una regola la
+    elimina direttamente solo il figlio) e dice di chi era la proposta."""
     pendenti = conn.execute(
-        "SELECT id FROM proposte WHERE regola_id = ? AND stato = 'pendente'", (riga["id"],)
+        "SELECT id, autore FROM proposte WHERE regola_id = ? AND stato = 'pendente'", (riga["id"],)
     ).fetchall()
     for p in pendenti:
         conn.execute("UPDATE proposte SET stato = 'annullata' WHERE id = ?", (p["id"],))
@@ -210,7 +223,8 @@ def _annulla_proposte_pendenti(conn: sqlite3.Connection, riga: sqlite3.Row, ts: 
             conn,
             "proposta_annullata",
             "Proposta annullata: la regola collegata e' stata eliminata",
-            {"proposta_id": p["id"], "regola_id": riga["id"], "motivo": "regola_eliminata"},
+            {"proposta_id": p["id"], "regola_id": riga["id"], "motivo": "regola_eliminata",
+             "autore": p["autore"]},
             ts,
             destinatario="genitore",
             figlio_id=riga["figlio_id"],

@@ -250,7 +250,7 @@ Le notifiche **non lette** (polling; ogni notifica ha un `tipo` macchina-leggibi
 ```
 - `id`: intero autoincrementale del server — chiave per la marcatura come letta e per non ri-avvisare due volte lato app.
 - `destinatario` (v2): ogni notifica nasce per un destinatario — `figlio` o `genitore` — e ciascuno riceve SOLO le proprie (il GET filtra sul ruolo del token; anche l'app del figlio ora legge le notifiche, es. nuove proposte e verdetti).
-- `tipo` ∈ `sforamento · manomissione · bonus · modifica_regola · nuova_proposta · proposta_risposta · dichiarazione · verdetto · segno` (le app tollerano tipi nuovi). `segno` (v2.4) è destinato al figlio, con `payload: {}`.
+- `tipo` ∈ `sforamento · manomissione · bonus · modifica_regola · nuova_proposta · proposta_risposta · proposta_annullata · proposta_ritirata · dichiarazione · verdetto · segno` (le app tollerano tipi nuovi). `segno` (v2.4) è destinato al figlio, con `payload: {}`. `proposta_annullata` (v2.1) va al genitore; `proposta_ritirata` (v3.4) va a chi non ha ritirato. Dalla v3.4 `nuova_proposta` e `proposta_risposta` possono andare a tutti e due: chi le riceve lo dice `autore` nel `payload` (v. la sezione v3.4).
 - `payload` per tipo: **sforamento/manomissione** `{evento_id, dettagli}` (l'evento del registro che l'ha generata); **bonus** `{minuti, regola_id, motivo, residuo_giorno, residuo_settimana}`; **modifica_regola** `{regola_id, azione, …}` con `parametri` su creazione, `direzione/concordata/prima/dopo` su modifica, `concordata/prima` su eliminazione; **nuova_proposta** `{proposta_id, regola_id, confronto, direzione}`; **proposta_risposta** `{proposta_id, regola_id, esito}`; **dichiarazione** `{dichiarazione_id, regola_id, esito, giorno}`; **verdetto** `{dichiarazione_id, regola_id, verdetto}`.
 - POST /api/notifiche/{id}/letta funziona per il proprio ruolo: ciascuno può marcare come lette solo le notifiche a lui destinate (`404` sulle altrui).
 
@@ -427,6 +427,7 @@ La forma della v2.4 resta, riferita al figlio indicato:
 ### Versioni e download
 
 - `GET /api/versione` ha anche `"computer": { "versione_code", "versione_nome", "url": "/scarica/pactum-computer.zip", "note" }`.
+- (v3.4) Il `versione_code` del computer segue quello delle app del telefono (0.8.0 = 8, 0.9.0 = 9, 0.10.0 = 10), perché il programma lo confronta col proprio codice, che fin dalla 0.8 è numerato così. Il server per la 0.8 e la 0.9 annunciava per sbaglio 1 e 2, e il programma non avvisava mai.
 - `/scarica` offre anche `pactum-computer.zip`.
 
 ### Migrazione (una volta, automatica, al primo avvio della v3)
@@ -498,8 +499,89 @@ Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
 
 - Le risposte sotto `/api/` più grandi di 500 byte arrivano compresse (gzip) se il client manda `Accept-Encoding: gzip`, come fa da solo OkHttp nelle app Android. Serve all'app del genitore 0.9, che chiede le notifiche ogni minuto e riceve ogni volta tutte quelle non lette. `/scarica` non si comprime mai: APK e zip sono già compressi e devono mantenere la loro lunghezza.
 
+## v3.4 — le proposte del figlio (01/10/2026, decisione di Andrea del 30/09)
+
+Fino alla v3.3 propone solo il genitore e risponde solo il figlio. Dalla v3.4 **propone anche il figlio e risponde il genitore**. Resta tutto quello che c'era: il figlio continua a cambiare le sue regole da solo (stringere subito, allentare dopo 4 giorni); in più può chiedere al genitore un cambio che, **se il genitore accetta, vale subito**, anche se allenta.
+
+Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
+
+### Chi propone, chi risponde
+
+- Ogni proposta ha un **`autore`**: `"genitore"` oppure `"figlio"`. Le proposte nate prima della v3.4 sono tutte `"genitore"`.
+- Risponde sempre **l'altro**: a una proposta del genitore risponde il figlio (un suo dispositivo qualsiasi, come prima); a una proposta del figlio risponde il genitore. Rispondere a una proposta propria → `403`.
+- Resta **una sola proposta `pendente` per regola**, chiunque l'abbia fatta: `409 {"errore": "proposta_gia_pendente"}`. Sulla stessa regola non ci sono mai due richieste incrociate.
+- Le proposte servono a **modificare o eliminare** una regola che esiste. Una regola nuova il figlio la crea da solo (creare = stringere), come prima.
+
+### `POST /api/proposte` dal dispositivo (nuovo)
+
+- Stesso corpo del genitore: `{ "regola_id": n, "parametri_proposti": { … } | {"azione": "elimina"}, "motivazione": "…"? }`. `figlio_id` nel corpo si ignora: il figlio è quello del token.
+- La regola deve essere **attiva** e **dello stesso figlio** del dispositivo (di qualsiasi suo dispositivo, oppure di vita reale): altrimenti `409 {"errore": "regola_non_valida"}`, la stessa risposta che riceve il genitore.
+- Regola di un dispositivo revocato → `409 {"errore": "dispositivo_revocato"}`. Parametri che non vanno bene per il tipo della regola o del dispositivo → `422`, come per il genitore.
+- Il figlio può proporre anche un cambio che stringe (il server non lo vieta), ma le app glielo offrono soprattutto quando allenta, perché stringere lo può già fare da solo e subito.
+- Il server calcola `confronto` e `direzione` come per le proposte del genitore (stessa funzione).
+- Notifica al **genitore**: `tipo: "nuova_proposta"`, `messaggio: "<nome del figlio> propone: <confronto>"`, `payload: { "proposta_id", "regola_id", "confronto", "direzione", "autore": "figlio" }`, con `figlio_id` e il `dispositivo_id` della regola (`null` per la vita reale).
+- Risposta `200` con la proposta creata (`"autore": "figlio"`).
+
+### `POST /api/proposte/{id}/risposta` dal genitore (nuovo)
+
+- Stesso corpo: `{ "esito": "accetta" | "rifiuta", "motivazione": "…"? }`. Stesso comportamento della risposta del figlio: atomica anche sotto richieste concorrenti; `accetta` **applica subito** la modifica (lock dei 4 giorni saltato, parametri esattamente quelli proposti, `concordata: true` nello storico; eliminazione col marcatore, col vincolo `ultima_regola`; `409 dispositivo_revocato` se nel frattempo il dispositivo è stato revocato, e la proposta resta pendente). Stessa risposta `200 { "proposta": {…}, "regola": {…} | null }`.
+- Proposta di un figlio inesistente → `404`, come per gli altri endpoint del genitore: il corpo può avere `figlio_id` (facoltativo, come nel verdetto); un figlio che non c'è, o che non è quello della proposta, → `404`. Anche una proposta che non c'è → `404`.
+- Notifica al **figlio**: `tipo: "proposta_risposta"`, `messaggio: "Il genitore ha accettato la tua proposta: <confronto>"` oppure `"Il genitore ha rifiutato la tua proposta: <confronto>"`, `payload: { "proposta_id", "regola_id", "esito", "autore": "figlio" }`, con **`dispositivo_id: null`**: la risposta arriva a **tutti** i dispositivi del figlio, perché la cerca dove si trova.
+- Quando accetta il genitore, il server **non** gli manda anche la notifica `modifica_regola` (la modifica l'ha appena decisa lui). Lo storico la registra come sempre.
+- La notifica `proposta_risposta` al genitore (il figlio risponde a una proposta del genitore) ha in più `"autore": "genitore"` nel `payload`. Il resto non cambia.
+
+### `POST /api/proposte/{id}/ritira` (nuovo, figlio e genitore)
+
+- Ritira una proposta **propria** ancora in attesa: il genitore le sue, un dispositivo del figlio quelle del figlio (da qualsiasi suo dispositivo). La proposta di un altro → `403`. Una proposta non più `pendente` → `409 {"errore": "proposta_non_pendente"}`.
+- Nessun corpo. `stato` diventa **`ritirata`**, `usata: false`, la regola non cambia. Il `confronto` (e la `direzione`) si fermano a come sono in quel momento, come quando si risponde.
+- Atomico come la risposta: un "ritira" e un "accetta" che arrivano insieme → ne passa uno solo, l'altro riceve `409 proposta_non_pendente`.
+- Notifica **all'altro**: `tipo: "proposta_ritirata"` (tipo nuovo), `payload: { "proposta_id", "regola_id", "autore" }`.
+  - Se ritira il figlio: al genitore, `messaggio: "<nome del figlio> ha ritirato la sua proposta"`, col `dispositivo_id` della regola.
+  - Se ritira il genitore: al figlio, `messaggio: "Il genitore ha ritirato la sua proposta"`, col `dispositivo_id` della regola (come la `nuova_proposta` che l'aveva annunciata).
+- Risposta `200` con la proposta aggiornata.
+
+### La proposta nelle risposte
+
+- Ovunque compaia una proposta (`POST /api/proposte`, `GET /api/proposte`, le risposte di `risposta` e `ritira`, `proposte_pendenti`, `proposte_inviate`) c'è in più **`autore`**: `"genitore" | "figlio"`.
+- `stato` ∈ `pendente · accettata · rifiutata · annullata · ritirata`.
+- Il `confronto` delle pendenti si ricalcola a ogni lettura rispetto alla regola di adesso (v2.1), per tutte e due gli autori.
+
+### Dove si vedono
+
+- **`GET /api/proposte`** (figlio e genitore): **senza parametri resta com'era**: solo le proposte del genitore (`autore: "genitore"`), dalla più recente, al massimo 50. Così le app 0.8 e 0.9 (e il programma del computer non ancora aggiornato) non scambiano una proposta del figlio per una del genitore. **Con `?autori=tutti`** arrivano le proposte di **tutti e due gli autori**, sempre al massimo 50: le app 0.10 lo chiedono sempre. Per il genitore il parametro si aggiunge a `figlio_id` (`?figlio_id=2&autori=tutti`). Un altro valore di `autori` → `422`.
+- **`GET /api/patto`**:
+  - `proposte_pendenti` resta **solo quelle a cui il figlio deve rispondere** (`autore: "genitore"`), come le vedevano le app 0.9;
+  - in più **`proposte_inviate`**: le proposte del figlio **ancora pendenti** (aspettano il genitore), stessa forma, dalla più recente. Di tutto il figlio, come `proposte_pendenti`.
+- **`GET /api/finestra?figlio_id=…`**: in più **`proposte_pendenti`**: tutte le proposte pendenti del figlio, di tutti e due gli autori, dalla più recente, ciascuna col suo `autore`. Quelle con `autore: "figlio"` aspettano la decisione del genitore.
+- **`GET /api/famiglia`**: per ogni figlio in più **`proposte_da_decidere`**: quante proposte di quel figlio aspettano il genitore (pendenti con `autore: "figlio"`), senza contare quelle sulle regole di un dispositivo revocato (non si possono accettare, solo rifiutare: restano visibili nella finestra).
+- Le notifiche che andrebbero al `dispositivo_id` di una regola di un dispositivo **revocato** (per esempio il genitore che ritira una sua proposta su quella regola) vanno invece a tutto il figlio (`dispositivo_id: null`): un dispositivo revocato non legge più niente.
+
+### I nomi nel confronto
+
+- Quando una proposta **cambia il bersaglio** di un `limite_tempo` (da un'app a un'altra, da una categoria a un'app, a o da `totale`), il `confronto` scrive i bersagli **con i nomi che leggono le persone**, mai con le chiavi tecniche:
+  - app del telefono e programmi del computer (`exe:`): l'etichetta più recente vista nelle fotografie `uso_giornaliero` del figlio, la stessa che dà il `nome` della finestra; se non è mai arrivata, la chiave com'è;
+  - categorie: come le scrivono le app: `Social`, `Giochi`, `Video`, `Musica`, `Altre app`;
+  - siti (`sito:`): il dominio (`youtube.com`);
+  - `totale`: "tutto il telefono" / "tutto il computer", come dalla v3.3.
+- Esempio: `"da TikTok (60 min) a Instagram (60 min) al giorno"`, `"da Social (120 min) a TikTok (60 min) al giorno"`. Vale per le proposte di tutti e due gli autori e per i messaggi delle notifiche. A bersaglio uguale il testo non cambia.
+- Le proposte di **eliminazione** tengono `confronto: "propone di eliminare la regola"`, ma nei messaggi delle notifiche il verbo non si ripete: `"<nome del figlio> propone di eliminare la regola"`, `"Il genitore propone di eliminare la regola"`, `"Il genitore ha accettato la tua proposta di eliminare la regola"` (o `rifiutato`), `"<nome del figlio> ha ritirato la sua proposta di eliminare la regola"`, `"Il genitore ha ritirato la sua proposta di eliminare la regola"`.
+
+### L'eliminazione diretta di una regola
+
+- Come dalla v2.1: eliminare una regola **annulla** tutte le sue proposte pendenti, ora di tutti e due gli autori (`stato: "annullata"`).
+- La notifica `proposta_annullata` va sempre al **genitore**, come prima (una regola la elimina direttamente solo il figlio, quindi chi va avvisato è il genitore), con in più `"autore"` nel `payload`.
+
+### Compatibilità
+
+- **Database**: la tabella `proposte` prende la colonna `autore` (`"genitore"` per tutte le righe che ci sono già) e il nuovo stato `ritirata`. Si fa da sola al primo avvio, tutta in una transazione. Come per la v3, prima di toccare un database che ha già dati il server ne fa una copia completa accanto al file (`<db>.prima-v3.4-<data>`), e se la copia non riesce **non parte**. Un database che fa anche la migrazione v3 (per esempio uno della v2.4) ha tutte e due le copie, fatte tutte e due prima di toccarlo.
+- **App 0.8/0.9 con server 0.10**: continuano a funzionare e vedono le proposte come prima: le proposte del figlio non arrivano né in `proposte_pendenti` né in `GET /api/proposte` senza `?autori=tutti`. Ignorano i campi nuovi e mostrano il tipo nuovo `proposta_ritirata` col suo `messaggio` (o lo ignorano). Per decidere sulle proposte del figlio il genitore deve avere l'app 0.10.
+- **Tornare indietro al server v3.3** dopo la migrazione si fa solo **rimettendo la copia `.prima-v3.4-…`** (o con `PACTUM_RIPRISTINA` di una copia della notte precedente): un server v3.3 su un database v3.4 non sa chi ha fatto una proposta e lascerebbe il figlio rispondere alle sue.
+- **Ordine sul NAS**: prima i file nuovi in `server/apk` (APK 0.10 e `pactum-computer.zip`), poi la ricostruzione dell'immagine: `versioni.json` sta dentro l'immagine e annuncia la 0.10 appena il server riparte.
+- **App 0.10 con server vecchio**: `POST /api/proposte` col token del dispositivo riceve `403` (ruolo sbagliato) e `ritira` riceve `404` o `405`. In questi casi l'app non dice "errore": dice che per mandare proposte serve aggiornare il server di Pactum. Il resto dell'app funziona come la 0.9.
+
 ---
-**Versione: v3.3 — 30/09/2026** (decisione di Andrea): limite sul totale del dispositivo — `app_o_categoria = "totale"` accettato per telefoni e computer, valutato dalle app con lo `sforamento` di sempre (semaforo invariato); nella finestra la regola totale non ha `nome` e il suo limite sta accanto al `totale_minuti` del giorno in `uso_recente` (`limite`, `regola_id`, `bonus`); nel confronto delle proposte "tutto il telefono" / "tutto il computer"; `GET /api/notifiche?dopo_id=N` (solo le non lette arrivate dopo) e risposte `/api/` compresse gzip su richiesta, per l'app del genitore sempre attiva. Nessun cambio al database.
+**Versione: v3.4 — 01/10/2026** (decisione di Andrea del 30/09): le proposte del figlio — `POST /api/proposte` anche col token del dispositivo (notifica `nuova_proposta` al genitore), `POST /api/proposte/{id}/risposta` anche col token del genitore sulle proposte del figlio (accetta = vale subito; notifica `proposta_risposta` a tutti i dispositivi del figlio; niente `modifica_regola` doppia al genitore), `POST /api/proposte/{id}/ritira` per chi ha proposto (stato `ritirata`, notifica `proposta_ritirata` all'altro); campo `autore` su ogni proposta; `proposte_inviate` in `GET /api/patto` (`proposte_pendenti` resta quelle a cui risponde il figlio), `proposte_pendenti` in `GET /api/finestra`, `proposte_da_decidere` in `GET /api/famiglia`; una sola pendente per regola di chiunque sia. Database: colonna `autore` e stato `ritirata`, con la copia prima della migrazione.
+**v3.3 — 30/09/2026** (decisione di Andrea): limite sul totale del dispositivo — `app_o_categoria = "totale"` accettato per telefoni e computer, valutato dalle app con lo `sforamento` di sempre (semaforo invariato); nella finestra la regola totale non ha `nome` e il suo limite sta accanto al `totale_minuti` del giorno in `uso_recente` (`limite`, `regola_id`, `bonus`); nel confronto delle proposte "tutto il telefono" / "tutto il computer"; `GET /api/notifiche?dopo_id=N` (solo le non lette arrivate dopo) e risposte `/api/` compresse gzip su richiesta, per l'app del genitore sempre attiva. Nessun cambio al database.
 **v3.2 — 25/09/2026**: copia notturna del registro fatta dal server stesso (sul NAS non c'è un programmatore di attività): una al giorno dopo le 03:00 del patto, controllata con `integrity_check`, ultime 30; campo `backup` in `GET /api/salute`; ripristino di una copia all'avvio con `PACTUM_RIPRISTINA`. Nessun cambio per le app.
 **v3 — 23/09/2026** (decisione di Andrea): famiglia con più figli, ogni figlio con più dispositivi (telefoni e computer) con regole, tempi, bonus e registro separati; vita reale e striscia per figlio; token per dispositivo e per genitore con abbinamento a codice di 6 cifre; computer con programmi (`exe:`), siti (`sito:`, letti dalla barra degli indirizzi, solo il dominio) e spegnimento che non è un'interruzione; compatibile con le app 0.7.
 **v2.4 — 19/09/2026** (redesign Fascia B/C della tavola rotonda, deciso da Andrea): `striscia` aggregata degli 8 giorni in `GET /api/finestra` **e identica** in `GET /api/patto`, uscita da una sola funzione del server; semaforo senza verde nei giorni senza fotografia (un giorno di cui non si sa niente non è un giorno mantenuto); `giorno` opzionale nei dettagli di `sforamento`, così gli sforamenti consegnati in ritardo cadono nel giorno giusto; `riepilogo` (giorni fuori regola + interruzioni negli 8 giorni) e `semaforo` per regola anche in `GET /api/patto`, cosi' il figlio vede gli stessi fatti del genitore; `POST /api/segno` (riconoscimento del genitore a testo fisso, max 1 al giorno) + `segno_oggi` nella finestra + notifica di tipo `segno` al figlio.

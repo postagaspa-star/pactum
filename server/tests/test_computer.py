@@ -299,4 +299,4 @@ def test_scarica_il_programma_per_il_computer(client_zip):
     assert r.content == b"PK\x03\x04 finto zip"
     pagina = c.get("/scarica").text
     assert "/scarica/pactum-computer.zip" in pagina and "SmartScreen" in pagina
-    assert c.get("/api/versione").json()["computer"]["versione_nome"] == "0.9.0"
+    assert c.get("/api/versione").json()["computer"]["versione_nome"] == "0.10.0"

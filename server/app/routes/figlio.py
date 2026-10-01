@@ -223,7 +223,10 @@ def patto(
     (v3) Regole, bonus e siti sono di QUESTO dispositivo (piu' la vita reale del
     figlio); proposte, dichiarazioni, striscia e riepilogo sono di tutto il figlio.
     In piu' chi e' il figlio, chi e' il dispositivo, la striscia del dispositivo e
-    quella di ciascun dispositivo del figlio."""
+    quella di ciascun dispositivo del figlio.
+
+    (v3.4) proposte_pendenti = quelle del genitore a cui il figlio risponde;
+    proposte_inviate = quelle del figlio che aspettano il genitore."""
     ora = clock.now()
     figlio = famiglia.figlio_o_404(conn, chi.figlio_id)
     dispositivi = famiglia.dispositivi_del_figlio(conn, chi.figlio_id)
@@ -249,10 +252,16 @@ def patto(
         "regole": regole,
         "bonus": stato_bonus(conn, ora, chi.dispositivo_id),
         "bonus_oggi_per_regola": bonus_oggi_per_regola(conn, ora, chi.dispositivo_id),
-        # conn: confronto ricalcolato vs la regola attuale (v2.1)
+        # conn: confronto ricalcolato vs la regola attuale (v2.1). (v3.4) Solo quelle a
+        # cui il figlio deve rispondere, cioe' del genitore: come le vedevano le app 0.9.
         "proposte_pendenti": [
             formatta_proposta(r, conn)
-            for r in proposte_del_figlio(conn, chi.figlio_id, solo_pendenti=True)
+            for r in proposte_del_figlio(conn, chi.figlio_id, solo_pendenti=True, autore="genitore")
+        ],
+        # (v3.4) Le proposte del figlio che aspettano il genitore, di tutto il figlio.
+        "proposte_inviate": [
+            formatta_proposta(r, conn)
+            for r in proposte_del_figlio(conn, chi.figlio_id, solo_pendenti=True, autore="figlio")
         ],
         "dichiarazioni_in_attesa": [
             formatta_dichiarazione(r)

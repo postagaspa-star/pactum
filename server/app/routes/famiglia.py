@@ -39,7 +39,7 @@ def _dispositivo_o_404(conn: sqlite3.Connection, dispositivo_id: int) -> sqlite3
 def leggi_famiglia(conn: sqlite3.Connection = Depends(get_conn)):
     """I figli in ordine di id, ciascuno con la sua striscia, il riepilogo, le
     notifiche per il genitore non ancora lette e i dispositivi in ordine di id,
-    revocati compresi."""
+    revocati compresi. (v3.4) E quante proposte del figlio aspettano il genitore."""
     ora = clock.now()
     figli = []
     for figlio in conn.execute("SELECT * FROM figli ORDER BY id").fetchall():
@@ -50,6 +50,16 @@ def leggi_famiglia(conn: sqlite3.Connection = Depends(get_conn)):
             " WHERE letta = 0 AND destinatario = 'genitore' AND figlio_id = ?",
             (figlio["id"],),
         ).fetchone()["n"]
+        # (v3.4) Le pendenti con autore "figlio": quelle che decide il genitore. Non
+        # quelle sulle regole di un dispositivo revocato: non si possono accettare,
+        # solo rifiutare (restano visibili nella finestra).
+        da_decidere = conn.execute(
+            "SELECT COUNT(*) AS n FROM proposte p JOIN regole r ON r.id = p.regola_id"
+            " LEFT JOIN dispositivi d ON d.id = r.dispositivo_id"
+            " WHERE r.figlio_id = ? AND p.stato = 'pendente' AND p.autore = 'figlio'"
+            " AND (r.dispositivo_id IS NULL OR d.revocato_ts IS NULL)",
+            (figlio["id"],),
+        ).fetchone()["n"]
         figli.append(
             {
                 "id": figlio["id"],
@@ -57,6 +67,7 @@ def leggi_famiglia(conn: sqlite3.Connection = Depends(get_conn)):
                 "striscia": quadro["striscia"],
                 "riepilogo": quadro["riepilogo"],
                 "notifiche_non_lette": non_lette,
+                "proposte_da_decidere": da_decidere,
                 "dispositivi": [
                     {
                         **famiglia.descrizione(d),

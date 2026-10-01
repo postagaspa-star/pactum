@@ -19,6 +19,7 @@ from ..auth import richiede_genitore
 from ..config import fuso_patto
 from ..db import accoda_notifica, get_conn, segno_mandato_oggi, stato_bonus
 from ..schemas import CHIAVE_TOTALE, SegnoIn
+from .proposte import formatta_proposta, proposte_del_figlio
 from .regole import _riga_regola
 
 router = APIRouter(dependencies=[Depends(richiede_genitore)])
@@ -27,10 +28,6 @@ router = APIRouter(dependencies=[Depends(richiede_genitore)])
 # siti.GIORNI_FINESTRA, unica per tutte le sezioni.
 RECENTI = 20
 STORICO_MASSIMO = 50
-# (v3.1) Le etichette leggibili delle app si cercano nelle fotografie degli ultimi
-# 60 giorni, non in tutta la storia: una regola su un'app mai piu' usata da due
-# mesi mostra il nome del pacchetto (il ripiego del contratto).
-GIORNI_NOMI = 60
 
 # (v2.4) Il testo del segno e' fisso: non lo sceglie il genitore (contratto-api.md).
 MESSAGGIO_SEGNO = "Ho visto la settimana. Bene così."
@@ -181,30 +178,6 @@ def _medie(conn: sqlite3.Connection, dispositivo_id: int | None, oggi) -> dict:
     return {"settimana": media(7), "mese": media(30)}
 
 
-def _nomi_recenti(conn: sqlite3.Connection, figlio_id: int, oggi) -> dict:
-    """(S2) L'ultima etichetta leggibile vista per ciascun pacchetto nelle
-    fotografie uso_giornaliero (la piu' recente vince): serve a mostrare al
-    genitore "TikTok" invece di com.zhiliaoapp.musically sulle regole
-    limite_tempo. Le fotografie sono al piu' una per giorno per dispositivo.
-    Fotografie senza `nomi` (pre-v2.2) si saltano. (v3) Dalle fotografie di tutti
-    i dispositivi del figlio: anche "Minecraft" per exe:minecraft.exe arriva cosi'
-    dal computer. (v3.1) Solo quelle degli ultimi GIORNI_NOMI giorni: la storia
-    cresce, e ogni fotografia letta qui e' un JSON da aprire."""
-    nomi: dict = {}
-    for riga in conn.execute(
-        "SELECT u.dettagli FROM uso_giornaliero u JOIN dispositivi d ON d.id = u.dispositivo_id"
-        " WHERE d.figlio_id = ? AND u.giorno >= ? ORDER BY u.ts_server DESC, u.giorno DESC",
-        (figlio_id, (oggi - timedelta(days=GIORNI_NOMI - 1)).isoformat()),
-    ).fetchall():
-        mappa = json.loads(riga["dettagli"]).get("nomi")
-        if not isinstance(mappa, dict):
-            continue
-        for chiave, nome in mappa.items():
-            if chiave not in nomi and isinstance(nome, str) and nome:
-                nomi[chiave] = nome
-    return nomi
-
-
 def _misure(
     conn: sqlite3.Connection,
     ora: datetime,
@@ -283,7 +256,7 @@ def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(ge
         "SELECT * FROM regole WHERE figlio_id = ? ORDER BY id", (figlio["id"],)
     ).fetchall()
     quadro = semaforo.quadro(conn, ora, figlio["id"], dispositivi)
-    nomi = _nomi_recenti(conn, figlio["id"], giorni[-1])
+    nomi = famiglia.nomi_recenti(conn, figlio["id"], giorni[-1])
     regole = []
     for riga in righe_regole:
         voce = {**_riga_regola(riga, per_id), "semaforo": quadro["semafori"][riga["id"]]}
@@ -346,6 +319,13 @@ def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(ge
         "riepilogo": quadro["riepilogo"],
         "segno_oggi": segno_mandato_oggi(conn, ora, figlio["id"]),
         "dispositivi": per_dispositivo,
+        # (v3.4) Le proposte pendenti del figlio, di tutti e due gli autori, dalla piu'
+        # recente, col confronto ricalcolato: quelle con autore "figlio" aspettano il
+        # genitore, quelle con autore "genitore" il figlio.
+        "proposte_pendenti": [
+            formatta_proposta(r, conn)
+            for r in proposte_del_figlio(conn, figlio["id"], solo_pendenti=True)
+        ],
     }
 
 

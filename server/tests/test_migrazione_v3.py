@@ -164,7 +164,7 @@ def test_ogni_riga_di_prima_resta_uguale_e_va_al_figlio_1(avvia, db_v24):
 
     for tabella in TABELLE_V24:
         assert len(dopo[tabella]) == len(prima[tabella]), tabella
-        nuove = {"figlio_id", "dispositivo_id"}
+        nuove = {"figlio_id", "dispositivo_id", "autore"}  # autore: (v3.4), sotto
         vecchie = [_senza(r, *nuove) for r in prima[tabella]]
         rimaste = [_senza(r, *nuove) for r in dopo[tabella]]
         if tabella in ("uso_giornaliero", "siti_giornalieri"):  # ricostruite: conta il contenuto
@@ -190,6 +190,10 @@ def test_ogni_riga_di_prima_resta_uguale_e_va_al_figlio_1(avvia, db_v24):
     assert {r["id"]: r["dispositivo_id"] for r in dopo["notifiche"]} == {
         1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: None, 7: 1, 8: 1, 9: 1, 10: None, 11: None,
     }
+    # (v3.4) prima della v3.4 proponeva solo il genitore
+    assert [(r["id"], r["autore"]) for r in dopo["proposte"]] == [
+        (1, "genitore"), (2, "genitore"), (3, "genitore"), (4, "genitore"),
+    ]
     for tabella in TABELLE_V3:
         assert tabella in dopo
 
@@ -322,6 +326,19 @@ def test_prima_di_migrare_una_copia_completa_accanto_al_file(avvia, db_v24):
     assert not list(Path(db_v24).parent.glob("*.parziale"))
 
 
+def test_dalla_v24_anche_la_copia_prima_della_v34(avvia, db_v24):
+    """(v3.4) Un database v2.4 fa anche la migrazione delle proposte: ha anche la sua
+    copia .prima-v3.4-, fatta come l'altra prima di toccare il database."""
+    prima = dati_v24.righe(db_v24)
+    with avvia():
+        pass
+    (v3,) = _copie(db_v24)
+    percorso = Path(db_v24)
+    (v34,) = sorted(percorso.parent.glob(percorso.name + ".prima-v3.4-*"))
+    assert v34.name == "nas-v24.db.prima-v3.4-20260923-120000"
+    assert dati_v24.righe(str(v34)) == prima == dati_v24.righe(str(v3))
+
+
 def test_la_copia_si_fa_una_volta_sola(avvia, db_v24, orologio):
     with avvia():
         pass
@@ -380,24 +397,31 @@ def test_una_copia_a_meta_non_resta_sul_disco(avvia, db_v24, monkeypatch):
     assert dati_v24.righe(db_v24) == prima
 
 
-def test_un_avvio_fallito_a_meta_non_sovrascrive_la_copia(db_v24, monkeypatch, orologio):
-    """Un avvio che copia e poi non riesce a migrare, e il riavvio nello stesso
-    secondo: due copie, nessuna sovrascritta."""
+def test_gli_avvii_falliti_non_rifanno_la_copia(db_v24, monkeypatch, orologio):
+    """Tre avvii che copiano e poi non riescono a migrare (in Docker il server riparte
+    da solo), e poi uno che riesce: (v3.4) una copia sola per migrazione, quella del
+    primo avvio, che resta buona perche' la migrazione fallita non ha toccato i dati.
+    Senza, il giro di errori riempirebbe il disco del NAS di copie uguali."""
     from app import db
 
+    prima = dati_v24.righe(db_v24)
     attacca_vero = db._attacca_dati_esistenti
 
     def guasto(*_):
         raise RuntimeError("corrente saltata a meta' migrazione")
 
     monkeypatch.setattr(db, "_attacca_dati_esistenti", guasto)
-    with pytest.raises(RuntimeError):
-        db.init_db(db_v24, 30, 90, TOKEN_FIGLIO, TOKEN_GENITORE)
+    for _ in range(3):
+        with pytest.raises(RuntimeError):
+            db.init_db(db_v24, 30, 90, TOKEN_FIGLIO, TOKEN_GENITORE)
+        orologio.avanza(seconds=30)
     monkeypatch.setattr(db, "_attacca_dati_esistenti", attacca_vero)
     db.init_db(db_v24, 30, 90, TOKEN_FIGLIO, TOKEN_GENITORE)
-    assert [c.name for c in _copie(db_v24)] == [
-        "nas-v24.db.prima-v3-20260923-120000", "nas-v24.db.prima-v3-20260923-120000-2",
-    ]
+    (copia,) = _copie(db_v24)
+    assert copia.name == "nas-v24.db.prima-v3-20260923-120000"
+    assert dati_v24.righe(str(copia)) == prima
+    percorso = Path(db_v24)
+    assert len(list(percorso.parent.glob(percorso.name + ".prima-v3.4-*"))) == 1
 
 
 # --- (v3.1) le notifiche del figlio lette per dispositivo ---

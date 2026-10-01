@@ -2,14 +2,20 @@
 dispositivi"). Qui vivono le letture condivise da piu' endpoint: quale figlio
 vuole il genitore, quali dispositivi ha, qual e' il primo (quello a cui valgono i
 campi di primo livello della finestra per le app 0.7), se un dispositivo tace o
-e' solo spento."""
+e' solo spento, (v3.4) come si chiamano le sue app (finestra e proposte)."""
 
+import json
 import sqlite3
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 
 from .config import SOGLIA_SILENZIO_MINUTI
+
+# (v3.1) Le etichette leggibili delle app si cercano nelle fotografie degli ultimi
+# 60 giorni, non in tutta la storia: una regola su un'app mai piu' usata da due
+# mesi mostra il nome del pacchetto (il ripiego del contratto).
+GIORNI_NOMI = 60
 
 
 def figlio_o_404(conn: sqlite3.Connection, figlio_id: int) -> sqlite3.Row:
@@ -55,6 +61,33 @@ def descrizione(dispositivo: sqlite3.Row) -> dict:
         "abbinato": dispositivo["abbinato_ts"] is not None,
         "revocato": dispositivo["revocato_ts"] is not None,
     }
+
+
+def nomi_recenti(conn: sqlite3.Connection, figlio_id: int, oggi) -> dict:
+    """(S2) L'ultima etichetta leggibile vista per ciascun pacchetto nelle
+    fotografie uso_giornaliero (la piu' recente vince): serve a mostrare al
+    genitore "TikTok" invece di com.zhiliaoapp.musically sulle regole
+    limite_tempo. Le fotografie sono al piu' una per giorno per dispositivo.
+    Fotografie senza `nomi` (pre-v2.2) si saltano. (v3) Dalle fotografie di tutti
+    i dispositivi del figlio: anche "Minecraft" per exe:minecraft.exe arriva cosi'
+    dal computer. (v3.1) Solo quelle degli ultimi GIORNI_NOMI giorni: la storia
+    cresce, e ogni fotografia letta qui e' un JSON da aprire. (v3.4) Le stesse
+    etichette scrivono i bersagli nel confronto delle proposte: qui e non in
+    routes/genitore.py, che le proposte non possono importare (genitore importa
+    proposte)."""
+    nomi: dict = {}
+    for riga in conn.execute(
+        "SELECT u.dettagli FROM uso_giornaliero u JOIN dispositivi d ON d.id = u.dispositivo_id"
+        " WHERE d.figlio_id = ? AND u.giorno >= ? ORDER BY u.ts_server DESC, u.giorno DESC",
+        (figlio_id, (oggi - timedelta(days=GIORNI_NOMI - 1)).isoformat()),
+    ).fetchall():
+        mappa = json.loads(riga["dettagli"]).get("nomi")
+        if not isinstance(mappa, dict):
+            continue
+        for chiave, nome in mappa.items():
+            if chiave not in nomi and isinstance(nome, str) and nome:
+                nomi[chiave] = nome
+    return nomi
 
 
 def stato_silenzio(conn: sqlite3.Connection, dispositivo: sqlite3.Row | None, ora: datetime) -> dict:

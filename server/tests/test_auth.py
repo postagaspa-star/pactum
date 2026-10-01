@@ -14,21 +14,23 @@ ENDPOINT_FIGLIO = [
     ("POST", "/api/bonus", {"minuti": 5, "regola_id": 1}),
     ("GET", "/api/patto", None),
     ("POST", "/api/dichiarazioni", {"regola_id": 1, "esito": "successo"}),
-    ("POST", "/api/proposte/1/risposta", {"esito": "accetta"}),
 ]
 ENDPOINT_GENITORE = [
     ("GET", "/api/finestra", None),
-    ("POST", "/api/proposte", {"regola_id": 1, "parametri_proposti": {}}),
     ("POST", "/api/dichiarazioni/1/verdetto", {"verdetto": "conferma"}),
     ("POST", "/api/segno", None),
 ]
 # Dual-role (v2): serve un token valido di UNO dei due ruoli, ma nessuno dei due e' escluso.
+# (v3.4) Anche proporre, rispondere e ritirare: propongono tutti e due, risponde l'altro.
 ENDPOINT_ENTRAMBI = [
     ("GET", "/api/regole", None),
     ("GET", "/api/notifiche", None),
     ("POST", "/api/notifiche/1/letta", None),
     ("GET", "/api/proposte", None),
     ("GET", "/api/dichiarazioni", None),
+    ("POST", "/api/proposte", {"regola_id": 1, "parametri_proposti": {}}),
+    ("POST", "/api/proposte/1/risposta", {"esito": "accetta"}),
+    ("POST", "/api/proposte/1/ritira", None),
 ]
 TUTTI = ENDPOINT_FIGLIO + ENDPOINT_GENITORE + ENDPOINT_ENTRAMBI
 

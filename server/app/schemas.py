@@ -137,12 +137,17 @@ class ProponiIn(BaseModel):
     parametri_proposti: dict
     motivazione: str | None = None
     # (v3) Facoltativo: il figlio lo dice gia' la regola; se c'e', deve combaciare.
+    # (v3.4) Dal dispositivo si ignora: il figlio e' quello del token.
     figlio_id: int | None = None
 
 
 class RispostaPropostaIn(BaseModel):
     esito: Literal["accetta", "rifiuta"]
     motivazione: str | None = None
+    # (v3.4) Solo per il genitore, facoltativo come nel verdetto: il figlio lo dice
+    # gia' la proposta; se c'e', deve esistere e combaciare (404 altrimenti). Dal
+    # dispositivo si ignora.
+    figlio_id: int | None = None
 
 
 class DichiarazioneIn(BaseModel):

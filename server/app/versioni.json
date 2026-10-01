@@ -1,20 +1,20 @@
 {
   "figlio": {
-    "versione_code": 9,
-    "versione_nome": "0.9.0",
+    "versione_code": 10,
+    "versione_nome": "0.10.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.9.0: il superamento di un limite si vede entro un minuto, con un avviso a tutto schermo (serve \"Mostra sopra le altre app\"); nuovo limite su tutto il telefono; WhatsApp e le app di messaggi non contano nei social, YouTube sì."
+    "note": "v0.10.0: puoi proporre al genitore un cambio a una regola: se accetta, vale subito, anche se allenta. Le tue proposte e le risposte sono in Proposte."
   },
   "genitore": {
-    "versione_code": 9,
-    "versione_nome": "0.9.0",
+    "versione_code": 10,
+    "versione_nome": "0.10.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.9.0: l'app resta attiva e controlla gli avvisi ogni minuto, anche a telefono fermo; in cima alla Panoramica le regole di oggi, mantenute e non; limite su tutto il telefono o tutto il computer."
+    "note": "v0.10.0: tuo figlio può proporti un cambio a una regola: lo trovi in cima alla Panoramica e decidi tu; se accetti, vale subito. Puoi anche ritirare una tua proposta."
   },
   "computer": {
-    "versione_code": 2,
-    "versione_nome": "0.9.0",
+    "versione_code": 10,
+    "versione_nome": "0.10.0",
     "url": "/scarica/pactum-computer.zip",
-    "note": "v0.9.0: avviso a tutto schermo quando superi un limite; nuovo limite su tutto il computer; WhatsApp e le app di messaggi non contano nei social, YouTube sì."
+    "note": "v0.10.0: anche dal computer puoi proporre al genitore un cambio a una regola: se accetta, vale subito."
   }
 }

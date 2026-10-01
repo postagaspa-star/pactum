@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Info
@@ -30,6 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -39,22 +41,30 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -71,31 +81,70 @@ import eu.stgm.pactum.design.contaGiorni
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.catalogo.AppInstallata
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
+import eu.stgm.pactum.figlio.dati.BloccoCambio
+import eu.stgm.pactum.figlio.dati.CambioRegola
+import eu.stgm.pactum.figlio.dati.EsitoProposta
+import eu.stgm.pactum.figlio.dati.Proposta
+import eu.stgm.pactum.figlio.dati.ProposteDelFiglio
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import eu.stgm.pactum.figlio.dati.inGiorniPatto
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 import java.time.Instant
 
-/** Le regole del patto: le scrive il figlio, il server le custodisce. */
+/**
+ * Le regole del patto: le scrive il figlio, il server le custodisce. (0.10) Su
+ * ogni regola anche "Proponi al genitore" (contratto v3.4): se il genitore
+ * accetta, il cambio vale subito, anche se allenta. [onApriProposte] porta
+ * alla scheda Proposte.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
+fun RegoleScreen(
+    onApriProposte: () -> Unit = {},
+    vm: RegoleViewModel = viewModel(),
+) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    // (0.10) Le snackbar delle proposte partono qui, fuori dall'effetto degli
+    // eventi: l'evento si consuma subito, così "Apri Proposte" può cambiare
+    // scheda senza che la snackbar ricompaia al ritorno.
+    val ambito = rememberCoroutineScope()
 
-    // null = nessun dialogo; CREA senza regola; MODIFICA con la regola.
-    var dialogoAperto by remember { mutableStateOf<DialogoRegole?>(null) }
-    var regolaDaEliminare by remember { mutableStateOf<Regola?>(null) }
+    // I dialoghi aperti si ricordano per id della regola (e il blocco come
+    // testo): una rotazione o la morte del processo non li chiudono, e non
+    // buttano quello che il ragazzo ha scritto (0.10). Per la modifica: null =
+    // nessun dialogo, NUOVA_REGOLA = creazione, altrimenti la regola.
+    var dialogoRegolaId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var regolaDaEliminareId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // (0.10) La regola su cui si sta scrivendo una proposta al genitore.
+    var regolaDaProporreId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // (0.10) Il cambio fermato dal blocco dei 4 giorni (BloccoCambio.inTesto).
+    var bloccoTesto by rememberSaveable { mutableStateOf<String?>(null) }
+    // L'ultima copia di ogni regola aperta in un dialogo: se intanto sparisce
+    // dal patto (eliminata, rilettura) il dialogo resta e dice perché.
+    val viste = remember { HashMap<Long, Regola>() }
+    fun regolaAperta(id: Long?): Regola? =
+        id?.let { cercata -> stato.regole.firstOrNull { it.id == cercata } ?: viste[cercata] }
+    fun ricorda(regola: Regola) {
+        viste[regola.id] = regola
+    }
+
+    // (0.10) Chiuso il modulo della proposta (o il blocco), il suo esito non si dice più.
+    fun chiudiProposta() {
+        regolaDaProporreId = null
+        vm.dimenticaEsitoProposta()
+    }
+    fun chiudiBlocco() {
+        bloccoTesto = null
+        vm.dimenticaEsitoProposta()
+    }
 
     LifecycleResumeEffect(Unit) {
         vm.aggiorna()
@@ -106,31 +155,63 @@ fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
     val messaggioEliminata = stringResource(R.string.regola_eliminata_ok)
     val messaggioUltima = stringResource(R.string.regola_ultima_messaggio)
     val messaggioErrore = stringResource(R.string.regola_errore_generico)
+    val azioneApriProposte = stringResource(R.string.proposta_apri_proposte)
     LaunchedEffect(stato.evento) {
         when (val evento = stato.evento) {
             is RegoleViewModel.Evento.Salvata -> {
-                dialogoAperto = null
+                dialogoRegolaId = null
                 snackbarHostState.showSnackbar(messaggioSalvata)
             }
             is RegoleViewModel.Evento.Eliminata -> {
-                regolaDaEliminare = null
+                regolaDaEliminareId = null
                 snackbarHostState.showSnackbar(messaggioEliminata)
             }
             is RegoleViewModel.Evento.LockAttivo -> {
-                regolaDaEliminare = null
-                val attesa = testoAttesa(context, evento.secondiRimanenti)
-                val messaggio = if (evento.perEliminazione) {
-                    context.getString(R.string.regola_elimina_lock_messaggio, attesa)
-                } else {
-                    context.getString(R.string.regola_lock_messaggio, attesa)
-                }
-                snackbarHostState.showSnackbar(messaggio)
+                regolaDaEliminareId = null
+                // (0.10) L'attesa resta quella di prima, ma in un dialogo che offre
+                // anche di chiederlo al genitore. Si apre sempre: il server guarda
+                // "l'ultima regola" prima del blocco, quindi qui le regole sono almeno due.
+                vm.dimenticaEsitoProposta()
+                bloccoTesto = BloccoCambio(
+                    evento.cambio,
+                    sbloccoAlle = System.currentTimeMillis() + evento.secondiRimanenti * 1000,
+                ).inTesto()
             }
             is RegoleViewModel.Evento.UltimaRegola -> {
-                regolaDaEliminare = null
+                regolaDaEliminareId = null
                 snackbarHostState.showSnackbar(messaggioUltima)
             }
             is RegoleViewModel.Evento.Errore -> snackbarHostState.showSnackbar(messaggioErrore)
+            is RegoleViewModel.Evento.PropostaAlGenitore -> {
+                val esito = evento.esito
+                val moduloAperto = regolaDaProporreId != null || bloccoTesto != null
+                // Si consuma subito: "Apri Proposte" può cambiare scheda, e al
+                // ritorno la snackbar non deve ricomparire.
+                vm.consumaEvento()
+                if (ProposteDelFiglio.chiudeIlModulo(esito)) {
+                    // Arrivata: si chiude tutto (anche la modifica sotto il blocco).
+                    bloccoTesto = null
+                    regolaDaProporreId = null
+                    dialogoRegolaId = null
+                } else if (moduloAperto) {
+                    // Il resto lo dice il modulo aperto, dove il ragazzo guarda
+                    // (stato.esitoProposta), non una snackbar sotto l'ombra.
+                    return@LaunchedEffect
+                }
+                // Arrivata, oppure il modulo era già chiuso quando è arrivata la risposta.
+                val messaggio = testoEsitoProposta(context, esito)
+                val verso = esito == EsitoProposta.GiaPendente || esito == EsitoProposta.GiaTua
+                ambito.launch {
+                    val scelta = snackbarHostState.showSnackbar(
+                        message = messaggio,
+                        // Già una proposta su questa regola: si va a vederla.
+                        actionLabel = azioneApriProposte.takeIf { verso },
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (scelta == SnackbarResult.ActionPerformed) onApriProposte()
+                }
+                return@LaunchedEffect
+            }
             null -> Unit
         }
         if (stato.evento != null) vm.consumaEvento()
@@ -150,7 +231,7 @@ fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
         },
         floatingActionButton = {
             if (!stato.configurazioneMancante) {
-                FloatingActionButton(onClick = { dialogoAperto = DialogoRegole(null) }) {
+                FloatingActionButton(onClick = { dialogoRegolaId = NUOVA_REGOLA }) {
                     Icon(Icons.Filled.Add, stringResource(R.string.regole_nuova))
                 }
             }
@@ -210,8 +291,21 @@ fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
                             CardRegola(
                                 regola = regola,
                                 concordata = regola.id in stato.concordate,
-                                onModifica = { dialogoAperto = DialogoRegole(regola) },
-                                onElimina = { regolaDaEliminare = regola },
+                                inAttesa = stato.proposteInAttesa[regola.id],
+                                onModifica = {
+                                    ricorda(regola)
+                                    dialogoRegolaId = regola.id
+                                },
+                                onElimina = {
+                                    ricorda(regola)
+                                    regolaDaEliminareId = regola.id
+                                },
+                                onProponi = {
+                                    ricorda(regola)
+                                    vm.dimenticaEsitoProposta()
+                                    regolaDaProporreId = regola.id
+                                },
+                                onApriProposte = onApriProposte,
                             )
                         }
                     }
@@ -234,27 +328,33 @@ fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
         }
     }
 
-    dialogoAperto?.let { dialogo ->
-        DialogoRegola(
-            regola = dialogo.regola,
-            invioInCorso = stato.invioInCorso,
-            onAnnulla = { dialogoAperto = null },
-            onSalva = { tipo, parametri ->
-                val regola = dialogo.regola
-                if (regola == null) vm.crea(tipo, parametri) else vm.modifica(regola.id, parametri)
-            },
-        )
+    // Creazione (NUOVA_REGOLA) o modifica di una regola: quella della modifica
+    // si mostra solo quando la si ritrova (dopo la morte del processo, a
+    // rilettura finita).
+    dialogoRegolaId?.let { id ->
+        val nuova = id == NUOVA_REGOLA
+        val regola = if (nuova) null else regolaAperta(id)
+        if (nuova || regola != null) {
+            DialogoRegola(
+                regola = regola,
+                invioInCorso = stato.invioInCorso,
+                onAnnulla = { dialogoRegolaId = null },
+                onSalva = { tipo, parametri ->
+                    if (regola == null) vm.crea(tipo, parametri) else vm.modifica(regola.id, parametri)
+                },
+            )
+        }
     }
 
-    regolaDaEliminare?.let { regola ->
+    regolaAperta(regolaDaEliminareId)?.let { regola ->
         AlertDialog(
-            onDismissRequest = { regolaDaEliminare = null },
+            onDismissRequest = { regolaDaEliminareId = null },
             title = { Text(stringResource(R.string.regola_elimina_conferma_titolo)) },
             text = {
                 Text(
                     stringResource(
                         R.string.regola_elimina_conferma_testo,
-                        descrizioneRegola(regola.tipo, regola.parametri),
+                        descrizioneRegola(regola.tipo, regola.parametri, leggibile = true),
                     ),
                 )
             },
@@ -267,23 +367,59 @@ fun RegoleScreen(vm: RegoleViewModel = viewModel()) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { regolaDaEliminare = null }) {
+                TextButton(onClick = { regolaDaEliminareId = null }) {
                     Text(stringResource(R.string.azione_annulla))
                 }
             },
         )
     }
+
+    regolaAperta(regolaDaProporreId)?.let { regola ->
+        DialogoProposta(
+            regola = regola,
+            invioInCorso = stato.invioInCorso,
+            // Eliminare l'ultima regola del patto non si può, nemmeno d'accordo.
+            eliminabile = stato.totaleFiglio > 1,
+            esito = stato.esitoProposta,
+            onAnnulla = { chiudiProposta() },
+            onManda = { cambio, perche -> vm.proponi(cambio, perche) },
+            onApriProposte = {
+                chiudiProposta()
+                onApriProposte()
+            },
+        )
+    }
+
+    // Sopra al modulo della modifica, che resta aperto sotto: chiuso il
+    // blocco, si torna lì e si può ancora stringere invece di allentare.
+    BloccoCambio.daTesto(bloccoTesto)?.let { blocco ->
+        DialogoBlocco(
+            blocco = blocco,
+            invioInCorso = stato.invioInCorso,
+            esito = stato.esitoProposta,
+            onChiudi = { chiudiBlocco() },
+            onChiedi = { perche -> vm.proponi(blocco.cambio, perche) },
+            onApriProposte = {
+                chiudiBlocco()
+                dialogoRegolaId = null
+                onApriProposte()
+            },
+        )
+    }
 }
 
-/** Il dialogo da aprire: regola null = creazione. */
-private data class DialogoRegole(val regola: Regola?)
+/** Il dialogo della modifica aperto su una regola nuova (creazione). */
+private const val NUOVA_REGOLA = -1L
 
 @Composable
 private fun CardRegola(
     regola: Regola,
     concordata: Boolean,
+    inAttesa: Proposta?,
     onModifica: () -> Unit,
     onElimina: () -> Unit,
+    onProponi: () -> Unit,
+    onApriProposte: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
@@ -297,7 +433,8 @@ private fun CardRegola(
                 if (concordata) Etichetta(stringResource(R.string.regola_concordata))
             }
             Text(
-                text = descrizioneRegola(regola.tipo, regola.parametri),
+                // (0.10) Mai il nome di un pacchetto, anche dopo un cambio di bersaglio.
+                text = descrizioneRegola(regola.tipo, regola.parametri, leggibile = true),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = Spazi.xs),
             )
@@ -333,7 +470,50 @@ private fun CardRegola(
                     Text(stringResource(R.string.azione_elimina))
                 }
             }
+            // (0.10) Proporre al genitore, ben visibile su ogni regola (Andrea,
+            // 30/09: il pulsante si deve vedere). Se su questa regola aspetta già
+            // una proposta, di chiunque sia, si dice quale e si porta a Proposte:
+            // una seconda il server la rifiuterebbe.
+            if (inAttesa == null) {
+                FilledTonalButton(onClick = onProponi, modifier = Modifier.fillMaxWidth()) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(Spazi.s))
+                    Text(stringResource(R.string.regola_proponi))
+                }
+            } else {
+                Text(
+                    text = testoPropostaInAttesa(inAttesa),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Spazi.xs, bottom = Spazi.s),
+                )
+                OutlinedButton(onClick = onApriProposte, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.regola_vedi_proposta))
+                }
+            }
         }
+    }
+}
+
+/**
+ * (0.10) La proposta che aspetta su una regola, in una riga: la propria
+ * aspetta il genitore, quella del genitore aspetta il figlio. Il confronto di
+ * un'eliminazione è scritto per il genitore: qui si dice "eliminarla".
+ */
+@Composable
+private fun testoPropostaInAttesa(proposta: Proposta): String {
+    val eliminazione = TestoProposta.eliminazione(proposta.direzione, proposta.parametriProposti)
+    val confronto = proposta.confronto?.trim()?.ifEmpty { null }
+        ?: stringResource(R.string.proposta_senza_confronto)
+    return when {
+        proposta.delFiglio && eliminazione -> stringResource(R.string.regola_proposta_tua_elimina)
+        proposta.delFiglio -> stringResource(R.string.regola_proposta_tua, confronto)
+        eliminazione -> stringResource(R.string.regola_proposta_genitore_elimina)
+        else -> stringResource(R.string.regola_proposta_genitore, confronto)
     }
 }
 
@@ -356,8 +536,155 @@ private fun etichettaTipoRegola(tipo: String): String = when (tipo) {
     else -> tipo
 }
 
-private val ORA_REGEX = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
-private val GIORNI = listOf("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+/**
+ * I campi di una regola, partendo dai valori di [regola] (vuoti per una
+ * nuova). (0.10) Lo stesso modulo serve a creare, a modificare e a proporre
+ * al genitore: stessi selettori, stessi controlli (ParametriRegola), mai testo
+ * libero per l'app o la categoria.
+ */
+@Stable
+private class ModuloRegola(
+    tipo: String,
+    app: String = "",
+    minuti: String = "",
+    dalle: String = "",
+    alle: String = "",
+    giorni: Set<String> = emptySet(),
+    descrizione: String = "",
+    arbitro: String = "",
+    frequenza: String = "",
+) {
+    var tipo by mutableStateOf(tipo)
+    var app by mutableStateOf(app)
+    var minuti by mutableStateOf(minuti)
+    var dalle by mutableStateOf(dalle)
+    var alle by mutableStateOf(alle)
+    var giorni by mutableStateOf(giorni)
+    var descrizione by mutableStateOf(descrizione)
+    var arbitro by mutableStateOf(arbitro)
+    var frequenza by mutableStateOf(frequenza)
+
+    /** I parametri pronti da mandare, null se qualche campo non va: il pulsante resta spento. */
+    val parametri: JsonObject?
+        get() = ParametriRegola.daCampi(tipo, app, minuti, dalle, alle, giorni, descrizione, arbitro, frequenza)
+
+    /** (0.10) Più minuti di un giorno: il campo lo dice, non solo il pulsante spento. */
+    val minutiTroppi: Boolean
+        get() = tipo == TipiRegola.LIMITE_TEMPO && ParametriRegola.minutiOltreIlGiorno(minuti)
+
+    fun cambiaGiorno(giorno: String) {
+        giorni = if (giorno in giorni) giorni - giorno else giorni + giorno
+    }
+
+    companion object {
+        /** Il modulo coi valori di [regola]; vuoto (limite di tempo) per una regola nuova. */
+        fun da(regola: Regola?): ModuloRegola {
+            val iniziali = regola?.parametri ?: JsonObject(emptyMap())
+            return ModuloRegola(
+                tipo = regola?.tipo ?: TipiRegola.LIMITE_TEMPO,
+                app = parametroTesto(iniziali, "app_o_categoria") ?: "",
+                minuti = parametroTesto(iniziali, "minuti_al_giorno") ?: "",
+                dalle = parametroTesto(iniziali, "dalle") ?: "",
+                alle = parametroTesto(iniziali, "alle") ?: "",
+                giorni = (iniziali["giorni"] as? JsonArray)
+                    ?.mapNotNull { (it as? JsonPrimitive)?.content }
+                    ?.toSet()
+                    ?: emptySet(),
+                descrizione = parametroTesto(iniziali, "descrizione") ?: "",
+                arbitro = parametroTesto(iniziali, "arbitro_nome") ?: "",
+                frequenza = parametroTesto(iniziali, "frequenza") ?: "",
+            )
+        }
+
+        /**
+         * (0.10) Quello che il ragazzo ha scritto resta attraverso una
+         * rotazione o la morte del processo: tutti i campi come testo.
+         */
+        val Salvataggio: Saver<ModuloRegola, Any> = listSaver(
+            save = {
+                listOf(
+                    it.tipo, it.app, it.minuti, it.dalle, it.alle, it.giorni.joinToString(","),
+                    it.descrizione, it.arbitro, it.frequenza,
+                )
+            },
+            restore = { valori ->
+                ModuloRegola(
+                    tipo = valori[0],
+                    app = valori[1],
+                    minuti = valori[2],
+                    dalle = valori[3],
+                    alle = valori[4],
+                    giorni = valori[5].split(',').filter { it.isNotBlank() }.toSet(),
+                    descrizione = valori[6],
+                    arbitro = valori[7],
+                    frequenza = valori[8],
+                )
+            },
+        )
+    }
+}
+
+/**
+ * I campi del [modulo], dentro la colonna di un dialogo. [sceltaTipo] = si
+ * sceglie anche il tipo: solo creando (il contratto non prevede di cambiarlo).
+ */
+@Composable
+private fun CampiRegola(modulo: ModuloRegola, sceltaTipo: Boolean) {
+    if (sceltaTipo) {
+        Column {
+            RigaRadio(
+                selezionato = modulo.tipo == TipiRegola.LIMITE_TEMPO,
+                testo = stringResource(R.string.regola_tipo_limite_tempo),
+                onClick = { modulo.tipo = TipiRegola.LIMITE_TEMPO },
+            )
+            RigaRadio(
+                selezionato = modulo.tipo == TipiRegola.FASCIA_ORARIA,
+                testo = stringResource(R.string.regola_tipo_fascia_oraria),
+                onClick = { modulo.tipo = TipiRegola.FASCIA_ORARIA },
+            )
+            RigaRadio(
+                selezionato = modulo.tipo == TipiRegola.VITA_REALE,
+                testo = stringResource(R.string.regola_tipo_vita_reale),
+                onClick = { modulo.tipo = TipiRegola.VITA_REALE },
+            )
+        }
+    }
+
+    when (modulo.tipo) {
+        TipiRegola.LIMITE_TEMPO -> {
+            SelettoreAppOCategoria(valore = modulo.app, onScegli = { modulo.app = it })
+            CampoTesto(
+                modulo.minuti, { modulo.minuti = it }, R.string.regola_campo_minuti,
+                numerico = true,
+                // (0.10) Il server accetta al massimo 1440 minuti: lo si dice sul campo.
+                avviso = if (modulo.minutiTroppi) stringResource(R.string.regola_minuti_troppi) else null,
+            )
+        }
+        TipiRegola.FASCIA_ORARIA -> {
+            CampoTesto(modulo.dalle, { modulo.dalle = it }, R.string.regola_campo_dalle)
+            CampoTesto(modulo.alle, { modulo.alle = it }, R.string.regola_campo_alle)
+            Text(
+                text = stringResource(R.string.regola_campo_giorni),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                ParametriRegola.GIORNI.take(4).forEach { giorno ->
+                    ChipGiorno(giorno, giorno in modulo.giorni) { modulo.cambiaGiorno(giorno) }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                ParametriRegola.GIORNI.drop(4).forEach { giorno ->
+                    ChipGiorno(giorno, giorno in modulo.giorni) { modulo.cambiaGiorno(giorno) }
+                }
+            }
+        }
+        TipiRegola.VITA_REALE -> {
+            CampoTesto(modulo.descrizione, { modulo.descrizione = it }, R.string.regola_campo_descrizione)
+            CampoTesto(modulo.arbitro, { modulo.arbitro = it }, R.string.regola_campo_arbitro)
+            CampoTesto(modulo.frequenza, { modulo.frequenza = it }, R.string.regola_campo_frequenza)
+        }
+    }
+}
 
 /**
  * Creazione o modifica di una regola. In creazione si sceglie il tipo; in
@@ -372,73 +699,9 @@ private fun DialogoRegola(
     onAnnulla: () -> Unit,
     onSalva: (String, JsonObject) -> Unit,
 ) {
-    var tipo by remember { mutableStateOf(regola?.tipo ?: TipiRegola.LIMITE_TEMPO) }
-
-    val parametriIniziali = regola?.parametri ?: JsonObject(emptyMap())
-    var app by remember { mutableStateOf(parametroTesto(parametriIniziali, "app_o_categoria") ?: "") }
-    var minuti by remember {
-        mutableStateOf(parametroTesto(parametriIniziali, "minuti_al_giorno") ?: "")
-    }
-    var dalle by remember { mutableStateOf(parametroTesto(parametriIniziali, "dalle") ?: "") }
-    var alle by remember { mutableStateOf(parametroTesto(parametriIniziali, "alle") ?: "") }
-    var giorni by remember {
-        mutableStateOf(
-            (parametriIniziali["giorni"] as? JsonArray)
-                ?.mapNotNull { (it as? JsonPrimitive)?.content }
-                ?.toSet()
-                ?: emptySet(),
-        )
-    }
-    var descrizione by remember {
-        mutableStateOf(parametroTesto(parametriIniziali, "descrizione") ?: "")
-    }
-    var arbitro by remember {
-        mutableStateOf(parametroTesto(parametriIniziali, "arbitro_nome") ?: "")
-    }
-    var frequenza by remember {
-        mutableStateOf(parametroTesto(parametriIniziali, "frequenza") ?: "")
-    }
-
-    val parametri: JsonObject? = when (tipo) {
-        TipiRegola.LIMITE_TEMPO -> {
-            val n = minuti.trim().toIntOrNull()
-            if (app.isBlank() || n == null || n <= 0) {
-                null
-            } else {
-                buildJsonObject {
-                    put("app_o_categoria", app.trim())
-                    put("minuti_al_giorno", n)
-                }
-            }
-        }
-        TipiRegola.FASCIA_ORARIA -> {
-            if (!ORA_REGEX.matches(dalle.trim()) || !ORA_REGEX.matches(alle.trim()) ||
-                giorni.isEmpty()
-            ) {
-                null
-            } else {
-                buildJsonObject {
-                    put("dalle", dalle.trim())
-                    put("alle", alle.trim())
-                    putJsonArray("giorni") {
-                        GIORNI.filter { it in giorni }.forEach { add(it) }
-                    }
-                }
-            }
-        }
-        TipiRegola.VITA_REALE -> {
-            if (descrizione.isBlank() || arbitro.isBlank() || frequenza.isBlank()) {
-                null
-            } else {
-                buildJsonObject {
-                    put("descrizione", descrizione.trim())
-                    put("arbitro_nome", arbitro.trim())
-                    put("frequenza", frequenza.trim())
-                }
-            }
-        }
-        else -> null
-    }
+    // (0.10) Salvato: una rotazione non butta quello che si sta scrivendo.
+    val modulo = rememberSaveable(regola?.id, saver = ModuloRegola.Salvataggio) { ModuloRegola.da(regola) }
+    val parametri = modulo.parametri
 
     AlertDialog(
         onDismissRequest = onAnnulla,
@@ -454,68 +717,13 @@ private fun DialogoRegola(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Spazi.m),
             ) {
-                if (regola == null) {
-                    Column {
-                        RigaRadio(
-                            selezionato = tipo == TipiRegola.LIMITE_TEMPO,
-                            testo = stringResource(R.string.regola_tipo_limite_tempo),
-                            onClick = { tipo = TipiRegola.LIMITE_TEMPO },
-                        )
-                        RigaRadio(
-                            selezionato = tipo == TipiRegola.FASCIA_ORARIA,
-                            testo = stringResource(R.string.regola_tipo_fascia_oraria),
-                            onClick = { tipo = TipiRegola.FASCIA_ORARIA },
-                        )
-                        RigaRadio(
-                            selezionato = tipo == TipiRegola.VITA_REALE,
-                            testo = stringResource(R.string.regola_tipo_vita_reale),
-                            onClick = { tipo = TipiRegola.VITA_REALE },
-                        )
-                    }
-                }
-
-                when (tipo) {
-                    TipiRegola.LIMITE_TEMPO -> {
-                        SelettoreAppOCategoria(valore = app, onScegli = { app = it })
-                        CampoTesto(
-                            minuti, { minuti = it }, R.string.regola_campo_minuti,
-                            numerico = true,
-                        )
-                    }
-                    TipiRegola.FASCIA_ORARIA -> {
-                        CampoTesto(dalle, { dalle = it }, R.string.regola_campo_dalle)
-                        CampoTesto(alle, { alle = it }, R.string.regola_campo_alle)
-                        Text(
-                            text = stringResource(R.string.regola_campo_giorni),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(Spazi.xs)) {
-                            GIORNI.take(4).forEach { giorno ->
-                                ChipGiorno(giorno, giorno in giorni) {
-                                    giorni = if (giorno in giorni) giorni - giorno else giorni + giorno
-                                }
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(Spazi.xs)) {
-                            GIORNI.drop(4).forEach { giorno ->
-                                ChipGiorno(giorno, giorno in giorni) {
-                                    giorni = if (giorno in giorni) giorni - giorno else giorni + giorno
-                                }
-                            }
-                        }
-                    }
-                    TipiRegola.VITA_REALE -> {
-                        CampoTesto(descrizione, { descrizione = it }, R.string.regola_campo_descrizione)
-                        CampoTesto(arbitro, { arbitro = it }, R.string.regola_campo_arbitro)
-                        CampoTesto(frequenza, { frequenza = it }, R.string.regola_campo_frequenza)
-                    }
-                }
+                CampiRegola(modulo, sceltaTipo = regola == null)
             }
         },
         confirmButton = {
             Button(
                 enabled = parametri != null && !invioInCorso,
-                onClick = { parametri?.let { onSalva(tipo, it) } },
+                onClick = { parametri?.let { onSalva(modulo.tipo, it) } },
             ) {
                 Text(stringResource(R.string.azione_salva))
             }
@@ -523,6 +731,207 @@ private fun DialogoRegola(
         dismissButton = {
             TextButton(onClick = onAnnulla) { Text(stringResource(R.string.azione_annulla)) }
         },
+    )
+}
+
+/**
+ * (0.10) "Proponi al genitore" (contratto v3.4): lo stesso modulo della
+ * modifica, coi valori di adesso, più il perché facoltativo. Da qui si può
+ * anche proporre di eliminarla ([eliminabile]: non l'unica regola del patto).
+ * Se il genitore accetta, il server applica il cambio subito, anche se
+ * allenta. La usano la scheda Regole e la "Nuova proposta" della scheda Proposte.
+ *
+ * [esito] = com'è andato l'ultimo invio, se non è arrivato: si dice qui
+ * dentro. Il pulsante resta acceso solo quando rimandare ha senso; per una
+ * proposta già in attesa, [onApriProposte] (se c'è) porta a vederla.
+ */
+@Composable
+internal fun DialogoProposta(
+    regola: Regola,
+    invioInCorso: Boolean,
+    eliminabile: Boolean,
+    esito: EsitoProposta?,
+    onAnnulla: () -> Unit,
+    onManda: (CambioRegola, String?) -> Unit,
+    onApriProposte: (() -> Unit)? = null,
+) {
+    val modulo = rememberSaveable(regola.id, saver = ModuloRegola.Salvataggio) { ModuloRegola.da(regola) }
+    var perche by rememberSaveable(regola.id) { mutableStateOf("") }
+    var eliminazione by rememberSaveable(regola.id) { mutableStateOf(false) }
+    // Il punto di partenza è il modulo stesso appena aperto, non i parametri
+    // grezzi: i giorni di una fascia, per esempio, il modulo li rimette in ordine.
+    val partenza = remember(regola.id) { ModuloRegola.da(regola).parametri }
+    val parametri = modulo.parametri
+    // Una proposta uguale alla regola di adesso non chiede niente: il pulsante resta spento.
+    val cambio: CambioRegola? = when {
+        eliminazione -> CambioRegola.Eliminazione(regola.id)
+        parametri != null && parametri != partenza -> CambioRegola.Modifica(regola.id, parametri)
+        else -> null
+    }
+    val adesso = descrizioneRegola(regola.tipo, regola.parametri, leggibile = true)
+
+    AlertDialog(
+        onDismissRequest = onAnnulla,
+        title = {
+            Text(stringResource(if (eliminazione) R.string.proponi_elimina else R.string.proponi_titolo))
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Spazi.m),
+            ) {
+                if (eliminazione) {
+                    Text(
+                        text = stringResource(R.string.proponi_elimina_testo, adesso),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.proposta_regola_ora, adesso),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    CampiRegola(modulo, sceltaTipo = false)
+                }
+                CampoPerche(perche) { perche = it }
+                Text(
+                    text = stringResource(
+                        if (eliminazione) R.string.proponi_elimina_spiegazione else R.string.proponi_spiegazione,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!eliminazione && eliminabile) {
+                    TextButton(
+                        onClick = { eliminazione = true },
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text(stringResource(R.string.proponi_elimina))
+                    }
+                }
+                esito?.let { RigaEsitoProposta(it, onApriProposte) }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = cambio != null && !invioInCorso && (esito == null || ProposteDelFiglio.riprovabile(esito)),
+                onClick = { cambio?.let { onManda(it, perche) } },
+            ) {
+                Text(stringResource(R.string.proponi_manda))
+            }
+        },
+        dismissButton = {
+            // Dall'eliminazione si torna al modulo; dal modulo si chiude.
+            TextButton(onClick = { if (eliminazione) eliminazione = false else onAnnulla() }) {
+                Text(stringResource(if (eliminazione) R.string.azione_indietro else R.string.azione_annulla))
+            }
+        },
+    )
+}
+
+/**
+ * (0.10) Il blocco dei 4 giorni ha fermato un cambio che allenta (o
+ * un'eliminazione). Resta l'attesa di sempre, "potrai allentarla tra…", e in
+ * più "Chiedi al genitore": se accetta, vale subito. Manda ESATTAMENTE il
+ * cambio fermato ([blocco].cambio), col perché se c'è. [esito] = com'è
+ * andato l'ultimo invio, se non è arrivato: si dice qui dentro.
+ */
+@Composable
+private fun DialogoBlocco(
+    blocco: BloccoCambio,
+    invioInCorso: Boolean,
+    esito: EsitoProposta?,
+    onChiudi: () -> Unit,
+    onChiedi: (String?) -> Unit,
+    onApriProposte: () -> Unit,
+) {
+    val context = LocalContext.current
+    val perEliminazione = blocco.cambio is CambioRegola.Eliminazione
+    var perche by rememberSaveable(blocco.cambio.regolaId) { mutableStateOf("") }
+    // Dall'istante dello sblocco: dopo una rotazione o la morte del processo
+    // l'attesa resta giusta.
+    val attesa = testoAttesa(context, blocco.secondiRimanenti(System.currentTimeMillis()))
+
+    AlertDialog(
+        onDismissRequest = onChiudi,
+        title = {
+            Text(
+                stringResource(
+                    if (perEliminazione) R.string.regola_elimina_lock_titolo else R.string.regola_lock_titolo,
+                ),
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Spazi.m),
+            ) {
+                Text(
+                    text = if (perEliminazione) {
+                        stringResource(R.string.regola_elimina_lock_messaggio, attesa)
+                    } else {
+                        stringResource(R.string.regola_lock_messaggio, attesa)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = stringResource(
+                        if (perEliminazione) {
+                            R.string.regola_elimina_lock_chiedi_spiegazione
+                        } else {
+                            R.string.regola_lock_chiedi_spiegazione
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                CampoPerche(perche) { perche = it }
+                esito?.let { RigaEsitoProposta(it, onApriProposte) }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !invioInCorso && (esito == null || ProposteDelFiglio.riprovabile(esito)),
+                onClick = { onChiedi(perche) },
+            ) {
+                Text(stringResource(R.string.regola_lock_chiedi))
+            }
+        },
+        dismissButton = {
+            // Sotto un cambio che allenta resta aperta la modifica: si torna lì.
+            // Sotto un'eliminazione non c'è niente da modificare.
+            TextButton(onClick = onChiudi) {
+                Text(stringResource(if (perEliminazione) R.string.azione_annulla else R.string.regola_lock_torna))
+            }
+        },
+    )
+}
+
+/**
+ * (0.10) Com'è andata la proposta, dentro il modulo ancora aperto: una riga
+ * neutra (§3.1: niente rosso per un esito del server), e per una proposta già
+ * in attesa su quella regola la strada per vederla ([onApriProposte], se c'è).
+ */
+@Composable
+private fun RigaEsitoProposta(esito: EsitoProposta, onApriProposte: (() -> Unit)?) {
+    val context = LocalContext.current
+    LocalConfiguration.current
+    RigaNeutra(testoEsitoProposta(context, esito))
+    if (onApriProposte != null && (esito == EsitoProposta.GiaPendente || esito == EsitoProposta.GiaTua)) {
+        TextButton(onClick = onApriProposte, contentPadding = PaddingValues(0.dp)) {
+            Text(stringResource(R.string.proposta_apri_proposte))
+        }
+    }
+}
+
+/** (0.10) Il perché di una proposta: facoltativo, arriva al genitore con la proposta. */
+@Composable
+private fun CampoPerche(valore: String, onValore: (String) -> Unit) {
+    OutlinedTextField(
+        value = valore,
+        onValueChange = onValore,
+        label = { Text(stringResource(R.string.proponi_perche)) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
@@ -543,17 +952,22 @@ private fun RigaRadio(selezionato: Boolean, testo: String, onClick: () -> Unit) 
     }
 }
 
+/** Un campo del modulo. (0.10) [avviso] = cosa non va nel valore scritto, detto sul campo. */
 @Composable
 private fun CampoTesto(
     valore: String,
     onValore: (String) -> Unit,
     etichetta: Int,
     numerico: Boolean = false,
+    avviso: String? = null,
 ) {
     OutlinedTextField(
         value = valore,
         onValueChange = onValore,
         label = { Text(stringResource(etichetta)) },
+        // Validazione del campo: l'unico posto dove il rosso di sistema vale (§3.1).
+        isError = avviso != null,
+        supportingText = avviso?.let { { Text(it) } },
         singleLine = true,
         keyboardOptions = if (numerico) {
             androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number)

@@ -13,7 +13,8 @@ import eu.stgm.pactum.figlio.permessi.PermessiHelper
 
 /**
  * Gli avvisi locali del figlio: promemoria gentili sugli sforamenti, novità
- * dal patto (nuova proposta, verdetto, il segno del genitore) e la chiusura
+ * dal patto (nuova proposta, verdetto, il segno del genitore; dalla 0.10 la
+ * sua risposta a una proposta del figlio e il ritiro della sua) e la chiusura
  * della sera. Canale separato dal "testimone"
  * (IMPORTANCE_MIN, fisso): questi si devono vedere, ma senza allarme —
  * l'app non punisce, ricorda.
@@ -41,7 +42,22 @@ object AvvisiLocali {
     /** La chiusura della sera: una al giorno, la nuova sostituisce quella di ieri. */
     const val ID_CHIUSURA_SERALE = 5_000_001
 
+    /**
+     * (0.10) La "Nuova proposta del genitore" ha l'id della SUA proposta, non
+     * quello della notifica del server: se il genitore la ritira, la si toglie
+     * dalla tendina col solo id della proposta (payload di `proposta_ritirata`).
+     */
+    private const val BASE_ID_PROPOSTA = 6_000_000L
+
     fun idSforamento(regolaId: Long): Int = (BASE_ID_SFORAMENTO + (regolaId % 100_000)).toInt()
+
+    /** (0.10) L'id della notifica locale che annuncia la proposta [propostaId]. */
+    fun idProposta(propostaId: Long): Int = (BASE_ID_PROPOSTA + (propostaId % 100_000)).toInt()
+
+    /** (0.10) Toglie dalla tendina una notifica, se c'è ancora; se non c'è, niente. */
+    fun cancella(context: Context, id: Int) {
+        NotificationManagerCompat.from(context).cancel(id)
+    }
 
     /**
      * Id di notifica per una notifica del server: l'id grezzo del server
@@ -132,10 +148,14 @@ object AvvisiLocali {
     /**
      * Su quale scheda aprire l'app toccando la notifica. Ogni tipo ha la sua:
      * un tocco non deve mai finire nel vuoto. I tipi che non si conoscono
-     * ancora aprono Oggi, la schermata del patto.
+     * ancora aprono Oggi, la schermata del patto. (0.10) La risposta del
+     * genitore a una tua proposta e il ritiro della sua aprono Proposte.
      */
     fun destinazioneTipo(tipo: String): String = when (tipo) {
-        TipiNotifica.NUOVA_PROPOSTA -> MainActivity.DEST_PROPOSTE
+        TipiNotifica.NUOVA_PROPOSTA,
+        TipiNotifica.PROPOSTA_RISPOSTA,
+        TipiNotifica.PROPOSTA_RITIRATA,
+        -> MainActivity.DEST_PROPOSTE
         TipiNotifica.VERDETTO -> MainActivity.DEST_DIARIO
         else -> MainActivity.DEST_OGGI
     }

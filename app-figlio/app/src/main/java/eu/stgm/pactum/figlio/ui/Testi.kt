@@ -8,6 +8,9 @@ import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.ContestoDispositivi
+import eu.stgm.pactum.figlio.dati.EsitoProposta
+import eu.stgm.pactum.figlio.dati.EsitoRitiro
+import eu.stgm.pactum.figlio.dati.Proposta
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiDispositivo
 import eu.stgm.pactum.figlio.dati.TipiRegola
@@ -57,10 +60,10 @@ fun giorniTesto(parametri: JsonObject): String =
  * onesto che muto (tolleranza evolutiva).
  */
 @Composable
-fun descrizioneRegola(tipo: String, parametri: JsonObject): String {
+fun descrizioneRegola(tipo: String, parametri: JsonObject, leggibile: Boolean = false): String {
     // Si rilegge a ogni cambio di configurazione (lingua), come stringResource.
     LocalConfiguration.current
-    return descrizioneRegola(LocalContext.current, tipo, parametri)
+    return descrizioneRegola(LocalContext.current, tipo, parametri, leggibile = leggibile)
 }
 
 /**
@@ -87,11 +90,26 @@ fun etichettaChiave(
 }
 
 /**
+ * (0.10, contratto v3.4 "I nomi nel confronto") Il bersaglio con un nome che
+ * una persona legge (app, categoria, "Tutto il telefono", programma, sito);
+ * null se questo telefono non sa come si chiama: un'app di un altro telefono,
+ * mai vista qui. Nelle proposte mai il nome del pacchetto.
+ */
+fun etichettaLeggibile(
+    context: Context,
+    chiave: String,
+    nomeServer: String? = null,
+    tipoDispositivo: String? = null,
+): String? = TestoProposta.nomeLeggibile(chiave, etichettaChiave(context, chiave, nomeServer, tipoDispositivo))
+
+/**
  * La stessa descrizione fuori da Compose (notifiche, worker).
  * [tipoDispositivo] = di che dispositivo è la regola: una fascia oraria del
  * computer è "Niente computer dalle…". [breve] = la forma che segue il nome del
  * dispositivo ("Sul computer: youtube.com (sito) al massimo 1 h al giorno"),
  * senza i due punti dopo il bersaglio e con l'iniziale minuscola.
+ * (0.10) [leggibile] = per le regole e le proposte: un'app che qui non ha un
+ * nome diventa "un'app non installata qui", mai il nome del pacchetto.
  */
 fun descrizioneRegola(
     context: Context,
@@ -100,13 +118,22 @@ fun descrizioneRegola(
     tipoDispositivo: String? = null,
     nomeServer: String? = null,
     breve: Boolean = false,
+    leggibile: Boolean = false,
 ): String = when (tipo) {
     // app_o_categoria è un pacchetto, una chiave categoria:* (contratto v2.1)
     // o, sul computer, exe:/sito: (v3): si mostra l'etichetta leggibile.
     TipiRegola.LIMITE_TEMPO -> context.getString(
         if (breve) R.string.regola_limite_tempo_breve else R.string.regola_limite_tempo,
         parametroTesto(parametri, "app_o_categoria")
-            ?.let { etichettaChiave(context, it, nomeServer, tipoDispositivo) } ?: "?",
+            ?.let { chiave ->
+                if (leggibile) {
+                    etichettaLeggibile(context, chiave, nomeServer, tipoDispositivo)
+                        ?: context.getString(R.string.chiave_app_sconosciuta)
+                            .let { if (breve) it else TestoDispositivi.maiuscola(it) }
+                } else {
+                    etichettaChiave(context, chiave, nomeServer, tipoDispositivo)
+                }
+            } ?: "?",
         testoDurata(context, parametroTesto(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
     )
 
@@ -137,6 +164,7 @@ fun descrizioneRegola(
  * forma che va dopo il nome del dispositivo, se è di un altro dispositivo
  * ("youtube.com (sito) al massimo 1 h al giorno"), altrimenti quella di sempre.
  * Il nome del server vale solo se il bersaglio è ancora quello della regola.
+ * (0.10) Si usa per le proposte: i bersagli sempre con nomi leggibili.
  */
 fun descrizioneRegolaSenzaDispositivo(
     context: Context,
@@ -153,7 +181,30 @@ fun descrizioneRegolaSenzaDispositivo(
         tipoDispositivo = TestoDispositivi.tipoDi(regola, contesto),
         nomeServer = regola.nome.takeIf { stessoBersaglio },
         breve = TestoDispositivi.diUnAltro(regola, contesto),
+        leggibile = true,
     )
+}
+
+/**
+ * (0.10) I parametri proposti per [regola], detti in chiaro. null quando la
+ * proposta cambia il bersaglio verso un'app che questo telefono non sa come
+ * si chiama: meglio nessuna riga che un nome di pacchetto, e il confronto del
+ * server (contratto v3.4, "I nomi nel confronto") quel nome lo scrive già.
+ */
+fun descrizioneParametriProposti(
+    context: Context,
+    regola: Regola,
+    contesto: ContestoDispositivi,
+    parametri: JsonObject,
+): String? {
+    val chiave = parametroTesto(parametri, "app_o_categoria")
+    if (chiave != null &&
+        chiave != parametroTesto(regola.parametri, "app_o_categoria") &&
+        etichettaLeggibile(context, chiave, tipoDispositivo = TestoDispositivi.tipoDi(regola, contesto)) == null
+    ) {
+        return null
+    }
+    return descrizioneRegolaSenzaDispositivo(context, regola, contesto, parametri)
 }
 
 /**
@@ -200,25 +251,120 @@ fun paroleProposta(context: Context) = ParoleProposta(
 )
 
 /**
+ * (0.10) Le stesse frasi per una proposta del figlio, dette dalla sua parte:
+ * "Se il genitore accetta: …", "Eliminare la regola: …".
+ */
+fun paroleTuaProposta(context: Context) = ParoleProposta(
+    senzaConfronto = context.getString(R.string.proposta_senza_confronto),
+    ora = context.getString(R.string.proposta_regola_ora),
+    seAccetti = context.getString(R.string.proposta_tua_se_accetta),
+    togliere = context.getString(R.string.proposta_tua_eliminare),
+    oraSu = context.getString(R.string.proposta_regola_ora_su),
+    togliereSu = context.getString(R.string.proposta_tua_eliminare_su),
+)
+
+/**
  * Il racconto di una proposta con le regole del patto, per la scheda Proposte
  * e per la notifica: la regola detta in chiaro e, se è di un altro
- * dispositivo, su quale ("Ora sul computer: …").
+ * dispositivo, su quale ("Ora sul computer: …"). (0.10) [parole] =
+ * paroleTuaProposta per le proposte del figlio; un bersaglio proposto senza un
+ * nome leggibile qui non diventa una riga col nome del pacchetto.
  */
 fun raccontoProposta(
     context: Context,
     confronto: String?,
     oggetto: OggettoProposta?,
     contesto: ContestoDispositivi,
+    parole: ParoleProposta = paroleProposta(context),
 ): RaccontoProposta {
-    val parole = paroleDispositivo(context)
+    val paroleDispositivo = paroleDispositivo(context)
     return TestoProposta.racconto(
         confronto = confronto,
         oggetto = oggetto,
-        parole = paroleProposta(context),
+        parole = parole,
         descrivi = { regola, parametri -> descrizioneRegolaSenzaDispositivo(context, regola, contesto, parametri) },
-        dispositivoDi = { regola -> TestoDispositivi.etichetta(regola, contesto, parole) },
+        dispositivoDi = { regola -> TestoDispositivi.etichetta(regola, contesto, paroleDispositivo) },
+        descriviProposta = { regola, parametri -> descrizioneParametriProposti(context, regola, contesto, parametri) },
     )
 }
+
+/** (0.10) Cosa dire dopo aver mandato una proposta al genitore (TestoProposta.esito). */
+fun testoEsitoProposta(context: Context, esito: EsitoProposta): String = TestoProposta.esito(
+    esito,
+    ParoleEsitoProposta(
+        mandata = context.getString(R.string.proposta_mandata),
+        mandataEliminazione = context.getString(R.string.proposta_mandata_elimina),
+        mandataSenzaConfronto = context.getString(R.string.proposta_mandata_semplice),
+        giaPendente = context.getString(R.string.proposta_gia_pendente),
+        giaTua = context.getString(R.string.proposta_gia_tua),
+        regolaNonValida = context.getString(R.string.proposta_regola_non_valida),
+        dispositivoRevocato = context.getString(R.string.proposta_dispositivo_revocato),
+        valoriNonValidi = context.getString(R.string.proposta_valori_non_validi),
+        serverDaAggiornare = context.getString(R.string.proposta_server_da_aggiornare),
+        scollegato = context.getString(R.string.oggi_scollegato),
+        senzaRete = context.getString(R.string.proposta_senza_rete),
+        errore = context.getString(R.string.proposta_non_mandata),
+    ),
+)
+
+/** (0.10) Cosa dire dopo il ritiro di una proposta del figlio (TestoProposta.ritiro). */
+fun testoRitiro(context: Context, esito: EsitoRitiro): String = TestoProposta.ritiro(
+    esito,
+    ParoleRitiro(
+        ritirata = context.getString(R.string.proposta_ritirata_ok),
+        nonPiuPendente = context.getString(R.string.proposta_non_pendente),
+        nonTrovata = context.getString(R.string.proposta_non_trovata),
+        // Il ritiro ha la sua frase: "per mandare proposte" qui non c'entra.
+        serverDaAggiornare = context.getString(R.string.proposta_ritiro_server_da_aggiornare),
+        scollegato = context.getString(R.string.oggi_scollegato),
+        errore = context.getString(R.string.proposta_ritiro_errore),
+    ),
+)
+
+/** (0.10) Le frasi della storia delle proposte (TestoProposta.righeChiusa). */
+fun paroleStoria(context: Context) = ParoleStoria(
+    haiAccettato = context.getString(R.string.proposta_tua_risposta_accettata),
+    haiRifiutato = context.getString(R.string.proposta_tua_risposta_rifiutata),
+    genitoreHaAccettato = context.getString(R.string.proposta_genitore_ha_accettato),
+    genitoreHaRifiutato = context.getString(R.string.proposta_genitore_ha_rifiutato),
+    haiRitirato = context.getString(R.string.proposta_hai_ritirato),
+    genitoreHaRitirato = context.getString(R.string.proposta_genitore_ha_ritirato),
+    annullata = context.getString(R.string.proposta_annullata),
+    genitoreDice = context.getString(R.string.proposta_motivazione_genitore),
+    haiDetto = context.getString(R.string.proposta_tua_motivazione),
+    tuoPerche = context.getString(R.string.proposta_tuo_perche),
+)
+
+/**
+ * (0.10) Titolo e testo della notifica di una risposta del genitore a una
+ * proposta del figlio, o di un suo ritiro (TestoProposta.avviso). [regola] =
+ * la regola com'è adesso, se c'è ancora; [messaggio] = il testo del server.
+ */
+fun avvisoNovitaProposta(
+    context: Context,
+    novita: NovitaProposta,
+    proposta: Proposta?,
+    regola: Regola?,
+    contesto: ContestoDispositivi,
+    messaggio: String,
+): Pair<String, String> = TestoProposta.avviso(
+    novita = novita,
+    proposta = proposta,
+    regolaAdesso = regola?.let { descrizioneRegolaConDispositivo(context, it, contesto) },
+    messaggio = messaggio,
+    parole = ParoleNovita(
+        accettataTitolo = context.getString(R.string.notifica_proposta_accettata_titolo),
+        rifiutataTitolo = context.getString(R.string.notifica_proposta_rifiutata_titolo),
+        ritirataTitolo = context.getString(R.string.notifica_proposta_ritirata_titolo),
+        ora = context.getString(R.string.proposta_regola_ora),
+        resta = context.getString(R.string.notifica_proposta_regola_resta),
+        tolta = context.getString(R.string.notifica_proposta_regola_eliminata),
+        regola = context.getString(R.string.proposta_regola),
+        genitoreDice = context.getString(R.string.proposta_motivazione_genitore),
+        ritirataEliminazione = context.getString(R.string.notifica_proposta_ritirata_eliminare),
+        ritirataEliminazioneSenzaRegola = context.getString(R.string.notifica_proposta_ritirata_eliminare_senza_regola),
+    ),
+)
 
 /** "oggi", "ieri", "18/09" dentro una frase (minuscolo). */
 @Composable

@@ -23,7 +23,12 @@ data class Patto(
     val bonus: StatoBonus? = null,
     // Chiave = regola_id come stringa (contratto): minuti bonus concessi OGGI.
     @SerialName("bonus_oggi_per_regola") val bonusOggiPerRegola: Map<String, Int> = emptyMap(),
+    // (v3.4) Solo quelle a cui il figlio deve rispondere (autore "genitore").
     @SerialName("proposte_pendenti") val propostePendenti: List<Proposta> = emptyList(),
+    // (0.10, v3.4) Le proposte del figlio ancora in attesa del genitore, di
+    // tutto il figlio, dalla più recente. Vuota = nessuna, oppure server vecchio
+    // che non conosce le proposte del figlio.
+    @SerialName("proposte_inviate") val proposteInviate: List<Proposta> = emptyList(),
     @SerialName("dichiarazioni_in_attesa") val dichiarazioniInAttesa: List<Dichiarazione> = emptyList(),
     // (v2.3) La stessa identica lista che il genitore vede in GET /api/finestra:
     // è il principio della tavola rotonda: niente esiste nella finestra del
@@ -233,6 +238,18 @@ object StatiProposta {
     const val PENDENTE = "pendente"
     const val ACCETTATA = "accettata"
     const val RIFIUTATA = "rifiutata"
+
+    /** (v2.1) La regola è stata eliminata direttamente: le sue proposte in attesa decadono. */
+    const val ANNULLATA = "annullata"
+
+    /** (0.10, v3.4) Chi l'aveva fatta l'ha ritirata prima della risposta. */
+    const val RITIRATA = "ritirata"
+}
+
+/** (0.10, v3.4) Chi ha fatto una proposta: risponde sempre l'altro. */
+object AutoriProposta {
+    const val GENITORE = "genitore"
+    const val FIGLIO = "figlio"
 }
 
 object DirezioniProposta {
@@ -265,6 +282,15 @@ object TipiNotifica {
 
     /** (v2.4) Il riconoscimento del genitore, a testo fisso. */
     const val SEGNO = "segno"
+
+    /**
+     * (0.10, v3.4) Al figlio arriva quando il genitore risponde a una SUA
+     * proposta: nel payload `autore: "figlio"` ed `esito` (accetta · rifiuta).
+     */
+    const val PROPOSTA_RISPOSTA = "proposta_risposta"
+
+    /** (0.10, v3.4) Il genitore ha ritirato una sua proposta ancora in attesa. */
+    const val PROPOSTA_RITIRATA = "proposta_ritirata"
 }
 
 /**
@@ -310,6 +336,29 @@ data class Proposta(
     val usata: Boolean = false,
     @SerialName("ts_server") val tsServer: String = "",
     val risposta: RispostaProposta? = null,
+    // (0.10, v3.4) Chi l'ha fatta: "genitore" o "figlio". Assente o null (server
+    // vecchio, proposte nate prima della v3.4) vuol dire del genitore, come sono
+    // state tutte fino ad allora. Si legge con delFiglio / delGenitore.
+    val autore: String? = null,
+) {
+    /** (0.10) È una proposta del figlio: aspetta la risposta del genitore. */
+    val delFiglio: Boolean get() = autore?.trim()?.lowercase() == AutoriProposta.FIGLIO
+
+    /** (0.10) È una proposta del genitore (anche senza `autore`): risponde il figlio. */
+    val delGenitore: Boolean get() = !delFiglio
+}
+
+/**
+ * (0.10, v3.4) POST /api/proposte dal telefono: lo stesso corpo del genitore.
+ * `parametri_proposti` sono i parametri nuovi della regola oppure il marcatore
+ * `{"azione": "elimina"}`; il perché viaggia solo se c'è (`encodeDefaults =
+ * false`). Lo costruisce ProposteDelFiglio.richiesta.
+ */
+@Serializable
+data class PropostaIn(
+    @SerialName("regola_id") val regolaId: Long,
+    @SerialName("parametri_proposti") val parametriProposti: JsonObject,
+    val motivazione: String? = null,
 )
 
 @Serializable

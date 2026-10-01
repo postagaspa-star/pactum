@@ -16,6 +16,7 @@ import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.dati.AncoraTempo
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.CodaEventi
+import eu.stgm.pactum.figlio.dati.ContestoDispositivi
 import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.Notifica
@@ -34,7 +35,9 @@ import eu.stgm.pactum.figlio.siti.Domini
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.siti.RegistroSiti
 import eu.stgm.pactum.figlio.siti.ReteDns
+import eu.stgm.pactum.figlio.ui.NovitaProposta
 import eu.stgm.pactum.figlio.ui.TestoProposta
+import eu.stgm.pactum.figlio.ui.avvisoNovitaProposta
 import eu.stgm.pactum.figlio.ui.raccontoProposta
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.serialization.json.JsonPrimitive
@@ -223,9 +226,10 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
     /**
      * Alza una notifica locale per ogni notifica del server mai avvisata prima
      * (il GET col token del figlio restituisce solo le sue: nuove proposte,
-     * verdetti, il segno del genitore) e poi le marca lette sul server. Senza permesso non si avvisa E
-     * non si segna né marca: appena il permesso arriva, il giro successivo
-     * recupera (marcare prima di avvisare perderebbe l'avviso).
+     * verdetti, il segno del genitore; dalla 0.10 anche le sue risposte alle
+     * proposte del figlio e i ritiri delle sue) e poi le marca lette sul server.
+     * Senza permesso non si avvisa E non si segna né marca: appena il permesso
+     * arriva, il giro successivo recupera (marcare prima di avvisare perderebbe l'avviso).
      */
     private suspend fun avvisaNovitaDelPatto(
         context: Context,
@@ -238,21 +242,62 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
 
         val giaAvvisate = impostazioni.leggiIdAvvisati()
         val nuove = notifiche.filter { it.id !in giaAvvisate }
+        // (0.10) Il genitore ha risposto a una proposta del figlio, o ha ritirato
+        // la sua: si dice con parole del figlio (TestoProposta.novita).
+        val novita = nuove
+            .mapNotNull { notifica -> TestoProposta.novita(notifica.tipo, notifica.payload)?.let { notifica.id to it } }
+            .toMap()
         // La copia del patto appena sincronizzata in questo giro: serve a dire
-        // su quale regola verte una nuova proposta.
-        val patto = if (nuove.any { it.tipo == TipiNotifica.NUOVA_PROPOSTA }) {
+        // su quale regola verte una nuova proposta (o una risposta, o un ritiro).
+        val patto = if (novita.isNotEmpty() || nuove.any { it.tipo == TipiNotifica.NUOVA_PROPOSTA }) {
             PattoLocale(context).leggi()
         } else {
             null
         }
+        // (0.10) Per risposte e ritiri: la proposta chiusa, col confronto e il
+        // perché del genitore; la regola, se non è in questo patto (di un altro
+        // dispositivo), da GET /api/regole. Solo quando servono.
+        val proposte = if (novita.isNotEmpty()) postino.leggiProposte().orEmpty() else emptyList()
+        val diQuestoPatto = patto?.regole.orEmpty()
+        val regole = if (novita.values.any { n -> diQuestoPatto.none { it.id == n.regolaId } }) {
+            (diQuestoPatto + postino.leggiRegole().orEmpty()).distinctBy { it.id }
+        } else {
+            diQuestoPatto
+        }
         nuove.forEach { notifica ->
+            val n = novita[notifica.id]
+            val (titolo, testo) = n
+                ?.let {
+                    avvisoNovitaProposta(
+                        context,
+                        novita = it,
+                        proposta = proposte.firstOrNull { p -> p.id == it.propostaId },
+                        regola = regole.firstOrNull { r -> r.id == it.regolaId },
+                        contesto = patto?.contestoDispositivi() ?: ContestoDispositivi(),
+                        messaggio = notifica.messaggio,
+                    )
+                }
+                ?: (AvvisiLocali.titoloTipo(context, notifica.tipo) to testoNotifica(context, notifica, patto))
+            // (0.10) La proposta ritirata dal genitore non resta annunciata in
+            // tendina come "Nuova proposta del genitore": quella si toglie.
+            if (n is NovitaProposta.Ritiro) {
+                n.propostaId?.let { AvvisiLocali.cancella(context, AvvisiLocali.idProposta(it)) }
+            }
+            // (0.10) La nuova proposta ha l'id della proposta (per poterla togliere
+            // se viene ritirata); le altre quello della notifica del server.
+            val propostaAnnunciata = if (notifica.tipo == TipiNotifica.NUOVA_PROPOSTA) {
+                (notifica.payload["proposta_id"] as? JsonPrimitive)?.longOrNull
+            } else {
+                null
+            }
             AvvisiLocali.avvisa(
                 context,
                 // Id con offset: l'id grezzo del server collide con la notifica
                 // fissa del testimone (FGS id 1), che verrebbe sostituita.
-                id = AvvisiLocali.idNotificaServer(notifica.id),
-                titolo = AvvisiLocali.titoloTipo(context, notifica.tipo),
-                testo = testoNotifica(context, notifica, patto),
+                id = propostaAnnunciata?.let { AvvisiLocali.idProposta(it) }
+                    ?: AvvisiLocali.idNotificaServer(notifica.id),
+                titolo = titolo,
+                testo = testo,
                 destinazione = AvvisiLocali.destinazioneTipo(notifica.tipo),
             )
         }

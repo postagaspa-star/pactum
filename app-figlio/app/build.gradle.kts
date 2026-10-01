@@ -28,10 +28,11 @@ android {
         minSdk = 26
         targetSdk = 35
         // 0.9: sentinella ogni minuto a schermo acceso, avviso a tutto schermo,
-        // limite su tutto il telefono. Nuova funzione = nuovo versionCode,
-        // altrimenti l'auto-aggiornamento non la propone.
-        versionCode = 9
-        versionName = "0.9.0"
+        // limite su tutto il telefono. 0.10: le proposte del figlio al genitore
+        // (contratto v3.4). Nuova funzione = nuovo versionCode, altrimenti
+        // l'auto-aggiornamento non la propone.
+        versionCode = 10
+        versionName = "0.10.0"
     }
 
     signingConfigs {

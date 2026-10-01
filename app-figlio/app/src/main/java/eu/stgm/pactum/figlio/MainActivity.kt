@@ -193,7 +193,8 @@ private fun PactumRoot(
     val regoleVm: RegoleViewModel = viewModel()
     val statoRegole by regoleVm.stato.collectAsStateWithLifecycle()
     // Le proposte in attesa danno il badge sulla scheda: stesso ViewModel
-    // (dell'Activity) che usa la scheda Proposte.
+    // (dell'Activity) che usa la scheda Proposte. (0.10) Contano solo quelle a
+    // cui deve rispondere il figlio, non le sue che aspettano il genitore.
     val proposteVm: ProposteViewModel = viewModel()
     val statoProposte by proposteVm.stato.collectAsStateWithLifecycle()
     LifecycleResumeEffect(Unit) {
@@ -303,7 +304,8 @@ private fun PactumRoot(
                     onApriSiti = { mostraSiti = true },
                     onApriDiario = { nomeScheda = Scheda.DIARIO.name },
                 )
-                Scheda.REGOLE -> RegoleScreen()
+                // (0.10) Dalla regola si va alla proposta che aspetta su di lei.
+                Scheda.REGOLE -> RegoleScreen(onApriProposte = { nomeScheda = Scheda.PROPOSTE.name })
                 Scheda.PROPOSTE -> ProposteScreen()
                 Scheda.DIARIO -> DichiarazioniScreen()
             }

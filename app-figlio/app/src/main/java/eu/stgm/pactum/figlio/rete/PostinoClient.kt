@@ -18,6 +18,8 @@ import eu.stgm.pactum.figlio.dati.PaccoProposte
 import eu.stgm.pactum.figlio.dati.PaccoRegole
 import eu.stgm.pactum.figlio.dati.Patto
 import eu.stgm.pactum.figlio.dati.Proposta
+import eu.stgm.pactum.figlio.dati.PropostaIn
+import eu.stgm.pactum.figlio.dati.ProposteDelFiglio
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.RispostaPropostaIn
 import kotlinx.coroutines.Dispatchers
@@ -43,9 +45,10 @@ import java.util.concurrent.TimeUnit
  * (fonte di verità — ogni modifica passa prima da lì).
  *
  *   POST {base}/api/battito · POST {base}/api/eventi   → consegna tollerante all'offline
- *   GET  {base}/api/patto · /api/regole · /api/proposte · /api/dichiarazioni · /api/notifiche
+ *   GET  {base}/api/patto · /api/regole · /api/proposte?autori=tutti (v3.4) · /api/dichiarazioni · /api/notifiche
  *   POST/PATCH/DELETE {base}/api/regole · POST /api/bonus · /api/dichiarazioni ·
  *        /api/proposte/{id}/risposta                    → mutazioni con esito HTTP
+ *   POST {base}/api/proposte · /api/proposte/{id}/ritira (v3.4) → le proposte del figlio
  *   POST {base}/api/abbina (v3, senza token)            → il codice di 6 cifre diventa un token
  *   header: Authorization: Bearer <token di questo dispositivo>
  *
@@ -117,8 +120,14 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     suspend fun leggiRegole(): List<Regola>? =
         leggi("/api/regole")?.let { decodifica(PaccoRegole.serializer(), it) }?.regole
 
+    /**
+     * GET /api/proposte: le proposte del figlio, dalla più recente, al massimo
+     * 50. (0.10, v3.4) Sempre con `?autori=tutti`: senza, un server v3.4 manda
+     * solo quelle del genitore (per le app 0.8 e 0.9). Chi deve rispondere lo
+     * dice `autore`. Un server vecchio ignora il parametro.
+     */
     suspend fun leggiProposte(): List<Proposta>? =
-        leggi("/api/proposte")?.let { decodifica(PaccoProposte.serializer(), it) }?.proposte
+        leggi(ProposteDelFiglio.PERCORSO_ELENCO)?.let { decodifica(PaccoProposte.serializer(), it) }?.proposte
 
     suspend fun leggiDichiarazioni(): List<Dichiarazione>? =
         leggi("/api/dichiarazioni")
@@ -192,6 +201,18 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             "/api/proposte/$propostaId/risposta",
             json.encodeToString(RispostaPropostaIn.serializer(), corpo),
         )
+
+    /**
+     * (0.10, v3.4) Il figlio propone al genitore un cambio a una sua regola: se
+     * il genitore accetta, vale subito. Un server di prima della v3.4 risponde
+     * 403 (ruolo sbagliato): lo legge ProposteDelFiglio.esito.
+     */
+    suspend fun mandaProposta(corpo: PropostaIn): RispostaHttp =
+        mutazione("POST", "/api/proposte", json.encodeToString(PropostaIn.serializer(), corpo))
+
+    /** (0.10, v3.4) Ritira una proposta del figlio ancora in attesa. Nessun corpo. */
+    suspend fun ritiraProposta(propostaId: Long): RispostaHttp =
+        mutazione("POST", "/api/proposte/$propostaId/ritira", null)
 
     suspend fun creaDichiarazione(corpo: DichiarazioneIn): RispostaHttp =
         mutazione(
@@ -294,7 +315,7 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             .build()
 
         /**
-         * Le mutazioni (bonus, dichiarazioni, risposte alle proposte, regole)
+         * Le mutazioni (bonus, dichiarazioni, proposte e risposte, regole)
          * NON si ritentano da sole. Con il ritentativo di OkHttp, una
          * connessione caduta dopo che il server ha già ricevuto il POST lo
          * rimanderebbe in silenzio: due bonus al posto di uno. Il dubbio dopo

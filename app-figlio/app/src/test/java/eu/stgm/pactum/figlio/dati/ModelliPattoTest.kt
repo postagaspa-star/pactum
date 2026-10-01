@@ -42,6 +42,26 @@ class ModelliPattoTest {
         val patto = json.decodeFromString(Patto.serializer(), corpo)
         assertNull(patto.riepilogo)
         assertTrue(patto.regole.single().semaforo.isEmpty())
+        // (0.10) Nemmeno le proposte del figlio: lista vuota, niente errore.
+        assertTrue(patto.proposteInviate.isEmpty())
+    }
+
+    // (0.10) Le proposte del figlio (contratto v3.4) passano dalla copia locale.
+    @Test
+    fun `la copia locale conserva le proposte inviate e il loro autore`() {
+        val corpo = """
+            { "regole": [],
+              "proposte_inviate": [ { "id": 7, "regola_id": 1, "stato": "pendente", "autore": "figlio",
+                                      "confronto": "+30 min al giorno rispetto ad ora" } ],
+              "proposte_pendenti": [ { "id": 3, "regola_id": 2, "stato": "pendente" } ] }
+        """.trimIndent()
+        val letto = json.decodeFromString(Patto.serializer(), corpo)
+        // Come PattoLocale: si riscrive e si rilegge con lo stesso modello.
+        val copia = json.decodeFromString(Patto.serializer(), json.encodeToString(Patto.serializer(), letto))
+        assertTrue(copia.proposteInviate.single().delFiglio)
+        assertEquals("+30 min al giorno rispetto ad ora", copia.proposteInviate.single().confronto)
+        // Senza autore resta del genitore anche dopo il giro sul disco.
+        assertTrue(copia.propostePendenti.single().delGenitore)
     }
 
     // --- v3: famiglia, figli e dispositivi -----------------------------------

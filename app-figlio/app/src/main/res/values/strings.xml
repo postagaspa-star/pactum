@@ -45,12 +45,12 @@
         <item>Le interruzioni nella registrazione, e quando. Per esempio telefono spento a lungo, permessi tolti, notifiche spente, osservazione dei siti spenta, ora cambiata a mano; sul computer anche il programma Pactum chiuso mentre il computer era acceso, e i siti che per un po\' non si riescono a leggere.</item>
         <item>I bonus che ti dai: quanti minuti, su quale regola e il perché, se lo scrivi. E quanti minuti di bonus ti sei dato in ciascuno degli ultimi 8 giorni, dispositivo per dispositivo.</item>
         <item>Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.</item>
-        <item>Le tue risposte alle sue proposte, con la tua motivazione se la scrivi.</item>
+        <item>Le proposte che gli mandi, con il tuo perché se lo scrivi, e le tue risposte alle sue proposte, con la tua motivazione se la scrivi.</item>
         <item>Il tempo passato in TUTTE le app del telefono, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese.</item>
         <item>I siti visitati sul telefono, se hai acceso l\'osservazione: solo il nome del sito e quante volte al giorno. E se per una parte della giornata il telefono ha tenuto nascosti i nomi dei siti.</item>
         <item>Sul computer: il tempo passato in ogni programma, giorno per giorno, anche per categoria, con la media della settimana e del mese; i siti, con quante volte e quanti minuti al giorno; se il computer è acceso o spento, e da quando è spento.</item>
         <item>Per ogni dispositivo, quando ha inviato l\'ultimo aggiornamento, e se non ne invia da più di tre quarti d\'ora. Quando spegni il computer, lui vede che è spento: non conta come silenzio.</item>
-        <item>Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, o quando c\'è un\'interruzione nella registrazione.</item>
+        <item>Un avviso quando crei, cambi o elimini una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, gli mandi o ritiri una proposta, rispondi a una sua proposta, o quando c\'è un\'interruzione nella registrazione.</item>
     </string-array>
     <string name="cosa_vede_no_titolo">COSA RESTA FUORI</string>
     <string-array name="cosa_vede_no">
@@ -310,6 +310,35 @@
     <string name="regola_eliminata_ok">Regola eliminata. Il genitore riceve una notifica.</string>
     <string name="regola_lock_messaggio">Questa modifica allenta la regola: potrai allentarla tra %1$s. Stringerla invece si può sempre.</string>
     <string name="regola_elimina_lock_messaggio">Eliminare è l\'allentamento massimo: potrai farlo tra %1$s.</string>
+    <!-- (0.10) Il blocco dei 4 giorni ha fermato il cambio: resta l'attesa di
+         sopra e in più si può chiederlo al genitore (contratto v3.4). -->
+    <string name="regola_lock_titolo">Per ora non puoi allentarla</string>
+    <string name="regola_elimina_lock_titolo">Per ora non puoi eliminarla</string>
+    <string name="regola_lock_chiedi_spiegazione">Oppure chiedilo al genitore: se accetta, vale subito.</string>
+    <string name="regola_elimina_lock_chiedi_spiegazione">Oppure chiedi al genitore di eliminarla: se accetta, vale subito.</string>
+    <string name="regola_lock_chiedi">Chiedi al genitore</string>
+    <!-- Sotto il blocco resta aperta la modifica: si torna lì, per stringere invece di allentare. -->
+    <string name="regola_lock_torna">Torna alla modifica</string>
+    <!-- (0.10) Proporre al genitore un cambio a una regola (contratto v3.4): se
+         il genitore accetta, vale subito, anche se allenta. -->
+    <string name="regola_proponi">Proponi al genitore</string>
+    <string name="regola_proposta_tua">In attesa del genitore: %1$s</string>
+    <string name="regola_proposta_tua_elimina">In attesa del genitore: hai chiesto di eliminarla</string>
+    <string name="regola_proposta_genitore">Il genitore propone: %1$s</string>
+    <string name="regola_proposta_genitore_elimina">Il genitore propone di eliminarla</string>
+    <string name="regola_vedi_proposta">Vedi in Proposte</string>
+    <string name="proponi_titolo">Proponi al genitore</string>
+    <string name="proponi_spiegazione">Cambia quello che vuoi chiedere. Se il genitore accetta, vale subito, anche se la allenti.</string>
+    <string name="proponi_perche">Perché? (facoltativo)</string>
+    <string name="proponi_elimina">Proponi di eliminarla</string>
+    <string name="proponi_elimina_testo">Chiedi al genitore di eliminare la regola «%1$s».</string>
+    <string name="proponi_elimina_spiegazione">Se il genitore accetta, la regola viene eliminata subito.</string>
+    <string name="proponi_manda">Manda la proposta</string>
+    <!-- Sul campo dei minuti, quando sono più di un giorno (il server accetta da 1 a 1440). -->
+    <string name="regola_minuti_troppi">Al massimo 24 ore al giorno</string>
+    <!-- (0.10) Un'app che questo telefono non ha mai visto (di un altro telefono):
+         nelle proposte mai il nome tecnico del pacchetto (contratto v3.4, "I nomi nel confronto"). -->
+    <string name="chiave_app_sconosciuta">un\'app non installata qui</string>
     <string name="regola_ultima_messaggio">Il patto vuole almeno una regola: creane un\'altra prima di eliminare questa.</string>
     <string name="regola_errore_generico">Non sono riuscito a salvare: controlla i campi e la connessione, poi riprova.</string>
     <string name="regola_elimina_conferma_titolo">Eliminare la regola?</string>
@@ -358,12 +387,12 @@
     <!-- Su quale regola verte la proposta (il confronto del server non lo dice) -->
     <string name="proposta_regola_ora">Ora: %1$s</string>
     <string name="proposta_regola_se_accetti">Se accetti: %1$s</string>
-    <string name="proposta_regola_togliere">Propone di togliere la regola: %1$s</string>
+    <string name="proposta_regola_togliere">Propone di eliminare la regola: %1$s</string>
     <string name="proposta_regola">Regola: %1$s</string>
     <!-- (v3) La regola è di un altro dispositivo: la frase lo dice.
          "Ora sul computer: youtube.com (sito) al massimo 1 h al giorno" -->
     <string name="proposta_regola_ora_su">Ora %1$s: %2$s</string>
-    <string name="proposta_regola_togliere_su">Propone di togliere la regola %1$s: %2$s</string>
+    <string name="proposta_regola_togliere_su">Propone di eliminare la regola %1$s: %2$s</string>
     <string name="proposta_regola_su">Regola %1$s: %2$s</string>
     <string name="proposta_accettata_ok_su">Proposta accettata: la regola %1$s è già aggiornata.</string>
     <string name="proposta_motivazione_genitore">Il genitore dice: %1$s</string>
@@ -376,14 +405,56 @@
     <string name="proposta_non_pendente">Questa proposta non è più in attesa.</string>
     <string name="proposta_errore">Non sono riuscito a inviare la risposta: riprova.</string>
     <string name="proposta_stato_pendente">In attesa</string>
-    <string name="proposta_stato_accettata">Accettata</string>
-    <string name="proposta_stato_rifiutata">Rifiutata</string>
     <string name="proposta_tag_allenta">allenta</string>
     <string name="proposta_tag_stringe">stringe</string>
     <string name="proposta_tag_elimina">eliminazione</string>
     <string name="proposta_tua_risposta_accettata">Hai accettato</string>
     <string name="proposta_tua_risposta_rifiutata">Hai rifiutato</string>
     <string name="proposta_tua_motivazione">Hai detto: %1$s</string>
+    <!-- (0.10) Le proposte del figlio al genitore (contratto v3.4) -->
+    <string name="proposte_sezione_tue">Le tue proposte</string>
+    <string name="proposte_tue_vuoto">Nessuna tua proposta in attesa.</string>
+    <!-- Solo quando il pulsante «Nuova proposta» si vede (c'è almeno una regola su cui proporre). -->
+    <string name="proposte_tue_come">Per chiedere al genitore di cambiare una regola tocca «Nuova proposta»: se accetta, vale subito.</string>
+    <string name="proposte_nuova">Nuova proposta</string>
+    <string name="proposte_scegli_regola_titolo">Quale regola vuoi cambiare?</string>
+    <string name="proposte_regola_occupata">C\'è già una proposta in attesa su questa regola</string>
+    <string name="proposta_tua">LA TUA PROPOSTA</string>
+    <string name="proposta_tua_in_attesa">%1$s · in attesa del genitore</string>
+    <string name="proposta_tuo_perche">Il tuo perché: %1$s</string>
+    <string name="proposta_tua_se_accetta">Se il genitore accetta: %1$s</string>
+    <string name="proposta_tua_eliminare">Eliminare la regola: %1$s</string>
+    <string name="proposta_tua_eliminare_semplice">Eliminare la regola</string>
+    <string name="proposta_tua_eliminare_su">Eliminare la regola %1$s: %2$s</string>
+    <string name="proposta_ritira">Ritira</string>
+    <string name="proposta_ritira_titolo">Ritirare la proposta?</string>
+    <string name="proposta_ritira_testo">La regola resta com\'è e il genitore non dovrà più decidere. Gli arriva un avviso che l\'hai ritirata.</string>
+    <string name="proposta_ritirata_ok">Proposta ritirata: la regola resta com\'è.</string>
+    <string name="proposta_ritiro_errore">Non sono riuscito a ritirare la proposta: riprova.</string>
+    <!-- 404 "proposta non trovata" di un server v3.4: la proposta non c'è più. -->
+    <string name="proposta_non_trovata">Non trovo più questa proposta.</string>
+    <!-- Server di prima della v3.4: il ritiro risponde 404 "Not Found" o 405. -->
+    <string name="proposta_ritiro_server_da_aggiornare">Per ritirare una proposta serve aggiornare il server di Pactum.</string>
+    <string name="proposta_mandata">Proposta mandata: %1$s. Se il genitore accetta, vale subito.</string>
+    <string name="proposta_mandata_elimina">Proposta mandata: eliminare la regola. Se il genitore accetta, vale subito.</string>
+    <string name="proposta_mandata_semplice">Proposta mandata. Se il genitore accetta, vale subito.</string>
+    <string name="proposta_gia_pendente">C\'è già una proposta in attesa su questa regola.</string>
+    <!-- La proposta in attesa è la tua (di solito una risposta persa e un secondo invio). -->
+    <string name="proposta_gia_tua">Hai già una proposta in attesa su questa regola.</string>
+    <string name="proposta_apri_proposte">Apri Proposte</string>
+    <string name="proposta_regola_non_valida">Questa regola non è più attiva: non si può proporre di cambiarla.</string>
+    <string name="proposta_dispositivo_revocato">Questa regola è di un dispositivo scollegato dal patto: non si può più cambiare, nemmeno con una proposta.</string>
+    <string name="proposta_valori_non_validi">Qualche valore non va bene: controlla i campi e riprova.</string>
+    <!-- Server di prima della v3.4: 403 su POST /api/proposte, 404 o 405 sul ritiro. Mai "errore". -->
+    <string name="proposta_server_da_aggiornare">Per mandare proposte serve aggiornare il server di Pactum.</string>
+    <string name="proposta_senza_rete">Non riesco a raggiungere il server: controlla la connessione e riprova.</string>
+    <string name="proposta_non_mandata">Non sono riuscito a mandare la proposta: riprova.</string>
+    <!-- Com'è finita una proposta chiusa: chi ha deciso cosa -->
+    <string name="proposta_genitore_ha_accettato">Il genitore ha accettato</string>
+    <string name="proposta_genitore_ha_rifiutato">Il genitore ha rifiutato</string>
+    <string name="proposta_hai_ritirato">L\'hai ritirata</string>
+    <string name="proposta_genitore_ha_ritirato">Il genitore l\'ha ritirata</string>
+    <string name="proposta_annullata">Annullata: la regola è stata eliminata</string>
 
     <!-- Diario (dichiarazioni vita reale) -->
     <string name="diario_titolo">Diario</string>
@@ -446,6 +517,15 @@
     <string name="tipo_verdetto">Esito della tua dichiarazione</string>
     <string name="tipo_segno">Un segno dal genitore</string>
     <string name="tipo_novita">Novità dal patto</string>
+    <!-- (0.10) Il genitore risponde a una tua proposta, o ritira la sua (contratto v3.4) -->
+    <string name="notifica_proposta_accettata_titolo">Il genitore ha accettato la tua proposta</string>
+    <string name="notifica_proposta_rifiutata_titolo">Il genitore ha rifiutato la tua proposta</string>
+    <string name="notifica_proposta_ritirata_titolo">Il genitore ha ritirato la sua proposta</string>
+    <string name="notifica_proposta_regola_resta">La regola resta: %1$s</string>
+    <string name="notifica_proposta_regola_eliminata">La regola è stata eliminata.</string>
+    <!-- Il genitore ritira una sua proposta di eliminare: lo si dice. -->
+    <string name="notifica_proposta_ritirata_eliminare">Era la proposta di eliminare la regola: %1$s</string>
+    <string name="notifica_proposta_ritirata_eliminare_senza_regola">Era la proposta di eliminare una regola.</string>
 
     <!-- Chiusura della sera (redesign C5) -->
     <string name="serale_titolo">Com\'è andata oggi</string>

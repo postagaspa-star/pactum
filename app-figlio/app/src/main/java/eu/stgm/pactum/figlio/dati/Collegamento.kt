@@ -5,6 +5,7 @@ import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.bonus.CassettaBonus
 import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.rete.PostinoClient
+import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -146,6 +147,9 @@ object Collegamento {
         val copia = PattoLocale(app)
         copia.cambiaCollegamento(cancellaCopia = !stessoDispositivo) {
             impostazioni.salvaCollegamento(server, token, identita, stessoDispositivo, stessoFiglio)
+            // (0.11) Le sessioni del dispositivo di prima non sono di questo:
+            // se ce n'era una in corso, la sua barriera si ferma qui.
+            if (!stessoDispositivo) ArchivioSessioni.svuota(app)
         }
         // Un bonus del patto vecchio non parte verso quello nuovo.
         if (!stessoDispositivo && sospeso != null) ConsegnaBonus.dimenticaInFondo(app, sospeso.id)

@@ -102,6 +102,8 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
         val fuso: String? = null,
         val righe: List<RigaUso> = emptyList(),
         val minutiTotali: Long = 0,
+        /** (0.11) I minuti di oggi passati in una Sessione nelle sue app: non contano. */
+        val minutiInSessione: Long = 0,
         val bonusInSospeso: BonusInSospeso? = null,
         /** È aperta la snackbar "Ti sei dato 15 minuti · Aggiungi perché". */
         val finestraBonus: Boolean = false,
@@ -190,12 +192,9 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             // totale che durante il giorno non scende. Così il totale del figlio
             // coincide con quello che il genitore vede nella finestra.
             val oggi = LocalDate.now()
-            val uso = UsoContato.di(
-                context,
-                oggi,
-                UsageStatsReader(context).usoDelGiorno(oggi),
-                CatalogoApp.filtroUso(context),
-            )
+            // (0.11) Senza il tempo passato in una Sessione nelle sue app: non
+            // conta, né qui né nella finestra del genitore.
+            val uso = UsoContato.di(context, UsageStatsReader(context).leggiGiorno(oggi))
             val bonusOggi = patto?.bonusValidiOggi(adesso).orEmpty()
             // (v3) Solo le regole di questo telefono e la vita reale: quelle del
             // computer si misurano sul computer.
@@ -238,6 +237,7 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                     fuso = patto?.fuso,
                     righe = righe,
                     minutiTotali = uso.totaleMinuti,
+                    minutiInSessione = uso.sessioniMinuti ?: 0,
                     bonusInSospeso = if (sospeso == null && finestra) aperto else sospeso,
                     finestraBonus = finestra,
                 )

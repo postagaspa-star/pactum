@@ -38,6 +38,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.permessi.StatoPermessi
 import eu.stgm.pactum.figlio.servizio.PactumService
+import eu.stgm.pactum.figlio.sessione.RichiestaTermine
+import eu.stgm.pactum.figlio.ui.ConSessioneInCorso
 import eu.stgm.pactum.figlio.ui.CosaVedeScreen
 import eu.stgm.pactum.figlio.ui.DichiarazioniScreen
 import eu.stgm.pactum.figlio.ui.ImpostazioniScreen
@@ -48,6 +50,7 @@ import eu.stgm.pactum.figlio.ui.ProposteScreen
 import eu.stgm.pactum.figlio.ui.ProposteViewModel
 import eu.stgm.pactum.figlio.ui.RegoleScreen
 import eu.stgm.pactum.figlio.ui.RegoleViewModel
+import eu.stgm.pactum.figlio.ui.SessioniScreen
 import eu.stgm.pactum.figlio.ui.SitiScreen
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -93,6 +96,10 @@ class MainActivity : ComponentActivity() {
     private fun prendiDestinazione(intent: Intent?): String? {
         val destinazione = intent?.getStringExtra(EXTRA_DESTINAZIONE)
         intent?.removeExtra(EXTRA_DESTINAZIONE)
+        // (0.11) "Termina la sessione" dalla notifica fissa: la scheda della
+        // sessione in corso apre la sua conferma (Oggi, o sopra le schermate
+        // iniziali). Terminare passa sempre da lì.
+        if (destinazione == DEST_TERMINA_SESSIONE) RichiestaTermine.chiedi()
         return destinazione
     }
 
@@ -102,17 +109,25 @@ class MainActivity : ComponentActivity() {
         const val DEST_REGOLE = "regole"
         const val DEST_PROPOSTE = "proposte"
         const val DEST_DIARIO = "diario"
+
+        /** (0.11) La risposta del genitore a una sessione apre le Sessioni. */
+        const val DEST_SESSIONI = "sessioni"
+
+        /** (0.11) "Termina la sessione" della notifica fissa: Oggi, con la conferma aperta. */
+        const val DEST_TERMINA_SESSIONE = "termina_sessione"
     }
 }
 
 /**
- * Le quattro schede (redesign C8). La scheda Bonus non c'è più: il bonus vive
- * sulla riga della regola, in Oggi, dove il contesto è già dato. Le icone sono
+ * Le schede (redesign C8). La scheda Bonus non c'è più: il bonus vive sulla
+ * riga della regola, in Oggi, dove il contesto è già dato. Le icone sono
  * disegnate per Pactum (C4), sul modello del quadretto della striscia.
+ * (0.11) In più le Sessioni (contratto v3.5), accanto alle regole.
  */
 private enum class Scheda(val icona: Int, val etichetta: Int, val destinazione: String) {
     OGGI(R.drawable.ic_scheda_oggi, R.string.scheda_oggi, MainActivity.DEST_OGGI),
     REGOLE(R.drawable.ic_scheda_regole, R.string.scheda_regole, MainActivity.DEST_REGOLE),
+    SESSIONI(R.drawable.ic_scheda_sessioni, R.string.scheda_sessioni, MainActivity.DEST_SESSIONI),
     PROPOSTE(R.drawable.ic_scheda_proposte, R.string.scheda_proposte, MainActivity.DEST_PROPOSTE),
     DIARIO(R.drawable.ic_scheda_diario, R.string.scheda_diario, MainActivity.DEST_DIARIO),
 }
@@ -120,7 +135,7 @@ private enum class Scheda(val icona: Int, val etichetta: Int, val destinazione: 
 /**
  * Navigazione del figlio: onboarding finché manca l'accesso ai dati di
  * utilizzo (il permesso indispensabile), poi — una volta — "Cosa vede tuo
- * padre", poi il gate della prima regola, poi le quattro schede. Le
+ * padre", poi il gate della prima regola, poi le schede. Le
  * Impostazioni sono un'icona nella barra in alto di Oggi.
  */
 @Composable
@@ -140,10 +155,13 @@ private fun PactumRoot(
     }
 
     if (!statoPermessi.accessoUso) {
-        OnboardingScreen(
-            statoPermessi = statoPermessi,
-            onAggiorna = { statoPermessi = StatoPermessi.leggi(context) },
-        )
+        // (0.11) Anche qui, se c'è una sessione in corso, si può terminare.
+        ConSessioneInCorso {
+            OnboardingScreen(
+                statoPermessi = statoPermessi,
+                onAggiorna = { statoPermessi = StatoPermessi.leggi(context) },
+            )
+        }
         return
     }
 
@@ -158,7 +176,9 @@ private fun PactumRoot(
             return
         }
         false -> {
-            CosaVedeScreen(onHoCapito = { ambito.launch { impostazioni.registraCosaVedeVista() } })
+            ConSessioneInCorso {
+                CosaVedeScreen(onHoCapito = { ambito.launch { impostazioni.registraCosaVedeVista() } })
+            }
             return
         }
         true -> Unit
@@ -258,7 +278,7 @@ private fun PactumRoot(
                 CircularProgressIndicator()
             }
         } else {
-            PrimaRegolaScreen(vm = regoleVm)
+            ConSessioneInCorso { PrimaRegolaScreen(vm = regoleVm) }
         }
         return
     }
@@ -306,6 +326,7 @@ private fun PactumRoot(
                 )
                 // (0.10) Dalla regola si va alla proposta che aspetta su di lei.
                 Scheda.REGOLE -> RegoleScreen(onApriProposte = { nomeScheda = Scheda.PROPOSTE.name })
+                Scheda.SESSIONI -> SessioniScreen()
                 Scheda.PROPOSTE -> ProposteScreen()
                 Scheda.DIARIO -> DichiarazioniScreen()
             }

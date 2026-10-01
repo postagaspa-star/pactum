@@ -31,6 +31,7 @@ import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.servizio.PactumService
+import eu.stgm.pactum.figlio.sessione.ConsegnaSessioni
 import eu.stgm.pactum.figlio.siti.Domini
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.siti.RegistroSiti
@@ -38,6 +39,7 @@ import eu.stgm.pactum.figlio.siti.ReteDns
 import eu.stgm.pactum.figlio.ui.NovitaProposta
 import eu.stgm.pactum.figlio.ui.TestoProposta
 import eu.stgm.pactum.figlio.ui.avvisoNovitaProposta
+import eu.stgm.pactum.figlio.ui.avvisoRispostaSessione
 import eu.stgm.pactum.figlio.ui.raccontoProposta
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.serialization.json.JsonPrimitive
@@ -150,6 +152,8 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         // Riserve del servizio: il bonus rimasto a metà e la chiusura della sera.
         runCatching { ConsegnaBonus.recupera(context) }
         runCatching { ChiusuraSerale.controlla(context) }
+        // (0.11) E una "Termina la sessione" rimasta senza rete.
+        runCatching { ConsegnaSessioni.riprovaSeServe(context, forza = true) }
 
         val battitoOk = postino.inviaBattito(
             Battito(
@@ -249,7 +253,10 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
             .toMap()
         // La copia del patto appena sincronizzata in questo giro: serve a dire
         // su quale regola verte una nuova proposta (o una risposta, o un ritiro).
-        val patto = if (novita.isNotEmpty() || nuove.any { it.tipo == TipiNotifica.NUOVA_PROPOSTA }) {
+        // (0.11) E il nome e il perché del genitore di una sessione decisa.
+        val patto = if (novita.isNotEmpty() ||
+            nuove.any { it.tipo == TipiNotifica.NUOVA_PROPOSTA || it.tipo == TipiNotifica.SESSIONE_RISPOSTA }
+        ) {
             PattoLocale(context).leggi()
         } else {
             null
@@ -277,6 +284,9 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
                         messaggio = notifica.messaggio,
                     )
                 }
+                // (0.11) Il genitore ha deciso su una sessione o sul suo cambio.
+                ?: notifica.takeIf { it.tipo == TipiNotifica.SESSIONE_RISPOSTA }
+                    ?.let { avvisoRispostaSessione(context, it.payload, it.messaggio, patto) }
                 ?: (AvvisiLocali.titoloTipo(context, notifica.tipo) to testoNotifica(context, notifica, patto))
             // (0.10) La proposta ritirata dal genitore non resta annunciata in
             // tendina come "Nuova proposta del genitore": quella si toglie.

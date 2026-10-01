@@ -63,6 +63,12 @@ object FotografiaUso {
                         put(categoria, JsonPrimitive(usi.sumOf { it.millisPrimoPiano / 60_000 }))
                     }
             })
+            // (0.11, v3.5) I minuti del giorno passati in sessione nelle app
+            // della sessione: non sono in uso_minuti, categorie né totale. Solo
+            // un'informazione per la finestra. Anche zero: un telefono 0.11 sa
+            // dire "nessun minuto in sessione". Ma non finché non sa quali
+            // sessioni ci sono state (dopo una reinstallazione): niente campo.
+            uso.sessioniMinuti?.let { put("sessioni_minuti", it) }
         },
     )
 }

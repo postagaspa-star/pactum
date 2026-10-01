@@ -1,0 +1,906 @@
+package eu.stgm.pactum.figlio.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.catalogo.AppInstallata
+import eu.stgm.pactum.figlio.catalogo.CatalogoApp
+import eu.stgm.pactum.figlio.permessi.PermessiHelper
+import eu.stgm.pactum.figlio.sessione.AppDellaSessione
+import eu.stgm.pactum.figlio.sessione.DurataSessione
+import eu.stgm.pactum.figlio.sessione.EsitoAvvio
+import eu.stgm.pactum.figlio.sessione.EsitoSessione
+import eu.stgm.pactum.figlio.sessione.NomeSessione
+import eu.stgm.pactum.figlio.sessione.SessioneDefinita
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * (0.11) Le Sessioni (contratto v3.5): "Studio", "Lavoro". Le scrive il
+ * figlio (un nome e le app del telefono), il genitore le approva una volta e
+ * ogni cambio; il figlio le inizia quando vuole, per quanto vuole, e le può
+ * terminare prima. Durante una sessione il tempo nelle sue app non conta, e le
+ * altre app si coprono con "Sei in sessione".
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
+    val stato by vm.stato.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    // Le snackbar partono fuori dall'effetto degli eventi: l'evento si consuma
+    // subito, e la snackbar non viene interrotta da quel cambio.
+    val ambito = rememberCoroutineScope()
+    val inCorso = rememberSessioneInCorso()
+    val avvioIncerto = rememberAvvioIncerto()
+
+    // I dialoghi si ricordano per id: una rotazione o la morte del processo
+    // non li chiudono. Per il modulo: null = chiuso, NUOVA_SESSIONE = nuova.
+    var moduloId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var daEliminareId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var daAvviareId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var cambioDaRitirareId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // L'ultima copia di ogni sessione aperta in un dialogo: se sparisce dalla
+    // lista (rilettura) il dialogo resta e dice perché.
+    val viste = remember { HashMap<Long, SessioneDefinita>() }
+    fun aperta(id: Long?): SessioneDefinita? =
+        id?.let { cercata -> stato.sessioni.firstOrNull { it.id == cercata } ?: viste[cercata] }
+    fun ricorda(sessione: SessioneDefinita) {
+        viste[sessione.id] = sessione
+    }
+
+    LifecycleResumeEffect(Unit) {
+        vm.aggiorna()
+        onPauseOrDispose { }
+    }
+
+    LaunchedEffect(stato.evento) {
+        val evento = stato.evento ?: return@LaunchedEffect
+        vm.consumaEvento()
+        val messaggio = when (evento) {
+            is SessioniViewModel.Evento.Mandata -> {
+                moduloId = null
+                vm.dimenticaEsiti()
+                testoEsitoSessione(context, EsitoSessione.Fatta(null), cambio = evento.cambio)
+            }
+            SessioniViewModel.Evento.Eliminata -> {
+                daEliminareId = null
+                context.getString(R.string.sessione_eliminata)
+            }
+            is SessioniViewModel.Evento.NonEliminata -> {
+                daEliminareId = null
+                testoEsitoSessione(context, evento.esito)
+            }
+            SessioniViewModel.Evento.CambioRitirato -> {
+                cambioDaRitirareId = null
+                context.getString(R.string.sessione_cambio_ritirato)
+            }
+            is SessioniViewModel.Evento.CambioNonRitirato -> {
+                cambioDaRitirareId = null
+                testoEsitoSessione(context, evento.esito)
+            }
+            is SessioniViewModel.Evento.Iniziata -> {
+                daAvviareId = null
+                vm.dimenticaEsiti()
+                testoEsitoAvvio(context, evento.esito)
+            }
+        }
+        ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+    }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0.dp),
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.sessioni_titolo)) },
+                actions = {
+                    IconButton(onClick = { vm.aggiorna() }) {
+                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
+                    }
+                },
+            )
+        },
+        floatingActionButton = {
+            if (stato.letto && !stato.configurazioneMancante && !stato.serverDaAggiornare) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        if (stato.sessioni.size >= SESSIONI_MASSIME) {
+                            // Il server ne tiene al massimo 20 per telefono: lo si dice prima.
+                            ambito.launch { snackbarHostState.showSnackbar(context.getString(R.string.sessione_esito_troppe)) }
+                        } else {
+                            vm.dimenticaEsiti()
+                            moduloId = NUOVA_SESSIONE
+                        }
+                    },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text(stringResource(R.string.sessioni_nuova)) },
+                )
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { padding ->
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            when {
+                stato.caricamento && !stato.letto -> Centro {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = stringResource(R.string.sessioni_caricamento),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = Spazi.s),
+                        )
+                    }
+                }
+
+                stato.configurazioneMancante -> Centro {
+                    TestoCentrato(stringResource(R.string.regole_config_mancante))
+                }
+
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    // In fondo lo spazio di "Nuova sessione", perché non copra l'ultima.
+                    contentPadding = PaddingValues(
+                        start = Spazi.l + Spazi.xs,
+                        end = Spazi.l + Spazi.xs,
+                        top = Spazi.l + Spazi.xs,
+                        bottom = 88.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Spazi.l),
+                ) {
+                    if (stato.scollegato) {
+                        item { RigaNeutra(stringResource(R.string.oggi_scollegato)) }
+                    } else if (stato.datiFermi) {
+                        item { BannerDatiVecchi(stato.datiFermiAlle) }
+                    }
+                    inCorso.attiva?.let { attiva ->
+                        item(key = "in-corso") {
+                            SchedaSessioneInCorso(
+                                attiva = attiva,
+                                adesso = inCorso.adesso,
+                                onTerminata = {
+                                    ambito.launch {
+                                        snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    // Un "Inizia" rimasto senza risposta: si dice finché non si chiarisce.
+                    avvioIncerto?.let { incerto -> item(key = "incerta") { RigaAvvioIncerto(incerto) } }
+                    if (stato.serverDaAggiornare) {
+                        // Mai "errore": il server va aggiornato, il resto dell'app funziona.
+                        item { RigaNeutra(stringResource(R.string.sessioni_server_da_aggiornare)) }
+                    } else {
+                        item {
+                            Text(
+                                text = stringResource(R.string.sessioni_intro),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (stato.sessioni.isEmpty()) {
+                            item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.sessioni_vuoto)) }
+                        } else {
+                            items(stato.sessioni, key = { it.id }) { sessione ->
+                                CardSessione(
+                                    sessione = sessione,
+                                    inCorsoQuesta = inCorso.attiva?.sessioneId == sessione.id,
+                                    unaInCorso = inCorso.attiva != null,
+                                    invioInCorso = stato.invioInCorso,
+                                    onInizia = {
+                                        ricorda(sessione)
+                                        vm.dimenticaEsiti()
+                                        daAvviareId = sessione.id
+                                    },
+                                    onModifica = {
+                                        ricorda(sessione)
+                                        vm.dimenticaEsiti()
+                                        moduloId = sessione.id
+                                    },
+                                    onElimina = {
+                                        ricorda(sessione)
+                                        daEliminareId = sessione.id
+                                    },
+                                    onRitiraCambio = {
+                                        ricorda(sessione)
+                                        cambioDaRitirareId = sessione.id
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Nuova sessione, o il cambio di una che c'è.
+    moduloId?.let { id ->
+        val nuova = id == NUOVA_SESSIONE
+        val sessione = if (nuova) null else aperta(id)
+        if (nuova || sessione != null) {
+            DialogoSessione(
+                sessione = sessione,
+                // Conta anche il nome di un cambio in attesa (contratto v3.5):
+                // approvato, due sessioni si chiamerebbero uguali.
+                altriNomi = stato.sessioni
+                    .filter { it.id != sessione?.id }
+                    .flatMap { listOfNotNull(it.nome, it.modificaInAttesa?.nome) },
+                invioInCorso = stato.invioInCorso,
+                esito = stato.esitoModulo,
+                onAnnulla = {
+                    moduloId = null
+                    vm.dimenticaEsiti()
+                },
+                onManda = { nome, app, nomi ->
+                    if (sessione == null) {
+                        vm.crea(nome, app, nomi)
+                    } else {
+                        vm.modifica(sessione.id, sessione.approvata, nome, app, nomi)
+                    }
+                },
+            )
+        }
+    }
+
+    aperta(daEliminareId)?.let { sessione ->
+        AlertDialog(
+            onDismissRequest = { daEliminareId = null },
+            title = { Text(stringResource(R.string.sessione_elimina_titolo)) },
+            text = { Text(stringResource(R.string.sessione_elimina_testo, sessione.nome)) },
+            confirmButton = {
+                Button(enabled = !stato.invioInCorso, onClick = { vm.elimina(sessione.id) }) {
+                    Text(stringResource(R.string.azione_elimina))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { daEliminareId = null }) { Text(stringResource(R.string.azione_annulla)) }
+            },
+        )
+    }
+
+    aperta(daAvviareId)?.let { sessione ->
+        DialogoAvvio(
+            sessione = sessione,
+            invioInCorso = stato.invioInCorso,
+            esito = stato.esitoAvvio,
+            onAnnulla = {
+                daAvviareId = null
+                vm.dimenticaEsiti()
+            },
+            onInizia = { durata -> vm.avvia(sessione.id, sessione.nome, durata) },
+        )
+    }
+
+    // "Ritira il cambio": resta la sessione approvata.
+    aperta(cambioDaRitirareId)?.let { sessione ->
+        AlertDialog(
+            onDismissRequest = { cambioDaRitirareId = null },
+            title = { Text(stringResource(R.string.sessione_ritira_cambio_titolo)) },
+            text = { Text(stringResource(R.string.sessione_ritira_cambio_testo, sessione.nome)) },
+            confirmButton = {
+                Button(enabled = !stato.invioInCorso, onClick = { vm.ritiraCambio(sessione) }) {
+                    Text(stringResource(R.string.sessione_ritira_cambio))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { cambioDaRitirareId = null }) { Text(stringResource(R.string.azione_annulla)) }
+            },
+        )
+    }
+}
+
+/** Il modulo aperto su una sessione nuova. */
+private const val NUOVA_SESSIONE = -1L
+
+/** Il server ne tiene al massimo 20 per telefono (contratto v3.5). */
+private const val SESSIONI_MASSIME = 20
+
+/** La scelta "Altro" della durata: ore e minuti scritti a mano. */
+private const val DURATA_ALTRO = -1
+
+/**
+ * Una sessione: il nome, com'è messa col genitore, le sue app (mai nomi di
+ * pacchetti), e cosa si può fare. Si inizia solo una sessione approvata (con
+ * o senza un cambio in attesa: vale quella approvata), una alla volta.
+ */
+@Composable
+private fun CardSessione(
+    sessione: SessioneDefinita,
+    inCorsoQuesta: Boolean,
+    unaInCorso: Boolean,
+    invioInCorso: Boolean,
+    onInizia: () -> Unit,
+    onModifica: () -> Unit,
+    onElimina: () -> Unit,
+    onRitiraCambio: () -> Unit,
+) {
+    val context = LocalContext.current
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(Spazi.l + Spazi.xs),
+            verticalArrangement = Arrangement.spacedBy(Spazi.s),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = sessione.nome,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Etichetta(
+                    stringResource(
+                        when {
+                            inCorsoQuesta -> R.string.sessione_in_corso_etichetta
+                            sessione.approvata -> R.string.sessione_stato_approvata
+                            sessione.rifiutata -> R.string.sessione_stato_rifiutata
+                            else -> R.string.sessione_stato_in_attesa
+                        },
+                    ),
+                )
+            }
+            Text(
+                text = stringResource(R.string.sessione_app, elencoAppSessione(context, sessione.app, sessione.nomi)),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            when {
+                sessione.inAttesa -> Nota(stringResource(R.string.sessione_in_attesa_spiegazione))
+                sessione.rifiutata -> {
+                    sessione.motivazione?.let { Nota(stringResource(R.string.proposta_motivazione_genitore, it)) }
+                    Nota(stringResource(R.string.sessione_rifiutata_spiegazione))
+                }
+            }
+            val cambio = sessione.modificaInAttesa
+            if (cambio != null) {
+                Etichetta(stringResource(R.string.sessione_cambio_in_attesa))
+                val appChieste = cambio.app ?: sessione.app
+                val nomiChiesti = sessione.nomi + cambio.nomi
+                val elenco = elencoAppSessione(context, appChieste, nomiChiesti)
+                val nomeChiesto = cambio.nome?.trim()?.takeIf { it.isNotEmpty() && it != sessione.nome }
+                Text(
+                    text = if (nomeChiesto != null) {
+                        stringResource(R.string.sessione_cambio_chiesto_nome, nomeChiesto, elenco)
+                    } else {
+                        stringResource(R.string.sessione_cambio_chiesto, elenco)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Nota(stringResource(R.string.sessione_cambio_spiegazione))
+                // Ci ha ripensato: torna la sessione approvata, il genitore non deve più decidere.
+                TextButton(onClick = onRitiraCambio, enabled = !invioInCorso, contentPadding = PaddingValues(0.dp)) {
+                    Text(stringResource(R.string.sessione_ritira_cambio))
+                }
+            } else if (sessione.approvata) {
+                // Un cambio chiesto e non approvato: resta la sessione di prima, e il perché.
+                sessione.motivazione?.let {
+                    Nota(stringResource(R.string.sessione_cambio_rifiutato))
+                    Nota(stringResource(R.string.proposta_motivazione_genitore, it))
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (sessione.approvata && !inCorsoQuesta) {
+                    Button(enabled = !unaInCorso && !invioInCorso, onClick = onInizia) {
+                        Text(stringResource(R.string.sessione_inizia))
+                    }
+                    Spacer(modifier = Modifier.width(Spazi.s))
+                }
+                TextButton(onClick = onModifica) { Text(stringResource(R.string.sessione_modifica)) }
+                // La sessione in corso non si elimina (il server direbbe di no): prima si termina.
+                if (!inCorsoQuesta) {
+                    TextButton(onClick = onElimina) { Text(stringResource(R.string.azione_elimina)) }
+                }
+            }
+            if (sessione.approvata && unaInCorso && !inCorsoQuesta) {
+                Nota(stringResource(R.string.sessione_una_gia_in_corso))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Nota(testo: String) {
+    Text(
+        text = testo,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Le app scelte, come testo che sopravvive a una rotazione. */
+private val salvataggioLista = listSaver<List<String>, String>(save = { it }, restore = { it })
+
+/**
+ * Nuova sessione o cambio: il nome (1–40 caratteri, unico) e le app, scelte
+ * dall'elenco delle app installate. Un cambio parte dal cambio già in attesa,
+ * se c'è (lo sostituisce), altrimenti dalla sessione com'è.
+ */
+@Composable
+private fun DialogoSessione(
+    sessione: SessioneDefinita?,
+    altriNomi: List<String>,
+    invioInCorso: Boolean,
+    esito: EsitoSessione?,
+    onAnnulla: () -> Unit,
+    onManda: (nome: String, app: List<String>, nomi: Map<String, String>) -> Unit,
+) {
+    val context = LocalContext.current
+    val partenzaNome = sessione?.modificaInAttesa?.nome ?: sessione?.nome ?: ""
+    val partenzaApp = sessione?.modificaInAttesa?.app ?: sessione?.app ?: emptyList()
+    // I nomi che il telefono aveva mandato: servono per le app non più installate.
+    val nomiNoti = remember(sessione) { (sessione?.nomi ?: emptyMap()) + (sessione?.modificaInAttesa?.nomi ?: emptyMap()) }
+    var nome by rememberSaveable(sessione?.id) { mutableStateOf(partenzaNome) }
+    var scelte by rememberSaveable(sessione?.id, stateSaver = salvataggioLista) { mutableStateOf(partenzaApp) }
+    var sceltaAperta by rememberSaveable(sessione?.id) { mutableStateOf(false) }
+    // Le etichette viste nella scelta delle app: vanno al genitore con la sessione.
+    val etichette = remember(sessione?.id) { HashMap<String, String>() }
+
+    // Il nome come lo vuole il server (contratto v3.5): senza spazi ai bordi, in
+    // forma NFC, niente caratteri invisibili, unico anche coi cambi in attesa.
+    val pulito = NomeSessione.pulito(nome)
+    val problema = NomeSessione.problema(nome)
+    val doppio = pulito.isNotEmpty() && altriNomi.any { NomeSessione.stesso(it, pulito) }
+    val valida = problema == null && !doppio && scelte.size in 1..APP_MASSIME
+    val cambiata = sessione == null || pulito != NomeSessione.pulito(partenzaNome) || scelte.toSet() != partenzaApp.toSet()
+    val avvisoNome = when {
+        problema == NomeSessione.Problema.TROPPO_LUNGO -> stringResource(R.string.sessione_nome_troppo_lungo)
+        problema == NomeSessione.Problema.INVISIBILI -> stringResource(R.string.sessione_nome_invisibili)
+        doppio -> stringResource(R.string.sessione_nome_doppio)
+        else -> null
+    }
+
+    AlertDialog(
+        onDismissRequest = onAnnulla,
+        title = {
+            Text(stringResource(if (sessione == null) R.string.sessione_crea_titolo else R.string.sessione_modifica_titolo))
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Spazi.m),
+            ) {
+                OutlinedTextField(
+                    value = nome,
+                    onValueChange = { nome = it.take(NomeSessione.MASSIMO * 2) },
+                    label = { Text(stringResource(R.string.sessione_campo_nome)) },
+                    // Validazione del campo: l'unico posto dove il rosso di sistema vale (§3.1).
+                    isError = avvisoNome != null,
+                    supportingText = avvisoNome?.let { { Text(it) } },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = stringResource(R.string.sessione_app_titolo),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = if (scelte.isEmpty()) {
+                        stringResource(R.string.sessione_app_nessuna)
+                    } else {
+                        elencoAppSessione(context, scelte, nomiNoti + etichette, massimo = 12)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (scelte.size > APP_MASSIME) {
+                    Text(
+                        text = stringResource(R.string.sessione_app_troppe),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                OutlinedButton(onClick = { sceltaAperta = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.sessione_scegli_app))
+                }
+                Text(
+                    text = stringResource(
+                        if (sessione?.approvata == true) R.string.sessione_spiegazione_cambio else R.string.sessione_spiegazione_nuova,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                esito?.let { RigaNeutra(testoEsitoSessione(context, it)) }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = valida && cambiata && !invioInCorso,
+                onClick = { onManda(pulito, scelte, nomiPerIlGenitore(context, scelte, etichette, nomiNoti)) },
+            ) {
+                Text(stringResource(R.string.sessione_manda))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onAnnulla) { Text(stringResource(R.string.azione_annulla)) }
+        },
+    )
+
+    if (sceltaAperta) {
+        DialogoSceltaAppSessione(
+            iniziali = scelte,
+            nomiNoti = nomiNoti + etichette,
+            onFatto = { nuove, nuoveEtichette ->
+                scelte = nuove
+                etichette.putAll(nuoveEtichette)
+                sceltaAperta = false
+            },
+            onAnnulla = { sceltaAperta = false },
+        )
+    }
+}
+
+/**
+ * I `nomi` da mandare con la sessione: solo il telefono sa come si chiamano
+ * le app (il genitore vede i pacchetti). Mai un nome uguale al pacchetto;
+ * fino a 100 caratteri, come vuole il contratto.
+ */
+private fun nomiPerIlGenitore(
+    context: android.content.Context,
+    app: List<String>,
+    etichette: Map<String, String>,
+    nomiNoti: Map<String, String>,
+): Map<String, String> =
+    app.mapNotNull { chiave ->
+        val nome = if (chiave == AppDellaSessione.GRUPPO_APK) {
+            context.getString(R.string.gruppo_apk_nome)
+        } else {
+            etichette[chiave] ?: CatalogoApp.etichettaValore(context, chiave).takeIf { it != chiave } ?: nomiNoti[chiave]
+        }
+        nome?.trim()?.takeIf { it.isNotEmpty() && it != chiave }?.let { chiave to primiCaratteri(it, ETICHETTA_MASSIMA) }
+    }.toMap()
+
+/** I primi [n] caratteri veri (un'emoji è uno, come li conta il server), mai metà di uno. */
+private fun primiCaratteri(testo: String, n: Int): String =
+    if (testo.codePointCount(0, testo.length) <= n) testo else testo.substring(0, testo.offsetByCodePoints(0, n))
+
+private const val ETICHETTA_MASSIMA = 100
+
+/**
+ * La scelta delle app: in cima "App installate da APK" (`gruppo:apk`) con la
+ * sua riga di spiegazione, poi le app installate (lo stesso elenco delle
+ * regole), con la ricerca. Le app scelte e non più installate restano
+ * nell'elenco, per poterle togliere.
+ */
+@Composable
+private fun DialogoSceltaAppSessione(
+    iniziali: List<String>,
+    nomiNoti: Map<String, String>,
+    onFatto: (List<String>, Map<String, String>) -> Unit,
+    onAnnulla: () -> Unit,
+) {
+    val context = LocalContext.current
+    // PackageManager è lento: l'elenco si carica fuori dal thread principale, una volta.
+    val installate by produceState<List<AppInstallata>?>(initialValue = null) {
+        value = withContext(Dispatchers.IO) { CatalogoApp.appInstallate(context) }
+    }
+    var scelte by rememberSaveable(stateSaver = salvataggioLista) { mutableStateOf(iniziali) }
+    var cerca by rememberSaveable { mutableStateOf("") }
+    fun cambia(chiave: String) {
+        scelte = if (chiave in scelte) scelte - chiave else scelte + chiave
+    }
+    val gruppoApk = stringResource(R.string.gruppo_apk_nome)
+    val sconosciuta = stringResource(R.string.chiave_app_sconosciuta)
+    val filtro = cerca.trim().lowercase()
+    fun trovata(etichetta: String) = filtro.isEmpty() || etichetta.lowercase().contains(filtro)
+
+    AlertDialog(
+        onDismissRequest = onAnnulla,
+        title = { Text(stringResource(R.string.sessione_scegli_app_titolo)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
+                OutlinedTextField(
+                    value = cerca,
+                    onValueChange = { cerca = it },
+                    label = { Text(stringResource(R.string.sessione_cerca)) },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp)) {
+                    if (trovata(gruppoApk)) {
+                        item(key = AppDellaSessione.GRUPPO_APK) {
+                            RigaSceltaApp(
+                                nome = gruppoApk,
+                                spiegazione = stringResource(R.string.gruppo_apk_spiegazione),
+                                scelta = AppDellaSessione.GRUPPO_APK in scelte,
+                            ) { cambia(AppDellaSessione.GRUPPO_APK) }
+                        }
+                    }
+                    val lista = installate
+                    // Scelte prima e non più installate: si vedono, per poterle togliere.
+                    val pacchettiInstallati = lista?.map { it.pacchetto }?.toSet()
+                    val mancanti = if (pacchettiInstallati == null) {
+                        emptyList()
+                    } else {
+                        scelte.filter { it != AppDellaSessione.GRUPPO_APK && it !in pacchettiInstallati }
+                    }
+                    items(mancanti, key = { "mancante-$it" }) { chiave ->
+                        val etichetta = nomiNoti[chiave]?.takeIf { it != chiave } ?: sconosciuta
+                        if (trovata(etichetta)) {
+                            RigaSceltaApp(nome = etichetta, spiegazione = null, scelta = chiave in scelte) { cambia(chiave) }
+                        }
+                    }
+                    item { TitoloSezione(stringResource(R.string.regola_sezione_app)) }
+                    if (lista == null) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
+                                horizontalArrangement = Arrangement.Center,
+                            ) { CircularProgressIndicator() }
+                        }
+                    } else {
+                        val trovate = lista.filter { trovata(it.etichetta) }
+                        if (trovate.isEmpty()) {
+                            item {
+                                Text(
+                                    text = stringResource(R.string.sessione_nessuna_app_trovata),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = Spazi.m),
+                                )
+                            }
+                        }
+                        items(trovate, key = { it.pacchetto }) { installata ->
+                            RigaSceltaApp(
+                                nome = installata.etichetta,
+                                spiegazione = null,
+                                scelta = installata.pacchetto in scelte,
+                            ) { cambia(installata.pacchetto) }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val etichette = installate.orEmpty()
+                        .filter { it.pacchetto in scelte }
+                        .associate { it.pacchetto to it.etichetta }
+                    onFatto(scelte, etichette)
+                },
+            ) {
+                Text(stringResource(R.string.sessione_scelta_fatto))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onAnnulla) { Text(stringResource(R.string.azione_annulla)) }
+        },
+    )
+}
+
+@Composable
+private fun RigaSceltaApp(nome: String, spiegazione: String?, scelta: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = Spazi.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Il tocco è sulla riga intera: la casella mostra soltanto.
+        Checkbox(checked = scelta, onCheckedChange = null, modifier = Modifier.padding(end = Spazi.m))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = nome, style = MaterialTheme.typography.bodyLarge)
+            spiegazione?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * "Inizia": per quanto tempo (30 min, 1 h, 2 h, 3 h, o ore e minuti scritti,
+ * fino a 24 ore), fino a che ora, e cosa vuol dire. Prima di iniziare servono
+ * "Mostra sopra le altre app" e l'accesso ai dati di utilizzo: se mancano lo
+ * si dice qui, con la strada per darli, e la sessione non parte.
+ */
+@Composable
+private fun DialogoAvvio(
+    sessione: SessioneDefinita,
+    invioInCorso: Boolean,
+    esito: EsitoAvvio?,
+    onAnnulla: () -> Unit,
+    onInizia: (Int) -> Unit,
+) {
+    val context = LocalContext.current
+    val mostraSopra = rememberMostraSopra()
+    val accessoUso = rememberAccessoUso()
+    var scelta by rememberSaveable(sessione.id) { mutableIntStateOf(DurataSessione.SCELTE[1]) }
+    var ore by rememberSaveable(sessione.id) { mutableStateOf("") }
+    var minuti by rememberSaveable(sessione.id) { mutableStateOf("") }
+    val durata = if (scelta == DURATA_ALTRO) DurataSessione.daOreMinuti(ore, minuti) else scelta
+    // "Fino alle …" segue l'orologio mentre la finestra è aperta.
+    var adesso by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(15_000)
+            adesso = System.currentTimeMillis()
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onAnnulla,
+        title = { Text(stringResource(R.string.sessione_avvio_titolo, sessione.nome)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Spazi.m),
+            ) {
+                Text(
+                    text = stringResource(R.string.sessione_avvio_quanto),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                val voci = DurataSessione.SCELTE + DURATA_ALTRO
+                voci.chunked(3).forEach { riga ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                        riga.forEach { voce ->
+                            FilterChip(
+                                selected = scelta == voce,
+                                onClick = { scelta = voce },
+                                label = {
+                                    Text(
+                                        if (voce == DURATA_ALTRO) {
+                                            stringResource(R.string.sessione_durata_altro)
+                                        } else {
+                                            testoDurata(voce.toLong())
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+                if (scelta == DURATA_ALTRO) {
+                    val troppa = DurataSessione.oltreIlMassimo(ore, minuti)
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spazi.s)) {
+                        CampoNumero(ore, { ore = it }, R.string.sessione_durata_ore, troppa, Modifier.weight(1f))
+                        CampoNumero(minuti, { minuti = it }, R.string.sessione_durata_minuti, troppa, Modifier.weight(1f))
+                    }
+                    if (troppa) {
+                        Text(
+                            text = stringResource(R.string.sessione_durata_troppa),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                if (durata != null) {
+                    Text(
+                        text = testoFinoAlle(
+                            context,
+                            adesso + durata * 60_000L,
+                            adesso,
+                            R.string.sessione_fino_alle,
+                            R.string.sessione_fino_a_domani,
+                        ),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.sessione_avvio_spiegazione),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // Cosa resta usabile oltre alle app scelte (una pagina web, la fotocamera, i file), e cosa no.
+                Text(
+                    text = stringResource(R.string.sessione_avvio_aperte),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!mostraSopra) {
+                    Text(
+                        text = stringResource(R.string.sessione_avvio_manca_mostra_sopra),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedButton(onClick = { PermessiHelper.apri(context, PermessiHelper.intentMostraSopra(context)) }) {
+                        Text(stringResource(R.string.passo_apri_impostazioni))
+                    }
+                    AiutoRestrizioni(stringResource(R.string.aiuto_mostra_sopra_testo))
+                }
+                if (!accessoUso) {
+                    Text(
+                        text = stringResource(R.string.sessione_avvio_manca_uso),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedButton(onClick = { PermessiHelper.apri(context, PermessiHelper.intentAccessoUso()) }) {
+                        Text(stringResource(R.string.passo_apri_impostazioni))
+                    }
+                    AiutoRestrizioni(stringResource(R.string.aiuto_restrizioni_testo))
+                }
+                esito?.let { RigaNeutra(testoEsitoAvvio(context, it)) }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = DurataSessione.valida(durata) && mostraSopra && accessoUso && !invioInCorso,
+                onClick = { durata?.let(onInizia) },
+            ) {
+                Text(stringResource(R.string.sessione_avvia))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onAnnulla) { Text(stringResource(R.string.azione_annulla)) }
+        },
+    )
+}
+
+@Composable
+private fun CampoNumero(valore: String, onValore: (String) -> Unit, etichetta: Int, errore: Boolean, modifier: Modifier) {
+    OutlinedTextField(
+        value = valore,
+        onValueChange = { nuovo -> onValore(nuovo.filter { it.isDigit() }.take(4)) },
+        label = { Text(stringResource(etichetta)) },
+        isError = errore,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = modifier,
+    )
+}
+
+private const val APP_MASSIME = 200

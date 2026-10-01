@@ -209,9 +209,11 @@ class SentinellaPatto(private val context: Context) {
         val giorno = Instant.ofEpochMilli(now).atZone(zona).toLocalDate()
         // Un filtro per giro: la schermata Home si risolve una volta sola.
         val filtro = CatalogoApp.filtroUso(context)
+        // (0.11) La lettura è già senza il tempo passato in una Sessione nelle
+        // sue app (UsageStatsReader): limiti, totale e fasce non lo vedono.
         val letta = giornata?.takeIf { it.giorno == giorno }
             ?: UsageStatsReader(context).leggiGiorno(giorno, zona, now)
-        return Lettura(giorno, zona, letta, UsoContato.di(context, giorno, letta.perApp, filtro), filtro)
+        return Lettura(giorno, zona, letta, UsoContato.di(context, letta, filtro), filtro)
     }
 
     private suspend fun valutaContro(patto: Patto, lettura: Lettura, now: Long, soloFasce: Boolean): List<Sforamento> {

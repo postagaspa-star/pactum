@@ -42,6 +42,9 @@ object AvvisiLocali {
     /** La chiusura della sera: una al giorno, la nuova sostituisce quella di ieri. */
     const val ID_CHIUSURA_SERALE = 5_000_001
 
+    /** (0.11) Una sessione partita senza che il ragazzo l'abbia vista partire (o non partita): una alla volta. */
+    const val ID_SESSIONE = 7_000_001
+
     /**
      * (0.10) La "Nuova proposta del genitore" ha l'id della SUA proposta, non
      * quello della notifica del server: se il genitore la ritira, la si toglie
@@ -142,6 +145,7 @@ object AvvisiLocali {
         TipiNotifica.NUOVA_PROPOSTA -> context.getString(R.string.tipo_nuova_proposta)
         TipiNotifica.VERDETTO -> context.getString(R.string.tipo_verdetto)
         TipiNotifica.SEGNO -> context.getString(R.string.tipo_segno)
+        TipiNotifica.SESSIONE_RISPOSTA -> context.getString(R.string.tipo_sessione)
         else -> context.getString(R.string.tipo_novita)
     }
 
@@ -150,6 +154,7 @@ object AvvisiLocali {
      * un tocco non deve mai finire nel vuoto. I tipi che non si conoscono
      * ancora aprono Oggi, la schermata del patto. (0.10) La risposta del
      * genitore a una tua proposta e il ritiro della sua aprono Proposte.
+     * (0.11) La sua decisione su una sessione apre Sessioni.
      */
     fun destinazioneTipo(tipo: String): String = when (tipo) {
         TipiNotifica.NUOVA_PROPOSTA,
@@ -157,6 +162,7 @@ object AvvisiLocali {
         TipiNotifica.PROPOSTA_RITIRATA,
         -> MainActivity.DEST_PROPOSTE
         TipiNotifica.VERDETTO -> MainActivity.DEST_DIARIO
+        TipiNotifica.SESSIONE_RISPOSTA -> MainActivity.DEST_SESSIONI
         else -> MainActivity.DEST_OGGI
     }
 

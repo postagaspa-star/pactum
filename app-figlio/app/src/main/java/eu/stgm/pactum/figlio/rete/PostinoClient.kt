@@ -22,6 +22,10 @@ import eu.stgm.pactum.figlio.dati.PropostaIn
 import eu.stgm.pactum.figlio.dati.ProposteDelFiglio
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.RispostaPropostaIn
+import eu.stgm.pactum.figlio.sessione.AvvioSessioneIn
+import eu.stgm.pactum.figlio.sessione.SessioneIn
+import eu.stgm.pactum.figlio.sessione.SessioneModificaIn
+import eu.stgm.pactum.figlio.sessione.TerminaSessioneIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -38,7 +42,12 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLHandshakeException
 
 /**
  * Client verso il server postino. Protocollo: docs/contratto-api.md
@@ -49,6 +58,7 @@ import java.util.concurrent.TimeUnit
  *   POST/PATCH/DELETE {base}/api/regole · POST /api/bonus · /api/dichiarazioni ·
  *        /api/proposte/{id}/risposta                    → mutazioni con esito HTTP
  *   POST {base}/api/proposte · /api/proposte/{id}/ritira (v3.4) → le proposte del figlio
+ *   GET/POST/PATCH/DELETE {base}/api/sessioni · …/{id}/avvia · …/in_corso/termina (v3.5) → le Sessioni
  *   POST {base}/api/abbina (v3, senza token)            → il codice di 6 cifre diventa un token
  *   header: Authorization: Bearer <token di questo dispositivo>
  *
@@ -59,8 +69,12 @@ import java.util.concurrent.TimeUnit
  */
 class PostinoClient(private val configurazione: ConfigurazionePostino) {
 
-    /** Esito grezzo di una mutazione: [codice] 0 = errore di rete o URL malformato. */
-    data class RispostaHttp(val ok: Boolean, val codice: Int, val corpo: String?)
+    /**
+     * Esito grezzo di una mutazione: [codice] 0 = errore di rete o URL
+     * malformato. (0.11) [incerta] = con codice 0, la richiesta forse è
+     * arrivata al server (la rete è caduta dopo l'invio): non si sa com'è andata.
+     */
+    data class RispostaHttp(val ok: Boolean, val codice: Int, val corpo: String?, val incerta: Boolean = false)
 
     suspend fun inviaBattito(battito: Battito): Boolean =
         inviaSemplice("/api/battito", json.encodeToString(Battito.serializer(), battito))
@@ -229,6 +243,29 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     suspend fun marcaNotificaLetta(id: Long): Boolean =
         mutazione("POST", "/api/notifiche/$id/letta", null).ok
 
+    // --- (0.11, v3.5) Le Sessioni ---------------------------------------------
+    // Un server di prima della v3.5 risponde 404 o 405: lo legge EsitiSessioni.
+
+    /** GET /api/sessioni: il corpo (null se non 2xx) e il codice HTTP. */
+    suspend fun leggiSessioni(): Pair<String?, Int> = leggiConCodice("/api/sessioni")
+
+    suspend fun creaSessione(corpo: SessioneIn): RispostaHttp =
+        mutazione("POST", "/api/sessioni", json.encodeToString(SessioneIn.serializer(), corpo))
+
+    suspend fun modificaSessione(sessioneId: Long, corpo: SessioneModificaIn): RispostaHttp =
+        mutazione("PATCH", "/api/sessioni/$sessioneId", json.encodeToString(SessioneModificaIn.serializer(), corpo))
+
+    suspend fun eliminaSessione(sessioneId: Long): RispostaHttp =
+        mutazione("DELETE", "/api/sessioni/$sessioneId", null)
+
+    /** "Inizia": mai ritentata da sola (due avvii al posto di uno), come le altre mutazioni. */
+    suspend fun avviaSessione(sessioneId: Long, corpo: AvvioSessioneIn): RispostaHttp =
+        mutazione("POST", "/api/sessioni/$sessioneId/avvia", json.encodeToString(AvvioSessioneIn.serializer(), corpo))
+
+    /** "Termina la sessione", con l'istante vero della chiusura fatta sul telefono. */
+    suspend fun terminaSessione(corpo: TerminaSessioneIn): RispostaHttp =
+        mutazione("POST", "/api/sessioni/in_corso/termina", json.encodeToString(TerminaSessioneIn.serializer(), corpo))
+
     // --- Interni -------------------------------------------------------------
 
     private suspend fun inviaSemplice(percorso: String, corpo: String): Boolean {
@@ -283,7 +320,7 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
                     )
                 }
             } catch (e: IOException) {
-                RispostaHttp(ok = false, codice = 0, corpo = null)
+                RispostaHttp(ok = false, codice = 0, corpo = null, incerta = forseArrivata(e))
             } catch (e: IllegalArgumentException) {
                 RispostaHttp(ok = false, codice = 0, corpo = null)
             }
@@ -303,6 +340,19 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     }
 
     companion object {
+        /**
+         * (0.11) Una richiesta fallita forse è arrivata lo stesso al server?
+         * No se non si è mai collegato (nome del server sconosciuto, nessuna
+         * strada, collegamento rifiutato o scaduto prima di collegarsi, cifratura
+         * mai partita); negli altri casi (risposta mai arrivata, collegamento
+         * caduto a metà) non si sa.
+         */
+        fun forseArrivata(errore: IOException): Boolean = when (errore) {
+            is UnknownHostException, is ConnectException, is NoRouteToHostException, is SSLHandshakeException -> false
+            is SocketTimeoutException -> errore.message?.contains("connect", ignoreCase = true) != true
+            else -> true
+        }
+
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private val CORPO_VUOTO = ByteArray(0).toRequestBody(null)
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }

@@ -3,6 +3,7 @@ package eu.stgm.pactum.figlio.misura
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import eu.stgm.pactum.figlio.sessione.PeriodiSessione
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -19,6 +20,7 @@ data class UsoApp(val pacchetto: String, val millisPrimoPiano: Long)
  */
 class UsageStatsReader(context: Context) {
 
+    private val app = context.applicationContext
     private val usageStatsManager =
         context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
 
@@ -26,12 +28,20 @@ class UsageStatsReader(context: Context) {
      * (0.9) L'uso di [giorno] letto una volta sola, dalla sua mezzanotte fino ad
      * [adesso] o alla mezzanotte successiva: minuti per app, totale e fasce
      * escono tutti da qui.
+     *
+     * (0.11) Senza il tempo passato in una Sessione nelle sue app: da qui in
+     * poi non conta per nessuno (TempoInSessione). Le app fuori dalla lista
+     * contano come sempre.
      */
     fun leggiGiorno(
         giorno: LocalDate = LocalDate.now(),
         zona: ZoneId = ZoneId.systemDefault(),
         adesso: Long = System.currentTimeMillis(),
-    ): LetturaGiorno = Sessioni.giorno(giorno, zona, adesso, ::scorri)
+    ): LetturaGiorno {
+        val tutto = Sessioni.giorno(giorno, zona, adesso, ::scorri)
+        val periodi = PeriodiSessione.delGiorno(app, giorno, zona, tutto.fine)
+        return TempoInSessione.togli(tutto, periodi.periodi, periodi.note)
+    }
 
     /** Uso di [giorno] per app, dalla sua mezzanotte fino ad [adesso] o alla mezzanotte successiva. */
     fun usoDelGiorno(

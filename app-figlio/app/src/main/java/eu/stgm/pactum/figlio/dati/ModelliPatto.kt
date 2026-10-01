@@ -5,6 +5,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import eu.stgm.pactum.design.GiornoPatto
 import eu.stgm.pactum.design.segnaleDaStato
+import eu.stgm.pactum.figlio.sessione.LetturaSessioni
+import eu.stgm.pactum.figlio.sessione.SessioneDefinita
+import eu.stgm.pactum.figlio.sessione.SessioneSvolta
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 import java.time.ZoneId
@@ -55,6 +60,12 @@ data class Patto(
     // (v3) Tutti i dispositivi del figlio, ciascuno con la sua striscia: la
     // riga "Computer: 5 su 7" sotto la striscia del figlio.
     val dispositivi: List<Dispositivo> = emptyList(),
+    // (0.11, v3.5) Le sessioni, tenute grezze e lette a parte (LetturaSessioni):
+    // un campo scritto male non deve far cadere la lettura di tutto il patto.
+    // `sessioni` assente = server di prima della v3.5.
+    @SerialName("sessioni") val sessioniGrezze: JsonElement? = null,
+    @SerialName("sessione_in_corso") val sessioneInCorsoGrezza: JsonElement? = null,
+    @SerialName("sessioni_svolte") val sessioniSvolteGrezze: JsonElement? = null,
     // App-interno (NON dal server): il giorno del patto in cui `bonusOggiPerRegola`
     // è valido, stampato da PattoLocale al salvataggio. Se al momento della
     // valutazione non è più oggi (notte offline), i bonus di "oggi" non valgono.
@@ -67,6 +78,18 @@ data class Patto(
 ) {
     /** La striscia nel linguaggio del design system (core-design). */
     fun giorniPatto(): List<GiornoPatto> = striscia.inGiorniPatto()
+
+    /** (0.11) Il server conosce le sessioni (v3.5): il patto porta l'elenco, anche vuoto. */
+    val conosceSessioni: Boolean get() = sessioniGrezze is JsonArray
+
+    /** (0.11) Le sessioni di questo telefono, dalla più vecchia. Vuota = nessuna, o server vecchio. */
+    val sessioni: List<SessioneDefinita> get() = LetturaSessioni.definite(sessioniGrezze).orEmpty()
+
+    /** (0.11) La sessione svolta in corso su questo telefono per il server, se c'è. */
+    val sessioneInCorso: SessioneSvolta? get() = LetturaSessioni.svolta(sessioneInCorsoGrezza)
+
+    /** (0.11) Le sessioni svolte che toccano gli 8 giorni: i periodi che non contano. */
+    val sessioniSvolte: List<SessioneSvolta> get() = LetturaSessioni.svolte(sessioniSvolteGrezze)
 
     /**
      * (v3) Le regole che valgono su QUESTO telefono: le sue e quelle di vita
@@ -291,6 +314,12 @@ object TipiNotifica {
 
     /** (0.10, v3.4) Il genitore ha ritirato una sua proposta ancora in attesa. */
     const val PROPOSTA_RITIRATA = "proposta_ritirata"
+
+    /**
+     * (0.11, v3.5) Il genitore ha deciso su una sessione o su un suo cambio:
+     * nel payload `sessione_id`, `nome`, `esito` (approva · rifiuta) e `cambio`.
+     */
+    const val SESSIONE_RISPOSTA = "sessione_risposta"
 }
 
 /**

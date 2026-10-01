@@ -21,11 +21,30 @@ typealias ScorriEventi = (da: Long, a: Long, azione: (Int, String?, String?, Lon
  * escono i minuti per app, il totale e l'uso dentro le fasce, senza rileggere
  * gli eventi per ogni fascia. [fine] = fin dove arriva la lettura (adesso, o
  * la mezzanotte dopo per un giorno finito).
+ *
+ * (0.11) [sessioni] sono i pezzi che CONTANO. Il tempo passato in una Sessione
+ * (contratto v3.5: "Studio", "Lavoro") nelle app della sua lista sta a parte,
+ * in [inSessione] (TempoInSessione): non entra nei minuti per app, nelle
+ * categorie, nel totale, nei limiti né nelle fasce. [conSessioni] = una
+ * Sessione ha toccato questo giorno (anche senza minuti dentro).
+ * [sessioniNote] = il telefono sa quali sessioni ci sono state (dopo una
+ * reinstallazione no, finché il server non le riporta): solo allora i minuti
+ * in sessione si possono dire.
  */
-class LetturaGiorno(val giorno: LocalDate, val fine: Long, val sessioni: List<Sessione>) {
+class LetturaGiorno(
+    val giorno: LocalDate,
+    val fine: Long,
+    val sessioni: List<Sessione>,
+    val inSessione: List<Sessione> = emptyList(),
+    val conSessioni: Boolean = false,
+    val sessioniNote: Boolean = false,
+) {
 
     /** Il tempo in primo piano per app, dalla più usata. */
     val perApp: List<UsoApp> by lazy { Sessioni.perApp(sessioni) }
+
+    /** (0.11) Il tempo passato in una Sessione, per app: non conta. */
+    val perAppInSessione: List<UsoApp> by lazy { Sessioni.perApp(inSessione) }
 
     /** I millisecondi in primo piano dentro [da, a] delle sole app che [conta] ammette. */
     fun millisNellIntervallo(da: Long, a: Long, conta: (String) -> Boolean): Long =

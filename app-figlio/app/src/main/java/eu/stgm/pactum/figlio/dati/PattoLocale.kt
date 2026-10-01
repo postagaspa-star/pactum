@@ -1,6 +1,7 @@
 package eu.stgm.pactum.figlio.dati
 
 import android.content.Context
+import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,6 +47,12 @@ class PattoLocale(context: Context) {
             }
             scrivi(daScrivere)
             impostazioni.aggiornaIdentita(patto.dispositivo, patto.figlio)
+            // (0.11) Ogni patto fresco porta le sessioni svolte e quella in
+            // corso: così una sessione torna anche dopo una reinstallazione, e
+            // i periodi che non contano restano noti. Sotto lo stesso mutex del
+            // cambio di collegamento: le sessioni di un altro dispositivo non
+            // rientrano da una lettura vecchia. Mai a spese della copia del patto.
+            runCatching { ArchivioSessioni.daServer(app, patto) }
             true
         }
     }

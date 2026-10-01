@@ -4,7 +4,7 @@
 
     <!-- Onboarding -->
     <string name="onboarding_titolo">Benvenuto in Pactum</string>
-    <string name="onboarding_intro">Pactum è un testimone, non un carceriere: misura l\'uso delle app e lo racconta al patto, senza bloccare niente. Per funzionare servono tre permessi; il quarto è facoltativo.</string>
+    <string name="onboarding_intro">Pactum è un testimone, non un carceriere: misura l\'uso delle app e lo racconta al patto. Non blocca niente: l\'unica eccezione sono le sessioni, che decidi tu. Per funzionare servono tre permessi; il quarto è facoltativo.</string>
     <string name="passo_uso_titolo">1. Accesso ai dati di utilizzo</string>
     <string name="passo_uso_descrizione">Serve per misurare quanto tempo passi nelle app. Senza questo permesso Pactum non può fare da testimone.</string>
     <string name="passo_batteria_titolo">2. Esenzione dalla batteria</string>
@@ -14,7 +14,7 @@
     <!-- (0.9) Il permesso "Mostra sopra le altre app": da Android 11 si apre
          l'elenco delle app, non la pagina di Pactum. -->
     <string name="passo_mostra_sopra_titolo">4. Mostra sopra le altre app (facoltativo)</string>
-    <string name="passo_mostra_sopra_descrizione">Per l\'avviso a tutto schermo quando vai oltre una regola: si apre sopra l\'app che stai usando e si chiude sempre, non blocca niente. Senza, l\'avviso arriva in alto sullo schermo. Nell\'elenco che si apre cerca Pactum e attivalo.</string>
+    <string name="passo_mostra_sopra_descrizione">Serve per gli avvisi a tutto schermo e per la schermata delle sessioni. Senza, l\'avviso arriva in alto sullo schermo e le sessioni non si possono iniziare. Nell\'elenco che si apre cerca Pactum e attivalo.</string>
     <!-- La stessa guida di aiuto_restrizioni_testo, per "Mostra sopra le altre app". -->
     <string name="aiuto_mostra_sopra_testo">Su Android 15 e 16, con l\'app installata a mano (dal browser o da un file), l\'interruttore “Mostra sopra le altre app” può partire bloccato dalle impostazioni con limitazioni. Se hai già sbloccato Pactum per l\'accesso ai dati di utilizzo, di solito non serve.\n\n1. Tocca “Apri impostazioni” e prova ad attivare Pactum: comparirà “Impostazione non disponibile”.\n2. Torna qui e tocca “Apri info app”.\n3. Nella pagina dell\'app tocca il menu ⋮ in alto a destra.\n4. Scegli “Consenti impostazioni con limitazioni” e conferma con PIN o impronta.\n5. Torna su “Mostra sopra le altre app” e attiva Pactum.</string>
     <string name="passo_apri_impostazioni">Apri impostazioni</string>
@@ -46,11 +46,12 @@
         <item>I bonus che ti dai: quanti minuti, su quale regola e il perché, se lo scrivi. E quanti minuti di bonus ti sei dato in ciascuno degli ultimi 8 giorni, dispositivo per dispositivo.</item>
         <item>Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.</item>
         <item>Le proposte che gli mandi, con il tuo perché se lo scrivi, e le tue risposte alle sue proposte, con la tua motivazione se la scrivi.</item>
-        <item>Il tempo passato in TUTTE le app del telefono, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese.</item>
+        <item>Le tue sessioni: il nome, le app che hai scelto e i cambi che chiedi. E per ogni sessione fatta: quando l\'hai iniziata, per quanto, quando è finita e se l\'hai terminata prima. Per ogni giorno, quanti minuti hai passato in sessione.</item>
+        <item>Il tempo passato in TUTTE le app del telefono, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese. Il tempo nelle app di una sessione, mentre è in corso, non è nei tempi delle app: vede la sessione, quanto è durata e i minuti passati in sessione.</item>
         <item>I siti visitati sul telefono, se hai acceso l\'osservazione: solo il nome del sito e quante volte al giorno. E se per una parte della giornata il telefono ha tenuto nascosti i nomi dei siti.</item>
         <item>Sul computer: il tempo passato in ogni programma, giorno per giorno, anche per categoria, con la media della settimana e del mese; i siti, con quante volte e quanti minuti al giorno; se il computer è acceso o spento, e da quando è spento.</item>
         <item>Per ogni dispositivo, quando ha inviato l\'ultimo aggiornamento, e se non ne invia da più di tre quarti d\'ora. Quando spegni il computer, lui vede che è spento: non conta come silenzio.</item>
-        <item>Un avviso quando crei, cambi o elimini una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, gli mandi o ritiri una proposta, rispondi a una sua proposta, o quando c\'è un\'interruzione nella registrazione.</item>
+        <item>Un avviso quando crei, cambi o elimini una regola o una sessione, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, gli mandi o ritiri una proposta, rispondi a una sua proposta, o quando c\'è un\'interruzione nella registrazione.</item>
     </string-array>
     <string name="cosa_vede_no_titolo">COSA RESTA FUORI</string>
     <string-array name="cosa_vede_no">
@@ -61,6 +62,7 @@
         <item>Gli indirizzi completi delle pagine: vede youtube.com, mai quale video.</item>
         <item>I titoli delle pagine e delle finestre: sul computer non vengono mai letti.</item>
         <item>Dove sei: la posizione non viene mai letta.</item>
+        <item>Durante una sessione, quali app provi ad aprire e quante volte compare «Sei in sessione».</item>
     </string-array>
     <!-- Contratto v3, "Siti visitati · Sul computer": la promessa del computer
          è diversa da quella del telefono, e qui va detta chiara. -->
@@ -600,4 +602,153 @@
     <!-- Auto-aggiornamento (tappa 6) -->
     <string name="notifica_aggiornamento_titolo">Aggiornamento pronto</string>
     <string name="notifica_aggiornamento_testo">C\'è una versione nuova di Pactum. Tocca per installarla.</string>
+
+    <!-- (0.11) Le Sessioni (contratto v3.5): il figlio crea una sessione (un
+         nome e le app del telefono), il genitore la approva una volta e
+         approva ogni cambio, il figlio la inizia quando vuole per quanto vuole
+         e la può terminare prima. Durante la sessione il tempo nelle sue app
+         non conta, e le altre app si coprono con «Sei in sessione». -->
+    <string name="scheda_sessioni">Sessioni</string>
+    <string name="sessioni_titolo">Sessioni</string>
+    <string name="sessioni_intro">Una sessione è un tempo in cui usi solo le app che scegli tu, per esempio «Studio». Il genitore la approva, e di nuovo a ogni cambio della lista; poi la inizi quando vuoi e per quanto vuoi. Il tempo nelle app della sessione non conta; le altre app si coprono finché la sessione non finisce.</string>
+    <string name="sessioni_caricamento">Sto leggendo le sessioni…</string>
+    <string name="sessioni_vuoto">Nessuna sessione ancora. Creane una con «Nuova sessione».</string>
+    <string name="sessioni_nuova">Nuova sessione</string>
+    <!-- Server di prima della v3.5: GET /api/sessioni risponde 404 o 405. Mai "errore". -->
+    <string name="sessioni_server_da_aggiornare">Per le sessioni serve aggiornare il server di Pactum.</string>
+    <string name="sessione_stato_in_attesa">In attesa del genitore</string>
+    <string name="sessione_stato_approvata">Approvata</string>
+    <string name="sessione_stato_rifiutata">Non approvata</string>
+    <string name="sessione_in_corso_etichetta">In corso</string>
+    <string name="sessione_cambio_in_attesa">Cambio in attesa del genitore</string>
+    <string name="sessione_app">App: %1$s</string>
+    <!-- "ClasseViva, Calcolatrice e altre 3": la fine dell'elenco quando è lungo. -->
+    <plurals name="sessione_altre_app">
+        <item quantity="one">un\'altra</item>
+        <item quantity="other">altre %1$d</item>
+    </plurals>
+    <string name="sessione_in_attesa_spiegazione">La potrai iniziare quando il genitore la approva.</string>
+    <string name="sessione_rifiutata_spiegazione">Puoi cambiarla e mandarla di nuovo al genitore.</string>
+    <string name="sessione_cambio_chiesto">Hai chiesto: %1$s</string>
+    <string name="sessione_cambio_chiesto_nome">Hai chiesto: «%1$s», con %2$s</string>
+    <string name="sessione_cambio_spiegazione">Finché il genitore non decide, puoi usare la sessione approvata.</string>
+    <string name="sessione_cambio_rifiutato">Il cambio che avevi chiesto non è stato approvato: resta questa.</string>
+    <string name="sessione_inizia">Inizia</string>
+    <string name="sessione_modifica">Modifica</string>
+    <string name="sessione_una_gia_in_corso">C\'è già una sessione in corso: per iniziarne un\'altra, prima terminala.</string>
+    <!-- Nuova sessione e cambio -->
+    <string name="sessione_crea_titolo">Nuova sessione</string>
+    <string name="sessione_modifica_titolo">Modifica la sessione</string>
+    <string name="sessione_campo_nome">Nome (per esempio Studio)</string>
+    <string name="sessione_nome_troppo_lungo">Al massimo 40 caratteri</string>
+    <string name="sessione_nome_doppio">Hai già una sessione con questo nome</string>
+    <string name="sessione_app_titolo">App della sessione</string>
+    <string name="sessione_app_nessuna">Nessuna app scelta.</string>
+    <string name="sessione_app_troppe">Al massimo 200 app.</string>
+    <string name="sessione_scegli_app">Scegli le app</string>
+    <string name="sessione_spiegazione_nuova">La sessione arriva al genitore: quando la approva, la puoi iniziare quando vuoi.</string>
+    <string name="sessione_spiegazione_cambio">Il cambio arriva al genitore. Finché non decide, resta la sessione approvata.</string>
+    <string name="sessione_manda">Manda al genitore</string>
+    <!-- La scelta delle app: in cima il gruppo gruppo:apk, poi le app installate. -->
+    <string name="sessione_scegli_app_titolo">Quali app nella sessione?</string>
+    <string name="sessione_cerca">Cerca un\'app</string>
+    <string name="gruppo_apk_nome">App installate fuori dal Play Store</string>
+    <string name="gruppo_apk_spiegazione">Le app installate da un file (APK), non da un negozio di app come il Play Store.</string>
+    <string name="sessione_nessuna_app_trovata">Nessuna app con questo nome.</string>
+    <string name="sessione_scelta_fatto">Fatto</string>
+    <!-- Eliminare: il registro delle sessioni fatte resta. -->
+    <string name="sessione_elimina_titolo">Eliminare la sessione?</string>
+    <string name="sessione_elimina_testo">«%1$s» esce dall\'elenco. Le sessioni che hai già fatto restano nel registro, e il genitore riceve un avviso.</string>
+    <string name="sessione_eliminata">Sessione eliminata.</string>
+    <!-- Esiti dell'invio -->
+    <string name="sessione_mandata">Sessione mandata al genitore: la potrai iniziare quando la approva.</string>
+    <string name="sessione_cambio_mandato">Cambio mandato al genitore. Finché non decide, resta la sessione approvata.</string>
+    <string name="sessione_esito_nome_doppio">Hai già una sessione con questo nome: scegline un altro.</string>
+    <string name="sessione_esito_in_corso">Questa sessione è in corso: terminala prima di eliminarla.</string>
+    <string name="sessione_esito_non_trovata">Questa sessione non c\'è più.</string>
+    <string name="sessione_esito_valori">Qualche valore non va bene: controlla il nome e le app.</string>
+    <string name="sessione_esito_senza_rete">Non riesco a raggiungere il server: controlla la connessione e riprova.</string>
+    <string name="sessione_esito_errore">Non sono riuscito a mandare la sessione: riprova.</string>
+    <!-- Iniziare: serve il server. Da 1 minuto a 24 ore, senza tetto del genitore. -->
+    <string name="sessione_avvio_titolo">Inizia «%1$s»</string>
+    <string name="sessione_avvio_quanto">Per quanto tempo?</string>
+    <string name="sessione_durata_altro">Altro</string>
+    <string name="sessione_durata_ore">Ore</string>
+    <string name="sessione_durata_minuti">Minuti</string>
+    <string name="sessione_durata_troppa">Al massimo 24 ore.</string>
+    <string name="sessione_durata_non_valida">Scrivi una durata da 1 minuto a 24 ore.</string>
+    <string name="sessione_fino_alle">Fino alle %1$s</string>
+    <string name="sessione_fino_a_domani">Fino a domani alle %1$s</string>
+    <string name="sessione_avvio_spiegazione">Durante la sessione puoi usare le app della sessione e, sempre, Pactum, la schermata Home, il Telefono e le Impostazioni. Le altre app si coprono con «Sei in sessione». Puoi terminarla prima da Pactum.</string>
+    <string name="sessione_avvio_manca_mostra_sopra">Per coprire le altre app Pactum ha bisogno di «Mostra sopra le altre app»: senza, la sessione non può iniziare. Tocca «Apri impostazioni», cerca Pactum nell\'elenco e attivalo.</string>
+    <string name="sessione_avvio_manca_uso">Per sapere quale app hai davanti Pactum ha bisogno dell\'accesso ai dati di utilizzo: senza, la sessione non può iniziare.</string>
+    <string name="sessione_avvia">Inizia la sessione</string>
+    <string name="sessione_iniziata">Sessione iniziata: fino alle %1$s.</string>
+    <string name="sessione_iniziata_domani">Sessione iniziata: fino a domani alle %1$s.</string>
+    <string name="sessione_iniziata_semplice">Sessione iniziata.</string>
+    <string name="sessione_esito_non_approvata">Il genitore non ha ancora approvato questa sessione.</string>
+    <string name="sessione_esito_gia_in_corso">C\'è già una sessione in corso.</string>
+    <string name="sessione_esito_avvio_senza_rete">Non riesco a raggiungere il server: la sessione non è iniziata. Controlla la connessione e riprova.</string>
+    <string name="sessione_esito_avvio_errore">Non sono riuscito a iniziare la sessione: riprova.</string>
+    <!-- La sessione in corso, in cima a Oggi e a Sessioni. -->
+    <string name="sessione_in_corso_titolo">In sessione «%1$s» fino alle %2$s</string>
+    <string name="sessione_in_corso_titolo_domani">In sessione «%1$s» fino a domani alle %2$s</string>
+    <string name="sessione_mancano">Ancora %1$s</string>
+    <string name="sessione_manca_poco">Manca meno di un minuto</string>
+    <string name="sessione_in_corso_app">Puoi usare: %1$s.</string>
+    <string name="sessione_termina">Termina la sessione</string>
+    <string name="sessione_termina_titolo">Terminare la sessione?</string>
+    <string name="sessione_termina_testo">La sessione finisce adesso e le altre app tornano libere. Il genitore vede che l\'hai terminata prima.</string>
+    <string name="sessione_termina_conferma">Termina</string>
+    <string name="sessione_terminata">Sessione terminata.</string>
+    <!-- La barriera: un solo pulsante, Esci, che porta alla schermata Home. -->
+    <string name="barriera_titolo">Sei in sessione «%1$s»</string>
+    <string name="barriera_testo">In questa sessione puoi usare solo le app che hai scelto.</string>
+    <!-- (0.11) La seconda riga della barriera: cosa fare se quell'app serve davvero. Il server
+         fissa la lista all'avvio: un'app aggiunta vale dalla sessione dopo. -->
+    <string name="barriera_aggiungila">Se ti serve, aggiungila alla sessione «%1$s»: varrà dalla prossima volta.</string>
+    <string name="barriera_fine">La sessione finisce alle %1$s.</string>
+    <string name="barriera_fine_domani">La sessione finisce domani alle %1$s.</string>
+    <string name="barriera_esci">Esci</string>
+    <!-- La notifica fissa del testimone, mentre una sessione è in corso. -->
+    <string name="notifica_testimone_sessione">In sessione «%1$s» fino alle %2$s</string>
+    <string name="notifica_testimone_sessione_domani">In sessione «%1$s» fino a domani alle %2$s</string>
+    <!-- La decisione del genitore (notifica sessione_risposta). -->
+    <string name="tipo_sessione">Sessioni</string>
+    <string name="notifica_sessione_approvata">Il genitore ha approvato la sessione «%1$s»</string>
+    <string name="notifica_sessione_rifiutata">Il genitore non ha approvato la sessione «%1$s»</string>
+    <string name="notifica_sessione_cambio_approvato">Il genitore ha approvato il cambio alla sessione «%1$s»</string>
+    <string name="notifica_sessione_cambio_rifiutato">Il genitore non ha approvato il cambio alla sessione «%1$s»</string>
+    <string name="notifica_sessione_approvata_testo">Puoi iniziarla quando vuoi, dalla scheda Sessioni.</string>
+    <string name="notifica_sessione_rifiutata_testo">Puoi cambiarla e mandarla di nuovo.</string>
+    <string name="notifica_sessione_cambio_approvato_testo">Vale dalla prossima volta che la inizi.</string>
+    <string name="notifica_sessione_cambio_rifiutato_testo">Resta la sessione di prima.</string>
+    <!-- (0.11, revisione) Quello che si dice dopo un "Inizia" senza risposta, e
+         prima di coprire qualcosa per una sessione che il ragazzo non ha visto partire. -->
+    <string name="sessione_esito_incerto">Non so se la sessione è partita: controllo appena c\'è rete.</string>
+    <string name="sessione_incerta_riga">Non so ancora se la sessione «%1$s» è partita: controllo appena c\'è rete.</string>
+    <string name="sessione_esito_gia_in_corso_fino">La sessione «%1$s» è già in corso, fino alle %2$s.</string>
+    <string name="sessione_esito_gia_in_corso_fino_domani">La sessione «%1$s» è già in corso, fino a domani alle %2$s.</string>
+    <string name="notifica_sessione_partita">La sessione «%1$s» è partita (fino alle %2$s)</string>
+    <string name="notifica_sessione_partita_domani">La sessione «%1$s» è partita (fino a domani alle %2$s)</string>
+    <string name="notifica_sessione_partita_testo">Le app fuori dalla sessione si coprono. Per terminarla prima, apri Pactum.</string>
+    <string name="notifica_sessione_non_partita">La sessione «%1$s» non è partita</string>
+    <string name="notifica_sessione_non_partita_testo">Se vuoi, iniziala di nuovo dalla scheda Sessioni.</string>
+    <string name="notifica_sessione_gia_finita">La sessione «%1$s» era partita ed è già finita</string>
+    <string name="notifica_sessione_gia_finita_testo">Il tempo passato nelle sue app non conta.</string>
+    <!-- Al massimo 20 sessioni per telefono (409 troppe_sessioni). -->
+    <string name="sessione_esito_troppe">Hai già 20 sessioni: per crearne una nuova, eliminane una.</string>
+    <!-- "Ritira il cambio": torna la sessione approvata (PATCH col contenuto approvato). -->
+    <string name="sessione_ritira_cambio">Ritira il cambio</string>
+    <string name="sessione_ritira_cambio_titolo">Ritirare il cambio?</string>
+    <string name="sessione_ritira_cambio_testo">«%1$s» resta com\'è approvata e il genitore non dovrà più decidere.</string>
+    <string name="sessione_cambio_ritirato">Cambio ritirato: resta la sessione approvata.</string>
+    <!-- Il nome di una sessione non può avere caratteri che non si vedono (a capo, tab…). -->
+    <string name="sessione_nome_invisibili">Il nome ha caratteri che non si vedono: toglili</string>
+    <!-- Nella finestra "Inizia": cosa resta usabile oltre alle app della sessione, e cosa no. -->
+    <string name="sessione_avvio_aperte">Le pagine web aperte dalle app della sessione, la fotocamera e la scelta dei file restano usabili; le altre app no: se ti servono, aggiungile alla sessione.</string>
+    <!-- Sulla barriera, sotto la fine: sempre un solo pulsante, Esci. -->
+    <string name="barriera_terminare">Per terminarla prima, apri Pactum.</string>
+    <!-- In Oggi, sotto "Dove è finito il tempo": il tempo in sessione c'è, ma non conta. -->
+    <string name="oggi_in_sessione_non_contati">In più %1$s in sessione, che non contano.</string>
 </resources>

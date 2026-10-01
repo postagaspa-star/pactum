@@ -58,6 +58,17 @@
             android:launchMode="singleTask"
             android:taskAffinity="eu.stgm.pactum.figlio.avviso" />
 
+        <!-- (0.11) La barriera di una Sessione: "Sei in sessione «Studio»" con
+             un solo pulsante, Esci (alla schermata Home). Come l'avviso: task
+             suo, fuori dalle recenti, aperta dal servizio con "Mostra sopra le
+             altre app". Mai sopra il blocco schermo (niente showWhenLocked). -->
+        <activity
+            android:name=".sessione.BarrieraActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="eu.stgm.pactum.figlio.barriera" />
+
         <service
             android:name=".servizio.PactumService"
             android:exported="false"

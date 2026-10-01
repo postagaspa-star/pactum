@@ -22,10 +22,18 @@ import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.giornata.ChiusuraSerale
 import eu.stgm.pactum.figlio.giornata.TestoSerale
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.rete.PostinoClient
+import eu.stgm.pactum.figlio.sessione.AnnunciSessione
+import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
+import eu.stgm.pactum.figlio.sessione.ConsegnaSessioni
+import eu.stgm.pactum.figlio.sessione.SessioneAttiva
+import eu.stgm.pactum.figlio.sessione.SorveglianzaSessione
+import eu.stgm.pactum.figlio.sessione.StatoSessione
+import eu.stgm.pactum.figlio.sessione.TestoSessioni
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.sync.ConsegnaEventi
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
@@ -62,6 +70,11 @@ import java.time.ZonedDateTime
  * comunque in BattitoWorker (design retroattivo), quindi la morte di questo
  * servizio non buca il registro: al massimo riconsegna battito e sforamenti
  * al worker.
+ *
+ * (0.11) E, solo mentre una Sessione è in corso, la sua barriera
+ * (avviaLoopSessione): un giro al secondo a schermo acceso e sbloccato, e la
+ * notifica fissa dice la sessione. Un loop a parte: qualsiasi cosa vada storta
+ * lì non tocca battito, sentinella e chiusura della sera, e non copre niente.
  */
 class PactumService : Service() {
 
@@ -69,24 +82,36 @@ class PactumService : Service() {
     private var loopBattito: Job? = null
     private var loopSentinella: Job? = null
     private var loopSerale: Job? = null
+    private var loopSessione: Job? = null
 
     // (0.9) Lo spegnimento dello schermo sveglia subito la sentinella: l'uso
-    // fino a quell'istante si guarda adesso, non al giro dopo.
+    // fino a quell'istante si guarda adesso, non al giro dopo. (0.11)
+    // L'accensione rinfresca la notifica fissa: una sessione finita mentre il
+    // telefono dormiva non resta scritta lì.
     private val spegnimenti = Channel<Unit>(Channel.CONFLATED)
     private val ricevitoreSchermo = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_SCREEN_OFF) spegnimenti.trySend(Unit)
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> spegnimenti.trySend(Unit)
+                Intent.ACTION_SCREEN_ON -> ambito.launch(Dispatchers.IO) {
+                    protetto { ArchivioSessioni.ricalcola(applicationContext) }
+                    aggiornaNotifica(StatoSessione.attivaAdesso())
+                }
+            }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
         creaCanale()
-        // SCREEN_OFF si riceve solo da un ricevitore registrato a mano, finché il servizio vive.
+        // SCREEN_OFF e SCREEN_ON si ricevono solo da un ricevitore registrato a mano, finché il servizio vive.
         ContextCompat.registerReceiver(
             this,
             ricevitoreSchermo,
-            IntentFilter(Intent.ACTION_SCREEN_OFF),
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
     }
@@ -95,7 +120,7 @@ class PactumService : Service() {
         ServiceCompat.startForeground(
             this,
             ID_NOTIFICA,
-            notificaTestimone(),
+            notificaTestimone(StatoSessione.attivaAdesso()),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             } else {
@@ -105,6 +130,7 @@ class PactumService : Service() {
         avviaLoopBattito()
         avviaLoopSentinella()
         avviaLoopSerale()
+        avviaLoopSessione()
         return START_STICKY
     }
 
@@ -192,10 +218,93 @@ class PactumService : Service() {
                     ultimoGiorno = oggi
                 }
                 protetto { ConsegnaEventi.riprovaSeServe(applicationContext, adesso) }
+                // (0.11) Una "Termina la sessione" fatta senza rete: si riprova
+                // con attesa crescente finché arriva al server.
+                protetto { ConsegnaSessioni.riprovaSeServe(applicationContext, adesso) }
                 accesoPrima = accesoOra
                 // Un minuto, o meno se nel frattempo si spegne lo schermo.
                 spentoAdesso = withTimeoutOrNull(CadenzaSentinella.INTERVALLO_MS) { spegnimenti.receive() } != null
             }
+        }
+    }
+
+    /**
+     * (0.11) La Sessione in corso: la notifica fissa la dice, e la barriera
+     * guarda l'app in primo piano circa una volta al secondo, SOLO finché la
+     * sessione dura. Quando finisce (scaduta, terminata in Pactum, sparita)
+     * il giro si ferma subito: collectLatest lo interrompe al primo cambio.
+     */
+    private fun avviaLoopSessione() {
+        if (loopSessione?.isActive == true) return
+        loopSessione = ambito.launch(Dispatchers.IO) {
+            // Lo stato dal disco, se il processo è appena nato.
+            try {
+                ArchivioSessioni.leggi(applicationContext)
+            } catch (e: Exception) {
+                // senza archivio, nessuna sessione: nessuna barriera
+            }
+            // Telefono appena reinstallato (nessun archivio): una sessione in
+            // corso la sa solo il server. Una lettura del patto la riporta.
+            protetto { recuperaSessioneDalServer() }
+            StatoSessione.attiva.collectLatest { attiva ->
+                aggiornaNotifica(attiva?.takeIf { System.currentTimeMillis() < it.fine })
+                if (attiva == null) return@collectLatest
+                if (!attiva.annunciata) {
+                    // Una sessione che il ragazzo non ha visto partire (risposta
+                    // persa, reinstallazione): prima glielo si dice. Se la
+                    // notifica non arriva, niente barriera: la vedrà in Pactum.
+                    val detta = try {
+                        AnnunciSessione.partita(applicationContext, attiva)
+                    } catch (e: Exception) {
+                        false
+                    }
+                    if (detta) {
+                        // Lo stato nuovo (annunciata) fa ripartire questo giro con la barriera.
+                        protetto { ArchivioSessioni.annuncia(applicationContext, attiva.svoltaId) }
+                        return@collectLatest
+                    }
+                    delay((attiva.fine - System.currentTimeMillis()).coerceAtLeast(0))
+                } else {
+                    protetto { sorvegliaSessione(attiva) }
+                }
+                // Arrivata alla fine: non è più "in corso" per nessuno.
+                protetto { ArchivioSessioni.ricalcola(applicationContext) }
+            }
+        }
+    }
+
+    /** Il giro della barriera, finché la sessione dura. Un giro andato storto non copre niente. */
+    private suspend fun sorvegliaSessione(attiva: SessioneAttiva) {
+        var sorveglianza: SorveglianzaSessione? = null
+        while (true) {
+            val adesso = System.currentTimeMillis()
+            if (adesso >= attiva.fine) return
+            val attesa = try {
+                val giro = sorveglianza ?: SorveglianzaSessione(applicationContext, attiva).also { sorveglianza = it }
+                giro.giro(adesso, SystemClock.elapsedRealtime())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                sorveglianza?.azzera()
+                SorveglianzaSessione.ATTESA_ERRORE_MS
+            }
+            delay(minOf(attesa, attiva.fine - adesso).coerceAtLeast(MINIMO_ATTESA_MS))
+        }
+    }
+
+    private suspend fun recuperaSessioneDalServer() {
+        if (ArchivioSessioni.esiste(applicationContext)) return
+        val configurazione = Impostazioni(applicationContext).leggiConfigurazione()
+        if (!configurazione.completa) return
+        // PattoLocale.salva porta con sé le sessioni (ArchivioSessioni.daServer).
+        PostinoClient(configurazione).leggiPatto()?.let { PattoLocale(applicationContext).salva(it) }
+    }
+
+    private fun aggiornaNotifica(attiva: SessioneAttiva?) {
+        try {
+            getSystemService(NotificationManager::class.java)?.notify(ID_NOTIFICA, notificaTestimone(attiva))
+        } catch (e: Exception) {
+            // notifiche spente: la sessione vale lo stesso
         }
     }
 
@@ -250,17 +359,39 @@ class PactumService : Service() {
         if (consegnato) impostazioni.registraBattitoConsegnato()
     }
 
-    private fun notificaTestimone(): Notification =
-        NotificationCompat.Builder(this, CANALE_TESTIMONE)
+    /**
+     * La notifica fissa del testimone. (0.11) Con una Sessione in corso dice
+     * quale e fino a quando: toccandola si arriva a Oggi, dove c'è "Termina la sessione".
+     */
+    private fun notificaTestimone(attiva: SessioneAttiva? = null): Notification {
+        val testo = attiva?.let {
+            val quando = TestoSessioni.quandoFinisce(it.fine, System.currentTimeMillis(), ZoneId.systemDefault())
+            getString(
+                if (quando.domani) R.string.notifica_testimone_sessione_domani else R.string.notifica_testimone_sessione,
+                it.nome,
+                quando.ora,
+            )
+        } ?: getString(R.string.notifica_testimone_testo)
+        val costruttore = NotificationCompat.Builder(this, CANALE_TESTIMONE)
             .setSmallIcon(R.drawable.ic_notifica_testimone)
             .setContentTitle(getString(R.string.notifica_testimone_titolo))
-            .setContentText(getString(R.string.notifica_testimone_testo))
+            .setContentText(testo)
             // Anche la notifica fissa porta da qualche parte: al patto di oggi.
             .setContentIntent(AvvisiLocali.apriScheda(this, MainActivity.DEST_OGGI))
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .build()
+        // (0.11) "Termina la sessione" anche da qui: apre Pactum sulla conferma.
+        if (attiva != null) {
+            costruttore.addAction(
+                0,
+                getString(R.string.sessione_termina),
+                AvvisiLocali.apriScheda(this, MainActivity.DEST_TERMINA_SESSIONE),
+            )
+        }
+        return costruttore.build()
+    }
 
     private fun creaCanale() {
         val canale = NotificationChannel(
@@ -277,6 +408,7 @@ class PactumService : Service() {
         private const val CANALE_TESTIMONE = "testimone"
         private const val ID_NOTIFICA = 1
         private const val INTERVALLO_BATTITO_MS = 15L * 60 * 1000
+        private const val MINIMO_ATTESA_MS = 50L
 
         fun avvia(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, PactumService::class.java))

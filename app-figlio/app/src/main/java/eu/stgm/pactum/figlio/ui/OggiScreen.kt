@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -64,6 +65,7 @@ import eu.stgm.pactum.figlio.dati.Riepilogo
 import eu.stgm.pactum.figlio.dati.StatoBonus
 import eu.stgm.pactum.figlio.ui.OggiViewModel.RigaRegola
 import eu.stgm.pactum.figlio.valutatore.MomentoFascia
+import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -84,6 +86,10 @@ fun OggiScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val mostraSopra = rememberMostraSopra()
+    // (0.11) La Sessione in corso, in cima, con "Termina la sessione".
+    val inSessione = rememberSessioneInCorso()
+    val avvioIncerto = rememberAvvioIncerto()
+    val ambitoSnackbar = rememberCoroutineScope()
 
     // Prima lettura e rilettura a ogni ritorno in primo piano.
     LifecycleResumeEffect(Unit) {
@@ -142,6 +148,24 @@ fun OggiScreen(
             contentPadding = PaddingValues(Spazi.l + Spazi.xs),
             verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
+            // (0.11) Una Sessione in corso: prima di tutto, perché si possa
+            // sempre terminare da qui.
+            inSessione.attiva?.let { attiva ->
+                item(key = "sessione-in-corso") {
+                    SchedaSessioneInCorso(
+                        attiva = attiva,
+                        adesso = inSessione.adesso,
+                        onTerminata = {
+                            ambitoSnackbar.launch {
+                                snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
+                            }
+                            vm.aggiorna()
+                        },
+                    )
+                }
+            }
+            // (0.11) Un "Inizia" rimasto senza risposta: si dice finché non si chiarisce.
+            avvioIncerto?.let { incerto -> item(key = "sessione-incerta") { RigaAvvioIncerto(incerto) } }
             if (stato.scollegato) {
                 // (v3) Non è un'età dei dati: il telefono va ricollegato, e si dice come.
                 item { RigaNeutra(stringResource(R.string.oggi_scollegato)) }
@@ -260,6 +284,16 @@ fun OggiScreen(
                     Text(
                         text = testoDurata(stato.minutiTotali),
                         style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+            // (0.11) Il tempo passato in sessione: c'è, ma non conta. Lo si dice.
+            if (stato.minutiInSessione > 0) {
+                item {
+                    Text(
+                        text = stringResource(R.string.oggi_in_sessione_non_contati, testoDurata(stato.minutiInSessione)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

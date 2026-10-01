@@ -11,6 +11,7 @@ from .. import abbinamento, clock, famiglia, semaforo
 from ..auth import richiede_genitore
 from ..db import get_conn
 from ..schemas import AbbinaIn, DispositivoIn, NomeIn
+from .sessioni import sessioni_da_approvare
 
 router = APIRouter(dependencies=[Depends(richiede_genitore)])
 abbina_router = APIRouter()  # nessun auth: e' il codice a fare da chiave
@@ -39,7 +40,8 @@ def _dispositivo_o_404(conn: sqlite3.Connection, dispositivo_id: int) -> sqlite3
 def leggi_famiglia(conn: sqlite3.Connection = Depends(get_conn)):
     """I figli in ordine di id, ciascuno con la sua striscia, il riepilogo, le
     notifiche per il genitore non ancora lette e i dispositivi in ordine di id,
-    revocati compresi. (v3.4) E quante proposte del figlio aspettano il genitore."""
+    revocati compresi. (v3.4) E quante proposte del figlio aspettano il genitore.
+    (v3.5) E quante sessioni (nuove o cambiate) aspettano la sua approvazione."""
     ora = clock.now()
     figli = []
     for figlio in conn.execute("SELECT * FROM figli ORDER BY id").fetchall():
@@ -68,6 +70,7 @@ def leggi_famiglia(conn: sqlite3.Connection = Depends(get_conn)):
                 "riepilogo": quadro["riepilogo"],
                 "notifiche_non_lette": non_lette,
                 "proposte_da_decidere": da_decidere,
+                "sessioni_da_approvare": sessioni_da_approvare(conn, figlio["id"]),  # (v3.5)
                 "dispositivi": [
                     {
                         **famiglia.descrizione(d),

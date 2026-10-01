@@ -1,6 +1,8 @@
+import re
+import unicodedata
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
 
 ORARIO = r"^(?:[01]\d|2[0-3]):[0-5]\d$"
 
@@ -200,3 +202,160 @@ class AbbinaIn(BaseModel):
     # di un dispositivo di un altro tipo, 409 tipo_non_corrispondente e il codice
     # resta valido. Facoltativo: senza, l'abbinamento va come prima.
     tipo: Literal["telefono", "computer"] | None = None
+
+
+# (v3.5) Le Sessioni (contratto-api.md, "v3.5 — le Sessioni"). Le app di una sessione
+# sono nomi di pacchetti Android, scelti sul telefono tra le app installate, oppure
+# GRUPPO_APK = tutte le app installate fuori dal Play Store. Il nome di un pacchetto
+# segue la regola di Android: almeno due pezzi separati da punti, ciascuno che comincia
+# con una lettera e fatto di lettere, cifre e "_". Cosi' exe:, sito:, categoria:* e
+# totale (le chiavi delle regole) non passano mai: 422.
+GRUPPO_APK = "gruppo:apk"
+PACCHETTO_ANDROID = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+")
+APP_MASSIME_SESSIONE = 200
+SESSIONI_MASSIME_PER_DISPOSITIVO = 20  # non eliminate; oltre: 409 troppe_sessioni
+LUNGHEZZA_MASSIMA_CHIAVE = 255
+LUNGHEZZA_MASSIMA_ETICHETTA = 100
+LUNGHEZZA_MASSIMA_MOTIVAZIONE = 500
+DURATA_MASSIMA_SESSIONE = 1440  # minuti: solo il limite tecnico di un giorno
+
+
+# (v3.5) I caratteri che non si vedono o comandano la scrittura: di controllo (Cc, come
+# a capo e tab), di formato (Cf: zero-width, i segni che girano il verso del testo) e i
+# separatori di riga e paragrafo (Zl, Zp). Un nome che li contiene puo' sembrare un
+# altro nome: si rifiuta. Da un'etichetta invece si tolgono e basta (v. _etichetta).
+CATEGORIE_INVISIBILI = ("Cc", "Cf", "Zl", "Zp")
+
+
+def _visibile(carattere: str) -> bool:
+    return unicodedata.category(carattere) not in CATEGORIE_INVISIBILI
+
+
+def _nome_sessione(nome: str) -> str:
+    """Come il nome di un figlio o di un dispositivo: 1-40 caratteri, spazi ai bordi
+    tolti. (v3.5) In forma NFC (la stessa parola scritta in due modi e' lo stesso
+    nome) e senza caratteri invisibili o di controllo (422). L'unicita' (senza
+    maiuscole, tra le sessioni del dispositivo) la controlla la route, dentro il lock."""
+    nome = unicodedata.normalize("NFC", nome.strip())
+    if not all(_visibile(c) for c in nome):
+        raise ValueError("il nome non puo' avere caratteri invisibili o di controllo")
+    if not 1 <= len(nome) <= LUNGHEZZA_MASSIMA_NOME:
+        raise ValueError(f"il nome va da 1 a {LUNGHEZZA_MASSIMA_NOME} caratteri")
+    return nome
+
+
+def _etichetta(nome: str) -> str:
+    """Un'etichetta come la mostrano le app: NFC, senza i caratteri invisibili o di
+    controllo (si tolgono: un'app vera puo' averne nel nome, e per questo non si
+    rifiuta la sessione), spazi ai bordi tolti."""
+    nome = unicodedata.normalize("NFC", nome)
+    return "".join(c for c in nome if _visibile(c)).strip()
+
+
+def _app_sessione(app: list[str]) -> list[str]:
+    """Ogni chiave e' un pacchetto Android o gruppo:apk; i doppioni si tolgono (resta
+    il primo, nell'ordine mandato) e poi si contano: da 1 a 200."""
+    for chiave in app:
+        if chiave != GRUPPO_APK and not (
+            len(chiave) <= LUNGHEZZA_MASSIMA_CHIAVE and PACCHETTO_ANDROID.fullmatch(chiave)
+        ):
+            raise ValueError(
+                f"{chiave!r} non va bene: servono nomi di pacchetti Android o {GRUPPO_APK}"
+            )
+    senza_doppioni = list(dict.fromkeys(app))
+    if not 1 <= len(senza_doppioni) <= APP_MASSIME_SESSIONE:
+        raise ValueError(f"le app di una sessione vanno da 1 a {APP_MASSIME_SESSIONE}")
+    return senza_doppioni
+
+
+def _nomi_sessione(nomi: dict[str, str]) -> dict[str, str]:
+    """Le etichette leggibili, risolte sul telefono come in uso_giornaliero: chiavi
+    fino a 255 caratteri, etichette fino a 100 (ripulite da _etichetta). Quelle vuote
+    si lasciano cadere qui; quelle di app che non sono nella lista, nella route."""
+    puliti = {}
+    for chiave, nome in nomi.items():
+        if len(chiave) > LUNGHEZZA_MASSIMA_CHIAVE:
+            raise ValueError(f"le chiavi di nomi arrivano a {LUNGHEZZA_MASSIMA_CHIAVE} caratteri")
+        nome = _etichetta(nome)
+        if len(nome) > LUNGHEZZA_MASSIMA_ETICHETTA:
+            raise ValueError(f"i nomi arrivano a {LUNGHEZZA_MASSIMA_ETICHETTA} caratteri")
+        if nome:
+            puliti[chiave] = nome
+    return puliti
+
+
+class SessioneIn(BaseModel):
+    nome: str
+    app: list[str]
+    nomi: dict[str, str] | None = None
+
+    @field_validator("nome")
+    @classmethod
+    def _nome(cls, nome: str) -> str:
+        return _nome_sessione(nome)
+
+    @field_validator("app")
+    @classmethod
+    def _app(cls, app: list[str]) -> list[str]:
+        return _app_sessione(app)
+
+    @field_validator("nomi")
+    @classmethod
+    def _nomi(cls, nomi: dict[str, str] | None) -> dict[str, str] | None:
+        return None if nomi is None else _nomi_sessione(nomi)
+
+
+class SessionePatch(BaseModel):
+    """(v3.5) Almeno un campo: quelli che mancano (o null) restano come sono."""
+
+    nome: str | None = None
+    app: list[str] | None = None
+    nomi: dict[str, str] | None = None
+
+    @field_validator("nome")
+    @classmethod
+    def _nome(cls, nome: str | None) -> str | None:
+        return None if nome is None else _nome_sessione(nome)
+
+    @field_validator("app")
+    @classmethod
+    def _app(cls, app: list[str] | None) -> list[str] | None:
+        return None if app is None else _app_sessione(app)
+
+    @field_validator("nomi")
+    @classmethod
+    def _nomi(cls, nomi: dict[str, str] | None) -> dict[str, str] | None:
+        return None if nomi is None else _nomi_sessione(nomi)
+
+    @model_validator(mode="after")
+    def _almeno_un_campo(self):
+        if self.nome is None and self.app is None and self.nomi is None:
+            raise ValueError("serve almeno uno tra nome, app e nomi")
+        return self
+
+
+class AvviaSessioneIn(BaseModel):
+    # (v3.5) StrictInt: true non e' un minuto, "30" e 30.0 neanche.
+    durata_minuti: StrictInt = Field(ge=1, le=DURATA_MASSIMA_SESSIONE)
+
+
+class TerminaSessioneIn(BaseModel):
+    # epoch in millisecondi UTC: quando il figlio ha chiuso la sessione sul telefono,
+    # magari senza rete (le regole per usarlo stanno nella route).
+    ts_device: int | None = None
+    # Facoltativo: l'id della sessione svolta che il telefono vuole chiudere. Se non e'
+    # quella in corso, 404: una chiusura rimasta in coda e consegnata dopo l'avvio di
+    # un'altra sessione non chiude quella nuova. StrictInt: true non e' l'id 1.
+    svolta_id: StrictInt | None = None
+
+
+class RispostaSessioneIn(BaseModel):
+    esito: Literal["approva", "rifiuta"]
+    # Obbligatoria: la versione della sessione che il genitore ha sullo schermo. Se
+    # intanto il figlio l'ha cambiata, 409 richiesta_cambiata e niente si decide.
+    # StrictInt: true non deve combaciare con la versione 1.
+    versione: StrictInt
+    motivazione: str | None = Field(default=None, max_length=LUNGHEZZA_MASSIMA_MOTIVAZIONE)
+    # Facoltativo, come nel verdetto: se c'e', deve esistere ed essere il figlio della
+    # sessione (404 altrimenti).
+    figlio_id: int | None = None

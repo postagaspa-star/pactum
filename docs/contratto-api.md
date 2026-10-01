@@ -579,8 +579,116 @@ Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
 - **Ordine sul NAS**: prima i file nuovi in `server/apk` (APK 0.10 e `pactum-computer.zip`), poi la ricostruzione dell'immagine: `versioni.json` sta dentro l'immagine e annuncia la 0.10 appena il server riparte.
 - **App 0.10 con server vecchio**: `POST /api/proposte` col token del dispositivo riceve `403` (ruolo sbagliato) e `ritira` riceve `404` o `405`. In questi casi l'app non dice "errore": dice che per mandare proposte serve aggiornare il server di Pactum. Il resto dell'app funziona come la 0.9.
 
+## v3.5 — le Sessioni (01/10/2026, decisioni di Andrea)
+
+Una **sessione** è un periodo in cui il telefono del figlio si limita da solo ad alcune app: "Studio" con le app di scuola, "Lavoro" con le app di lavoro. La sessione la **decide il figlio**, il **genitore la approva** (una volta, e di nuovo a ogni cambio della lista), la **avvia il figlio** quando vuole, per quanto vuole. Durante la sessione il tempo nelle app della sessione **non conta**. È la prima cosa di Pactum che limita: non la impone il genitore, se la dà il figlio.
+
+Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
+
+### La sessione
+
+- Appartiene a un **dispositivo** di tipo `telefono` (per ora solo i telefoni: su un computer `422`).
+- Forma:
+  ```json
+  { "id": 3, "dispositivo_id": 1, "dispositivo": { "id": 1, "nome": "Telefono", "tipo": "telefono" },
+    "nome": "Studio", "app": ["eu.spaggiari.classevivafamiglia", "gruppo:apk"],
+    "nomi": { "eu.spaggiari.classevivafamiglia": "ClasseViva", "gruppo:apk": "App installate da APK" },
+    "stato": "approvata", "modifica_in_attesa": null, "motivazione": null,
+    "versione": 4, "creata_ts": "…", "approvata_ts": "…" }
+  ```
+- `nome`: 1–40 caratteri, senza spazi ai bordi; unico (senza distinguere maiuscole) tra le sessioni del dispositivo non eliminate → altrimenti `409 {"errore": "nome_gia_usato"}`. Conta anche il nome di un cambio in attesa: se il genitore lo approvasse, due sessioni si chiamerebbero uguali. Eliminata una sessione, il suo nome torna libero. Il server lo porta in forma **NFC** (la stessa parola scritta in due modi è lo stesso nome); un nome con caratteri invisibili o di controllo (a capo, tab, zero-width, i segni che girano il verso del testo: categorie Unicode `Cc`, `Cf`, `Zl`, `Zp`) → `422`, perché potrebbe sembrare un altro nome.
+- `app`: da 1 a 200 chiavi, senza doppioni (il server toglie i doppioni, tiene il primo nell'ordine mandato, e poi conta). Ogni chiave è il **nome di un pacchetto Android** oppure **`gruppo:apk`** = tutte le app installate su quel telefono fuori dal Play Store. Chiavi `exe:`, `sito:`, `categoria:*`, `totale` → `422`. Il nome di un pacchetto segue la regola di Android: almeno due pezzi separati da punti, ciascuno che comincia con una lettera e fatto di lettere, cifre e `_`, al massimo 255 caratteri; il resto → `422`.
+- `nomi`: le etichette leggibili delle chiavi, risolte sul telefono come in `uso_giornaliero` (il genitore non può risolvere i pacchetti). Facoltativo; chiavi fino a 255 caratteri, nomi fino a 100 (in forma NFC, senza i caratteri invisibili o di controllo, che si tolgono: un'app vera può averne nel nome, e per questo la sessione non si rifiuta; spazi ai bordi tolti). Le etichette vuote e quelle di chiavi che non sono in `app` si lasciano cadere.
+  - **Le etichette che si leggono** (nelle risposte, ovunque compaia la sessione: anche in `modifica_in_attesa` e nelle sessioni svolte): per ogni app che le fotografie `uso_giornaliero` del figlio conoscono (le stesse da cui viene il `nome` delle regole nella finestra, di qualsiasi suo dispositivo, ultimi 60 giorni) vale **quell'etichetta**, non quella mandata con la sessione; quella mandata resta solo per le app mai viste nell'uso (e per `gruppo:apk`). Così il genitore non si fa ingannare da un'etichetta scritta apposta ("ClasseViva" su TikTok). Nel database resta quella mandata dal telefono.
+- `stato` ∈ `in_attesa · approvata · rifiutata`. `modifica_in_attesa` = `null` oppure `{ "nome", "app", "nomi", "richiesta_ts" }`, **sempre completa**: il contenuto intero che la sessione avrà se il genitore approva (i campi che il figlio non ha cambiato sono copiati da quella approvata). `motivazione` = quella dell'ultimo rifiuto del genitore (o `null`), al massimo 500 caratteri.
+- `versione`: un numero che il server aumenta a **ogni** cambio della sessione (creazione = 1, ogni `PATCH`, ogni decisione del genitore). Serve al genitore per dire **che cosa** ha visto quando decide (v. "La risposta del genitore").
+- Una sessione che non esiste, è eliminata o è di un altro dispositivo o figlio → `404 {"detail": "sessione non trovata"}` (mai il "Not Found" generico, che per le app vuol dire "server vecchio").
+
+### Endpoint del dispositivo
+
+- Una sessione si cambia, si elimina e si avvia **solo dal telefono che l'ha creata** (la barriera gira lì): per un altro dispositivo, anche dello stesso figlio, non c'è (`404 {"detail": "sessione non trovata"}`, v. sopra). `POST`, `PATCH`, `DELETE` e `avvia` rispondono `409 dispositivo_revocato` se il dispositivo è stato revocato mentre la richiesta arrivava (il token di un revocato risponde già `401`).
+- `GET /api/sessioni`: le sessioni non eliminate **di questo dispositivo**, dalla più vecchia. `{ "sessioni": [ … ] }`. Dal dispositivo `figlio_id` si ignora.
+- `POST /api/sessioni` `{ "nome", "app": [ … ], "nomi": { … }? }` → `201` con la sessione, `stato: "in_attesa"`. Al massimo **20 sessioni non eliminate per telefono** → altrimenti `409 {"errore": "troppe_sessioni"}`. Notifica al genitore `sessione_da_approvare`, `messaggio: "<nome del figlio> chiede di approvare la sessione «<nome>»"`, `payload: { "sessione_id", "nome", "cambio": false }`, col `dispositivo_id` della sessione.
+- **Un solo avviso aperto per sessione**: una `sessione_da_approvare` nuova prende il posto di quella sulla stessa sessione che il genitore non ha ancora letto (la vecchia si segna come letta). Anche quando il genitore decide, quando il figlio ritira il cambio o elimina la sessione, la richiesta aperta si segna come letta. Le notifiche non si cancellano.
+- `PATCH /api/sessioni/{id}` `{ "nome"?, "app"?, "nomi"? }` (almeno un campo):
+  - sessione `in_attesa` o `rifiutata`: il contenuto cambia subito e la sessione è (di nuovo) `in_attesa`, `motivazione: null`; notifica `sessione_da_approvare` con `cambio: false`;
+  - sessione `approvata`: il contenuto approvato **non** cambia; nasce `modifica_in_attesa` (ne sostituisce una precedente). La versione approvata resta usabile finché il genitore non decide. Notifica `sessione_da_approvare`, `messaggio: "<nome del figlio> chiede di cambiare la sessione «<nome>»"`, `cambio: true`. Qui `<nome>` (anche nel `payload`) è il nome approvato, quello che il genitore conosce; se il cambio rinomina la sessione, il `payload` ha in più `nuovo_nome`.
+  - i campi che mancano (o `null`) restano come sono: su una sessione approvata si copiano dalla versione approvata, e il cambio nuovo sostituisce del tutto quello di prima. Le etichette di `nomi` seguono la lista: quelle delle app tolte cadono. Nessun campo → `422`. Ogni `PATCH` aumenta la `versione`.
+  - su una sessione `approvata`, un `PATCH` il cui risultato è proprio la versione approvata (stesso nome, stesse app anche in un altro ordine, stesse etichette) è il figlio che **ritira il suo cambio**: `modifica_in_attesa` torna `null`, la `versione` cresce, nessun avviso nuovo e la richiesta che il genitore non aveva letto si segna come letta.
+- `DELETE /api/sessioni/{id}`: elimina subito (togliere una sessione non allenta niente; la storia delle sessioni svolte resta). Se è quella in corso → `409 {"errore": "sessione_in_corso"}`. Notifica al genitore `sessione_eliminata` (`{ "sessione_id", "nome" }`), `messaggio: "<nome del figlio> ha eliminato la sessione «<nome>»"`. Risposta `200 { "id", "eliminata": true }`.
+- `POST /api/sessioni/{id}/avvia` `{ "durata_minuti": n }` → `201` con la **sessione svolta**:
+  - `durata_minuti` da 1 a 1440, un intero vero (`true`, `"30"`, `30.0` → `422`). Il genitore non mette un tetto (decisione di Andrea): 1440 è solo il limite tecnico di un giorno;
+  - solo una sessione `approvata` (con o senza modifica in attesa: vale la versione approvata) → altrimenti `409 {"errore": "sessione_non_approvata"}`;
+  - una sola sessione in corso per dispositivo → altrimenti `409 {"errore": "sessione_gia_in_corso"}`; dispositivo revocato → `409 dispositivo_revocato`;
+  - il `nome`, la lista `app` e i `nomi` si **congelano** nella sessione svolta: un cambio approvato dopo vale dalla prossima.
+- `POST /api/sessioni/in_corso/termina` `{ "ts_device": ms?, "svolta_id": n? }` (il corpo si può omettere) → `200` con la sessione svolta chiusa (`chiusura: "terminata"`); `404` se non c'è una sessione in corso. `svolta_id` (facoltativo, un intero vero) è l'`id` della sessione svolta che il telefono vuole chiudere: se non è quella in corso → `404`. L'app lo manda sempre: senza, una chiusura rimasta in coda e consegnata dopo l'avvio di un'altra sessione chiuderebbe quella nuova.
+  - **La fine** è l'istante d'arrivo al server. `ts_device` conta solo per una chiusura fatta senza rete e consegnata dopo, cioè se cade **più di 2 minuti prima dell'arrivo** (entro 2 minuti è una chiusura fatta con la rete: vale l'arrivo, così un orologio un po' avanti o indietro non sposta niente), **non prima dell'inizio**, **mai dopo l'arrivo** (una fine nel futuro non esiste: vale l'arrivo) e **non più di 48 ore prima dell'arrivo** (oltre, vale l'arrivo). Mai oltre la fine prevista.
+  - Una chiusura fatta prima della fine prevista e consegnata quando la durata era già finita vale quindi da quando è stata fatta (`terminata`); se invece la fine così calcolata non viene prima della fine prevista, la sessione era già finita da sola: resta `scaduta` e la risposta è `404`. Una chiusura già scritta (`terminata` o `scaduta`) non si riscrive mai.
+- Allo scadere della durata la sessione si chiude da sola: `chiusura: "scaduta"`, `fine_ts` = `fine_prevista_ts`. Il server lo calcola quando legge, senza processi in sottofondo.
+
+### La sessione svolta
+
+```json
+{ "id": 12, "sessione_id": 3, "dispositivo_id": 1, "nome": "Studio",
+  "app": [ … ], "nomi": { … },
+  "inizio_ts": "…", "durata_minuti": 120, "fine_prevista_ts": "…",
+  "fine_ts": null, "chiusura": null, "in_corso": true }
+```
+
+`chiusura` ∈ `null` (in corso) · `scaduta` · `terminata` (chiusa prima dal figlio).
+
+### Dove si vedono
+
+- **`GET /api/patto`** (dispositivo), in più:
+  - `sessioni`: come `GET /api/sessioni`;
+  - `sessione_in_corso`: la sessione svolta in corso di questo dispositivo, o `null`;
+  - `sessioni_svolte`: quelle di questo dispositivo che toccano gli 8 giorni della striscia (finite dopo la mezzanotte, nel fuso del patto, del primo degli 8 giorni, o ancora aperte), dalla più recente, al massimo 200. Servono al telefono per sapere quali periodi non contano (anche dopo un riavvio o una reinstallazione).
+- **`GET /api/sessioni?figlio_id=…`** (genitore): `{ "sessioni": [ … ] }`, le sessioni non eliminate di tutti i dispositivi del figlio (revocati compresi), dalla più vecchia. Senza `figlio_id` il figlio con l'`id` più basso; un `figlio_id` che non c'è → `404`.
+- **`GET /api/finestra`**, in più: `sessioni` (come sopra), `sessioni_da_approvare` (quante: sessioni `in_attesa` più modifiche in attesa) e `sessioni_svolte` (del figlio, gli stessi 8 giorni, dalla più recente, al massimo 200, ciascuna col suo `dispositivo_id`).
+- **`GET /api/famiglia`**: per ogni figlio in più `sessioni_da_approvare`. Qui e nella finestra non si contano le sessioni dei dispositivi revocati (non si avviano più e non si decidono più: `risposta` → `409 dispositivo_revocato`): restano visibili in `sessioni`.
+- **`uso_recente`** (finestra, sia di primo livello sia `dispositivi[].uso_recente`): ogni voce del giorno ha in più `sessioni_minuti`, accanto a `totale_minuti`, dalla fotografia `uso_giornaliero` vigente di quel giorno: un intero da 0 a 1440 se la fotografia lo dice, altrimenti `null` (anche nei giorni senza fotografia). Mai uno zero finto: un telefono 0.10 non lo manda. Un valore non valido nella fotografia (negativo, non intero, oltre 1440) vale `null` e non fa rifiutare il pacco di eventi.
+- **Minuti oltre un giorno** (in tutte le fotografie `uso_giornaliero`, telefoni e computer): un `totale_minuti` oltre 1440 non è valido e vale 0, come uno mancante (quindi non scavalca la fotografia vigente e non sporca le `medie`); in `uso_recente` le voci di `uso_minuti` e `uso_categorie` oltre 1440 si lasciano cadere.
+- Il genitore vede **inizio, durata, fine e chiusure anticipate**; non vede quali app il figlio ha provato ad aprire né quante volte è comparsa la barriera (decisione di Andrea). Per l'inizio e la fine non ci sono notifiche: si vedono nella finestra.
+
+### La risposta del genitore
+
+- `POST /api/sessioni/{id}/risposta` `{ "esito": "approva" | "rifiuta", "versione": n, "motivazione": "…"? }` (genitore; `figlio_id` facoltativo nel corpo, `404` se non combacia). **`versione`** (un intero vero: `true`, `"1"`, `1.0` → `422`) è quella della sessione che il genitore ha sullo schermo: se nel frattempo il figlio l'ha cambiata (la `versione` sul server è diversa) → `409 {"errore": "richiesta_cambiata", "sessione": {…}}` con la sessione com'è adesso, e niente viene deciso: il genitore non approva mai una lista che non ha visto. `versione` mancante → `422`. Sessione di un dispositivo revocato → `409 dispositivo_revocato` (e non conta in `sessioni_da_approvare`). Decide quello che è in attesa:
+  - una sessione `in_attesa` → `approvata` (`approvata_ts`) o `rifiutata` (con `motivazione`);
+  - una `modifica_in_attesa` → `approva`: nome, app e nomi diventano quelli della modifica; `rifiuta`: la modifica sparisce, resta la versione approvata (la `motivazione` si conserva).
+  - Niente in attesa → `409 {"errore": "niente_da_decidere"}`. Atomica anche sotto richieste concorrenti.
+  - I controlli, in quest'ordine: sessione (`404`), dispositivo revocato, niente in attesa (anche con una `versione` vecchia: due decisioni insieme, la seconda riceve `niente_da_decidere`), poi la `versione`.
+  - Approvare (la sessione o il cambio) rimette `motivazione: null`; approvare un cambio porta `approvata_ts` all'ora della decisione.
+- Notifica al figlio `sessione_risposta`, `payload: { "sessione_id", "nome", "esito", "cambio" }` (`nome` = quello della sessione dopo la decisione), col `dispositivo_id` della sessione. Nelle notifiche `sessione_da_approvare` di un cambio che rinomina, `nome` è quello attuale e `nuovo_nome` quello chiesto. `messaggio`: "Il genitore ha approvato la sessione «Studio»" / "…non ha approvato…" (per un cambio: "…il cambio alla sessione «Studio»"), col nome di dopo la decisione, come il `payload`.
+- Risposta `200` con la sessione aggiornata.
+
+### Cosa conta durante una sessione (lo calcola il telefono)
+
+- Mentre una sessione svolta è in corso (da `inizio_ts` a `fine_ts`, o a `fine_prevista_ts` se non è ancora chiusa), il tempo passato nelle **app della sua lista** (comprese quelle del gruppo `gruppo:apk`, se c'è) **non conta**: non entra in `uso_minuti`, `uso_categorie` e `totale_minuti` della fotografia `uso_giornaliero`, né negli sforamenti di limiti (app, categoria, totale) e fasce orarie.
+- Il tempo nelle app **fuori dalla lista conta come sempre**, anche durante la sessione (per esempio se la barriera non è potuta comparire): una sessione non rende gratis le app che non ci sono.
+- La fotografia `uso_giornaliero` ha in più `sessioni_minuti` (facoltativo, un intero da 0 a 1440): i minuti del giorno non contati perché passati in sessione. È solo un'informazione per la finestra.
+
+### La barriera (comportamento dell'app del telefono)
+
+- Durante una sessione, se in primo piano c'è un'app fuori dalla lista, il telefono la copre entro pochi secondi con una schermata "Sei in sessione «Studio»" con un solo pulsante, **Esci**, che porta alla schermata Home. Non si può chiudere la schermata e restare nell'app: se ci si torna, ricompare.
+- **Sempre usabili** (mai coperte, il loro tempo conta come sempre): Pactum, la schermata Home, la tastiera, l'interfaccia di sistema, il Telefono e le chiamate (anche la schermata della chiamata e le emergenze), le Impostazioni.
+- Servono "Mostra sopra le altre app" e l'accesso all'uso: senza, l'app non avvia la sessione e lo dice.
+- Chiudere prima: dentro Pactum, "Termina la sessione" (decisione di Andrea: si può, resta nel registro e il genitore lo vede).
+
+### Compatibilità
+
+- Database: due tabelle nuove (`sessioni`, `sessioni_svolte`); nessuna tabella esistente cambia. Nascono da sole al primo avvio, senza copia prima (non si tocca niente di quello che c'è). Un server v3.4 su un database v3.5 le ignora.
+- App 0.10 con server 0.11: ignorano i campi nuovi. Il programma del computer non cambia.
+- App 0.11 con server vecchio: `/api/sessioni` risponde `404`/`405` → l'app dice che per le sessioni serve aggiornare il server di Pactum; il resto funziona come la 0.10.
+- **Ordine sul NAS**: prima i file nuovi in `server/apk` (APK 0.11 di figlio e genitore), poi la ricostruzione dell'immagine: `versioni.json` sta dentro l'immagine e annuncia la 0.11 appena il server riparte. Il programma del computer resta 0.10.
+
+### I corpi delle richieste e i numeri (tutto il server)
+
+- Ogni corpo JSON di una richiesta sotto `/api/` si controlla **prima di qualsiasi endpoint**: `NaN`, `Infinity`, `-Infinity` (e un numero come `1e400`, che diventa infinito), un **surrogato da solo** in un testo (per esempio `"\ud800"`, con l'escape o coi byte grezzi; una coppia di surrogati, cioè un'emoji, va bene) in una chiave o in un valore, e un **intero oltre i 64 bit** → `422 {"detail": [{"loc": ["body"], "msg": "…"}]}` e non si scrive niente. Python li legge come JSON, ma una volta nel registro (i dettagli di uno sforamento, le etichette di una fotografia, il nome di una sessione) farebbero cadere ogni lettura che li ripresenta, comprese le notifiche del genitore. Un corpo vuoto o che non è JSON resta com'era (lo giudica FastAPI).
+- Un intero oltre i 64 bit in un percorso o in una query (`/api/regole/99999999999999999999`, `?figlio_id=…`) → `422 {"detail": "numero fuori misura"}`, mai un `500`; sulle sessioni → `404 {"detail": "sessione non trovata"}`.
+
 ---
-**Versione: v3.4 — 01/10/2026** (decisione di Andrea del 30/09): le proposte del figlio — `POST /api/proposte` anche col token del dispositivo (notifica `nuova_proposta` al genitore), `POST /api/proposte/{id}/risposta` anche col token del genitore sulle proposte del figlio (accetta = vale subito; notifica `proposta_risposta` a tutti i dispositivi del figlio; niente `modifica_regola` doppia al genitore), `POST /api/proposte/{id}/ritira` per chi ha proposto (stato `ritirata`, notifica `proposta_ritirata` all'altro); campo `autore` su ogni proposta; `proposte_inviate` in `GET /api/patto` (`proposte_pendenti` resta quelle a cui risponde il figlio), `proposte_pendenti` in `GET /api/finestra`, `proposte_da_decidere` in `GET /api/famiglia`; una sola pendente per regola di chiunque sia. Database: colonna `autore` e stato `ritirata`, con la copia prima della migrazione.
+**Versione: v3.5 — 01/10/2026** (decisioni di Andrea): le Sessioni — il figlio crea sessioni (nome + app del telefono, anche `gruppo:apk`), il genitore le approva una volta e approva ogni cambio della lista (`modifica_in_attesa`); il figlio le avvia quando vuole per 1–1440 minuti e le può chiudere prima; nelle app della sessione il tempo non conta, fuori lista conta come sempre; barriera "Esci" sulle app fuori lista; `sessioni`, `sessione_in_corso`, `sessioni_svolte` in `GET /api/patto`, `sessioni`, `sessioni_da_approvare`, `sessioni_svolte` in `GET /api/finestra`, `sessioni_da_approvare` in `GET /api/famiglia`; notifiche `sessione_da_approvare`, `sessione_risposta`, `sessione_eliminata`; `sessioni_minuti` nella fotografia e accanto a `totale_minuti` in `uso_recente`. Due tabelle nuove. In più, per tutto il server: i corpi JSON con `NaN`/`Infinity`, surrogati da soli o interi oltre i 64 bit → `422` prima di ogni endpoint; un intero oltre i 64 bit in un percorso o in una query → `422` (`404` sulle sessioni), mai un `500`; minuti del giorno oltre 1440 non validi.
+**v3.4 — 01/10/2026** (decisione di Andrea del 30/09): le proposte del figlio — `POST /api/proposte` anche col token del dispositivo (notifica `nuova_proposta` al genitore), `POST /api/proposte/{id}/risposta` anche col token del genitore sulle proposte del figlio (accetta = vale subito; notifica `proposta_risposta` a tutti i dispositivi del figlio; niente `modifica_regola` doppia al genitore), `POST /api/proposte/{id}/ritira` per chi ha proposto (stato `ritirata`, notifica `proposta_ritirata` all'altro); campo `autore` su ogni proposta; `proposte_inviate` in `GET /api/patto` (`proposte_pendenti` resta quelle a cui risponde il figlio), `proposte_pendenti` in `GET /api/finestra`, `proposte_da_decidere` in `GET /api/famiglia`; una sola pendente per regola di chiunque sia. Database: colonna `autore` e stato `ritirata`, con la copia prima della migrazione.
 **v3.3 — 30/09/2026** (decisione di Andrea): limite sul totale del dispositivo — `app_o_categoria = "totale"` accettato per telefoni e computer, valutato dalle app con lo `sforamento` di sempre (semaforo invariato); nella finestra la regola totale non ha `nome` e il suo limite sta accanto al `totale_minuti` del giorno in `uso_recente` (`limite`, `regola_id`, `bonus`); nel confronto delle proposte "tutto il telefono" / "tutto il computer"; `GET /api/notifiche?dopo_id=N` (solo le non lette arrivate dopo) e risposte `/api/` compresse gzip su richiesta, per l'app del genitore sempre attiva. Nessun cambio al database.
 **v3.2 — 25/09/2026**: copia notturna del registro fatta dal server stesso (sul NAS non c'è un programmatore di attività): una al giorno dopo le 03:00 del patto, controllata con `integrity_check`, ultime 30; campo `backup` in `GET /api/salute`; ripristino di una copia all'avvio con `PACTUM_RIPRISTINA`. Nessun cambio per le app.
 **v3 — 23/09/2026** (decisione di Andrea): famiglia con più figli, ogni figlio con più dispositivi (telefoni e computer) con regole, tempi, bonus e registro separati; vita reale e striscia per figlio; token per dispositivo e per genitore con abbinamento a codice di 6 cifre; computer con programmi (`exe:`), siti (`sito:`, letti dalla barra degli indirizzi, solo il dominio) e spegnimento che non è un'interruzione; compatibile con le app 0.7.

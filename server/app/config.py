@@ -14,6 +14,9 @@ APK_DIR_DEFAULT = str(Path(__file__).resolve().parents[1] / "apk")
 
 LOCK_GIORNI = 4
 SOGLIA_SILENZIO_MINUTI = 45
+# (v3.5) I minuti di un giorno: un tempo d'uso del giorno oltre questo non e' un dato,
+# e' un errore (o un tentativo di sporcare la finestra), e non vale.
+MINUTI_IN_UN_GIORNO = 1440
 TETTO_BONUS_GIORNO_DEFAULT = 30
 TETTO_BONUS_SETTIMANA_DEFAULT = 90
 TIMEZONE_DEFAULT = "Europe/Rome"

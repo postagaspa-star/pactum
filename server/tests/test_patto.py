@@ -23,6 +23,10 @@ CHIAVI_ATTESE = {
     "dispositivi",
     # (v3.4)
     "proposte_inviate",
+    # (v3.5)
+    "sessioni",
+    "sessione_in_corso",
+    "sessioni_svolte",
 }
 
 

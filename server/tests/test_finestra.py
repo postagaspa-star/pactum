@@ -25,6 +25,10 @@ CHIAVI_ATTESE = {
     "segno_oggi",
     "dispositivi",  # (v3)
     "proposte_pendenti",  # (v3.4)
+    # (v3.5)
+    "sessioni",
+    "sessioni_da_approvare",
+    "sessioni_svolte",
 }
 
 

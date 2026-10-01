@@ -208,6 +208,7 @@ def test_finestra_regola_totale_senza_nome_e_limite_accanto_al_totale(client):
 
     assert finestra["uso_recente"][-1] == {
         "giorno": OGGI, "totale_minuti": 192,
+        "sessioni_minuti": None,  # (v3.5) la fotografia non lo dice
         "limite": 180, "regola_id": totale["id"], "bonus": 0,
         "aggiornato_ts": "2026-07-14T10:00:00+00:00",
         "app": [
@@ -219,8 +220,8 @@ def test_finestra_regola_totale_senza_nome_e_limite_accanto_al_totale(client):
     }
     # i giorni senza fotografia restano com'erano: nessun limite accanto a un totale che non c'e'
     for voce in finestra["uso_recente"][:-1]:
-        assert voce == {"giorno": voce["giorno"], "totale_minuti": None, "aggiornato_ts": None,
-                        "app": [], "categorie": []}
+        assert voce == {"giorno": voce["giorno"], "totale_minuti": None, "sessioni_minuti": None,
+                        "aggiornato_ts": None, "app": [], "categorie": []}
     # il primo livello vale per il primo dispositivo: la stessa lista
     assert _dispositivo(finestra, 1)["uso_recente"] == finestra["uso_recente"]
 

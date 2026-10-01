@@ -1,15 +1,15 @@
 {
   "figlio": {
-    "versione_code": 10,
-    "versione_nome": "0.10.0",
+    "versione_code": 11,
+    "versione_nome": "0.11.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.10.0: puoi proporre al genitore un cambio a una regola: se accetta, vale subito, anche se allenta. Le tue proposte e le risposte sono in Proposte."
+    "note": "v0.11.0: le Sessioni — crei una sessione (per esempio Studio) con le app che servono, il genitore la approva, e quando la avvii il telefono lascia usare solo quelle app; il tempo lì non conta."
   },
   "genitore": {
-    "versione_code": 10,
-    "versione_nome": "0.10.0",
+    "versione_code": 11,
+    "versione_nome": "0.11.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.10.0: tuo figlio può proporti un cambio a una regola: lo trovi in cima alla Panoramica e decidi tu; se accetti, vale subito. Puoi anche ritirare una tua proposta."
+    "note": "v0.11.0: le Sessioni — tuo figlio ti chiede di approvare una sessione con le sue app (per esempio Studio); in Panoramica vedi le sessioni fatte, quanto sono durate e se le ha chiuse prima."
   },
   "computer": {
     "versione_code": 10,

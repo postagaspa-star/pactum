@@ -92,6 +92,70 @@ CREATE TABLE IF NOT EXISTS proposte (
 );
 """
 
+# (v3.5) Le Sessioni (contratto-api.md, "v3.5 — le Sessioni"): un periodo in cui il
+# telefono del figlio si limita da solo ad alcune app. `sessioni` sono le definizioni:
+# le crea il figlio da un suo telefono (la sessione e' di quel dispositivo) e le
+# approva il genitore. nome, app (lista JSON di pacchetti Android o 'gruppo:apk') e
+# nomi (JSON {chiave: etichetta}) sono la versione corrente, quella approvata se
+# stato = 'approvata'. Un cambio chiesto su una sessione approvata aspetta in
+# modifica_in_attesa (JSON {nome, app, nomi, richiesta_ts}, sempre completo): finche'
+# il genitore non decide vale la versione approvata. motivazione = quella dell'ultimo
+# rifiuto del genitore. versione: 1 alla creazione, +1 a ogni cambio del figlio e a
+# ogni decisione del genitore; il genitore decide dicendo quale versione ha visto.
+# eliminata_ts: eliminata dal figlio (la riga resta: le sessioni svolte la citano).
+#
+# `sessioni_svolte` sono le volte in cui una sessione e' stata avviata: nome, app e
+# nomi si CONGELANO all'avvio (un cambio approvato dopo vale dalla prossima volta).
+# fine_ts e chiusura restano NULL finche' e' aperta. Allo scadere si chiude da sola
+# ('scaduta', fine_ts = fine_prevista_ts): il server lo calcola quando legge e lo
+# scrive al primo avvio successivo, senza processi in sottofondo. 'terminata' =
+# chiusa prima dal figlio. L'indice unico sulle aperte garantisce una sola sessione
+# aperta per dispositivo anche sotto richieste concorrenti, non la sola SELECT.
+#
+# Sono due tabelle nuove e basta: nessuna tabella che c'e' gia' cambia, quindi un
+# database della v3.4 non va copiato prima (contratto, "v3.5 — Compatibilita'").
+TABELLE_SESSIONI = """
+CREATE TABLE IF NOT EXISTS sessioni (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    figlio_id INTEGER NOT NULL REFERENCES figli(id),
+    dispositivo_id INTEGER NOT NULL REFERENCES dispositivi(id),
+    nome TEXT NOT NULL,
+    app TEXT NOT NULL,
+    nomi TEXT NOT NULL DEFAULT '{}',
+    stato TEXT NOT NULL DEFAULT 'in_attesa'
+        CHECK (stato IN ('in_attesa', 'approvata', 'rifiutata')),
+    modifica_in_attesa TEXT,
+    motivazione TEXT,
+    versione INTEGER NOT NULL DEFAULT 1,
+    creata_ts TEXT NOT NULL,
+    approvata_ts TEXT,
+    eliminata_ts TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessioni_dispositivo ON sessioni (dispositivo_id);
+CREATE INDEX IF NOT EXISTS idx_sessioni_figlio ON sessioni (figlio_id);
+
+CREATE TABLE IF NOT EXISTS sessioni_svolte (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessione_id INTEGER NOT NULL REFERENCES sessioni(id),
+    dispositivo_id INTEGER NOT NULL REFERENCES dispositivi(id),
+    nome TEXT NOT NULL,
+    app TEXT NOT NULL,
+    nomi TEXT NOT NULL DEFAULT '{}',
+    inizio_ts TEXT NOT NULL,
+    durata_minuti INTEGER NOT NULL CHECK (durata_minuti BETWEEN 1 AND 1440),
+    fine_prevista_ts TEXT NOT NULL,
+    fine_ts TEXT,
+    chiusura TEXT CHECK (chiusura IN ('scaduta', 'terminata')),
+    CHECK ((fine_ts IS NULL) = (chiusura IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessioni_svolte_dispositivo
+    ON sessioni_svolte (dispositivo_id, inizio_ts);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sessioni_svolte_una_aperta
+    ON sessioni_svolte (dispositivo_id) WHERE fine_ts IS NULL;
+"""
+
 # (v3.4) Le colonne di TABELLA_PROPOSTE, nell'ordine: la migrazione copia quelle che
 # la tabella vecchia ha gia', le altre (autore) prendono il default.
 COLONNE_PROPOSTE = [
@@ -269,7 +333,7 @@ CREATE TABLE IF NOT EXISTS notifiche (
     figlio_id INTEGER REFERENCES figli(id),
     dispositivo_id INTEGER REFERENCES dispositivi(id)
 );
-"""
+""" + TABELLE_SESSIONI
 
 # (v3.1) Chi ha letto una notifica del figlio: ogni dispositivo per conto suo, cosi'
 # una notifica per tutto il figlio (il segno) arriva al telefono E al computer anche
@@ -984,6 +1048,8 @@ def init_db(
             _copia_prima_della_migrazione(conn, db_path, SUFFISSO_COPIA_V34, "v3.4")
         # Tutto lo schema in una transazione: una scrittura sola su disco invece di
         # una per tabella (su Windows ogni transazione e' un file di journal in piu').
+        # (v3.5) Le sessioni sono solo tabelle nuove, che nascono qui (CREATE TABLE IF
+        # NOT EXISTS) senza toccare quelle che ci sono: niente migrazione, niente copia.
         conn.executescript("BEGIN;" + SCHEMA + "COMMIT;")
         _migra(conn, crea_famiglia=token_figlio is not None)
         conn.execute(

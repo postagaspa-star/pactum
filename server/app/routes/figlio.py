@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import clock, famiglia, semaforo, siti
 from ..auth import Identita, richiede_dispositivo
-from ..config import nome_fuso
+from ..config import MINUTI_IN_UN_GIORNO, nome_fuso
 from ..db import (
     accoda_notifica,
     bonus_oggi_per_regola,
@@ -21,6 +21,12 @@ from ..schemas import BattitoIn, BonusIn, EventiIn, EventoIn
 from .dichiarazioni import dichiarazioni_del_figlio, formatta_dichiarazione
 from .proposte import formatta_proposta, proposte_del_figlio
 from .regole import _riga_regola
+from .sessioni import (
+    etichette_note,
+    sessione_in_corso,
+    sessioni_del_dispositivo,
+    sessioni_svolte_del_dispositivo,
+)
 
 router = APIRouter(dependencies=[Depends(richiede_dispositivo)])
 
@@ -56,9 +62,11 @@ def battito(
 
 
 def _totale_minuti(dettagli: dict) -> int:
-    """totale_minuti mancante o non valido vale 0 (contratto-api.md)."""
+    """totale_minuti mancante o non valido vale 0 (contratto-api.md). (v3.5) Non e'
+    valido nemmeno oltre i minuti di un giorno: un totale assurdo non diventa la
+    fotografia vigente e non sporca le medie."""
     totale = dettagli.get("totale_minuti")
-    if isinstance(totale, bool) or not isinstance(totale, int) or totale < 0:
+    if isinstance(totale, bool) or not isinstance(totale, int) or not 0 <= totale <= MINUTI_IN_UN_GIORNO:
         return 0
     return totale
 
@@ -226,7 +234,11 @@ def patto(
     quella di ciascun dispositivo del figlio.
 
     (v3.4) proposte_pendenti = quelle del genitore a cui il figlio risponde;
-    proposte_inviate = quelle del figlio che aspettano il genitore."""
+    proposte_inviate = quelle del figlio che aspettano il genitore.
+
+    (v3.5) Le sessioni di QUESTO telefono, quella in corso e quelle svolte negli 8
+    giorni della striscia: al telefono servono per sapere quali periodi non contano,
+    anche dopo un riavvio o una reinstallazione."""
     ora = clock.now()
     figlio = famiglia.figlio_o_404(conn, chi.figlio_id)
     dispositivi = famiglia.dispositivi_del_figlio(conn, chi.figlio_id)
@@ -248,6 +260,8 @@ def patto(
         {**_riga_regola(r, per_id), "semaforo": quadro["semafori"][r["id"]]}
         for r in righe_regole
     ]
+    # (v3.5) Le etichette delle app delle sessioni: dalle fotografie dell'uso, lette una volta.
+    note = etichette_note(conn, chi.figlio_id)
     return {
         "regole": regole,
         "bonus": stato_bonus(conn, ora, chi.dispositivo_id),
@@ -284,4 +298,8 @@ def patto(
             }
             for d in dispositivi
         ],
+        # (v3.5) Solo di questo dispositivo: una sessione vale sul telefono che l'ha creata.
+        "sessioni": sessioni_del_dispositivo(conn, questo, note),
+        "sessione_in_corso": sessione_in_corso(conn, questo["id"], ora, note),
+        "sessioni_svolte": sessioni_svolte_del_dispositivo(conn, questo["id"], ora, note),
     }

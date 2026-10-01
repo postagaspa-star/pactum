@@ -16,11 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import clock, famiglia, semaforo, siti
 from ..auth import richiede_genitore
-from ..config import fuso_patto
+from ..config import MINUTI_IN_UN_GIORNO, fuso_patto
 from ..db import accoda_notifica, get_conn, segno_mandato_oggi, stato_bonus
 from ..schemas import CHIAVE_TOTALE, SegnoIn
 from .proposte import formatta_proposta, proposte_del_figlio
 from .regole import _riga_regola
+from .sessioni import sessioni_da_approvare, sessioni_del_figlio, sessioni_svolte_del_figlio
 
 router = APIRouter(dependencies=[Depends(richiede_genitore)])
 
@@ -65,14 +66,28 @@ def _eventi_recenti(conn: sqlite3.Connection, dispositivi: list, tipo: str) -> l
 
 def _minuti_validi(mappa) -> dict:
     """Tiene solo le voci {chiave: minuti} con minuti numerici non negativi:
-    una fotografia sporca non deve far crollare la finestra."""
+    una fotografia sporca non deve far crollare la finestra. (v3.5) E non oltre i
+    minuti di un giorno: una voce assurda si lascia cadere."""
     if not isinstance(mappa, dict):
         return {}
     return {
         chiave: minuti
         for chiave, minuti in mappa.items()
-        if isinstance(minuti, (int, float)) and not isinstance(minuti, bool) and minuti >= 0
+        if isinstance(minuti, (int, float))
+        and not isinstance(minuti, bool)
+        and 0 <= minuti <= MINUTI_IN_UN_GIORNO
     }
+
+
+def _sessioni_minuti(dettagli: dict) -> int | None:
+    """(v3.5) I minuti del giorno non contati perche' passati in una sessione, se la
+    fotografia li dice: un intero da 0 a 1440. Altrimenti null, mai uno zero finto:
+    un telefono 0.10 non li manda, e "non detto" non e' "zero". Un valore sporco si
+    ignora, non fa cadere la fotografia ne' la finestra."""
+    minuti = dettagli.get("sessioni_minuti")
+    if isinstance(minuti, bool) or not isinstance(minuti, int) or not 0 <= minuti <= MINUTI_IN_UN_GIORNO:
+        return None
+    return minuti
 
 
 def _con_limite(voce: dict, limite: dict | None, bonus_regola: dict, giorno: str) -> None:
@@ -102,7 +117,9 @@ def _uso_recente(
     e' dentro la regola. (v3) Tutto di un dispositivo: le sue fotografie, i limiti
     delle sue regole, i suoi bonus. (v3.3) `limite_totale` = {"limite", "regola_id"}
     della regola "totale" ATTIVA del dispositivo: va accanto a totale_minuti nella
-    voce del giorno, solo nei giorni con la fotografia."""
+    voce del giorno, solo nei giorni con la fotografia. (v3.5) Accanto a totale_minuti
+    anche `sessioni_minuti`, dalla fotografia vigente (null se non lo dice o se la
+    fotografia non c'e')."""
     bonus_regola = bonus_regola or {}
     date_iso = [g.isoformat() for g in giorni]
     segnaposto = ",".join("?" * len(date_iso))
@@ -120,8 +137,8 @@ def _uso_recente(
         riga = vigenti.get(data)
         if riga is None:
             voci.append(
-                {"giorno": data, "totale_minuti": None, "aggiornato_ts": None,
-                 "app": [], "categorie": []}
+                {"giorno": data, "totale_minuti": None, "sessioni_minuti": None,
+                 "aggiornato_ts": None, "app": [], "categorie": []}
             )
             continue
         dettagli = json.loads(riga["dettagli"])
@@ -146,7 +163,11 @@ def _uso_recente(
             voce = {"chiave": chiave, "minuti": minuti}
             _con_limite(voce, limiti.get(chiave), bonus_regola, data)
             categorie.append(voce)
-        voce_giorno = {"giorno": data, "totale_minuti": riga["totale_minuti"]}
+        voce_giorno = {
+            "giorno": data,
+            "totale_minuti": riga["totale_minuti"],
+            "sessioni_minuti": _sessioni_minuti(dettagli),  # (v3.5)
+        }
         _con_limite(voce_giorno, limite_totale, bonus_regola, data)  # (v3.3) accanto al totale
         voce_giorno.update({"aggiornato_ts": riga["ts_server"], "app": app, "categorie": categorie})
         voci.append(voce_giorno)
@@ -326,6 +347,13 @@ def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(ge
             formatta_proposta(r, conn)
             for r in proposte_del_figlio(conn, figlio["id"], solo_pendenti=True)
         ],
+        # (v3.5) Le sessioni di tutti i dispositivi del figlio, quante decisioni
+        # aspettano il genitore, e le sessioni svolte negli 8 giorni: inizio, durata,
+        # fine e chiusure anticipate (mai quali app ha provato ad aprire). Le etichette
+        # delle app sono quelle dell'uso (`nomi`, le stesse del `nome` delle regole).
+        "sessioni": sessioni_del_figlio(conn, figlio["id"], nomi, dispositivi),
+        "sessioni_da_approvare": sessioni_da_approvare(conn, figlio["id"]),
+        "sessioni_svolte": sessioni_svolte_del_figlio(conn, figlio["id"], ora, nomi),
     }
 
 

@@ -2,7 +2,8 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from starlette.middleware.gzip import GZipMiddleware
 
 from . import copie, db
@@ -15,6 +16,7 @@ from .config import (
     riassunto_config,
     valida_produzione,
 )
+from .controllo_corpo import CorpoJsonSano
 from .routes import (
     dichiarazioni,
     distribuzione,
@@ -24,6 +26,7 @@ from .routes import (
     notifiche,
     proposte,
     regole,
+    sessioni,
 )
 
 # uvicorn.error e' il logger che uvicorn configura con un handler a livello INFO:
@@ -103,8 +106,18 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Pactum — postino", version=VERSIONE, lifespan=_ciclo_di_vita)
     app.add_middleware(GzipSoloApi)
+    # (v3.5) Ogni corpo JSON sotto /api/ passa da qui prima di qualsiasi route: NaN,
+    # Infinity, surrogati da soli e interi oltre i 64 bit -> 422 (controllo_corpo.py).
+    app.add_middleware(CorpoJsonSano)
     app.state.settings = settings
     app.state.copia_notturna = copie.prepara_copia_notturna(settings)
+
+    @app.exception_handler(OverflowError)
+    async def numero_fuori_misura(request: Request, errore: OverflowError):
+        # (v3.5) Un intero che SQLite non sa tenere (oltre i 64 bit) in un percorso o in
+        # una query (/api/regole/99999999999999999999): non e' mai un id che esiste.
+        # 422, mai un 500. Nei corpi lo ferma gia' CorpoJsonSano.
+        return JSONResponse(status_code=422, content={"detail": "numero fuori misura"})
 
     @app.get("/api/salute")
     def salute():
@@ -124,6 +137,7 @@ def create_app() -> FastAPI:
     app.include_router(genitore.router, prefix="/api")
     app.include_router(famiglia.router, prefix="/api")
     app.include_router(famiglia.abbina_router, prefix="/api")
+    app.include_router(sessioni.router, prefix="/api")  # (v3.5)
     # Distribuzione (tappa 6): /api/versione sotto /api; /scarica alla radice.
     app.include_router(distribuzione.versione_router, prefix="/api")
     app.include_router(distribuzione.scarica_router)

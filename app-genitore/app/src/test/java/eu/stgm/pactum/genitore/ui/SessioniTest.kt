@@ -1,6 +1,7 @@
 package eu.stgm.pactum.genitore.ui
 
 import androidx.compose.runtime.saveable.SaverScope
+import eu.stgm.pactum.design.TemaSessione
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.DispositivoFinestra
@@ -32,7 +33,8 @@ import java.time.format.DateTimeFormatter
  * aspetta una decisione, che cosa cambia un cambio, su quale versione si risponde,
  * come si racconta una sessione fatta — e le frasi VERE (strings.xml) di card,
  * notifiche ed esiti. Se qui si sbaglia, il padre approva una lista che non ha
- * visto, o legge "chiusa prima" su una sessione durata tutta.
+ * visto, o legge "chiusa prima" su una sessione durata tutta. (0.12) Accanto al
+ * nome di ogni sessione, la prima emoji del suo tema.
  */
 class SessioniTest {
 
@@ -136,8 +138,8 @@ class SessioniTest {
         // Le non più valide, in ordine di nome.
         assertEquals(listOf(11L, 12L, 10L), sessioniNonPiuValide(tutte, scollegati).map { it.id })
         assertEquals(
-            "Vecchia · non più valida: il telefono è scollegato",
-            p.testo(R.string.sessione_non_piu_valida, "Vecchia"),
+            "✨ Vecchia · non più valida: il telefono è scollegato",
+            p.testo(R.string.sessione_non_piu_valida, nomeSessioneConEmoji(p, "Vecchia")),
         )
         // Il telefono si riconosce anche dal riferimento allegato.
         assertTrue(suTelefonoScollegato(Sessione(id = 1, dispositivo = RiferimentoDispositivo(2, "Vecchio", "telefono")), scollegati))
@@ -466,10 +468,10 @@ class SessioniTest {
 
     @Test
     fun `la card dice chi chiede e quale sessione, e che cosa vuol dire approvarla`() {
-        assertEquals("Luca chiede di approvare la sessione «Studio»", chiedeLaSessione(p, "Luca", "Studio", cambio = false))
-        assertEquals("Luca chiede di cambiare la sessione «Studio»", chiedeLaSessione(p, "Luca", "Studio", cambio = true))
-        assertEquals("Tuo figlio chiede di approvare la sessione «Studio»", chiedeLaSessione(p, " ", "Studio", cambio = false))
-        assertEquals("Tuo figlio chiede di cambiare la sessione «Sessione»", chiedeLaSessione(p, null, "  ", cambio = true))
+        assertEquals("Luca chiede di approvare la sessione 📚 «Studio»", chiedeLaSessione(p, "Luca", "Studio", cambio = false))
+        assertEquals("Luca chiede di cambiare la sessione 📚 «Studio»", chiedeLaSessione(p, "Luca", "Studio", cambio = true))
+        assertEquals("Tuo figlio chiede di approvare la sessione 📚 «Studio»", chiedeLaSessione(p, " ", "Studio", cambio = false))
+        assertEquals("Tuo figlio chiede di cambiare la sessione ✨ «Sessione»", chiedeLaSessione(p, null, "  ", cambio = true))
         assertEquals("Se approvi, Luca potrà avviarla quando vuole, per quanto vuole.", seApproviLaSessione(p, "Luca"))
         assertEquals("Se approvi, tuo figlio potrà avviarla quando vuole, per quanto vuole.", seApproviLaSessione(p, null))
         // Che cosa accetta, senza ambiguità: quali app non contano, e che cosa succede alle altre.
@@ -486,7 +488,10 @@ class SessioniTest {
         assertEquals("Non approvare", p.testo(R.string.sessione_non_approvare))
         assertEquals("Perché? (facoltativo)", p.testo(R.string.proposta_campo_perche))
         assertEquals("Al massimo 500 caratteri", p.testo(R.string.sessione_perche_massimo, MASSIMO_MOTIVAZIONE_SESSIONE))
-        assertEquals("Non approvi la sessione «Studio»?", p.testo(R.string.sessione_non_approvare_titolo, "Studio"))
+        assertEquals(
+            "Non approvi la sessione 📚 «Studio»?",
+            p.testo(R.string.sessione_non_approvare_titolo, nomeSessioneTraVirgolette(p, "Studio")),
+        )
     }
 
     @Test
@@ -519,7 +524,7 @@ class SessioniTest {
             ),
         )
         assertEquals(
-            listOf("Nuovo nome: «Compiti»", "Aggiunge Duolingo e le app installate fuori dal Play Store", "Toglie YouTube"),
+            listOf("Nuovo nome: 📚 «Compiti»", "Aggiunge Duolingo e le app installate fuori dal Play Store", "Toglie YouTube"),
             righeCambioSessione(p, checkNotNull(richiestaInAttesa(conCambio))),
         )
         // Una sessione nuova non ha righe di cambio.
@@ -594,15 +599,15 @@ class SessioniTest {
     fun `le sessioni fatte si leggono come le direbbe una persona`() {
         val adesso = istante(10, 1, 17, 0)
         assertEquals(
-            "Studio · oggi 15:02–16:40 · chiusa prima (prevista 2 h)",
+            "📚 Studio · oggi 15:02–16:40 · chiusa prima (prevista 2 h)",
             riga(svolta(ts(10, 1, 15, 2), 120, ts(10, 1, 17, 2), ts(10, 1, 16, 40), "terminata"), adesso),
         )
         assertEquals(
-            "Studio · ieri 15:00–17:00 · 2 h",
+            "📚 Studio · ieri 15:00–17:00 · 2 h",
             riga(svolta(ts(9, 30, 15, 0), 120, ts(9, 30, 17, 0), ts(9, 30, 17, 0), "scaduta"), adesso),
         )
         assertEquals(
-            "Studio · 28/09 15:00–16:30 · 1 h 30 min",
+            "📚 Studio · 28/09 15:00–16:30 · 1 h 30 min",
             riga(svolta(ts(9, 28, 15, 0), 90, ts(9, 28, 16, 30), ts(9, 28, 16, 30), "scaduta"), adesso),
         )
     }
@@ -610,20 +615,20 @@ class SessioniTest {
     @Test
     fun `una in corso dice quando e iniziata, la durata scelta e fino a quando`() {
         assertEquals(
-            "Lavoro · iniziata alle 15:02 · 2 h, fino alle 17:02",
+            "✨ Lavoro · iniziata alle 15:02 · 2 h, fino alle 17:02",
             riga(svolta(ts(10, 1, 15, 2), 120, ts(10, 1, 17, 2), null, null, nome = "Lavoro"), istante(10, 1, 16, 0)),
         )
         assertEquals(
-            "Lavoro · iniziata alle 22:00 · 3 h, fino a domani alle 01:00",
+            "✨ Lavoro · iniziata alle 22:00 · 3 h, fino a domani alle 01:00",
             riga(svolta(ts(10, 1, 22, 0), 180, ts(10, 2, 1, 0), null, null, nome = "Lavoro"), istante(10, 1, 22, 30)),
         )
         assertEquals(
-            "Studio · iniziata ieri alle 23:30 · 10 h, fino alle 09:30",
+            "📚 Studio · iniziata ieri alle 23:30 · 10 h, fino alle 09:30",
             riga(svolta(ts(9, 30, 23, 30), 600, ts(10, 1, 9, 30), null, null), istante(10, 1, 8, 0)),
         )
         // Senza durata né fine prevista: da quando, e basta.
         assertEquals(
-            "Studio · iniziata alle 15:00 · in corso",
+            "📚 Studio · iniziata alle 15:00 · in corso",
             riga(svolta(ts(10, 1, 15, 0), null, null, null, null), istante(10, 1, 15, 10)),
         )
         assertEquals("iniziata il 28/09 alle 09:05", iniziataQuando(p, istante(9, 28, 9, 5), roma, oggi))
@@ -635,13 +640,13 @@ class SessioniTest {
         assertEquals(FineSessione.IN_CORSO, checkNotNull(raccontaSvolta(studio, istante(10, 1, 15, 30))).fine)
         val dopo = checkNotNull(raccontaSvolta(studio, istante(10, 1, 16, 5)))
         assertEquals(FineSessione.COMPLETA, dopo.fine)
-        assertEquals("Studio · oggi 15:00–16:00 · 1 h", testoSessioneSvolta(p, dopo, roma, oggi))
+        assertEquals("📚 Studio · oggi 15:00–16:00 · 1 h", testoSessioneSvolta(p, dopo, roma, oggi))
     }
 
     @Test
     fun `a cavallo della mezzanotte`() {
         assertEquals(
-            "Studio · ieri 23:30 – oggi 00:45 · chiusa prima (prevista 2 h)",
+            "📚 Studio · ieri 23:30 – oggi 00:45 · chiusa prima (prevista 2 h)",
             riga(svolta(ts(9, 30, 23, 30), 120, ts(10, 1, 1, 30), ts(10, 1, 0, 45), "terminata"), istante(10, 1, 9, 0)),
         )
     }
@@ -650,32 +655,32 @@ class SessioniTest {
     fun `una terminata alla fine prevista non e chiusa prima, e i dati che mancano non si inventano`() {
         val sera = istante(10, 1, 18, 0)
         assertEquals(
-            "Studio · oggi 15:00–17:00 · 2 h",
+            "📚 Studio · oggi 15:00–17:00 · 2 h",
             riga(svolta(ts(10, 1, 15, 0), 120, ts(10, 1, 17, 0), ts(10, 1, 17, 0), "terminata"), sera),
         )
         // Senza la fine vera: da quando.
         assertEquals(
-            "Studio · oggi dalle 15:00 · chiusa prima (prevista 2 h)",
+            "📚 Studio · oggi dalle 15:00 · chiusa prima (prevista 2 h)",
             riga(svolta(ts(10, 1, 15, 0), 120, ts(10, 1, 17, 0), null, "terminata"), sera),
         )
         // Senza durata né fine prevista: "chiusa prima" e basta.
         assertEquals(
-            "Studio · oggi 15:00–15:40 · chiusa prima",
+            "📚 Studio · oggi 15:00–15:40 · chiusa prima",
             riga(svolta(ts(10, 1, 15, 0), null, null, ts(10, 1, 15, 40), "terminata"), sera),
         )
         // La durata scelta all'avvio si ricava dalla fine prevista, se manca.
         assertEquals(
-            "Studio · oggi 15:00–15:40 · chiusa prima (prevista 1 h)",
+            "📚 Studio · oggi 15:00–15:40 · chiusa prima (prevista 1 h)",
             riga(svolta(ts(10, 1, 15, 0), null, ts(10, 1, 16, 0), ts(10, 1, 15, 40), "terminata"), sera),
         )
         // Una chiusura che non si conosce: solo gli orari.
         assertEquals(
-            "Studio · oggi 15:00–15:40",
+            "📚 Studio · oggi 15:00–15:40",
             riga(svolta(ts(10, 1, 15, 0), 120, ts(10, 1, 17, 0), ts(10, 1, 15, 40), "chiusura_del_futuro"), sera),
         )
         // Un nome che manca.
         assertEquals(
-            "Sessione · oggi 15:00–17:00 · 2 h",
+            "✨ Sessione · oggi 15:00–17:00 · 2 h",
             riga(svolta(ts(10, 1, 15, 0), 120, ts(10, 1, 17, 0), ts(10, 1, 17, 0), "scaduta", nome = " "), sera),
         )
         // Un inizio che non si legge: la sessione non si racconta.
@@ -759,7 +764,7 @@ class SessioniTest {
         )
         assertEquals(
             TestoNotifica(
-                "Luca chiede di approvare la sessione «Studio»",
+                "Luca chiede di approvare la sessione 📚 «Studio»",
                 "ClasseViva, Classroom e le app installate fuori dal Play Store\n$nonConta",
             ),
             t,
@@ -781,14 +786,14 @@ class SessioniTest {
             figli = listOf(luca),
             sessioni = mapOf(3L to conCambio),
         )
-        assertEquals(TestoNotifica("Luca chiede di cambiare la sessione «Studio»", "Aggiunge Duolingo\nToglie YouTube"), t)
+        assertEquals(TestoNotifica("Luca chiede di cambiare la sessione 📚 «Studio»", "Aggiunge Duolingo\nToglie YouTube"), t)
     }
 
     @Test
     fun `senza la sessione letta, o gia decisa, la notifica si legge lo stesso`() {
         // Finestra non arrivata e famiglia non letta.
         assertEquals(
-            TestoNotifica("Tuo figlio chiede di approvare la sessione «Studio»", nonConta),
+            TestoNotifica("Tuo figlio chiede di approvare la sessione 📚 «Studio»", nonConta),
             testoNotifica(p, notifica("sessione_da_approvare", daApprovare(cambio = false)), emptyMap()),
         )
         // Già approvata: non c'è più una lista "da approvare" da mostrare.
@@ -803,7 +808,7 @@ class SessioniTest {
         )
         // Un cambio già deciso.
         assertEquals(
-            TestoNotifica("Luca chiede di cambiare la sessione «Studio»", nonConta),
+            TestoNotifica("Luca chiede di cambiare la sessione 📚 «Studio»", nonConta),
             testoNotifica(
                 p,
                 notifica("sessione_da_approvare", daApprovare(cambio = true)),
@@ -829,7 +834,7 @@ class SessioniTest {
         }
         // La sessione non letta (o il cambio già deciso): il nome nuovo viene dal payload.
         assertEquals(
-            TestoNotifica("Luca chiede di cambiare la sessione «Studio»", "Nuovo nome: «Compiti»"),
+            TestoNotifica("Luca chiede di cambiare la sessione 📚 «Studio»", "Nuovo nome: 📚 «Compiti»"),
             testoNotifica(p, notifica("sessione_da_approvare", rinomina), emptyMap(), figli = listOf(luca)),
         )
         // Letta e ancora in attesa: che cosa cambia, nome compreso.
@@ -840,7 +845,7 @@ class SessioniTest {
             modifica = ModificaSessione(nome = "Compiti", app = listOf(classeviva)),
         )
         assertEquals(
-            "Nuovo nome: «Compiti»\nToglie YouTube",
+            "Nuovo nome: 📚 «Compiti»\nToglie YouTube",
             testoNotifica(p, notifica("sessione_da_approvare", rinomina), emptyMap(), sessioni = mapOf(3L to conCambio)).testo,
         )
         // Un nuovo nome uguale a quello di adesso non è un nome nuovo.
@@ -860,11 +865,11 @@ class SessioniTest {
             put("nome", "Studio")
         }
         assertEquals(
-            TestoNotifica("Luca ha eliminato la sessione «Studio»", "Le sessioni già fatte restano nella Panoramica."),
+            TestoNotifica("Luca ha eliminato la sessione 📚 «Studio»", "Le sessioni già fatte restano nella Panoramica."),
             testoNotifica(p, notifica("sessione_eliminata", payload), emptyMap(), figli = listOf(luca)),
         )
         assertEquals(
-            "Tuo figlio ha eliminato la sessione «Studio»",
+            "Tuo figlio ha eliminato la sessione 📚 «Studio»",
             testoNotifica(p, notifica("sessione_eliminata", payload), emptyMap()).titolo,
         )
         assertEquals(
@@ -958,5 +963,71 @@ class SessioniTest {
                 frase(EsitoSessione.NonDecisa(niente, riletta)),
             )
         }
+    }
+
+    // --- 0.12: accanto al nome, l'emoji del tema -------------------------------------------------
+
+    @Test
+    fun `accanto al nome la prima emoji del suo tema, come nell'app del figlio`() {
+        // Il tema lo sceglie il nome (TemaSessione, core-design): maiuscole e parole in più non contano.
+        assertEquals("📚", emojiSessione("Studio"))
+        assertEquals("📚", emojiSessione("Compiti di matematica"))
+        assertEquals("⚽", emojiSessione("Allenamento calcio"))
+        assertEquals("🎵", emojiSessione("MUSICA"))
+        assertEquals("📖", emojiSessione("Lettura"))
+        assertEquals("💻", emojiSessione("Coding"))
+        // Un nome che non si riconosce, o che manca: le stelline.
+        assertEquals("✨", emojiSessione("Lavoro"))
+        assertEquals("✨", emojiSessione(null))
+        // È la prima emoji del tema: quella grande della pagina che vede il figlio.
+        assertEquals(TemaSessione.daNome("Sport").emojiPrincipale, emojiSessione("Sport"))
+        // In testa a una riga l'emoji e il nome; in una frase il nome esatto fra «», con l'emoji fuori.
+        assertEquals("📚 Studio", nomeSessioneConEmoji(p, " Studio "))
+        assertEquals("📚 «Studio»", nomeSessioneTraVirgolette(p, " Studio "))
+        assertEquals("✨ Sessione", nomeSessioneConEmoji(p, "  "))
+        assertEquals("✨ «Sessione»", nomeSessioneTraVirgolette(p, null))
+    }
+
+    @Test
+    fun `un nome che comincia gia con quell'emoji non la ripete`() {
+        assertNull(emojiSessione("📚 Ripasso storia"))
+        assertEquals("📚 Ripasso storia", nomeSessioneConEmoji(p, "📚 Ripasso storia"))
+        assertEquals("«📚 Ripasso storia»", nomeSessioneTraVirgolette(p, " 📚 Ripasso storia"))
+        // Una tastiera che aggiunge il selettore di variante: è la stessa emoji.
+        assertEquals("⚽\uFE0F Calcio", nomeSessioneConEmoji(p, "⚽\uFE0F Calcio"))
+        // Un'altra emoji in testa al nome non è quella del tema: l'emoji del tema c'è lo stesso.
+        assertEquals("📚 🔥 Studio", nomeSessioneConEmoji(p, "🔥 Studio"))
+    }
+
+    @Test
+    fun `l'emoji accompagna il nome ovunque compaia - card, domanda, righe e notifiche`() {
+        // La card da approvare, e la sua notifica (stesso titolo).
+        assertEquals("Luca chiede di approvare la sessione 🎵 «Chitarra»", chiedeLaSessione(p, "Luca", "Chitarra", cambio = false))
+        // La domanda prima del sì (o del no).
+        assertEquals(
+            "Approvi il cambio alla sessione 🎨 «Disegno»?",
+            p.testo(R.string.sessione_approva_cambio_titolo, nomeSessioneTraVirgolette(p, "Disegno")),
+        )
+        // Il nome nuovo chiesto da un cambio, con l'emoji del nome nuovo.
+        assertEquals("Nuovo nome: 🧘 «Relax»", testoNuovoNome(p, "Relax"))
+        // Le righe della Panoramica: una sessione fatta, una approvata, una non più valida.
+        assertEquals(
+            "⚽ Calcio · oggi 15:00–16:00 · 1 h",
+            riga(svolta(ts(10, 1, 15, 0), 60, ts(10, 1, 16, 0), ts(10, 1, 16, 0), "scaduta", nome = "Calcio"), istante(10, 1, 17, 0)),
+        )
+        assertEquals("💻 Progetto", nomeSessioneConEmoji(p, "Progetto"))
+        assertEquals(
+            "📖 Lettura · non più valida: il telefono è scollegato",
+            p.testo(R.string.sessione_non_piu_valida, nomeSessioneConEmoji(p, "Lettura")),
+        )
+        // Le notifiche: anche una sessione eliminata.
+        val eliminata = buildJsonObject {
+            put("sessione_id", 5)
+            put("nome", "Palestra")
+        }
+        assertEquals(
+            "Luca ha eliminato la sessione ⚽ «Palestra»",
+            testoNotifica(p, notifica("sessione_eliminata", eliminata), emptyMap(), figli = listOf(luca)).titolo,
+        )
     }
 }

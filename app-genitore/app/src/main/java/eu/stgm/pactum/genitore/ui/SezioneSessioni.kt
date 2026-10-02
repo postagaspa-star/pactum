@@ -50,6 +50,10 @@ import eu.stgm.pactum.genitore.dati.Sessione
 // risponde con quella. Se la card cambia mentre la domanda è aperta (il giro di
 // ogni minuto porta una versione nuova), la domanda si chiude e lo si dice: il
 // genitore non approva mai una lista che non ha visto.
+//
+// (0.12) Accanto al nome di ogni sessione, la prima emoji del suo tema (scelto dal
+// nome come nell'app del figlio): "📚 Studio", e nelle frasi "la sessione 📚 «Studio»".
+// Le frasi le fa Testi.kt (nomeSessioneConEmoji, nomeSessioneTraVirgolette).
 
 /**
  * Come si salva la domanda aperta su una sessione: id, gesto e versione vista.
@@ -195,7 +199,7 @@ private fun CambioDellaSessione(
     val p = parole()
     differenze.nuovoNome?.let {
         Text(
-            text = stringResource(R.string.sessione_nuovo_nome, it),
+            text = testoNuovoNome(p, it),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.padding(top = Spazi.s),
         )
@@ -311,7 +315,7 @@ internal fun DialogoDecisioneSessione(
     val p = parole()
     var perche by rememberSaveable { mutableStateOf("") }
     val approva = esito == EsitiSessione.APPROVA
-    val nome = nomeSessione(p, nomeNelTitolo(richiesta))
+    val nome = nomeSessioneTraVirgolette(p, nomeNelTitolo(richiesta))
     AlertDialog(
         onDismissRequest = onAnnulla,
         title = {
@@ -376,7 +380,7 @@ internal fun DialogoDecisioneSessione(
 
 /**
  * La sezione Sessioni della Panoramica: che cosa sono, in una riga; le sessioni
- * fatte negli 8 giorni, dalla più recente ("Studio · oggi 15:02–16:40 · chiusa
+ * fatte negli 8 giorni, dalla più recente ("📚 Studio · oggi 15:02–16:40 · chiusa
  * prima (prevista 2 h)"), le prime [SESSIONI_SVOLTE_VISIBILI] e le altre dietro un
  * tocco; le sessioni approvate, che il figlio può avviare, con le loro app, chiuse
  * di default; e quelle non più valide perché il loro telefono è scollegato
@@ -495,7 +499,7 @@ private fun RigaSessioneApprovata(sessione: Sessione, nomiFinestra: Map<String, 
         if (telefono != null) {
             SopraTitolo(telefono.uppercase(), modifier = Modifier.padding(bottom = Spazi.xs))
         }
-        Text(text = nomeSessione(p, sessione.nome), style = MaterialTheme.typography.bodyLarge)
+        Text(text = nomeSessioneConEmoji(p, sessione.nome), style = MaterialTheme.typography.bodyLarge)
         if (app != null) {
             Text(
                 text = app,
@@ -515,7 +519,7 @@ private fun RigaSessioneNonPiuValida(sessione: Sessione, telefono: String?) {
             SopraTitolo(telefono.uppercase(), modifier = Modifier.padding(bottom = Spazi.xs))
         }
         Text(
-            text = stringResource(R.string.sessione_non_piu_valida, nomeSessione(parole(), sessione.nome)),
+            text = stringResource(R.string.sessione_non_piu_valida, nomeSessioneConEmoji(parole(), sessione.nome)),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

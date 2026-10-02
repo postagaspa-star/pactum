@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.design.Segnale
+import eu.stgm.pactum.design.TemaSessione
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.AutoriProposta
 import eu.stgm.pactum.genitore.dati.CodiciErrore
@@ -1120,13 +1121,44 @@ fun nomeSessione(parole: Parole, nome: String?): String =
     nome?.trim()?.takeIf { it.isNotEmpty() } ?: parole.testo(R.string.sessione_senza_nome)
 
 /**
- * "Luca chiede di approvare la sessione «Studio»", o per un cambio a una sessione
- * già approvata "Luca chiede di cambiare la sessione «Studio»"; "Tuo figlio…" se il
+ * (0.12) L'emoji da mettere accanto al nome di una sessione: la prima del suo tema,
+ * scelto dal nome come nell'app del figlio (TemaSessione, core-design): 📚 per
+ * "Studio", ⚽ per "Calcio", ✨ per un nome che non si riconosce. null se il nome
+ * comincia già con quell'emoji ("📚 Ripasso"): due di fila sembrerebbero un errore.
+ */
+fun emojiSessione(nome: String?): String? {
+    val emoji = TemaSessione.daNome(nome.orEmpty()).emojiPrincipale
+    // Il selettore di variante (U+FE0F) non conta: con o senza, ⚽ resta la stessa emoji.
+    fun senzaVariante(testo: String) = testo.replace("\uFE0F", "")
+    return emoji.takeUnless { senzaVariante(nome.orEmpty().trim()).startsWith(senzaVariante(it)) }
+}
+
+/** (0.12) Il nome di una sessione con la sua emoji, in testa a una riga: "📚 Studio". */
+fun nomeSessioneConEmoji(parole: Parole, nome: String?): String =
+    conEmojiDellaSessione(parole, nome, nomeSessione(parole, nome))
+
+/**
+ * (0.12) Il nome di una sessione dentro una frase: fra «», con l'emoji fuori, così
+ * fra le virgolette resta il nome esatto scritto dal figlio: "📚 «Studio»".
+ */
+fun nomeSessioneTraVirgolette(parole: Parole, nome: String?): String =
+    conEmojiDellaSessione(parole, nome, parole.testo(R.string.sessione_nome_tra_virgolette, nomeSessione(parole, nome)))
+
+private fun conEmojiDellaSessione(parole: Parole, nome: String?, scritto: String): String =
+    emojiSessione(nome)?.let { parole.testo(R.string.sessione_con_emoji, it, scritto) } ?: scritto
+
+/** Il nome nuovo chiesto da un cambio: "Nuovo nome: 📚 «Compiti»". */
+fun testoNuovoNome(parole: Parole, nome: String): String =
+    parole.testo(R.string.sessione_nuovo_nome, nomeSessioneTraVirgolette(parole, nome))
+
+/**
+ * "Luca chiede di approvare la sessione 📚 «Studio»", o per un cambio a una sessione
+ * già approvata "Luca chiede di cambiare la sessione 📚 «Studio»"; "Tuo figlio…" se il
  * nome non si sa. Lo stesso titolo nella card della Panoramica e nella notifica.
  */
 fun chiedeLaSessione(parole: Parole, nomeFiglio: String?, nome: String?, cambio: Boolean): String {
     val chi = nomeDaScrivere(nomeFiglio)
-    val sessione = nomeSessione(parole, nome)
+    val sessione = nomeSessioneTraVirgolette(parole, nome)
     return when {
         cambio && chi != null -> parole.testo(R.string.sessione_chiede_cambiare, chi, sessione)
         cambio -> parole.testo(R.string.sessione_chiede_cambiare_senza_nome, sessione)
@@ -1188,7 +1220,7 @@ fun testoNomeCambiato(parole: Parole, cambiato: NomeCambiato, nomiFinestra: Map<
 
 /**
  * Che cosa cambia un cambio chiesto su una sessione approvata, una riga per cosa:
- * "Nuovo nome: «Compiti»", "Aggiunge Duolingo e le app installate fuori dal Play
+ * "Nuovo nome: 📚 «Compiti»", "Aggiunge Duolingo e le app installate fuori dal Play
  * Store", "Toglie YouTube", "Cambiano solo i nomi delle app: «Classe Viva» →
  * «ClasseViva»" (o "Cambiano anche i nomi…" insieme ad altro). Un cambio che non
  * cambia niente lo dice. I nomi delle app dai dati d'uso ([nomiFinestra]), poi
@@ -1213,7 +1245,7 @@ fun righeCambioSessione(
             )
         }
     return listOfNotNull(
-        differenze.nuovoNome?.let { parole.testo(R.string.sessione_nuovo_nome, it) },
+        differenze.nuovoNome?.let { testoNuovoNome(parole, it) },
         elenco(differenze.aggiunte)?.let { parole.testo(R.string.notifica_sessione_aggiunge, it) },
         elenco(differenze.tolte)?.let { parole.testo(R.string.notifica_sessione_toglie, it) },
         nomiCambiati,
@@ -1221,9 +1253,9 @@ fun righeCambioSessione(
 }
 
 /**
- * Una sessione fatta in una riga, negli orari del telefono: "Studio · oggi
- * 15:02–16:40 · chiusa prima (prevista 2 h)", "Studio · ieri 15:00–17:00 · 2 h";
- * una in corso con l'inizio e la durata scelta: "Lavoro · iniziata alle 15:02 · 2
+ * Una sessione fatta in una riga, negli orari del telefono: "📚 Studio · oggi
+ * 15:02–16:40 · chiusa prima (prevista 2 h)", "📚 Studio · ieri 15:00–17:00 · 2 h";
+ * una in corso con l'inizio e la durata scelta: "✨ Lavoro · iniziata alle 15:02 · 2
  * h, fino alle 17:02". Senza la fine vera (un dato che manca) "oggi dalle 15:02";
  * senza la durata prevista "chiusa prima" e basta. Mai un orario inventato.
  */
@@ -1233,7 +1265,7 @@ fun testoSessioneSvolta(
     zona: ZoneId = ZoneId.systemDefault(),
     oggi: LocalDate = LocalDate.now(zona),
 ): String {
-    val nome = nomeSessione(parole, sessione.svolta.nome)
+    val nome = nomeSessioneConEmoji(parole, sessione.svolta.nome)
     if (sessione.fine == FineSessione.IN_CORSO) {
         val iniziata = iniziataQuando(parole, sessione.inizio, zona, oggi)
         val finePrevista = sessione.finePrevista
@@ -1609,12 +1641,14 @@ private fun fraseNotifica(
             )
         }
 
-        // (0.11) "Luca chiede di approvare la sessione «Studio»" / le sue app.
+        // (0.11) "Luca chiede di approvare la sessione 📚 «Studio»" / le sue app.
         "sessione_da_approvare" -> fraseSessioneDaApprovare(parole, notifica, figli, sessioni, nomi)
 
-        // (0.11) "Luca ha eliminato la sessione «Studio»" / la storia resta.
+        // (0.11) "Luca ha eliminato la sessione 📚 «Studio»" / la storia resta.
         "sessione_eliminata" -> {
-            val nome = campo(payload, "nome")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            val nome = campo(payload, "nome")?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { nomeSessioneTraVirgolette(parole, it) }
+                ?: return null
             TestoNotifica(
                 titolo = nomeFiglioDi(notifica, figli)?.let { parole.testo(R.string.notifica_sessione_eliminata, it, nome) }
                     ?: parole.testo(R.string.notifica_sessione_eliminata_senza_nome, nome),
@@ -1694,11 +1728,11 @@ private fun fraseNuovaProposta(
 /**
  * (0.11) `sessione_da_approvare` arrivata al genitore (contratto v3.5). Il titolo
  * dice chi chiede e quale sessione: "Luca chiede di approvare la sessione
- * «Studio»", o per un cambio "Luca chiede di cambiare la sessione «Studio»" (col
+ * 📚 «Studio»", o per un cambio "Luca chiede di cambiare la sessione 📚 «Studio»" (col
  * nome di adesso, quello che il genitore conosce). Il testo, se la sessione è
  * stata letta con la finestra ([sessioni]) e chiede ancora quella cosa: le sue app
  * ("ClasseViva e le app installate fuori dal Play Store") e che cosa vuol dire, o per un cambio
- * che cosa cambia ("Nuovo nome: «Compiti»", "Aggiunge Duolingo", "Toglie
+ * che cosa cambia ("Nuovo nome: 📚 «Compiti»", "Aggiunge Duolingo", "Toglie
  * YouTube"). Se no, per un cambio che rinomina il nome nuovo del payload
  * (`nuovo_nome`), e per il resto che cosa vuol dire una sessione. Senza il nome
  * della sessione (null) il messaggio del server, che dice già la stessa cosa.
@@ -1726,7 +1760,7 @@ private fun fraseSessioneDaApprovare(
     }
     return TestoNotifica(
         titolo = chiedeLaSessione(parole, nomeFiglioDi(notifica, figli), nome, cambio),
-        testo = testo ?: nuovoNome?.let { parole.testo(R.string.sessione_nuovo_nome, it) } ?: nonConta,
+        testo = testo ?: nuovoNome?.let { testoNuovoNome(parole, it) } ?: nonConta,
     )
 }
 

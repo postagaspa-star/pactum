@@ -305,8 +305,9 @@
     <string name="notifica_sessione_toglie">Toglie %1$s</string>
     <string name="notifica_sessione_solo_nomi">Cambiano solo i nomi delle app: %1$s</string>
     <string name="notifica_sessione_anche_nomi">Cambiano anche i nomi delle app: %1$s</string>
-    <string name="notifica_sessione_eliminata">%1$s ha eliminato la sessione «%2$s»</string>
-    <string name="notifica_sessione_eliminata_senza_nome">Tuo figlio ha eliminato la sessione «%1$s»</string>
+    <!-- (0.12) Il nome della sessione arriva già fra «», con la sua emoji (sessione_con_emoji) -->
+    <string name="notifica_sessione_eliminata">%1$s ha eliminato la sessione %2$s</string>
+    <string name="notifica_sessione_eliminata_senza_nome">Tuo figlio ha eliminato la sessione %1$s</string>
     <string name="notifica_sessione_eliminata_testo">Le sessioni già fatte restano nella Panoramica.</string>
 
     <!-- Canale notifiche di sistema -->
@@ -653,16 +654,22 @@
          durante la sessione il tempo in quelle app non conta, e il telefono copre le
          altre app. Il genitore vede inizio, durata, fine e chiusure anticipate. -->
     <string name="sessione_tag">sessione</string>
-    <string name="sessione_chiede_approvare">%1$s chiede di approvare la sessione «%2$s»</string>
-    <string name="sessione_chiede_approvare_senza_nome">Tuo figlio chiede di approvare la sessione «%1$s»</string>
-    <string name="sessione_chiede_cambiare">%1$s chiede di cambiare la sessione «%2$s»</string>
-    <string name="sessione_chiede_cambiare_senza_nome">Tuo figlio chiede di cambiare la sessione «%1$s»</string>
+    <!-- (0.12) Accanto al nome di ogni sessione, la prima emoji del suo tema (scelto dal
+         nome, come nell'app del figlio): "📚 Studio". Nelle frasi il nome va fra «» e
+         l'emoji resta fuori, così fra le virgolette c'è il nome esatto: "la sessione
+         📚 «Studio»". Le frasi qui sotto ricevono il nome già con le «» e l'emoji. -->
+    <string name="sessione_con_emoji">%1$s %2$s</string>
+    <string name="sessione_nome_tra_virgolette">«%1$s»</string>
+    <string name="sessione_chiede_approvare">%1$s chiede di approvare la sessione %2$s</string>
+    <string name="sessione_chiede_approvare_senza_nome">Tuo figlio chiede di approvare la sessione %1$s</string>
+    <string name="sessione_chiede_cambiare">%1$s chiede di cambiare la sessione %2$s</string>
+    <string name="sessione_chiede_cambiare_senza_nome">Tuo figlio chiede di cambiare la sessione %1$s</string>
     <string name="sessione_senza_nome">Sessione</string>
     <string name="sessione_le_app">LE APP DELLA SESSIONE</string>
     <string name="sessione_aggiunge">AGGIUNGE</string>
     <string name="sessione_toglie">TOGLIE</string>
     <string name="sessione_restano">Restano: %1$s</string>
-    <string name="sessione_nuovo_nome">Nuovo nome: «%1$s»</string>
+    <string name="sessione_nuovo_nome">Nuovo nome: %1$s</string>
     <!-- Un cambio che rinomina solo alcune app (o anche): il nome di prima e quello nuovo -->
     <string name="sessione_cambiano_solo_i_nomi">CAMBIANO SOLO I NOMI</string>
     <string name="sessione_cambiano_anche_i_nomi">CAMBIANO ANCHE I NOMI</string>
@@ -695,10 +702,10 @@
     <string name="sessione_perche_massimo">Al massimo %1$d caratteri</string>
     <string name="sessione_approva">Approva</string>
     <string name="sessione_non_approvare">Non approvare</string>
-    <string name="sessione_approva_titolo">Approvi la sessione «%1$s»?</string>
-    <string name="sessione_approva_cambio_titolo">Approvi il cambio alla sessione «%1$s»?</string>
-    <string name="sessione_non_approvare_titolo">Non approvi la sessione «%1$s»?</string>
-    <string name="sessione_non_approvare_cambio_titolo">Non approvi il cambio alla sessione «%1$s»?</string>
+    <string name="sessione_approva_titolo">Approvi la sessione %1$s?</string>
+    <string name="sessione_approva_cambio_titolo">Approvi il cambio alla sessione %1$s?</string>
+    <string name="sessione_non_approvare_titolo">Non approvi la sessione %1$s?</string>
+    <string name="sessione_non_approvare_cambio_titolo">Non approvi il cambio alla sessione %1$s?</string>
     <string name="sessione_non_approvare_spiega">Non si potrà avviare. Tuo figlio può cambiarla e chiedertela di nuovo.</string>
     <string name="sessione_non_approvare_cambio_spiega">La sessione resta com\'è adesso.</string>
     <!-- Dopo la risposta, una frase che dice che cosa è successo -->

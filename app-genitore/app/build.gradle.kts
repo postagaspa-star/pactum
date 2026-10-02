@@ -33,8 +33,11 @@ android {
         // genitore le accetta (valgono subito) o le rifiuta, e ritira le sue.
         // v0.11.0: le Sessioni (contratto v3.5) — il genitore approva (o no) le
         // sessioni del figlio e ogni loro cambio, e vede quelle fatte.
-        versionCode = 11
-        versionName = "0.11.0"
+        // v0.12.0: accanto al nome di ogni sessione la prima emoji del suo tema
+        // (TemaSessione in core-design, come nell'app del figlio). Le due app
+        // viaggiano sempre alla stessa versione.
+        versionCode = 12
+        versionName = "0.12.0"
     }
 
     signingConfigs {

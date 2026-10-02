@@ -1,4 +1,5 @@
 using Pactum.Nucleo;
+using Pactum.Sistema;
 
 namespace Pactum.Tests;
 
@@ -9,6 +10,13 @@ public class ContatoreTest
 
     private static Osservazione Chrome(string? dominio, bool fallita = false) =>
         new(true, "exe:chrome.exe", "Google Chrome", Browser: true, Dominio: dominio, LetturaFallita: fallita);
+
+    /// <summary>Il browser <paramref name="exe"/> con <paramref name="indirizzo"/> nella barra, letto come lo legge il programma.</summary>
+    private static Osservazione Su(string exe, string indirizzo)
+    {
+        var l = Lettura.DallaBarra(indirizzo);
+        return new(true, exe, null, Browser: true, Dominio: l.Dominio, LetturaFallita: l.Fallita, CategoriaSito: l.CategoriaSito);
+    }
 
     private static Contatore Nuovo(string giorno) => new(Giornata.Nuova(giorno), Giornata.Nuova);
 
@@ -164,6 +172,42 @@ public class ContatoreTest
         Assert.Equal(2, c.Oggi.MinutiDi("sito:youtube.com"));
         Assert.Equal(2, c.Oggi.MinutiDi("sito:m.youtube.com"));
         Assert.Equal(4, c.Oggi.MinutiTotali);
+    }
+
+    /// <summary>(02/10) Firefox non è social (era il difetto sul telefono): conta il sito che c'è aperto.</summary>
+    [Fact]
+    public void Firefox_non_e_social_ma_YouTube_in_Firefox_si()
+    {
+        var c = Nuovo("2026-10-02");
+        long t = Giri(c, Fuso.Ms("2026-10-02T15:00:00"), 60, Su("exe:firefox.exe", "https://www.youtube.com/watch?v=abc"));
+        t = Giri(c, t, 120, Su("exe:firefox.exe", "https://www.sito-sconosciuto.it/pagina"));
+        Giri(c, t, 60, Su("exe:firefox.exe", "https://www.netflix.com/watch/1"));
+        Assert.Equal(1, c.Oggi.MinutiDi("categoria:social"));
+        Assert.Equal(2, c.Oggi.MinutiDi("categoria:altro"));
+        Assert.Equal(1, c.Oggi.MinutiDi("categoria:video"));
+        Assert.Equal(4, c.Oggi.MinutiDi("exe:firefox.exe"));
+    }
+
+    /// <summary>
+    /// (02/10) La categoria la decide il nome intero della pagina: YouTube Music va in musica, mentre il
+    /// sito resta youtube.com (nell'elenco dei siti e nelle regole sito:youtube.com); TgCom24 sta su
+    /// mediaset.it ma non è Mediaset Infinity, e resta in "altro".
+    /// </summary>
+    [Fact]
+    public void YouTube_Music_va_in_musica_e_il_sito_resta_youtube()
+    {
+        var c = Nuovo("2026-10-02");
+        long t = Giri(c, Fuso.Ms("2026-10-02T15:00:00"), 120, Su("exe:chrome.exe", "https://music.youtube.com/watch?v=abc"));
+        t = Giri(c, t, 60, Su("exe:chrome.exe", "https://www.youtube.com/watch?v=def"));
+        t = Giri(c, t, 60, Su("exe:chrome.exe", "https://tgcom24.mediaset.it/cronaca/"));
+        Giri(c, t, 60, Su("exe:chrome.exe", "https://mediasetinfinity.mediaset.it/video/qualcosa"));
+        Assert.Equal(2, c.Oggi.MinutiDi("categoria:musica"));
+        Assert.Equal(1, c.Oggi.MinutiDi("categoria:social"));
+        Assert.Equal(1, c.Oggi.MinutiDi("categoria:altro"));
+        Assert.Equal(1, c.Oggi.MinutiDi("categoria:video"));
+        Assert.Equal(3, c.Oggi.MinutiDi("sito:youtube.com"));
+        Assert.Equal(2, c.Oggi.MinutiDi("sito:mediaset.it"));
+        Assert.Equal(new[] { "mediaset.it", "youtube.com" }, c.Oggi.Siti.Keys.OrderBy(k => k, StringComparer.Ordinal));
     }
 
     [Fact]

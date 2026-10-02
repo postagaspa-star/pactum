@@ -26,10 +26,10 @@ data class AppInstallata(val pacchetto: String, val etichetta: String)
  * `app_o_categoria` (contratto-api.md v2.1) è un nome pacchetto Android oppure
  * una chiave `categoria:*` (dalla 0.9 anche "totale", tutto il telefono); il
  * match del valutatore è esatto sul pacchetto o sulla categoria. La categoria
- * di un pacchetto viene dalle eccezioni fisse (0.9: i messaggi fuori da ogni
- * categoria, YouTube social) e poi da ApplicationInfo.category (mapping
- * interno all'app). QUERY_ALL_PACKAGES è già nel manifest (sideload, nessuna
- * policy Play — architettura.md).
+ * di un pacchetto viene dalle liste scritte qui sotto ([LISTE], riportate in
+ * docs/categorie.md); della categoria che l'app dichiara di sé
+ * (ApplicationInfo.category) si usano solo i giochi. QUERY_ALL_PACKAGES è già
+ * nel manifest (sideload, nessuna policy Play — architettura.md).
  */
 object CatalogoApp {
 
@@ -53,46 +53,208 @@ object CatalogoApp {
     /** Solo la chiave esatta (minuscola, senza spazi): come la accetta il server. */
     fun eTotale(valore: String): Boolean = valore == CHIAVE_TOTALE
 
-    /**
-     * (0.9, decisione di Andrea) Le eccezioni fisse, che valgono PRIMA della
-     * categoria dichiarata dall'app. L'unica tabella: da qui passano la
-     * valutazione delle regole di categoria, la schermata Oggi e le categorie
-     * della fotografia per il genitore.
-     * - Le app di messaggi non sono in nessuna categoria ("Altre app"): non
-     *   contano in social, giochi, video, musica. Discord, Instagram, Snapchat,
-     *   TikTok e simili restano social.
-     * - YouTube è social (dichiara "video").
-     */
-    private val CATEGORIE_FISSE: Map<String, String> = buildMap {
-        listOf(
-            "com.whatsapp", "com.whatsapp.w4b", // WhatsApp, WhatsApp Business
-            "org.telegram.messenger", "org.telegram.messenger.web", "org.thunderdog.challegram", // Telegram
-            "com.facebook.orca", "com.facebook.mlite", // Messenger, Messenger Lite
-            "org.thoughtcrime.securesms", // Signal
-            "com.google.android.apps.messaging", // Messaggi di Google
-            "com.samsung.android.messaging", // Messaggi Samsung
-            "com.viber.voip", // Viber
-            "com.tencent.mm", // WeChat
-            "jp.naver.line.android", // Line
-            "ch.threema.app", // Threema
-            "com.skype.raider", // Skype
-        ).forEach { put(it, CAT_ALTRO) }
-        put("com.google.android.youtube", CAT_SOCIAL)
-    }
+    // --- Le liste delle categorie (revisione completa del 02/10) --------------
+    // L'unico posto dove si decide in che categoria sta un'app: da qui passano
+    // la valutazione delle regole di categoria, la schermata Oggi e le
+    // categorie della fotografia per il genitore. docs/categorie.md le riporta
+    // intere, in chiaro: chi cambia una riga qui la cambia anche lì.
+    //
+    // La regola ([categoriaDi]):
+    //  1. un'app in una lista sta nella categoria della sua lista;
+    //  2. un'app fuori dalle liste sta in Giochi se si dichiara un gioco
+    //     (CATEGORY_GAME: l'unica categoria dichiarata di cui ci si fida);
+    //  3. tutto il resto sta in "Altre app". Social, video e audio dichiarati
+    //     dall'app non contano più: ogni app sceglie da sé cosa dichiarare, e
+    //     Firefox si dichiara "social";
+    //  4. le app di messaggi (decisione di Andrea del 30/09) e i browser
+    //     (02/10) non sono in nessuna categoria, qualunque cosa dichiarino;
+    //     YouTube è social (decisione di Andrea del 30/09).
+
+    private val SOCIAL = listOf(
+        "com.instagram.android", // Instagram
+        "com.instagram.lite", // Instagram Lite
+        "com.zhiliaoapp.musically", // TikTok
+        "com.ss.android.ugc.trill", // TikTok (Asia)
+        "com.zhiliaoapp.musically.go", // TikTok Lite
+        "com.ss.android.ugc.tiktok.lite", // TikTok Lite (Europa)
+        "com.tiktok.lite.go", // TikTok Lite (altri paesi)
+        "com.snapchat.android", // Snapchat
+        "com.facebook.katana", // Facebook
+        "com.facebook.lite", // Facebook Lite
+        "com.twitter.android", // X (Twitter)
+        "com.instagram.barcelona", // Threads
+        "com.reddit.frontpage", // Reddit
+        "com.pinterest", // Pinterest
+        "com.tumblr", // Tumblr
+        "com.bereal.ft", // BeReal
+        "com.discord", // Discord
+        "com.linkedin.android", // LinkedIn
+        "xyz.blueskyweb.app", // Bluesky
+        "com.google.android.youtube", // YouTube (decisione di Andrea: social, anche se si dichiara "video")
+        "com.google.android.apps.youtube.kids", // YouTube Kids
+        "app.revanced.android.youtube", // YouTube ReVanced
+        "com.vanced.android.youtube", // YouTube Vanced
+        "org.schabi.newpipe", // NewPipe (YouTube)
+        "tv.twitch.android.app", // Twitch
+        "com.kick.mobile", // Kick (dirette, come Twitch)
+        "com.dailymotion.dailymotion", // Dailymotion (video fatti dalle persone, come YouTube)
+        "com.rumble.battles", // Rumble
+        "tv.danmaku.bili", // Bilibili
+        "com.bstar.intl", // Bilibili (internazionale)
+    )
+
+    private val VIDEO = listOf(
+        "com.netflix.mediaclient", // Netflix
+        "com.amazon.avod.thirdpartyclient", // Prime Video
+        "com.disney.disneyplus", // Disney+
+        "it.rainet", // RaiPlay
+        "it.fabbricadigitale.android.videomediaset", // Mediaset Infinity
+        "com.dazn", // DAZN
+        "com.nowtv.it", // NOW
+        "it.sky.anywhere", // Sky Go
+        "com.crunchyroll.crunchyroid", // Crunchyroll
+        "com.cbs.app", // Paramount+
+        "com.apple.atve.androidtv.appletv", // Apple TV
+        "tv.pluto.android", // Pluto TV
+        "com.wbd.stream", // HBO Max
+        "com.wbd.hbomax", // HBO Max (nuova)
+        "com.plexapp.android", // Plex
+        "org.videolan.vlc", // VLC
+        "com.vimeo.android.videoapp", // Vimeo (02/10, Andrea: video, non social)
+    )
+
+    private val MUSICA = listOf(
+        "com.spotify.music", // Spotify
+        "com.google.android.apps.youtube.music", // YouTube Music (musica, non social come YouTube)
+        "app.revanced.android.apps.youtube.music", // YouTube Music ReVanced
+        "com.apple.android.music", // Apple Music
+        "com.amazon.mp3", // Amazon Music
+        "deezer.android.app", // Deezer
+        "com.soundcloud.android", // SoundCloud
+        "com.aspiro.tidal", // Tidal
+        "com.shazam.android", // Shazam
+    )
+
+    /** I giochi più comuni: molti non si dichiarano giochi, e senza lista finirebbero in "Altre app". */
+    private val GIOCHI = listOf(
+        "com.supercell.brawlstars", // Brawl Stars
+        "com.supercell.clashroyale", // Clash Royale
+        "com.supercell.clashofclans", // Clash of Clans
+        "com.supercell.hayday", // Hay Day
+        "com.mojang.minecraftpe", // Minecraft
+        "com.roblox.client", // Roblox
+        "com.epicgames.fortnite", // Fortnite
+        "com.kiloo.subwaysurf", // Subway Surfers
+        "com.king.candycrushsaga", // Candy Crush Saga
+        "com.king.candycrushsodasaga", // Candy Crush Soda Saga
+        "com.tencent.ig", // PUBG Mobile
+        "com.activision.callofduty.shooter", // Call of Duty: Mobile
+        "com.miHoYo.GenshinImpact", // Genshin Impact
+        "com.HoYoverse.hkrpgoversea", // Honkai: Star Rail
+        "com.HoYoverse.Nap", // Zenless Zone Zero
+        "com.nianticlabs.pokemongo", // Pokémon GO
+        "com.innersloth.spacemafia", // Among Us
+        "jp.konami.pesam", // eFootball
+        "com.ea.gp.fifamobile", // EA SPORTS FC Mobile
+        "com.kitkagames.fallbuddies", // Stumble Guys
+        "com.dts.freefireth", // Free Fire
+        "com.dts.freefiremax", // Free Fire MAX
+        "com.miniclip.eightballpool", // 8 Ball Pool
+        "com.robtopx.geometryjump", // Geometry Dash
+        "com.riotgames.league.wildrift", // League of Legends: Wild Rift
+        "com.chess", // Chess.com
+        "org.lichess.mobileV2", // Lichess
+        "org.lichess.mobileapp", // Lichess (app vecchia)
+        // I negozi e le app delle console: come Steam ed Epic sul computer.
+        "com.valvesoftware.android.steam.community", // Steam
+        "com.epicgames.portal", // Epic Games Store
+        "com.epicgames.ega", // Epic Games
+        "com.microsoft.xboxone.smartglass", // Xbox
+        "com.gamepass", // Xbox Game Pass
+        "com.scee.psxandroid", // PlayStation App
+        "com.playstation.remoteplay", // PS Remote Play
+    )
+
+    /** (Decisione di Andrea del 30/09) Le app di messaggi: in nessuna categoria. */
+    private val MESSAGGI = listOf(
+        "com.whatsapp", // WhatsApp
+        "com.whatsapp.w4b", // WhatsApp Business
+        "org.telegram.messenger", // Telegram
+        "org.telegram.messenger.web", // Telegram (dal sito)
+        "org.thunderdog.challegram", // Telegram X
+        "com.facebook.orca", // Messenger
+        "com.facebook.mlite", // Messenger Lite
+        "org.thoughtcrime.securesms", // Signal
+        "com.google.android.apps.messaging", // Messaggi di Google (SMS)
+        "com.samsung.android.messaging", // Messaggi Samsung (SMS)
+        "com.android.mms", // Messaggi (SMS, Xiaomi e altri)
+        "com.android.messaging", // Messaggi (SMS, Android di base)
+        "com.viber.voip", // Viber
+        "com.tencent.mm", // WeChat
+        "jp.naver.line.android", // Line
+        "ch.threema.app", // Threema
+        "com.skype.raider", // Skype
+    )
 
     /**
-     * La categoria del contratto per un pacchetto: prima le eccezioni fisse,
-     * poi quella che l'app dichiara ([dichiarata] = ApplicationInfo.category,
-     * null se l'app non si trova).
+     * (02/10) I browser: in nessuna categoria, anche se si dichiarano "social"
+     * come Firefox. Sul telefono il tempo nel browser non si divide per sito.
+     */
+    private val BROWSER = listOf(
+        "com.android.chrome", // Chrome
+        "com.chrome.beta", // Chrome Beta
+        "com.chrome.dev", // Chrome Dev
+        "com.chrome.canary", // Chrome Canary
+        "org.mozilla.firefox", // Firefox
+        "org.mozilla.firefox_beta", // Firefox Beta
+        "org.mozilla.fenix", // Firefox Nightly
+        "org.mozilla.focus", // Firefox Focus
+        "org.mozilla.klar", // Firefox Klar
+        "com.brave.browser", // Brave
+        "com.brave.browser_beta", // Brave Beta
+        "com.brave.browser_nightly", // Brave Nightly
+        "com.microsoft.emmx", // Edge
+        "com.microsoft.emmx.beta", // Edge Beta
+        "com.microsoft.emmx.dev", // Edge Dev
+        "com.microsoft.emmx.canary", // Edge Canary
+        "com.opera.browser", // Opera
+        "com.opera.browser.beta", // Opera Beta
+        "com.opera.mini.native", // Opera Mini
+        "com.opera.gx", // Opera GX
+        "com.sec.android.app.sbrowser", // Samsung Internet
+        "com.sec.android.app.sbrowser.beta", // Samsung Internet Beta
+        "com.duckduckgo.mobile.android", // DuckDuckGo
+        "com.vivaldi.browser", // Vivaldi
+        "org.torproject.torbrowser", // Tor Browser
+        "com.kiwibrowser.browser", // Kiwi
+        "com.mi.globalbrowser", // Mi Browser (Xiaomi)
+        "com.huawei.browser", // Huawei Browser
+        "com.UCMobile.intl", // UC Browser
+        "com.yandex.browser", // Yandex
+        "com.ecosia.android", // Ecosia
+    )
+
+    /** Le liste per categoria: "Altre app" raccoglie i messaggi e i browser, mai in una categoria. */
+    internal val LISTE: Map<String, List<String>> = linkedMapOf(
+        CAT_SOCIAL to SOCIAL,
+        CAT_GIOCHI to GIOCHI,
+        CAT_VIDEO to VIDEO,
+        CAT_MUSICA to MUSICA,
+        CAT_ALTRO to MESSAGGI + BROWSER,
+    )
+
+    private val CATEGORIA_IN_LISTA: Map<String, String> =
+        LISTE.flatMap { (categoria, pacchetti) -> pacchetti.map { it to categoria } }.toMap()
+
+    /**
+     * La categoria del contratto per un pacchetto: quella della sua lista;
+     * fuori dalle liste Giochi se l'app si dichiara un gioco ([dichiarata] =
+     * ApplicationInfo.category, null se l'app non si trova), altrimenti
+     * "Altre app".
      */
     fun categoriaDi(pacchetto: String, dichiarata: Int?): String =
-        CATEGORIE_FISSE[pacchetto] ?: when (dichiarata) {
-            ApplicationInfo.CATEGORY_SOCIAL -> CAT_SOCIAL
-            ApplicationInfo.CATEGORY_GAME -> CAT_GIOCHI
-            ApplicationInfo.CATEGORY_VIDEO -> CAT_VIDEO
-            ApplicationInfo.CATEGORY_AUDIO -> CAT_MUSICA
-            else -> CAT_ALTRO
-        }
+        CATEGORIA_IN_LISTA[pacchetto]
+            ?: if (dichiarata == ApplicationInfo.CATEGORY_GAME) CAT_GIOCHI else CAT_ALTRO
 
     /** La categoria di un pacchetto, "categoria:altro" se ignoto. */
     fun categoriaDiPacchetto(context: Context, pacchetto: String): String =

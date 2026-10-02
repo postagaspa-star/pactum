@@ -7,13 +7,18 @@ namespace Pactum.Nucleo;
 /// <param name="Browser">In primo piano c'è un browser di cui si legge la barra degli indirizzi.</param>
 /// <param name="Dominio">Il dominio registrabile in primo piano, null se non c'è un sito.</param>
 /// <param name="LetturaFallita">Il browser c'è ma la barra non si è potuta leggere.</param>
+/// <param name="CategoriaSito">
+/// (02/10) La categoria del sito decisa dal nome intero della pagina (<c>music.youtube.com</c> → musica,
+/// v. <c>Lettura.DallaBarra</c>); null se il sito non ne ha una o se non la si è data: allora decide il dominio.
+/// </param>
 public sealed record Osservazione(
     bool Attivo,
     string? Programma,
     string? NomeProgramma,
     bool Browser = false,
     string? Dominio = null,
-    bool LetturaFallita = false)
+    bool LetturaFallita = false,
+    string? CategoriaSito = null)
 {
     public static readonly Osservazione Assente = new(false, null, null);
 }
@@ -148,7 +153,13 @@ public sealed class Contatore
             ultimoDominio = null;
         }
 
-        var chiave = Categorie.Chiave(Categorie.DelTempo(categoriaProgramma, dominioContato));
+        // Nel browser il tempo va nella categoria del sito, se ne ha una: quella del nome intero della
+        // pagina quando il lettore l'ha data (YouTube Music è musica, youtube.com è social), se no quella
+        // del dominio. Un sito senza categoria lascia il tempo in quella del programma.
+        var categoria = dominioContato == null
+            ? categoriaProgramma
+            : o.CategoriaSito ?? Categorie.DelTempo(categoriaProgramma, dominioContato);
+        var chiave = Categorie.Chiave(categoria);
         g.MsPerCategoria[chiave] = g.MsPerCategoria.GetValueOrDefault(chiave) + ms;
         g.Revisione++;
     }

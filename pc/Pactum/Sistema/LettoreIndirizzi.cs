@@ -4,17 +4,32 @@ using Pactum.Nucleo;
 
 namespace Pactum.Sistema;
 
-/// <summary>Il sito in primo piano: solo il dominio registrabile, oppure "non sono riuscito a leggere".</summary>
-public readonly record struct Lettura(string? Dominio, bool Fallita)
+/// <summary>
+/// Il sito in primo piano: solo il dominio registrabile e la categoria del sito (null se non ne ha una),
+/// oppure "non sono riuscito a leggere".
+/// </summary>
+public readonly record struct Lettura(string? Dominio, bool Fallita, string? CategoriaSito = null)
 {
     public static readonly Lettura NonLeggibile = new(null, true);
+
+    /// <summary>
+    /// (02/10) Dal testo della barra degli indirizzi al dominio registrabile e alla categoria del sito,
+    /// decisa dal nome intero della pagina: <c>music.youtube.com</c> è musica, anche se il dominio è
+    /// youtube.com (social). Il testo e il nome intero non escono da qui: si leggono e si buttano.
+    /// </summary>
+    public static Lettura DallaBarra(string? testo)
+    {
+        var nome = Domini.NomeDaBarraIndirizzi(testo);
+        var dominio = nome == null ? null : Domini.DominioDellaPagina(nome);
+        return dominio == null ? new Lettura(null, false) : new Lettura(dominio, false, Categorie.DelSito(nome!));
+    }
 }
 
 /// <summary>
 /// Legge con UI Automation la barra degli indirizzi del browser in primo piano e
-/// ne tiene SOLO il dominio registrabile. Il testo della barra non esce mai da
-/// <see cref="LeggiOra"/>: passa da <see cref="Domini.DaBarraIndirizzi"/> e si butta.
-/// Niente log, niente file, niente eventi con l'indirizzo. Si cerca esattamente la
+/// ne tiene SOLO il dominio registrabile e la categoria del sito. Il testo della
+/// barra non esce mai da <see cref="LeggiOra"/>: passa da <see cref="Lettura.DallaBarra"/>
+/// e si butta. Niente log, niente file, niente eventi con l'indirizzo. Si cerca esattamente la
 /// barra (Chromium: classe <c>OmniboxViewViews</c>; Firefox: <c>urlbar-input</c>):
 /// mai un campo di testo qualsiasi, che potrebbe essere dentro una pagina.
 /// </summary>
@@ -29,7 +44,7 @@ public sealed class LettoreIndirizzi
     private const long MsPausaDopoRicercaVana = 5_000;
 
     private readonly Dictionary<IntPtr, AutomationElement> barre = new();
-    private readonly Dictionary<IntPtr, string?> ultimoDominio = new();
+    private readonly Dictionary<IntPtr, Lettura> ultimaLettura = new();
     private readonly Dictionary<IntPtr, long> prossimaRicerca = new();
     private Task<Lettura>? inCorso;
 
@@ -76,12 +91,12 @@ public sealed class LettoreIndirizzi
             // Il cursore è nella barra: la persona sta scrivendo, la pagina è ancora quella di prima.
             if (barra.GetCurrentPropertyValue(AutomationElement.HasKeyboardFocusProperty) is true)
             {
-                return new Lettura(ultimoDominio.GetValueOrDefault(hwnd), false);
+                return ultimaLettura.TryGetValue(hwnd, out var prima) ? prima : new Lettura(null, false);
             }
 
-            var dominio = Domini.DaBarraIndirizzi(barra.GetCurrentPropertyValue(ValuePattern.ValueProperty) as string);
-            ultimoDominio[hwnd] = dominio;
-            return new Lettura(dominio, false);
+            var lettura = Lettura.DallaBarra(barra.GetCurrentPropertyValue(ValuePattern.ValueProperty) as string);
+            ultimaLettura[hwnd] = lettura;
+            return lettura;
         }
         catch (Exception e) when (e is ElementNotAvailableException or COMException or InvalidOperationException or ArgumentException or TimeoutException)
         {
@@ -95,8 +110,8 @@ public sealed class LettoreIndirizzi
     /// vale l'ultimo dominio letto in quella finestra. Altrimenti è una lettura mancata.
     /// </summary>
     private Lettura Ripiego(IntPtr hwnd, bool schermoIntero) =>
-        schermoIntero && ultimoDominio.TryGetValue(hwnd, out var d) && d != null
-            ? new Lettura(d, false)
+        schermoIntero && ultimaLettura.TryGetValue(hwnd, out var l) && l.Dominio != null
+            ? l
             : Lettura.NonLeggibile;
 
     private static AutomationElement? Trova(IntPtr hwnd, string exe)
@@ -124,7 +139,7 @@ public sealed class LettoreIndirizzi
     private void Dimentica()
     {
         barre.Clear();
-        ultimoDominio.Clear();
+        ultimaLettura.Clear();
         prossimaRicerca.Clear();
     }
 }

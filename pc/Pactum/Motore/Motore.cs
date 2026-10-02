@@ -352,9 +352,9 @@ public sealed partial class Motore : IDisposable
         if (finestra == null) return new Osservazione(true, null, null);
         if (!LettoreIndirizzi.ÈBrowser(finestra.Exe)) return new Osservazione(true, finestra.Chiave, finestra.Nome);
         var lettura = lettore.Leggi(finestra.Hwnd, finestra.Exe, finestra.SchermoIntero);
-        var dominio = lettura.Dominio;
-        if (dominio != null && SitiSolo != null && !SitiSolo.Contains(dominio)) dominio = null;
-        return new Osservazione(true, finestra.Chiave, finestra.Nome, true, dominio, lettura.Fallita);
+        if (lettura.Dominio != null && SitiSolo != null && !SitiSolo.Contains(lettura.Dominio))
+            lettura = lettura with { Dominio = null, CategoriaSito = null };
+        return new Osservazione(true, finestra.Chiave, finestra.Nome, true, lettura.Dominio, lettura.Fallita, lettura.CategoriaSito);
     }
 
     // ---------- I giorni su disco e le fotografie ----------

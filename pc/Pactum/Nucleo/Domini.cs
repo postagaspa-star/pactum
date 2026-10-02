@@ -237,7 +237,17 @@ public static class Domini
     /// sito (pagina nuova, pagine interne del browser, file, ricerche scritte,
     /// indirizzi IP o di rete locale).
     /// </summary>
-    public static string? DaBarraIndirizzi(string? testo)
+    public static string? DaBarraIndirizzi(string? testo) =>
+        NomeDaBarraIndirizzi(testo) is string nome ? DominioDellaPagina(nome) : null;
+
+    /// <summary>
+    /// (02/10) Dal testo della barra degli indirizzi al nome intero del sito,
+    /// minuscolo (<c>music.youtube.com</c>). Serve SOLO a decidere la categoria
+    /// del sito (<c>Lettura.DallaBarra</c>), che per qualche servizio sta in un
+    /// sottodominio: come il testo, non si conserva e non si scrive da nessuna
+    /// parte. Null quando non c'è un sito, come <see cref="DaBarraIndirizzi"/>.
+    /// </summary>
+    public static string? NomeDaBarraIndirizzi(string? testo)
     {
         if (string.IsNullOrWhiteSpace(testo)) return null;
         var t = testo.Trim();
@@ -280,6 +290,6 @@ public static class Domini
         {
             return null;
         }
-        return DominioDellaPagina(host);
+        return Normalizza(host);
     }
 }

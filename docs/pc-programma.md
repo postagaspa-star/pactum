@@ -44,13 +44,14 @@ Decisione di Andrea (30/09/2026, versione 0.10): **«come adesso + proposte»**.
   - minuti per dominio = tempo attivo con quel dominio in primo piano;
   - una visita = il dominio in primo piano cambia e diventa quello;
   - se per un browser la lettura fallisce per più di un minuto, il giorno diventa `dns_cifrato: true` ("siti non leggibili").
-- **Categorie** (`social`, `giochi`, `video`, `musica`, `altro`): una tabella interna di programmi e siti comuni, per esempio:
-  - `discord.exe`, `instagram.com` e (dal 30/09) `youtube.com` → social;
+- **Categorie** (`social`, `giochi`, `video`, `musica`, `altro`): liste interne di programmi e siti, le stesse scelte del telefono. **Le liste complete e la regola sono in [categorie.md](categorie.md)** (revisione del 02/10). In breve:
+  - `discord.exe`, `instagram.com`, `youtube.com` (dal 30/09) e `twitch.tv` (dal 02/10) → social;
   - `steam.exe`, `minecraft.windows.exe`, `roblox.com` → giochi;
-  - `netflix.com`, `twitch.tv` → video;
+  - `netflix.com`, `raiplay.it` → video;
   - `spotify.exe` → musica.
-  - (0.9, decisione di Andrea del 30/09) i programmi e i siti di **messaggi** (`whatsapp.exe`, `whatsapp.root.exe`, `telegram.exe`, `signal.exe`, `messenger.exe`, `skype.exe`; `whatsapp.com`, `telegram.org`, `messenger.com`, `signal.org`) non stanno in nessuna categoria della tabella: come ogni programma o sito non elencato, il loro tempo va in `altro`, mai in `social`. Discord, Instagram e gli altri social veri restano `social`.
-  - Il tempo nel browser va nella categoria del sito, se il sito ne ha una (contratto v3).
+  - I **browser** e (0.9, decisione di Andrea del 30/09) i programmi e i siti di **messaggi** (`whatsapp.exe`, `telegram.exe`, `whatsapp.com`…) non stanno in nessuna categoria: il loro tempo va in `altro`, mai in `social`. Discord, Instagram e gli altri social veri restano `social`.
+  - Il tempo nel browser va nella categoria del sito, se il sito ne ha una (contratto v3); altrimenti resta in quella del browser, `altro`.
+  - (02/10) Alcuni servizi stanno in un sottodominio di un sito più grande e si riconoscono dal nome intero della pagina, letto e buttato insieme all'indirizzo: `music.youtube.com` è musica (il sito resta `youtube.com`), `music.apple.com` è musica (il resto di `apple.com` no), `mediasetinfinity.mediaset.it` è video (TgCom24, sullo stesso `mediaset.it`, no). Fuori dal lettore esce solo il nome della categoria.
 - **Giorno**: il giorno locale del computer.
 
 ## Cosa manda (contratto v3)

@@ -397,7 +397,7 @@
       minutiOggi = S.oggi.siti.filter((s) => s.dominio === k.slice(5)).reduce((s, x) => s + x.minuti, 0);
     } else {
       const categoria = k.slice('categoria:'.length);
-      const siti = { 'youtube.com': 'social', 'instagram.com': 'social', 'twitch.tv': 'video', 'reddit.com': 'social' };
+      const siti = { 'youtube.com': 'social', 'instagram.com': 'social', 'twitch.tv': 'social', 'reddit.com': 'social' };
       minutiOggi = S.oggi.programmi.filter((p) => p.categoria === categoria && p.chiave !== 'exe:chrome.exe')
         .reduce((s, p) => s + p.minuti, 0) +
         S.oggi.siti.filter((s) => siti[s.dominio] === categoria).reduce((s, x) => s + x.minuti, 0);

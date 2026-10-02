@@ -130,9 +130,9 @@
   // --- Regole -----------------------------------------------------------------
 
   const CATEGORIE = [
-    { chiave: 'categoria:social', nome: 'Social', esempi: 'Discord, Instagram, YouTube…' },
+    { chiave: 'categoria:social', nome: 'Social', esempi: 'Discord, Instagram, YouTube, Twitch…' },
     { chiave: 'categoria:giochi', nome: 'Giochi', esempi: 'Steam, Minecraft, Roblox…' },
-    { chiave: 'categoria:video', nome: 'Video', esempi: 'Netflix, Twitch…' },
+    { chiave: 'categoria:video', nome: 'Video', esempi: 'Netflix, Prime Video, RaiPlay…' },
     { chiave: 'categoria:musica', nome: 'Musica', esempi: 'Spotify…' },
     { chiave: 'categoria:altro', nome: 'Altro', esempi: 'tutto quello che non sta nelle altre' },
   ];

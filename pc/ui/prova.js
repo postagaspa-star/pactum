@@ -60,7 +60,7 @@
 
   // --- I dati di partenza ---------------------------------------------------------
   //
-  // Un figlio (Andrea) con un telefono e questo computer. Sul computer: un
+  // Un figlio (Luca) con un telefono e questo computer. Sul computer: un
   // limite su Minecraft (stretto due giorni fa, quindi ancora bloccato per
   // allentarlo), uno su youtube.com (cambiato ieri, bloccato anche lui), una
   // fascia 22:00–07:00; per il figlio, la camminata con la nonna come arbitro.
@@ -101,7 +101,7 @@
         -20 * MINUTI_GIORNO, -20 * MINUTI_GIORNO, semaforo(V, V, V, G, V, V, V, V)),
       regola(14, 'limite_tempo', { app_o_categoria: 'sito:youtube.com', minuti_al_giorno: 45 }, computer,
         -10 * MINUTI_GIORNO, -MINUTI_GIORNO, semaforo(V, V, V, G, V, V, V, V)),
-      regola(15, 'vita_reale', { descrizione: 'Camminare un\'ora', arbitro_nome: 'Nonna Lucia', frequenza: 'ogni giorno' }, null,
+      regola(15, 'vita_reale', { descrizione: 'Camminare un\'ora', arbitro_nome: 'Nonna', frequenza: 'ogni giorno' }, null,
         -15 * MINUTI_GIORNO, -15 * MINUTI_GIORNO, semaforo(G, R, G, G, V, G, V, G)),
       // Le regole del telefono: il computer non le mostra fra le sue, ma servono
       // per raccontare le proposte e per il vincolo "almeno una regola".
@@ -124,7 +124,7 @@
       abbinato: opzioni.abbinato && !opzioni.revocato,
       // Revocato: il motore vero ricorda il server anche quando il token non vale più.
       server: opzioni.abbinato || opzioni.revocato ? 'https://pactum.esempio.it' : null,
-      figlio: { id: 1, nome: 'Andrea' },
+      figlio: { id: 1, nome: 'Luca' },
       telefono,
       computer,
       ultimoId: 40,
@@ -199,7 +199,7 @@
           stato: 'confermata_per_conto', ts_server: isoTs(traMinuti(-3 * MINUTI_GIORNO - 100)),
           verdetto: {
             verdetto: 'conferma_per_conto', nota: 'Ho sentito la nonna al telefono',
-            registro: 'confermato dal genitore per conto di Nonna Lucia', ts_server: isoTs(traMinuti(-3 * MINUTI_GIORNO + 30)),
+            registro: 'confermato dal genitore per conto di Nonna', ts_server: isoTs(traMinuti(-3 * MINUTI_GIORNO + 30)),
           },
         },
         {

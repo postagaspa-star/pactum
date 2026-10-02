@@ -52,8 +52,8 @@ public class PonteTest
     }
 
     [Theory]
-    [InlineData("pactum.taildbae63.ts.net", "https://pactum.taildbae63.ts.net")]
-    [InlineData("https://pactum.taildbae63.ts.net/", "https://pactum.taildbae63.ts.net")]
+    [InlineData("pactum.esempio.ts.net", "https://pactum.esempio.ts.net")]
+    [InlineData("https://pactum.esempio.ts.net/", "https://pactum.esempio.ts.net")]
     [InlineData("  https://Pactum.Esempio.it  ", "https://pactum.esempio.it")]
     [InlineData("http://127.0.0.1:8765", "http://127.0.0.1:8765")]
     [InlineData("https://nas.esempio.it/pactum/", "https://nas.esempio.it/pactum")]

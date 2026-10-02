@@ -206,7 +206,7 @@ tenendo le ultime 30. Schedulalo:
    (adatta il percorso se hai messo Pactum altrove).
 4. **Off-site (consigliato):** con **Hyper Backup** copia periodicamente la cartella
    `server/backup/` su un altro NAS o un cloud, cosi' un guasto del NAS non porta via
-   anche i backup. (Come per NormaAI: backup off-site.)
+   anche i backup.
 
 Per **ripristinare**: ferma il container, sostituisci il file nel volume
 `pactum-data` con una copia di `server/backup/pactum-*.db` rinominata `pactum.db`,

@@ -38,3 +38,24 @@ keystore.properties
 server/backup/*.db
 # Il pacchetto del programma per il computer: si ricostruisce con pc/prove/crea-pacchetto.ps1
 server/apk/*.zip
+
+# Copie del registro che il server fa da solo prima di migrare o ripristinare
+# (pactum.db.prima-v3-…, pactum.db.prima-del-ripristino-…) e i suoi file di lavoro
+*.db
+*.db-*
+*.db.*
+*.parziale
+*.sqlite*
+
+# Configurazioni vere: nel repo solo l'esempio
+.env.*
+!.env.example
+
+# Pacchetti, certificati e log, in qualsiasi cartella
+*.apk
+*.aab
+*.zip
+*.p12
+*.pfx
+*.pem
+*.log

@@ -31,7 +31,7 @@
 - Android 16 "Advanced Protection" (opt-in) blocca il sideload → verificare sia spento sui telefoni.
 
 ### Battery killer OEM
-- Peggiori: Huawei, Xiaomi/HyperOS, OnePlus, Samsung. **Motorola = fascia moderata** (telefoni della famiglia: tutti Motorola; figlio: Motorola Edge 50 Fusion) → corazza media: esenzione batteria + WorkManager come rete di sicurezza bastano quasi sempre; niente passi-per-marca estremi in v1.
+- Peggiori: Huawei, Xiaomi/HyperOS, OnePlus, Samsung. **Motorola = fascia moderata** (i telefoni su cui è provato sono Motorola) → corazza media: esenzione batteria + WorkManager come rete di sicurezza bastano quasi sempre; niente passi-per-marca estremi in v1.
 - L'esenzione Doze NON protegge dai layer proprietari → il segnale affidabile resta il **gap di heartbeat sul server**. WorkManager non sopravvive al force-stop (confermato): nessun watchdog locale può rilevare il proprio force-stop.
 
 ### Orologio e tempo

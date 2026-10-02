@@ -150,7 +150,7 @@ class AbbinamentoTest {
 
     // --- Stesso dispositivo, stesso figlio ----------------------------------
 
-    private val server = "https://pactum.taildbae63.ts.net"
+    private val server = "https://pactum.esempio.ts.net"
 
     @Test
     fun `codice nuovo per lo stesso dispositivo, la storia continua`() {
@@ -192,7 +192,7 @@ class AbbinamentoTest {
 
     // --- Gli sforamenti in coda -----------------------------------------------
 
-    private val altroServer = "http://192.168.1.50:8100"
+    private val altroServer = "http://192.168.0.20:8100"
 
     @Test
     fun `stesso server anche con la barra in fondo, un altro indirizzo no`() {

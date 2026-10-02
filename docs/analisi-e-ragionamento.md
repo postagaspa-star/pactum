@@ -66,7 +66,7 @@ Verificati contro fonti attuali tutti i presupposti dell'architettura. Esito: **
 
 - **Il regalo:** Android registra la storia d'uso da solo, a livello di sistema → l'app non deve restare sempre viva; si sveglia, rilegge la storia, sincronizza. Il design "testimone" si sposa con la piattaforma.
 - **Pedaggio 1:** su Android 15/16 gli APK installati dal browser hanno il permesso "accesso ai dati di utilizzo" bloccato di default (*restricted settings*); lo sblocco esiste sempre ma è nascosto → l'onboarding deve guidarlo passo-passo.
-- **Pedaggio 2:** alcune marche (Xiaomi, Samsung, OnePlus, Huawei) uccidono le app in sottofondo oltre le regole di Android. I telefoni della famiglia sono tutti Motorola → fascia moderata, corazza media. Il segnale affidabile resta comunque il **silenzio dei battiti visto dal server**.
+- **Pedaggio 2:** alcune marche (Xiaomi, Samsung, OnePlus, Huawei) uccidono le app in sottofondo oltre le regole di Android. I telefoni su cui è provato sono Motorola → fascia moderata, corazza media. Il segnale affidabile resta comunque il **silenzio dei battiti visto dal server**.
 - **Scelta confermata:** niente Device Admin per impedire la disinstallazione — Android tratta "sideload + device admin" come pattern da stalkerware, e comunque contraddice la filosofia. Disinstallazione = silenzio nel registro = conversazione.
 - **Nota 2027:** la "developer verification" di Google renderà necessario registrarsi (tier gratuito fino a 20 dispositivi) perché gli APK si installino sui telefoni normali anche in sideload. Fino a fine 2026 in Italia nessun impatto.
 

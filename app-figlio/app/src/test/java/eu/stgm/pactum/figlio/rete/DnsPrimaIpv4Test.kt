@@ -46,7 +46,7 @@ class DnsPrimaIpv4Test {
         val c6 = ipv6(2)
         val d4 = ipv4(20)
         val dns = DnsPrimaIpv4(sistema(a6, b4, c6, d4))
-        assertEquals(listOf(b4, d4, a6, c6), dns.lookup("pactum.taildbae63.ts.net"))
+        assertEquals(listOf(b4, d4, a6, c6), dns.lookup("pactum.esempio.ts.net"))
     }
 
     @Test
@@ -60,8 +60,8 @@ class DnsPrimaIpv4Test {
     @Test
     fun `il nome chiesto arriva al sistema cosi' com'e'`() {
         val finto = sistema(ipv4(1))
-        DnsPrimaIpv4(finto).lookup("pactum.taildbae63.ts.net")
-        assertEquals("pactum.taildbae63.ts.net", finto.chiesto)
+        DnsPrimaIpv4(finto).lookup("pactum.esempio.ts.net")
+        assertEquals("pactum.esempio.ts.net", finto.chiesto)
     }
 
     @Test

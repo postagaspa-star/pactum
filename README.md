@@ -1,14 +1,16 @@
 # Pactum
 
-An Android app that inverts parental control: **the teenager writes their own
-rules and the parent verifies them**. It never blocks anything, which makes it a
-witness rather than a jailer, and the whole design follows from that one
-constraint.
+Parental control turned around: **the teenager writes their own rules and the
+parent verifies them**. Apart from one exception the teenager switches on
+themselves, it never blocks anything, which makes it a witness rather than a
+jailer, and the whole design follows from that one constraint.
 
-Three parts: an app on the teenager's phone that measures usage and records what
-happens, an app for the parent that can read and propose but never impose, and a
-server that holds the rules and the log. Distributed as a sideloaded APK, not
-through a store.
+Four parts: an Android app on the teenager's phone that measures usage and
+records what happens, a Windows program that does the same on their computer, an
+Android app for the parent that can read and propose but never impose, and a
+server that holds the rules and the log. The apps are sideloaded APKs and the
+Windows program is a zip, both downloaded from the server's own page rather than
+from a store.
 
 ## Why it exists
 
@@ -27,15 +29,15 @@ punishment the software administers.
 Success here isn't measured by the phone being used less. It's the kid keeping a
 promise they made to themselves, and saying so out loud when they don't.
 
-## The four decisions that matter
+## The decisions that matter
 
 **The asymmetric lock.** Tightening a rule takes effect immediately. Loosening
 one requires four days to have passed since it was last changed. The lock exists
 to protect me from myself at 11pm, and it only ever resists in the direction
-where I'd be arguing with my own past judgement. There's one exception: a change
-that came from a parent's proposal I accepted takes effect at once, because if
-both sides agree the lock isn't protecting anyone. The idea is borrowed from
-Beeminder's akrasia horizon.
+where I'd be arguing with my own past judgement. The exception is agreement:
+either side can propose a change to the other, and a change both sides accepted
+takes effect at once, because if both agree the lock isn't protecting anyone.
+The idea is borrowed from Beeminder's akrasia horizon.
 
 **Referee verification, stickK-style.** Some rules aren't measurable by a phone,
 "walk an hour a day" being the obvious kind. For those the teenager names a human
@@ -49,10 +51,14 @@ behalf of X*, so it stays visible who vouched for what.
 rules, whether they're being kept, overruns, the history of changes, remaining
 bonus minutes, tamper events, silences. What stays outside is everything about
 the phone that isn't the pact: message contents, what's on screen, location,
-real-time position. The line moved once, deliberately. Daily usage totals for
-*all* apps are now inside the window rather than only apps with a rule attached,
-because "two hours, no limit set" is material for a conversation. Aggregated per
-day, still no content.
+real-time position. The line has moved twice, deliberately. Daily usage totals
+for *all* apps are inside the window rather than only apps with a rule attached,
+because "two hours, no limit set" is material for a conversation. And websites
+are inside as domains: on the phone through an optional log fed by a local VPN
+that carries nothing but DNS queries, on the computer by reading the domain from
+the browser's address bar. Either way what's recorded is the domain and how
+much, never the page. On the computer that's a weaker promise than "can't see",
+and it's written down as exactly that.
 
 **The log is the product.** Nothing is blocked, so the entire value rests on
 whether the record can be trusted. Extended airplane mode, force-stop, a changed
@@ -65,50 +71,101 @@ them apart belongs in a conversation rather than in an API. There is deliberatel
 no Device Admin and no uninstall lock: it would contradict the premise, and on a
 sideloaded app it trips Android's anti-stalkerware checks anyway.
 
+**Sessions: the one thing that stops you.** Since 0.11 there is a single
+exception to "never blocks", and it's one the teenager turns on. A session is a
+name and a list of apps, say *Study*: the school app, a dictionary, the
+calculator. The teenager creates it, the parent approves it once and then every
+change to it, and from there the teenager starts it whenever they want, for as
+long as they choose. While it runs, opening an app outside the list brings up a
+full-screen barrier whose only button goes back to the home screen; calls, the
+keyboard, Settings and Pactum stay reachable, and time in the session's own apps
+doesn't count against any limit. A session can always be ended early from
+Pactum. The parent sees the start, the end and any early close, never the
+attempts in between. It got in under one rule: a limit the teenager sets on
+themselves is not a limit the parent imposes.
+
+## Day to day
+
+- Rules of three kinds: a daily time limit (on one app, on a category such as
+  social, video, games or music, or on the whole device), a time-of-day window,
+  and a real-life rule with a referee.
+- A notification five minutes and one minute before a limit runs out.
+- On an overrun, a full-screen notice on the phone or the computer, closed with
+  one tap; the parent's app shows the overrun within a minute or two. Nothing is
+  stopped.
+- Bonus minutes (+5, +15, +30) the teenager grants themselves without asking,
+  within daily and weekly caps; the parent sees what's left.
+- A short animated page at the start and end of each session, its theme picked
+  from the session's name.
+- One family can have several children, each with a phone and a computer. Every
+  device keeps its own rules, bonus and log, and joins with a six-digit code
+  shown in the parent's app.
+
 ## What it deliberately doesn't do
 
-It never blocks an app, a site or a feature. It doesn't let the parent read
-messages or content. It doesn't let the parent edit or impose a rule, only
-propose one. And it doesn't run hidden: the teenager always knows it's there.
-That last one is less a feature than the precondition for any of the rest to mean
-anything.
+Outside a session the teenager started, it never blocks an app, a site or a
+feature. It doesn't let the parent read messages or content. It doesn't let the
+parent edit or impose a rule or start a session: the parent proposes changes and
+approves the teenager's. And it doesn't run hidden: the teenager always knows
+it's there. That last one is less a feature than the precondition for any of the
+rest to mean anything.
 
 ## Status — work in progress
 
-This is not a finished product, and the honest version of where it stands is:
+Where it honestly stands at version 0.12, in October 2026:
 
-- **It runs on my own phone, against a server on my PC.** Moving the server to a
-  NAS is underway and not finished; what's in `docker-compose.yml` is the target,
-  not something that has been running unattended.
-- **The parent app isn't installed on my father's phone yet.** He's the parent
-  it's designed for and he has seen it demonstrated, but nobody has used the
-  parent side day to day. Getting it onto his phone is the milestone that would
-  make this real, and it hasn't happened.
-- **The interface needs redoing.** There's a full design review in `docs/` that I
-  agree with and haven't acted on yet.
-- **The complete pact flow has never been driven live between the two apps.** It's
-  covered by server unit tests and adversarial review at every milestone, and the
-  server suite is green, but tests passing is not the same claim as two real
-  phones working end to end.
+- **It's deployed in one family, mine.** Since September the server has run on a
+  NAS at home, in Docker, reachable from outside through Tailscale Funnel, with a
+  nightly backup of the log. My phone reports to it, and the parent app has been
+  on my father's phone since the start of October, so real use is measured in
+  days, not months.
+- **The Windows program runs on the home computer but is two versions behind**
+  the phone apps.
+- **Sessions and their animated pages have been built and tested, not yet tried
+  live** on a real phone.
+- **The app categories are being redone.** The first version trusted the
+  category each Android app declares about itself, which is how Firefox ended up
+  under social. Curated lists are replacing it; that change isn't released yet.
+- **Tests aren't use.** There are nearly 2,000 automated tests across the four
+  parts and every milestone went through an adversarial review, but the
+  behaviour that matters most only shows up on a real phone over a real day. The
+  visual design is where the work is now.
 
-Treat this as a design that has been built and reviewed rather than a system in
-production.
+Treat this as a system in early real use, not a finished product.
 
 ## Stack
 
-Kotlin and Jetpack Compose on both apps, minSdk 26. Usage is measured through
-`UsageStatsManager` from paired resume/pause events, read back by a periodic
-worker rather than by a permanently running service, so the phone records its own
-history and the app doesn't have to stay alive to measure. FastAPI and SQLite on
-the server, in Docker. The server clock is authoritative for every timestamp; the
-phone's clock is recorded alongside it and never trusted.
+- **Phone apps.** Kotlin and Jetpack Compose, minSdk 26, sharing a
+  `core-design` module. Usage comes from `UsageStatsManager`'s event stream
+  (paired resume/pause events), re-read from the history Android keeps by
+  itself, so an app that gets killed loses timeliness rather than data. A
+  foreground service checks once a minute while the screen is on so warnings
+  land on time, with WorkManager as the backstop. The parent app runs its own
+  foreground service that polls the server every minute instead of relying on
+  push notifications.
+- **Windows program.** C# on .NET 8: a WinForms shell around a WebView2
+  interface in plain HTML and JavaScript. It measures the program in the
+  foreground and, through UI Automation, the domain in the browser's address
+  bar. Notes in [`docs/pc-programma.md`](docs/pc-programma.md).
+- **Server.** FastAPI and SQLite in Docker, on a home NAS, published through
+  Tailscale Funnel; [`docs/deploy-nas-ugreen.md`](docs/deploy-nas-ugreen.md) is
+  the current deployment guide, the Synology/Cloudflare ones are older. The
+  server clock is authoritative for every timestamp; device clocks are recorded
+  alongside and never trusted. Every night it copies the database with
+  `VACUUM INTO`, checks the copy and keeps the last 30.
+- **The contract comes first.** Every protocol change is written into
+  [`docs/contratto-api.md`](docs/contratto-api.md) before any code. The rule
+  dates from the first two parts built in parallel, which invented incompatible
+  dialects of the same API.
 
-Domain terms are in Italian throughout the code (`regola`, `sforamento`, `bonus`,
-`patto`, `finestra`, `arbitro`), technical plumbing in English. The documents in
-`docs/` are in Italian too: [`concept.md`](docs/concept.md) for what it is and
-why, [`analisi-e-ragionamento.md`](docs/analisi-e-ragionamento.md) for how each
+Domain terms are in Italian throughout the code (`regola`, `sforamento`,
+`bonus`, `patto`, `finestra`, `arbitro`, `sessione`), technical plumbing in
+English. The documents in `docs/` are in Italian too:
+[`concept.md`](docs/concept.md) for what it is and why,
+[`analisi-e-ragionamento.md`](docs/analisi-e-ragionamento.md) for how each
 decision was reached, [`architettura.md`](docs/architettura.md) for how it fits
-together.
+together. They're working notes kept as written, so the older ones describe the
+project as it was then.
 
 I make the product and design calls and find the behavioural problems by using
 the thing; Claude writes the implementation and finds the bugs a few layers down.

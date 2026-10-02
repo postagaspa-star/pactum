@@ -2,7 +2,6 @@
 
 Scritto il 20/09/2026, dopo il rilascio della 0.7.0 (redesign Fascia B+C).
 Mandato del padre: app completata, funzionante e **collaudata fisicamente entro sabato 26/09**.
-Versione per lui, leggibile: https://claude.ai/artifact/PiHLKe2zReWuzEprqrC19E
 
 Stato di partenza: server sul NAS acceso con indirizzo fisso (ma ancora sulla 0.6.0),
 APK 0.7.0 firmati e pronti, app non ancora installate sui telefoni, giro del patto

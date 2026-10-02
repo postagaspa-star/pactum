@@ -171,7 +171,7 @@ sh /volume1/docker/Pactum-NAS/server/scripts/backup-registro.sh
   abilitato). Guarda il log del container `pactum-tailscale`: lo dice.
 - **Dentro casa funziona ma fuori no** → di solito è il PASSO 2.
 - **Il container `pactum` non parte e l'indirizzo dà 502** → la porta dell'host è
-  già occupata da un'altra app del NAS (sul nostro la 8000 è di NormaAI: per
+  già occupata da un'altra app del NAS (sul nostro la 8000 era già presa: per
   questo Pactum usa la **8100** per le verifiche in casa, `http://IP-NAS:8100`).
 - **Da fuori dà `ERR_CONNECTION_CLOSED` e nel log di `pactum-tailscale` non
   arriva nulla** → succede dopo aver eliminato e ricreato la macchina con lo

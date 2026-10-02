@@ -195,5 +195,5 @@ Il programma **non si copia da nessuna parte**: gira dalla cartella dove il figl
 1. Scaricare `pactum-computer.zip` dalla pagina `<server>/scarica`.
 2. Scompattarlo in una cartella stabile, per esempio `Documenti\Pactum` (non nei Download, che si svuotano). Dentro c'è la cartella `Pactum\` con `Pactum.exe`.
 3. Aprire `Pactum.exe`. Windows SmartScreen avvisa che il programma non è firmato: **"Ulteriori informazioni" → "Esegui comunque"**.
-4. Se Bitdefender lo blocca, l'eccezione la aggiunge la famiglia (serve un account amministratore). Nella prova del 23/09 il pacchetto a cartella **non** è stato bloccato (a differenza del vecchio single-file da 66 MB, che era finito in quarantena).
+4. Se l'antivirus lo blocca, l'eccezione la aggiunge chi ha un account amministratore. Nella prova del 23/09 il pacchetto a cartella **non** è stato bloccato (a differenza del vecchio single-file da 66 MB, che era finito in quarantena).
 5. Alla prima apertura il programma chiede l'**indirizzo del server** e un **codice di 6 cifre** (lo crea il genitore dall'app, vale 15 minuti). Da lì in poi parte da solo al login, dalla cartella dov'è.

@@ -44,7 +44,7 @@ class RegoleAltroveTest {
 
     // --- Senza rete: l'ultimo numero saputo -----------------------------------
 
-    private val impronta = ConfigurazionePostino("https://pactum.taildbae63.ts.net", "token-di-questo-telefono").impronta
+    private val impronta = ConfigurazionePostino("https://pactum.esempio.ts.net", "token-di-questo-telefono").impronta
 
     @Test
     fun `senza rete vale l'ultimo numero letto con questo collegamento`() {
@@ -54,7 +54,7 @@ class RegoleAltroveTest {
     @Test
     fun `un numero letto con un altro collegamento non vale`() {
         // Telefono ricollegato a un altro dispositivo (o a un altro figlio): era un altro patto.
-        val altra = ConfigurazionePostino("https://pactum.taildbae63.ts.net", "token-di-prima").impronta
+        val altra = ConfigurazionePostino("https://pactum.esempio.ts.net", "token-di-prima").impronta
         assertEquals(0, RegoleAltrove.ultimoNoto(RegoleAltroveSalvate(conteggio = 2, lettoCon = altra), impronta))
         assertEquals(0, RegoleAltrove.ultimoNoto(RegoleAltroveSalvate(conteggio = 2, lettoCon = ""), impronta))
     }

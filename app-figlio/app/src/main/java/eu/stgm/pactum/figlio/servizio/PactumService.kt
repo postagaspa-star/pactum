@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.servizio
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -19,6 +20,7 @@ import androidx.core.content.ContextCompat
 import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.avviso.Chiamata
 import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.Impostazioni
@@ -26,14 +28,21 @@ import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.giornata.ChiusuraSerale
 import eu.stgm.pactum.figlio.giornata.TestoSerale
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
+import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.sessione.AnnunciSessione
 import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
 import eu.stgm.pactum.figlio.sessione.ConsegnaSessioni
+import eu.stgm.pactum.figlio.sessione.PaginaFine
+import eu.stgm.pactum.figlio.sessione.PaginaSessioneActivity
+import eu.stgm.pactum.figlio.sessione.PagineSessione
+import eu.stgm.pactum.figlio.sessione.PrimoPianoAdesso
 import eu.stgm.pactum.figlio.sessione.SessioneAttiva
 import eu.stgm.pactum.figlio.sessione.SorveglianzaSessione
 import eu.stgm.pactum.figlio.sessione.StatoSessione
+import eu.stgm.pactum.figlio.sessione.SvoltaLocale
 import eu.stgm.pactum.figlio.sessione.TestoSessioni
+import eu.stgm.pactum.figlio.sessione.nomeSessioneTraVirgolette
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.sync.ConsegnaEventi
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
@@ -48,6 +57,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Duration
 import java.time.Instant
@@ -75,6 +85,10 @@ import java.time.ZonedDateTime
  * (avviaLoopSessione): un giro al secondo a schermo acceso e sbloccato, e la
  * notifica fissa dice la sessione. Un loop a parte: qualsiasi cosa vada storta
  * lì non tocca battito, sentinella e chiusura della sera, e non copre niente.
+ *
+ * (0.12) Quando una Sessione finisce da sola (o la chiude il server), la sua
+ * pagina animata della fine: sopra l'app in uso solo nei primi 10 minuti,
+ * altrimenti una notifica e la pagina in Pactum (mostraFineSeServe).
  */
 class PactumService : Service() {
 
@@ -87,15 +101,27 @@ class PactumService : Service() {
     // (0.9) Lo spegnimento dello schermo sveglia subito la sentinella: l'uso
     // fino a quell'istante si guarda adesso, non al giro dopo. (0.11)
     // L'accensione rinfresca la notifica fissa: una sessione finita mentre il
-    // telefono dormiva non resta scritta lì.
+    // telefono dormiva non resta scritta lì. (0.12) L'accensione e lo sblocco
+    // svegliano anche la sentinella (il primo preavviso dopo lo sblocco non
+    // aspetta un minuto), e allo sblocco la pagina della fine di una sessione
+    // finita a schermo spento.
     private val spegnimenti = Channel<Unit>(Channel.CONFLATED)
+    private val accensioni = Channel<Unit>(Channel.CONFLATED)
     private val ricevitoreSchermo = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_SCREEN_OFF -> spegnimenti.trySend(Unit)
-                Intent.ACTION_SCREEN_ON -> ambito.launch(Dispatchers.IO) {
-                    protetto { ArchivioSessioni.ricalcola(applicationContext) }
-                    aggiornaNotifica(StatoSessione.attivaAdesso())
+                Intent.ACTION_SCREEN_ON -> {
+                    accensioni.trySend(Unit)
+                    ambito.launch(Dispatchers.IO) {
+                        protetto { ArchivioSessioni.ricalcola(applicationContext) }
+                        aggiornaNotifica(StatoSessione.attivaAdesso())
+                        protetto { mostraFineSeServe() }
+                    }
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    accensioni.trySend(Unit)
+                    ambito.launch(Dispatchers.IO) { protetto { mostraFineSeServe() } }
                 }
             }
         }
@@ -111,6 +137,7 @@ class PactumService : Service() {
             IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_OFF)
                 addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
@@ -213,17 +240,35 @@ class PactumService : Service() {
                         )
                     }
                 }
+                var attesa = CadenzaSentinella.INTERVALLO_MS
                 if (giro.oggi) {
-                    protetto { SentinellaPatto(applicationContext).valuta(now = adesso) }
+                    // (0.12) A schermo acceso anche i preavvisi "il tempo sta per
+                    // finire": il giro dopo arriva appena dopo la prossima soglia
+                    // dell'app davanti, se viene prima del minuto.
+                    protetto {
+                        attesa = CadenzaSentinella.attesa(
+                            SentinellaPatto(applicationContext).valutaConPreavvisi(now = adesso, preavvisi = accesoOra),
+                        )
+                    }
                     ultimoGiorno = oggi
                 }
                 protetto { ConsegnaEventi.riprovaSeServe(applicationContext, adesso) }
                 // (0.11) Una "Termina la sessione" fatta senza rete: si riprova
                 // con attesa crescente finché arriva al server.
                 protetto { ConsegnaSessioni.riprovaSeServe(applicationContext, adesso) }
+                // (0.12) La pagina della fine rimasta ad aspettare (una chiamata
+                // in corso quando la sessione è finita): appena si può.
+                if (accesoOra) protetto { mostraFineSeServe() }
                 accesoPrima = accesoOra
-                // Un minuto, o meno se nel frattempo si spegne lo schermo.
-                spentoAdesso = withTimeoutOrNull(CadenzaSentinella.INTERVALLO_MS) { spegnimenti.receive() } != null
+                // Un minuto (o meno, per un preavviso), o meno se nel frattempo lo
+                // schermo si spegne (si guarda subito l'uso fino a lì) o si
+                // riaccende (il primo preavviso dopo lo sblocco non aspetta).
+                spentoAdesso = withTimeoutOrNull(attesa) {
+                    select {
+                        spegnimenti.onReceive { true }
+                        accensioni.onReceive { false }
+                    }
+                } == true
             }
         }
     }
@@ -248,7 +293,12 @@ class PactumService : Service() {
             protetto { recuperaSessioneDalServer() }
             StatoSessione.attiva.collectLatest { attiva ->
                 aggiornaNotifica(attiva?.takeIf { System.currentTimeMillis() < it.fine })
-                if (attiva == null) return@collectLatest
+                if (attiva == null) {
+                    // (0.12) Finita (da sola, o chiusa dal server), o il servizio
+                    // appena ripartito: la pagina della fine, se è ancora da vedere.
+                    protetto { mostraFineSeServe() }
+                    return@collectLatest
+                }
                 if (!attiva.annunciata) {
                     // Una sessione che il ragazzo non ha visto partire (risposta
                     // persa, reinstallazione): prima glielo si dice. Se la
@@ -289,6 +339,57 @@ class PactumService : Service() {
                 SorveglianzaSessione.ATTESA_ERRORE_MS
             }
             delay(minOf(attesa, attiva.fine - adesso).coerceAtLeast(MINIMO_ATTESA_MS))
+        }
+    }
+
+    /**
+     * (0.12) La pagina della fine di una Sessione finita da poco (entro 2 ore),
+     * una volta sola. Sopra l'app in uso solo nei primi 10 minuti dalla fine,
+     * a schermo acceso e sbloccato, fuori da una chiamata (anche via internet:
+     * la schermata davanti, come per la barriera) e con "Mostra sopra le altre
+     * app"; con Pactum davanti, lì. Altrimenti la notifica, una volta sola, e
+     * la pagina alla prossima apertura di Pactum. "Fatta" la segna la pagina
+     * quando arriva sullo schermo; mentre si sta aprendo nessuno la riapre.
+     * La barriera non la copre (è di Pactum) e non la conta.
+     */
+    private fun mostraFineSeServe() {
+        val adesso = System.currentTimeMillis()
+        val svolta = PagineSessione.daMostrare(ArchivioSessioni.leggi(applicationContext).svolte, adesso) ?: return
+        if (PaginaSessioneActivity.inApertura(svolta.id, adesso)) return
+        val schermoAcceso = getSystemService(PowerManager::class.java)?.isInteractive == true
+        val sbloccato = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == false
+        val mostraSopra = PermessiHelper.puoMostrareSopra(applicationContext)
+        val pactumDavanti = MainActivity.inPrimoPiano
+        // La schermata davanti (una chiamata via internet) si legge solo quando la
+        // pagina potrebbe davvero aprirsi: non a ogni giro di una pagina già avvisata.
+        val potrebbeAprirsi = schermoAcceso && sbloccato && (
+            pactumDavanti || (svolta.paginaFine != PaginaFine.AVVISATA && mostraSopra && adesso - svolta.fine < PagineSessione.FINESTRA_SOPRA_MS)
+            )
+        val inChiamata = Chiamata.inCorso(applicationContext) ||
+            (potrebbeAprirsi && PrimoPianoAdesso.inChiamata(applicationContext, adesso))
+        val come = PagineSessione.come(
+            svolta = svolta,
+            adesso = adesso,
+            schermoAcceso = schermoAcceso,
+            sbloccato = sbloccato,
+            inChiamata = inChiamata,
+            mostraSopra = mostraSopra,
+            pactumDavanti = pactumDavanti,
+        )
+        when (come) {
+            PagineSessione.Come.APRI_IN_PACTUM, PagineSessione.Come.APRI_SOPRA -> {
+                // Android non l'ha aperta: la notifica (una volta), e la pagina all'apertura di Pactum.
+                if (!PaginaSessioneActivity.apriFine(applicationContext, svolta)) avvisaFine(svolta, adesso)
+            }
+            PagineSessione.Come.NOTIFICA -> avvisaFine(svolta, adesso)
+            PagineSessione.Come.ASPETTA, PagineSessione.Come.NIENTE -> Unit
+        }
+    }
+
+    /** La notifica "Sessione finita", solo se la pagina era ancora in attesa: mai due volte. */
+    private fun avvisaFine(svolta: SvoltaLocale, adesso: Long) {
+        if (ArchivioSessioni.avvisaPaginaFine(applicationContext, svolta.id)) {
+            AnnunciSessione.finita(applicationContext, svolta, adesso)
         }
     }
 
@@ -368,7 +469,7 @@ class PactumService : Service() {
             val quando = TestoSessioni.quandoFinisce(it.fine, System.currentTimeMillis(), ZoneId.systemDefault())
             getString(
                 if (quando.domani) R.string.notifica_testimone_sessione_domani else R.string.notifica_testimone_sessione,
-                it.nome,
+                nomeSessioneTraVirgolette(this, it.nome),
                 quando.ora,
             )
         } ?: getString(R.string.notifica_testimone_testo)

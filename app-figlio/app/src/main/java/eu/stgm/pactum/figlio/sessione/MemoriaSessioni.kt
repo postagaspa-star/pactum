@@ -33,6 +33,12 @@ data class SvoltaLocale(
      * telefono (lo stesso degli eventi d'uso), non su quello del server.
      */
     @SerialName("ancorata_qui") val ancorataQui: Boolean = false,
+    /**
+     * (0.12) La pagina animata della fine: dovuta ([PaginaFine.ATTESA]) per
+     * le sessioni che il ragazzo ha visto partire, poi fatta. Null = nessuna
+     * pagina (sessioni di prima della 0.12, o che il ragazzo non conosceva).
+     */
+    @SerialName("pagina_fine") val paginaFine: PaginaFine? = null,
 ) {
     /**
      * Quando è finita (o finirà) davvero: la prima tra la fine prevista, quella
@@ -55,6 +61,24 @@ data class SvoltaLocale(
     private companion object {
         const val MINUTO_MS = 60_000L
     }
+}
+
+/**
+ * (0.12) A che punto è la pagina animata della fine di una sessione svolta:
+ * da mostrare quando finisce, avvisata con una notifica (da lì in poi si
+ * mostra solo in Pactum), fatta. Fatta vuol dire vista davvero: la segna la
+ * pagina stessa quando arriva sullo schermo, mai chi prova ad aprirla.
+ */
+@Serializable
+enum class PaginaFine {
+    @SerialName("attesa")
+    ATTESA,
+
+    @SerialName("avvisata")
+    AVVISATA,
+
+    @SerialName("fatta")
+    FATTA,
 }
 
 /** Una chiusura anticipata da consegnare al server (`POST …/in_corso/termina`). */
@@ -154,20 +178,48 @@ data class MemoriaSessioni(
      * `svolta_id`, quindi non possono chiudere la sessione nuova, e la loro
      * sessione deve risultare terminata (non scaduta) anche se arrivano tardi.
      */
-    fun conAvvio(svolta: SvoltaLocale, adesso: Long): MemoriaSessioni =
-        copy(
-            svolte = (svolte.filterNot { it.id == svolta.id } + svolta.copy(annunciata = true)).sortedBy { it.inizio },
+    fun conAvvio(svolta: SvoltaLocale, adesso: Long): MemoriaSessioni {
+        // (0.12) La pagina della fine è dovuta: il ragazzo l'ha vista partire.
+        val paginaFine = svolte.firstOrNull { it.id == svolta.id }?.paginaFine ?: svolta.paginaFine ?: PaginaFine.ATTESA
+        return copy(
+            svolte = (svolte.filterNot { it.id == svolta.id } + svolta.copy(annunciata = true, paginaFine = paginaFine))
+                .sortedBy { it.inizio },
             avvioIncerto = null,
         ).potata(adesso)
+    }
 
     /** "Inizia" senza risposta: da ricontrollare. */
     fun conAvvioIncerto(incerto: AvvioIncerto): MemoriaSessioni = copy(avvioIncerto = incerto)
 
     fun senzaAvvioIncerto(): MemoriaSessioni = copy(avvioIncerto = null)
 
-    /** Il ragazzo ora sa che la sessione [svoltaId] è partita: vale la barriera. */
+    /** Il ragazzo ora sa che la sessione [svoltaId] è partita: vale la barriera, e (0.12) alla fine la sua pagina. */
     fun conAnnuncio(svoltaId: Long): MemoriaSessioni =
-        copy(svolte = svolte.map { if (it.id == svoltaId) it.copy(annunciata = true) else it })
+        copy(
+            svolte = svolte.map {
+                if (it.id == svoltaId) it.copy(annunciata = true, paginaFine = it.paginaFine ?: PaginaFine.ATTESA) else it
+            },
+        )
+
+    /**
+     * (0.12) La pagina della fine di [svoltaId] è arrivata sullo schermo: fatta,
+     * da qualunque stato (anche una sessione senza pagina dovuta, chiusa con
+     * "Termina la sessione"). Non torna più.
+     */
+    fun conPaginaVista(svoltaId: Long): MemoriaSessioni =
+        copy(svolte = svolte.map { if (it.id == svoltaId) it.copy(paginaFine = PaginaFine.FATTA) else it })
+
+    /**
+     * (0.12) La notifica "Sessione «Studio» finita" al posto della pagina:
+     * solo se la pagina era ancora in attesa. True = è cambiato adesso, e solo
+     * allora si manda la notifica (mai due volte, anche con due strade insieme).
+     */
+    fun conPaginaAvvisata(svoltaId: Long): Pair<MemoriaSessioni, Boolean> {
+        if (svolte.none { it.id == svoltaId && it.paginaFine == PaginaFine.ATTESA }) return this to false
+        return copy(
+            svolte = svolte.map { if (it.id == svoltaId) it.copy(paginaFine = PaginaFine.AVVISATA) else it },
+        ) to true
+    }
 
     /**
      * "Termina la sessione": finita adesso, qui, subito. Restituisce la
@@ -178,7 +230,14 @@ data class MemoriaSessioni(
         val chiusura = TerminazioneInAttesa(attiva.svoltaId, adesso)
         val nuova = copy(
             svolte = svolte.map {
-                if (it.id == attiva.svoltaId) it.copy(fineLocale = adesso.coerceAtLeast(it.inizio)) else it
+                // (0.12) La pagina della fine resta da mostrare: la apre Pactum
+                // subito, e se non ci riesce la apre chi arriva dopo (il servizio,
+                // la prossima apertura di Pactum). Fatta solo quando si vede.
+                if (it.id == attiva.svoltaId) {
+                    it.copy(fineLocale = adesso.coerceAtLeast(it.inizio), paginaFine = it.paginaFine ?: PaginaFine.ATTESA)
+                } else {
+                    it
+                }
             },
             terminazioni = terminazioni.filterNot { it.svoltaId == attiva.svoltaId } + chiusura,
         )
@@ -222,6 +281,7 @@ data class MemoriaSessioni(
                     fineLocale = locale.fineLocale,
                     chiusura = s.chiusura ?: locale.chiusura,
                     annunciata = locale.annunciata,
+                    paginaFine = locale.paginaFine,
                 )
             }
         }
@@ -301,6 +361,9 @@ data class MemoriaSessioni(
 
         /** Avvio incerto: una sessione iniziata fino a 10 minuti prima di "Inizia" (orologi diversi) è quella. */
         const val MARGINE_AVVIO_MS = 10L * 60 * 1000
+
+        /** (0.12) Le pagine della fine ancora da mostrare. */
+        val DA_MOSTRARE: Set<PaginaFine> = setOf(PaginaFine.ATTESA, PaginaFine.AVVISATA)
     }
 }
 

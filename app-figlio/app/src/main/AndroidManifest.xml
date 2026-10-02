@@ -69,6 +69,18 @@
             android:launchMode="singleTask"
             android:taskAffinity="eu.stgm.pactum.figlio.barriera" />
 
+        <!-- (0.12) La pagina animata di inizio e fine di una Sessione: tre secondi
+             e mezzo, poi si chiude da sola (o con un tocco). Come la barriera:
+             task sua e fuori dalle recenti, così chiusa si torna dove si era;
+             alla fine di una sessione può aprirsi sopra l'app in uso grazie a
+             "Mostra sopra le altre app". Mai sopra il blocco schermo. -->
+        <activity
+            android:name=".sessione.PaginaSessioneActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="eu.stgm.pactum.figlio.pagina" />
+
         <service
             android:name=".servizio.PactumService"
             android:exported="false"

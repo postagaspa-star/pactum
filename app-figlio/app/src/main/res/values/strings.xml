@@ -504,6 +504,16 @@
     <!-- (0.9) Il canale del banner in alto, quando l'avviso a tutto schermo non parte. -->
     <string name="canale_sforamenti_nome">Quando vai oltre una regola</string>
     <string name="canale_sforamenti_descrizione">Un avviso in alto sullo schermo quando vai oltre una regola e l\'avviso a tutto schermo non può aprirsi.</string>
+    <!-- (0.12) I preavvisi: a 5 minuti e a 1 minuto dal limite di oggi (bonus compresi).
+         %1$s = l'app, la categoria o "Tutto il telefono"; %2$d = i minuti che mancano. -->
+    <string name="canale_preavvisi_nome">Il tempo sta per finire</string>
+    <string name="canale_preavvisi_descrizione">Un avviso in alto sullo schermo quando mancano 5 minuti e quando manca 1 minuto al limite che ti sei dato.</string>
+    <string name="preavviso_titolo">Il tempo sta per finire</string>
+    <plurals name="preavviso_testo">
+        <item quantity="one">%1$s: manca %2$d minuto al limite che ti sei dato.</item>
+        <item quantity="other">%1$s: mancano %2$d minuti al limite che ti sei dato.</item>
+    </plurals>
+    <string name="preavviso_bersaglio_ignoto">Una regola</string>
     <string name="notifica_sforamento_fascia_titolo">Hai usato il telefono in una fascia che ti sei imposto</string>
     <string name="notifica_sforamento_fascia_testo">Hai usato il telefono %1$d min in una fascia che ti sei imposto (%2$s–%3$s). Nessun blocco: è il tuo patto.</string>
     <!-- (0.9) L'avviso a tutto schermo: i titoli sono quelli delle notifiche qui
@@ -630,7 +640,7 @@
     <string name="sessione_in_attesa_spiegazione">La potrai iniziare quando il genitore la approva.</string>
     <string name="sessione_rifiutata_spiegazione">Puoi cambiarla e mandarla di nuovo al genitore.</string>
     <string name="sessione_cambio_chiesto">Hai chiesto: %1$s</string>
-    <string name="sessione_cambio_chiesto_nome">Hai chiesto: «%1$s», con %2$s</string>
+    <string name="sessione_cambio_chiesto_nome">Hai chiesto: %1$s, con %2$s</string>
     <string name="sessione_cambio_spiegazione">Finché il genitore non decide, puoi usare la sessione approvata.</string>
     <string name="sessione_cambio_rifiutato">Il cambio che avevi chiesto non è stato approvato: resta questa.</string>
     <string name="sessione_inizia">Inizia</string>
@@ -658,7 +668,7 @@
     <string name="sessione_scelta_fatto">Fatto</string>
     <!-- Eliminare: il registro delle sessioni fatte resta. -->
     <string name="sessione_elimina_titolo">Eliminare la sessione?</string>
-    <string name="sessione_elimina_testo">«%1$s» esce dall\'elenco. Le sessioni che hai già fatto restano nel registro, e il genitore riceve un avviso.</string>
+    <string name="sessione_elimina_testo">%1$s esce dall\'elenco. Le sessioni che hai già fatto restano nel registro, e il genitore riceve un avviso.</string>
     <string name="sessione_eliminata">Sessione eliminata.</string>
     <!-- Esiti dell'invio -->
     <string name="sessione_mandata">Sessione mandata al genitore: la potrai iniziare quando la approva.</string>
@@ -670,7 +680,7 @@
     <string name="sessione_esito_senza_rete">Non riesco a raggiungere il server: controlla la connessione e riprova.</string>
     <string name="sessione_esito_errore">Non sono riuscito a mandare la sessione: riprova.</string>
     <!-- Iniziare: serve il server. Da 1 minuto a 24 ore, senza tetto del genitore. -->
-    <string name="sessione_avvio_titolo">Inizia «%1$s»</string>
+    <string name="sessione_avvio_titolo">Inizia %1$s</string>
     <string name="sessione_avvio_quanto">Per quanto tempo?</string>
     <string name="sessione_durata_altro">Altro</string>
     <string name="sessione_durata_ore">Ore</string>
@@ -691,8 +701,8 @@
     <string name="sessione_esito_avvio_senza_rete">Non riesco a raggiungere il server: la sessione non è iniziata. Controlla la connessione e riprova.</string>
     <string name="sessione_esito_avvio_errore">Non sono riuscito a iniziare la sessione: riprova.</string>
     <!-- La sessione in corso, in cima a Oggi e a Sessioni. -->
-    <string name="sessione_in_corso_titolo">In sessione «%1$s» fino alle %2$s</string>
-    <string name="sessione_in_corso_titolo_domani">In sessione «%1$s» fino a domani alle %2$s</string>
+    <string name="sessione_in_corso_titolo">In sessione %1$s fino alle %2$s</string>
+    <string name="sessione_in_corso_titolo_domani">In sessione %1$s fino a domani alle %2$s</string>
     <string name="sessione_mancano">Ancora %1$s</string>
     <string name="sessione_manca_poco">Manca meno di un minuto</string>
     <string name="sessione_in_corso_app">Puoi usare: %1$s.</string>
@@ -702,23 +712,23 @@
     <string name="sessione_termina_conferma">Termina</string>
     <string name="sessione_terminata">Sessione terminata.</string>
     <!-- La barriera: un solo pulsante, Esci, che porta alla schermata Home. -->
-    <string name="barriera_titolo">Sei in sessione «%1$s»</string>
+    <string name="barriera_titolo">Sei in sessione %1$s</string>
     <string name="barriera_testo">In questa sessione puoi usare solo le app che hai scelto.</string>
     <!-- (0.11) La seconda riga della barriera: cosa fare se quell'app serve davvero. Il server
          fissa la lista all'avvio: un'app aggiunta vale dalla sessione dopo. -->
-    <string name="barriera_aggiungila">Se ti serve, aggiungila alla sessione «%1$s»: varrà dalla prossima volta.</string>
+    <string name="barriera_aggiungila">Se ti serve, aggiungila alla sessione %1$s: varrà dalla prossima volta.</string>
     <string name="barriera_fine">La sessione finisce alle %1$s.</string>
     <string name="barriera_fine_domani">La sessione finisce domani alle %1$s.</string>
     <string name="barriera_esci">Esci</string>
     <!-- La notifica fissa del testimone, mentre una sessione è in corso. -->
-    <string name="notifica_testimone_sessione">In sessione «%1$s» fino alle %2$s</string>
-    <string name="notifica_testimone_sessione_domani">In sessione «%1$s» fino a domani alle %2$s</string>
+    <string name="notifica_testimone_sessione">In sessione %1$s fino alle %2$s</string>
+    <string name="notifica_testimone_sessione_domani">In sessione %1$s fino a domani alle %2$s</string>
     <!-- La decisione del genitore (notifica sessione_risposta). -->
     <string name="tipo_sessione">Sessioni</string>
-    <string name="notifica_sessione_approvata">Il genitore ha approvato la sessione «%1$s»</string>
-    <string name="notifica_sessione_rifiutata">Il genitore non ha approvato la sessione «%1$s»</string>
-    <string name="notifica_sessione_cambio_approvato">Il genitore ha approvato il cambio alla sessione «%1$s»</string>
-    <string name="notifica_sessione_cambio_rifiutato">Il genitore non ha approvato il cambio alla sessione «%1$s»</string>
+    <string name="notifica_sessione_approvata">Il genitore ha approvato la sessione %1$s</string>
+    <string name="notifica_sessione_rifiutata">Il genitore non ha approvato la sessione %1$s</string>
+    <string name="notifica_sessione_cambio_approvato">Il genitore ha approvato il cambio alla sessione %1$s</string>
+    <string name="notifica_sessione_cambio_rifiutato">Il genitore non ha approvato il cambio alla sessione %1$s</string>
     <string name="notifica_sessione_approvata_testo">Puoi iniziarla quando vuoi, dalla scheda Sessioni.</string>
     <string name="notifica_sessione_rifiutata_testo">Puoi cambiarla e mandarla di nuovo.</string>
     <string name="notifica_sessione_cambio_approvato_testo">Vale dalla prossima volta che la inizi.</string>
@@ -726,22 +736,22 @@
     <!-- (0.11, revisione) Quello che si dice dopo un "Inizia" senza risposta, e
          prima di coprire qualcosa per una sessione che il ragazzo non ha visto partire. -->
     <string name="sessione_esito_incerto">Non so se la sessione è partita: controllo appena c\'è rete.</string>
-    <string name="sessione_incerta_riga">Non so ancora se la sessione «%1$s» è partita: controllo appena c\'è rete.</string>
-    <string name="sessione_esito_gia_in_corso_fino">La sessione «%1$s» è già in corso, fino alle %2$s.</string>
-    <string name="sessione_esito_gia_in_corso_fino_domani">La sessione «%1$s» è già in corso, fino a domani alle %2$s.</string>
-    <string name="notifica_sessione_partita">La sessione «%1$s» è partita (fino alle %2$s)</string>
-    <string name="notifica_sessione_partita_domani">La sessione «%1$s» è partita (fino a domani alle %2$s)</string>
+    <string name="sessione_incerta_riga">Non so ancora se la sessione %1$s è partita: controllo appena c\'è rete.</string>
+    <string name="sessione_esito_gia_in_corso_fino">La sessione %1$s è già in corso, fino alle %2$s.</string>
+    <string name="sessione_esito_gia_in_corso_fino_domani">La sessione %1$s è già in corso, fino a domani alle %2$s.</string>
+    <string name="notifica_sessione_partita">La sessione %1$s è partita (fino alle %2$s)</string>
+    <string name="notifica_sessione_partita_domani">La sessione %1$s è partita (fino a domani alle %2$s)</string>
     <string name="notifica_sessione_partita_testo">Le app fuori dalla sessione si coprono. Per terminarla prima, apri Pactum.</string>
-    <string name="notifica_sessione_non_partita">La sessione «%1$s» non è partita</string>
+    <string name="notifica_sessione_non_partita">La sessione %1$s non è partita</string>
     <string name="notifica_sessione_non_partita_testo">Se vuoi, iniziala di nuovo dalla scheda Sessioni.</string>
-    <string name="notifica_sessione_gia_finita">La sessione «%1$s» era partita ed è già finita</string>
+    <string name="notifica_sessione_gia_finita">La sessione %1$s era partita ed è già finita</string>
     <string name="notifica_sessione_gia_finita_testo">Il tempo passato nelle sue app non conta.</string>
     <!-- Al massimo 20 sessioni per telefono (409 troppe_sessioni). -->
     <string name="sessione_esito_troppe">Hai già 20 sessioni: per crearne una nuova, eliminane una.</string>
     <!-- "Ritira il cambio": torna la sessione approvata (PATCH col contenuto approvato). -->
     <string name="sessione_ritira_cambio">Ritira il cambio</string>
     <string name="sessione_ritira_cambio_titolo">Ritirare il cambio?</string>
-    <string name="sessione_ritira_cambio_testo">«%1$s» resta com\'è approvata e il genitore non dovrà più decidere.</string>
+    <string name="sessione_ritira_cambio_testo">%1$s resta com\'è approvata e il genitore non dovrà più decidere.</string>
     <string name="sessione_cambio_ritirato">Cambio ritirato: resta la sessione approvata.</string>
     <!-- Il nome di una sessione non può avere caratteri che non si vedono (a capo, tab…). -->
     <string name="sessione_nome_invisibili">Il nome ha caratteri che non si vedono: toglili</string>
@@ -751,4 +761,30 @@
     <string name="barriera_terminare">Per terminarla prima, apri Pactum.</string>
     <!-- In Oggi, sotto "Dove è finito il tempo": il tempo in sessione c'è, ma non conta. -->
     <string name="oggi_in_sessione_non_contati">In più %1$s in sessione, che non contano.</string>
+    <!-- (0.12) Le pagine animate di inizio e fine di una sessione (si chiudono da sole
+         dopo pochi secondi, o con un tocco). Il tema lo sceglie il nome. -->
+    <string name="pagina_inizio_titolo">Sessione %1$s iniziata</string>
+    <string name="pagina_inizio_testo">Fino alle %1$s · usa le app della sessione</string>
+    <string name="pagina_inizio_testo_domani">Fino a domani alle %1$s · usa le app della sessione</string>
+    <string name="pagina_fine_titolo">Sessione %1$s finita</string>
+    <!-- "45 minuti di Studio": %1$s = quanto è durata (durata_*), %2$s = il nome della sessione. -->
+    <string name="pagina_fine_durata">%1$s di %2$s</string>
+    <string name="pagina_fine_meno_di_un_minuto">Meno di un minuto di %1$s</string>
+    <!-- Mai un giudizio: solo che è finita prima dell'ora prevista. -->
+    <string name="pagina_fine_chiusa_prima">Chiusa prima della fine</string>
+    <string name="pagina_chiudi">Chiudi</string>
+    <!-- (0.12) Il nome di una sessione con l'emoji del suo tema, come nell'app del genitore:
+         "📚 Studio" in testa a una riga, "📚 «Studio»" dentro una frase (il nome esatto fra «»,
+         l'emoji fuori). Le frasi delle sessioni ricevono il nome già così (%1$s). -->
+    <string name="sessione_con_emoji">%1$s %2$s</string>
+    <string name="sessione_nome_tra_virgolette">«%1$s»</string>
+    <!-- (0.12) Il nome del tema, letto da TalkBack al posto dell'emoji grande della pagina. -->
+    <string name="tema_studio">Studio</string>
+    <string name="tema_lettura">Lettura</string>
+    <string name="tema_sport">Sport</string>
+    <string name="tema_musica">Musica</string>
+    <string name="tema_arte">Arte</string>
+    <string name="tema_relax">Relax</string>
+    <string name="tema_programmazione">Programmazione</string>
+    <string name="tema_stelline">Stelline</string>
 </resources>

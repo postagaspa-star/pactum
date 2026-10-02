@@ -8,6 +8,7 @@ import eu.stgm.pactum.figlio.sessione.EsitoAvvio
 import eu.stgm.pactum.figlio.sessione.EsitoSessione
 import eu.stgm.pactum.figlio.sessione.ParoleRispostaSessione
 import eu.stgm.pactum.figlio.sessione.TestoSessioni
+import eu.stgm.pactum.figlio.sessione.nomeSessioneTraVirgolette
 import kotlinx.serialization.json.JsonObject
 import java.time.ZoneId
 
@@ -60,7 +61,9 @@ fun avvisoRispostaSessione(context: Context, payload: JsonObject, messaggio: Str
     val risposta = TestoSessioni.risposta(payload) ?: return null
     val sessione = risposta.sessioneId?.let { id -> patto?.sessioni?.firstOrNull { it.id == id } }
     val nome = risposta.nome ?: sessione?.nome?.takeIf { it.isNotBlank() }
-    return TestoSessioni.avvisoRisposta(risposta, nome, sessione?.motivazione, messaggio, paroleRispostaSessione(context))
+    // (0.12) Il nome con l'emoji del suo tema, fra «»: "📚 «Studio»".
+    val scritto = nome?.let { nomeSessioneTraVirgolette(context, it) }
+    return TestoSessioni.avvisoRisposta(risposta, scritto, sessione?.motivazione, messaggio, paroleRispostaSessione(context))
 }
 
 /** Cosa dire dopo aver mandato, cambiato o eliminato una sessione. [cambio] = era già approvata. */
@@ -94,7 +97,7 @@ fun testoEsitoAvvio(context: Context, esito: EsitoAvvio, adesso: Long = System.c
             adesso,
             R.string.sessione_esito_gia_in_corso_fino,
             R.string.sessione_esito_gia_in_corso_fino_domani,
-            it.nome,
+            nomeSessioneTraVirgolette(context, it.nome),
         )
     } ?: context.getString(R.string.sessione_esito_gia_in_corso)
     EsitoAvvio.Incerto -> context.getString(R.string.sessione_esito_incerto)

@@ -77,6 +77,9 @@ class Impostazioni(private val context: Context) {
         val SFORAMENTI_SEGNALATI = stringSetPreferencesKey("sforamenti_segnalati")
         val NOTIFICHE_AVVISATE = stringSetPreferencesKey("notifiche_avvisate")
 
+        // (0.12) I preavvisi "il tempo sta per finire" già dati (Preavvisi.chiave).
+        val PREAVVISI_FATTI = stringSetPreferencesKey("preavvisi_fatti")
+
         // Tappa 6 — corazza.
         // Ultimo stato NOTO dei permessi (null = mai osservato): serve a
         // rilevare la REVOCA come transizione (concesso→revocato), non come
@@ -154,6 +157,7 @@ class Impostazioni(private val context: Context) {
                 // nuovo (regole e id riciclati).
                 p.remove(Chiavi.SFORAMENTI_SEGNALATI)
                 p.remove(Chiavi.NOTIFICHE_AVVISATE)
+                p.remove(Chiavi.PREAVVISI_FATTI)
                 // Nuovo patto = nuova base dei permessi: senza azzerare, una revoca
                 // già in corso verrebbe rimandata come manomissione al server nuovo.
                 p.remove(Chiavi.ACCESSO_USO_NOTO)
@@ -315,6 +319,25 @@ class Impostazioni(private val context: Context) {
                 runCatching { LocalDate.parse(g) }.getOrNull()?.isBefore(soglia) != true
             }
             p[Chiavi.SFORAMENTI_SEGNALATI] = (recenti + Segnalazioni.chiave(regolaId, giorno)).toSet()
+        }
+    }
+
+    // --- (0.12) Dedup dei preavvisi "il tempo sta per finire" ----------------
+    // Chiave = "regolaId:giorno:limite:soglia" (Preavvisi.chiave): una volta per
+    // regola, giorno, limite e soglia. Si potano come gli sforamenti.
+
+    suspend fun leggiPreavvisiFatti(): Set<String> =
+        context.dataStore.data.first()[Chiavi.PREAVVISI_FATTI].orEmpty()
+
+    suspend fun registraPreavvisi(chiavi: Collection<String>) {
+        if (chiavi.isEmpty()) return
+        context.dataStore.edit { p ->
+            val soglia = LocalDate.now().minusDays(GIORNI_MEMORIA_SFORAMENTI)
+            val recenti = p[Chiavi.PREAVVISI_FATTI].orEmpty().filter { chiave ->
+                val g = chiave.split(':').getOrNull(1).orEmpty()
+                runCatching { LocalDate.parse(g) }.getOrNull()?.isBefore(soglia) != true
+            }
+            p[Chiavi.PREAVVISI_FATTI] = (recenti + chiavi).toSet()
         }
     }
 

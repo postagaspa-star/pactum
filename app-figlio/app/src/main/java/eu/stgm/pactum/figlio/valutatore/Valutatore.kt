@@ -61,18 +61,23 @@ sealed interface MomentoFascia {
  */
 class IndiceUso(
     uso: List<Pair<String, Long>>,
-    categoriaDi: (String) -> String,
+    private val categoriaDi: (String) -> String,
     private val totaleMinimo: Long = 0L,
 ) {
     private val perPacchetto = HashMap<String, Long>()
     private val perCategoria = HashMap<String, Long>()
+    private val millisPerPacchetto = HashMap<String, Long>()
+    private val millisPerCategoria = HashMap<String, Long>()
     private var totaleMillis = 0L
 
     init {
         for ((pacchetto, millis) in uso) {
             val minuti = millis / 60_000
+            val categoria = categoriaDi(pacchetto)
             perPacchetto.merge(pacchetto.lowercase(), minuti, Long::plus)
-            perCategoria.merge(categoriaDi(pacchetto), minuti, Long::plus)
+            perCategoria.merge(categoria, minuti, Long::plus)
+            millisPerPacchetto.merge(pacchetto.lowercase(), millis, Long::plus)
+            millisPerCategoria.merge(categoria, millis, Long::plus)
             totaleMillis += millis
         }
     }
@@ -86,6 +91,24 @@ class IndiceUso(
         if (chiave == CatalogoApp.CHIAVE_TOTALE) return totaleMinuti
         val k = chiave.trim().lowercase()
         return if (k.startsWith(PREFISSO_CATEGORIA)) perCategoria[k] ?: 0L else perPacchetto[k] ?: 0L
+    }
+
+    /**
+     * (0.12) I millisecondi veri di oggi su una chiave, stesse app di
+     * [minuti]: i preavvisi "il tempo sta per finire" vanno al secondo, non al
+     * minuto. "totale" mai meno di [totaleMinimo].
+     */
+    fun millis(chiave: String): Long {
+        if (chiave == CatalogoApp.CHIAVE_TOTALE) return maxOf(totaleMillis, totaleMinimo * 60_000)
+        val k = chiave.trim().lowercase()
+        return if (k.startsWith(PREFISSO_CATEGORIA)) millisPerCategoria[k] ?: 0L else millisPerPacchetto[k] ?: 0L
+    }
+
+    /** (0.12) Il tempo di [pacchetto] (un'app che conta) cade sulla chiave [chiave]? Stesso match di [minuti]. */
+    fun cade(chiave: String, pacchetto: String): Boolean {
+        if (chiave == CatalogoApp.CHIAVE_TOTALE) return true
+        val k = chiave.trim().lowercase()
+        return if (k.startsWith(PREFISSO_CATEGORIA)) categoriaDi(pacchetto) == k else pacchetto.lowercase() == k
     }
 
     companion object {

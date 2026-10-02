@@ -31,6 +31,13 @@ object AvvisiLocali {
      */
     const val CANALE_SFORAMENTI = "sforamenti"
 
+    /**
+     * (0.12) "Il tempo sta per finire": a 5 minuti e a 1 minuto dal limite.
+     * Importanza alta (il banner in alto sopra l'app in uso), canale suo:
+     * chi lo spegne non spegne gli sforamenti, e viceversa.
+     */
+    const val CANALE_PREAVVISI = "tempo_in_scadenza"
+
     /** Basi separate per non collidere tra loro né con la notifica fissa (FGS id 1). */
     private const val BASE_ID_SFORAMENTO = 1_000_000L
     private const val BASE_ID_SERVER = 2_000_000L
@@ -45,6 +52,12 @@ object AvvisiLocali {
     /** (0.11) Una sessione partita senza che il ragazzo l'abbia vista partire (o non partita): una alla volta. */
     const val ID_SESSIONE = 7_000_001
 
+    /** (0.12) "Sessione «Studio» finita", quando la pagina della fine non può aprirsi sopra le altre app. */
+    const val ID_SESSIONE_FINITA = 7_000_002
+
+    /** (0.12) Il preavviso di una regola: quello di 1 minuto sostituisce quello di 5. */
+    private const val BASE_ID_PREAVVISO = 8_000_000L
+
     /**
      * (0.10) La "Nuova proposta del genitore" ha l'id della SUA proposta, non
      * quello della notifica del server: se il genitore la ritira, la si toglie
@@ -53,6 +66,9 @@ object AvvisiLocali {
     private const val BASE_ID_PROPOSTA = 6_000_000L
 
     fun idSforamento(regolaId: Long): Int = (BASE_ID_SFORAMENTO + (regolaId % 100_000)).toInt()
+
+    /** (0.12) L'id del preavviso della regola [regolaId]. */
+    fun idPreavviso(regolaId: Long): Int = (BASE_ID_PREAVVISO + (regolaId % 100_000)).toInt()
 
     /** (0.10) L'id della notifica locale che annuncia la proposta [propostaId]. */
     fun idProposta(propostaId: Long): Int = (BASE_ID_PROPOSTA + (propostaId % 100_000)).toInt()
@@ -96,7 +112,23 @@ object AvvisiLocali {
         )
     }
 
-    /** Alza una notifica; false se il permesso manca (il chiamante NON segna l'avviso come fatto). */
+    private fun creaCanalePreavvisi(context: Context) {
+        NotificationManagerCompat.from(context).createNotificationChannel(
+            NotificationChannelCompat.Builder(
+                CANALE_PREAVVISI,
+                NotificationManagerCompat.IMPORTANCE_HIGH,
+            )
+                .setName(context.getString(R.string.canale_preavvisi_nome))
+                .setDescription(context.getString(R.string.canale_preavvisi_descrizione))
+                .build(),
+        )
+    }
+
+    /**
+     * Alza una notifica; false se il permesso manca (il chiamante NON segna
+     * l'avviso come fatto). (0.12) [scadeTra] = fra quanti ms se ne va da sola
+     * (non vale più); [soloUnaVolta] = se c'è già, la si aggiorna senza suonare.
+     */
     fun avvisa(
         context: Context,
         id: Int,
@@ -104,17 +136,25 @@ object AvvisiLocali {
         testo: String,
         destinazione: String = MainActivity.DEST_OGGI,
         canale: String = CANALE_PATTO,
+        scadeTra: Long? = null,
+        soloUnaVolta: Boolean = false,
     ): Boolean {
         if (!puoAvvisare(context)) return false
-        if (canale == CANALE_SFORAMENTI) creaCanaleSforamenti(context) else creaCanale(context)
-        val notifica = NotificationCompat.Builder(context, canale)
+        when (canale) {
+            CANALE_SFORAMENTI -> creaCanaleSforamenti(context)
+            CANALE_PREAVVISI -> creaCanalePreavvisi(context)
+            else -> creaCanale(context)
+        }
+        val costruttore = NotificationCompat.Builder(context, canale)
             .setSmallIcon(R.drawable.ic_notifica_testimone)
             .setContentTitle(titolo)
             .setContentText(testo)
             .setStyle(NotificationCompat.BigTextStyle().bigText(testo))
             .setContentIntent(apriScheda(context, destinazione))
             .setAutoCancel(true)
-            .build()
+            .setOnlyAlertOnce(soloUnaVolta)
+        scadeTra?.takeIf { it > 0 }?.let { costruttore.setTimeoutAfter(it) }
+        val notifica = costruttore.build()
         return try {
             NotificationManagerCompat.from(context).notify(id, notifica)
             true

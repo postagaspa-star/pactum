@@ -29,10 +29,12 @@ android {
         targetSdk = 35
         // 0.9: sentinella ogni minuto a schermo acceso, avviso a tutto schermo,
         // limite su tutto il telefono. 0.10: le proposte del figlio al genitore
-        // (contratto v3.4). 0.11: le Sessioni (contratto v3.5). Nuova funzione
-        // = nuovo versionCode, altrimenti l'auto-aggiornamento non la propone.
-        versionCode = 11
-        versionName = "0.11.0"
+        // (contratto v3.4). 0.11: le Sessioni (contratto v3.5). 0.12: i
+        // preavvisi "il tempo sta per finire" e le pagine animate delle
+        // sessioni (nessun cambio al server). Nuova funzione = nuovo
+        // versionCode, altrimenti l'auto-aggiornamento non la propone.
+        versionCode = 12
+        versionName = "0.12.0"
     }
 
     signingConfigs {

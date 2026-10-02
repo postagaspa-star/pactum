@@ -41,4 +41,19 @@ object CadenzaSentinella {
 
     /** L'ultimo istante del giorno prima di [oggi]: lì si guarda "ieri". */
     fun fineDiIeri(oggi: LocalDate, zona: ZoneId): Long = oggi.atStartOfDay(zona).toInstant().toEpochMilli() - 1
+
+    /**
+     * (0.12) Fra quanto il giro dopo. Di solito un minuto; ma se l'app davanti,
+     * restando lì, porta una regola a una soglia del preavviso ("mancano 5
+     * minuti", "manca 1 minuto") prima di allora, si guarda appena dopo la
+     * soglia ([prossimaSoglia] ms, più un secondo di margine): il preavviso
+     * arriva entro pochi secondi, non fino a un minuto dopo. Mai meno di un
+     * secondo. Senza soglie in vista (o a schermo spento) resta il minuto.
+     */
+    fun attesa(prossimaSoglia: Long?): Long =
+        prossimaSoglia?.let { (it + MARGINE_SOGLIA_MS).coerceIn(ATTESA_MINIMA_MS, INTERVALLO_MS) } ?: INTERVALLO_MS
+
+    /** Si guarda un secondo dopo la soglia: l'uso letto è già oltre. */
+    const val MARGINE_SOGLIA_MS = 1_000L
+    const val ATTESA_MINIMA_MS = 1_000L
 }

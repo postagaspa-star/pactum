@@ -157,6 +157,22 @@ object ArchivioSessioni {
     }
 
     /**
+     * (0.12) La pagina della fine di [svoltaId] è sullo schermo: fatta, per
+     * sempre. Fuori dal filo principale (la chiama la pagina in onResume).
+     */
+    fun segnaPaginaVista(context: Context, svoltaId: Long) {
+        val app = context.applicationContext
+        ambito.launch { runCatching { modifica(app) { it.conPaginaVista(svoltaId) } } }
+    }
+
+    /**
+     * (0.12) Da "in attesa" ad "avvisata", sotto il lock: true solo se è
+     * cambiata adesso. La notifica "Sessione finita" parte solo allora.
+     */
+    fun avvisaPaginaFine(context: Context, svoltaId: Long): Boolean =
+        modificaCon(context) { it.conPaginaAvvisata(svoltaId) }
+
+    /**
      * Quello che dice il server, da una copia del patto appena entrata. Un
      * server di prima della v3.5 non dice niente delle sessioni: niente da fare.
      */

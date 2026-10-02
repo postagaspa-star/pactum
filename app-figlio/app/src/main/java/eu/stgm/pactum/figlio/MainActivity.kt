@@ -34,10 +34,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.permessi.StatoPermessi
 import eu.stgm.pactum.figlio.servizio.PactumService
+import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
+import eu.stgm.pactum.figlio.sessione.PaginaSessioneActivity
+import eu.stgm.pactum.figlio.sessione.PagineSessione
 import eu.stgm.pactum.figlio.sessione.RichiestaTermine
 import eu.stgm.pactum.figlio.ui.ConSessioneInCorso
 import eu.stgm.pactum.figlio.ui.CosaVedeScreen
@@ -53,9 +57,11 @@ import eu.stgm.pactum.figlio.ui.RegoleViewModel
 import eu.stgm.pactum.figlio.ui.SessioniScreen
 import eu.stgm.pactum.figlio.ui.SitiScreen
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     // La scheda su cui aprirsi quando si arriva da una notifica locale
@@ -92,6 +98,35 @@ class MainActivity : ComponentActivity() {
         destinazioneRichiesta.value = prendiDestinazione(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        inPrimoPiano = true
+        mostraPaginaFineRimasta()
+    }
+
+    override fun onPause() {
+        inPrimoPiano = false
+        super.onPause()
+    }
+
+    /**
+     * (0.12) La pagina della fine di una Sessione rimasta da vedere (niente
+     * "Mostra sopra le altre app", passati i 10 minuti, la notifica toccata):
+     * adesso, in Pactum, entro 2 ore dalla fine. "Fatta" la segna la pagina
+     * quando arriva sullo schermo: se qui non si apre, si riprova al prossimo
+     * ritorno su Pactum. La notifica la toglie la pagina stessa.
+     */
+    private fun mostraPaginaFineRimasta() {
+        lifecycleScope.launch {
+            val adesso = System.currentTimeMillis()
+            val svolta = withContext(Dispatchers.IO) {
+                runCatching { PagineSessione.daMostrare(ArchivioSessioni.leggi(applicationContext).svolte, adesso) }.getOrNull()
+            } ?: return@launch
+            if (PaginaSessioneActivity.inApertura(svolta.id)) return@launch
+            PaginaSessioneActivity.apriFine(this@MainActivity, svolta)
+        }
+    }
+
     /** La destinazione della notifica, tolta dall'intent: si usa una volta sola. */
     private fun prendiDestinazione(intent: Intent?): String? {
         val destinazione = intent?.getStringExtra(EXTRA_DESTINAZIONE)
@@ -104,6 +139,14 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        /**
+         * (0.12) Pactum è davanti adesso: il servizio può aprire la pagina della
+         * fine di una sessione anche senza "Mostra sopra le altre app".
+         */
+        @Volatile
+        var inPrimoPiano: Boolean = false
+            private set
+
         const val EXTRA_DESTINAZIONE = "destinazione_iniziale"
         const val DEST_OGGI = "oggi"
         const val DEST_REGOLE = "regole"

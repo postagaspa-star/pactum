@@ -80,21 +80,25 @@ object ConsegnaSessioni {
 
     /**
      * "Termina la sessione": finita adesso, sul telefono, e la barriera si
-     * ferma. False se non c'era niente in corso. La consegna al server parte
-     * da sola, e se non riesce si riprova.
+     * ferma. Restituisce la sessione appena chiusa (con la sua fine vera: per
+     * la pagina della fine), null se non c'era niente in corso. La consegna al
+     * server parte da sola, e se non riesce si riprova.
      */
-    suspend fun termina(context: Context): Boolean {
+    suspend fun termina(context: Context): SvoltaLocale? {
         val app = context.applicationContext
-        val chiusura = try {
+        val chiusa = try {
             withContext(Dispatchers.IO) {
-                ArchivioSessioni.modificaCon(app) { it.conTermine(System.currentTimeMillis()) }
+                ArchivioSessioni.modificaCon(app) { memoria ->
+                    val (nuova, chiusura) = memoria.conTermine(System.currentTimeMillis())
+                    nuova to chiusura?.let { c -> nuova.svolte.firstOrNull { it.id == c.svoltaId } }
+                }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             null
         }
-        if (chiusura == null) return false
+        if (chiusa == null) return null
         falliti = 0
         ambito.launch {
             try {
@@ -103,7 +107,7 @@ object ConsegnaSessioni {
                 // resta in coda: riprova il giro della sentinella, poi il worker
             }
         }
-        return true
+        return chiusa
     }
 
     /**

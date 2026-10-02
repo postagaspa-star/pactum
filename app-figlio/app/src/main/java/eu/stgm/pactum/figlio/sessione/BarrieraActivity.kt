@@ -212,7 +212,7 @@ private fun SchermataBarriera(nome: String, fine: Long, onEsci: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(Spazi.l),
             ) {
                 Text(
-                    text = stringResource(R.string.barriera_titolo, nome),
+                    text = stringResource(R.string.barriera_titolo, nomeSessioneTraVirgolette(context, nome)),
                     style = MaterialTheme.typography.headlineSmall,
                 )
                 Text(
@@ -220,7 +220,7 @@ private fun SchermataBarriera(nome: String, fine: Long, onEsci: () -> Unit) {
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
-                    text = stringResource(R.string.barriera_aggiungila, nome),
+                    text = stringResource(R.string.barriera_aggiungila, nomeSessioneTraVirgolette(context, nome, conEmoji = false)),
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(

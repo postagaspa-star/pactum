@@ -39,11 +39,14 @@ import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
 import eu.stgm.pactum.figlio.sessione.AvvioIncerto
 import eu.stgm.pactum.figlio.sessione.ConsegnaSessioni
+import eu.stgm.pactum.figlio.sessione.PaginaSessioneActivity
 import eu.stgm.pactum.figlio.sessione.RichiestaTermine
 import eu.stgm.pactum.figlio.sessione.SessioneAttiva
 import eu.stgm.pactum.figlio.sessione.StatoSessione
 import eu.stgm.pactum.figlio.sessione.TestoSessioni
+import eu.stgm.pactum.figlio.sessione.nomeSessioneTraVirgolette
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -120,7 +123,7 @@ fun rememberAvvioIncerto(): AvvioIncerto? {
 /** (0.11) Lo si dice in una riga neutra (Oggi e Sessioni). */
 @Composable
 fun RigaAvvioIncerto(incerto: AvvioIncerto) {
-    RigaNeutra(stringResource(R.string.sessione_incerta_riga, incerto.nome))
+    RigaNeutra(stringResource(R.string.sessione_incerta_riga, nomeSessioneTraVirgolette(LocalContext.current, incerto.nome)))
 }
 
 /**
@@ -174,7 +177,7 @@ fun SchedaSessioneInCorso(
                     adesso,
                     R.string.sessione_in_corso_titolo,
                     R.string.sessione_in_corso_titolo_domani,
-                    attiva.nome,
+                    nomeSessioneTraVirgolette(context, attiva.nome),
                 ),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -213,13 +216,22 @@ fun SchedaSessioneInCorso(
                     onClick = {
                         terminando = true
                         ambito.launch {
-                            val terminata = try {
-                                ConsegnaSessioni.termina(context)
-                            } finally {
-                                terminando = false
-                                conferma = false
+                            // (0.12) Fino in fondo anche se questa scheda se ne va
+                            // (la sessione è finita: la scheda sparisce, e il suo
+                            // ambito con lei). Fra "termina" e la pagina della fine
+                            // niente altre attese: la sessione chiusa la dà termina.
+                            withContext(NonCancellable) {
+                                val chiusa = try {
+                                    ConsegnaSessioni.termina(context)
+                                } finally {
+                                    terminando = false
+                                    conferma = false
+                                }
+                                if (chiusa != null) {
+                                    PaginaSessioneActivity.apriFine(context, chiusa)
+                                    onTerminata()
+                                }
                             }
-                            if (terminata) onTerminata()
                         }
                     },
                 ) {

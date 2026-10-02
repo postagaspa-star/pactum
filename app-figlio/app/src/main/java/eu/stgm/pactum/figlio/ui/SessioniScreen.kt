@@ -73,7 +73,11 @@ import eu.stgm.pactum.figlio.sessione.DurataSessione
 import eu.stgm.pactum.figlio.sessione.EsitoAvvio
 import eu.stgm.pactum.figlio.sessione.EsitoSessione
 import eu.stgm.pactum.figlio.sessione.NomeSessione
+import eu.stgm.pactum.figlio.sessione.PaginaSessioneActivity
+import eu.stgm.pactum.figlio.sessione.PagineSessione
 import eu.stgm.pactum.figlio.sessione.SessioneDefinita
+import eu.stgm.pactum.figlio.sessione.nomeSessioneConEmoji
+import eu.stgm.pactum.figlio.sessione.nomeSessioneTraVirgolette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -146,6 +150,11 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
             is SessioniViewModel.Evento.Iniziata -> {
                 daAvviareId = null
                 vm.dimenticaEsiti()
+                // (0.12) Il server l'ha confermata: la pagina animata dell'inizio
+                // (solo se è di adesso, non per una risposta letta tornando qui dopo).
+                (evento.esito as? EsitoAvvio.Avviata)?.svolta
+                    ?.takeIf { PagineSessione.inizioDaMostrare(it, System.currentTimeMillis()) }
+                    ?.let { PaginaSessioneActivity.apriInizio(context, it) }
                 testoEsitoAvvio(context, evento.esito)
             }
         }
@@ -311,7 +320,7 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
         AlertDialog(
             onDismissRequest = { daEliminareId = null },
             title = { Text(stringResource(R.string.sessione_elimina_titolo)) },
-            text = { Text(stringResource(R.string.sessione_elimina_testo, sessione.nome)) },
+            text = { Text(stringResource(R.string.sessione_elimina_testo, nomeSessioneTraVirgolette(context, sessione.nome))) },
             confirmButton = {
                 Button(enabled = !stato.invioInCorso, onClick = { vm.elimina(sessione.id) }) {
                     Text(stringResource(R.string.azione_elimina))
@@ -341,7 +350,7 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
         AlertDialog(
             onDismissRequest = { cambioDaRitirareId = null },
             title = { Text(stringResource(R.string.sessione_ritira_cambio_titolo)) },
-            text = { Text(stringResource(R.string.sessione_ritira_cambio_testo, sessione.nome)) },
+            text = { Text(stringResource(R.string.sessione_ritira_cambio_testo, nomeSessioneTraVirgolette(context, sessione.nome))) },
             confirmButton = {
                 Button(enabled = !stato.invioInCorso, onClick = { vm.ritiraCambio(sessione) }) {
                     Text(stringResource(R.string.sessione_ritira_cambio))
@@ -387,7 +396,8 @@ private fun CardSessione(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = sessione.nome,
+                    // (0.12) Con l'emoji del suo tema, come nell'app del genitore: "📚 Studio".
+                    text = nomeSessioneConEmoji(context, sessione.nome),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
@@ -422,7 +432,7 @@ private fun CardSessione(
                 val nomeChiesto = cambio.nome?.trim()?.takeIf { it.isNotEmpty() && it != sessione.nome }
                 Text(
                     text = if (nomeChiesto != null) {
-                        stringResource(R.string.sessione_cambio_chiesto_nome, nomeChiesto, elenco)
+                        stringResource(R.string.sessione_cambio_chiesto_nome, nomeSessioneTraVirgolette(context, nomeChiesto), elenco)
                     } else {
                         stringResource(R.string.sessione_cambio_chiesto, elenco)
                     },
@@ -786,7 +796,7 @@ private fun DialogoAvvio(
 
     AlertDialog(
         onDismissRequest = onAnnulla,
-        title = { Text(stringResource(R.string.sessione_avvio_titolo, sessione.nome)) },
+        title = { Text(stringResource(R.string.sessione_avvio_titolo, nomeSessioneTraVirgolette(context, sessione.nome))) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),

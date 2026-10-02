@@ -1,15 +1,15 @@
 {
   "figlio": {
-    "versione_code": 11,
-    "versione_nome": "0.11.0",
+    "versione_code": 12,
+    "versione_nome": "0.12.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.11.0: le Sessioni — crei una sessione (per esempio Studio) con le app che servono, il genitore la approva, e quando la avvii il telefono lascia usare solo quelle app; il tempo lì non conta."
+    "note": "v0.12.0: un avviso quando mancano 5 minuti e 1 minuto al limite che ti sei dato; all'inizio e alla fine di ogni sessione una pagina animata con gli sticker del suo tema (dal nome: Studio, Sport, Musica…)."
   },
   "genitore": {
-    "versione_code": 11,
-    "versione_nome": "0.11.0",
+    "versione_code": 12,
+    "versione_nome": "0.12.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.11.0: le Sessioni — tuo figlio ti chiede di approvare una sessione con le sue app (per esempio Studio); in Panoramica vedi le sessioni fatte, quanto sono durate e se le ha chiuse prima."
+    "note": "v0.12.0: accanto al nome di ogni sessione l'emoji del suo tema (per esempio 📚 Studio, ⚽ Sport)."
   },
   "computer": {
     "versione_code": 10,

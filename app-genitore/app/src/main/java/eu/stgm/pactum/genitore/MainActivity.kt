@@ -50,8 +50,14 @@ import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.servizio.EsenzioneBatteria
 import eu.stgm.pactum.genitore.servizio.VedettaService
 import eu.stgm.pactum.genitore.sync.Vedetta
+import eu.stgm.pactum.genitore.ui.CollegamentoViewModel
+import eu.stgm.pactum.genitore.ui.FaccendeScreen
+import eu.stgm.pactum.genitore.ui.FaccendeViewModel
 import eu.stgm.pactum.genitore.ui.FamigliaViewModel
 import eu.stgm.pactum.genitore.ui.FinestraScreen
+import eu.stgm.pactum.genitore.ui.FinestraViewModel
+import eu.stgm.pactum.genitore.ui.ProposteViewModel
+import eu.stgm.pactum.genitore.ui.VerdettiViewModel
 import eu.stgm.pactum.genitore.ui.ImpostazioniScreen
 import eu.stgm.pactum.genitore.ui.NotificheScreen
 import eu.stgm.pactum.genitore.ui.NotificheViewModel
@@ -71,6 +77,9 @@ class MainActivity : ComponentActivity() {
     // così l'avviso su Luca apre il patto di Luca. null = nessuna richiesta.
     private val figlioRichiesto = mutableStateOf<Long?>(null)
 
+    // (0.13) La faccenda di cui la notifica toccata mostra la foto. null = nessuna.
+    private val faccendaRichiesta = mutableStateOf<Long?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // La destinazione vale solo per un tocco VERO sulla notifica. Due casi in
@@ -85,10 +94,12 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null && !daiRecenti) {
             destinazioneRichiesta.value = intent?.getStringExtra(EXTRA_DESTINAZIONE)
             figlioRichiesto.value = intent?.figlioDellaNotifica()
+            faccendaRichiesta.value = intent?.faccendaDellaNotifica()
         }
         // Consumati comunque: una rotazione non deve rileggerli nello stesso processo.
         intent?.removeExtra(EXTRA_DESTINAZIONE)
         intent?.removeExtra(EXTRA_FIGLIO)
+        intent?.removeExtra(EXTRA_FACCENDA)
         setContent {
             PactumTheme {
                 GenitoreRoot(
@@ -96,6 +107,8 @@ class MainActivity : ComponentActivity() {
                     onDestinazioneConsumata = { destinazioneRichiesta.value = null },
                     figlioRichiesto = figlioRichiesto.value,
                     onFiglioConsumato = { figlioRichiesto.value = null },
+                    faccendaRichiesta = faccendaRichiesta.value,
+                    onFaccendaConsumata = { faccendaRichiesta.value = null },
                 )
             }
         }
@@ -106,19 +119,30 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         destinazioneRichiesta.value = intent.getStringExtra(EXTRA_DESTINAZIONE)
         figlioRichiesto.value = intent.figlioDellaNotifica()
+        faccendaRichiesta.value = intent.faccendaDellaNotifica()
         // Consumati subito, come in onCreate: evita che una rotazione successiva
         // rilegga gli extra e ri-salti alla scheda della notifica.
         intent.removeExtra(EXTRA_DESTINAZIONE)
         intent.removeExtra(EXTRA_FIGLIO)
+        intent.removeExtra(EXTRA_FACCENDA)
     }
 
     private fun Intent.figlioDellaNotifica(): Long? =
         if (hasExtra(EXTRA_FIGLIO)) getLongExtra(EXTRA_FIGLIO, -1L).takeIf { it >= 0 } else null
 
+    private fun Intent.faccendaDellaNotifica(): Long? =
+        if (hasExtra(EXTRA_FACCENDA)) getLongExtra(EXTRA_FACCENDA, -1L).takeIf { it >= 0 } else null
+
     companion object {
         const val EXTRA_DESTINAZIONE = "destinazione_iniziale"
         const val EXTRA_FIGLIO = "figlio"
+
+        /** (0.13) La faccenda di cui aprire la foto (notifica `faccenda_fatta`). */
+        const val EXTRA_FACCENDA = "faccenda"
         const val DEST_FINESTRA = "finestra"
+
+        /** (0.13) La pagina delle faccende del figlio della notifica (sopra la Panoramica). */
+        const val DEST_FACCENDE = "faccende"
         const val DEST_TEMPO = "tempo"
         const val DEST_TURNO = "turno"
         const val DEST_NOTIFICHE = "notifiche"
@@ -161,9 +185,16 @@ private fun GenitoreRoot(
     onDestinazioneConsumata: () -> Unit,
     figlioRichiesto: Long?,
     onFiglioConsumato: () -> Unit,
+    faccendaRichiesta: Long? = null,
+    onFaccendaConsumata: () -> Unit = {},
 ) {
     var destinazione by rememberSaveable { mutableStateOf(Destinazione.FINESTRA) }
     var notificheAperte by rememberSaveable { mutableStateOf(false) }
+    // (0.13) La pagina delle faccende, sopra la Panoramica come le notifiche; con
+    // "Dai faccende" già aperto, o con la foto di una faccenda.
+    var faccendeAperte by rememberSaveable { mutableStateOf(false) }
+    var daiSubito by rememberSaveable { mutableStateOf(false) }
+    var fotoDaAprire by rememberSaveable { mutableStateOf<Long?>(null) }
     // (0.9) Le Impostazioni si aprono già sulla sezione "Avvisi del patto".
     var avvisiDaMostrare by rememberSaveable { mutableStateOf(false) }
 
@@ -201,6 +232,27 @@ private fun GenitoreRoot(
     val configurata = configurazione?.completa == true
     AvvioVedetta(configurata)
 
+    // (0.13) Un altro collegamento (un altro server, un altro codice: anche quello
+    // fatto col codice di 6 cifre mentre la pagina delle Impostazioni non c'era più)
+    // è un'altra famiglia: tutte le schermate dimenticano quello che sapevano. Qui,
+    // e non nella pagina che salva, così non si perde mai.
+    val collegamentoVm: CollegamentoViewModel = viewModel()
+    val finestraVm: FinestraViewModel = viewModel()
+    val proposteVm: ProposteViewModel = viewModel()
+    val verdettiVm: VerdettiViewModel = viewModel()
+    val faccendeVm: FaccendeViewModel = viewModel()
+    LaunchedEffect(configurazione) {
+        val attuale = configurazione ?: return@LaunchedEffect
+        if (!collegamentoVm.eUnAltroCollegamento(attuale)) return@LaunchedEffect
+        famigliaVm.ricomincia()
+        famigliaVm.aggiornaGenitori()
+        finestraVm.dimentica()
+        proposteVm.dimentica()
+        verdettiVm.dimentica()
+        notificheVm.dimentica()
+        faccendeVm.dimentica()
+    }
+
     RichiestaPermessoNotifiche()
     RichiestaEsenzioneBatteria(configurata)
 
@@ -211,33 +263,47 @@ private fun GenitoreRoot(
             MainActivity.DEST_TEMPO -> {
                 destinazione = Destinazione.TEMPO
                 notificheAperte = false
+                faccendeAperte = false
             }
             MainActivity.DEST_TURNO,
             MainActivity.DEST_PROPOSTE,
             MainActivity.DEST_VERDETTI -> {
                 destinazione = Destinazione.TURNO
                 notificheAperte = false
+                faccendeAperte = false
             }
             MainActivity.DEST_NOTIFICHE -> {
                 destinazione = Destinazione.FINESTRA
                 notificheAperte = true
+                faccendeAperte = false
             }
             MainActivity.DEST_AVVISI -> {
                 destinazione = Destinazione.IMPOSTAZIONI
                 notificheAperte = false
+                faccendeAperte = false
                 avvisiDaMostrare = true
+            }
+            // (0.13) Le faccende del figlio della notifica, e la foto se è di una faccenda.
+            MainActivity.DEST_FACCENDE -> {
+                destinazione = Destinazione.FINESTRA
+                notificheAperte = false
+                faccendeAperte = true
+                fotoDaAprire = faccendaRichiesta
             }
             // DEST_FINESTRA e qualunque valore sconosciuto: la casa.
             else -> {
                 destinazione = Destinazione.FINESTRA
                 notificheAperte = false
+                faccendeAperte = false
             }
         }
         onDestinazioneConsumata()
+        onFaccendaConsumata()
     }
 
-    // Indietro chiude le notifiche e torna alla finestra.
+    // Indietro chiude le notifiche (o le faccende) e torna alla finestra.
     BackHandler(enabled = notificheAperte) { notificheAperte = false }
+    BackHandler(enabled = faccendeAperte && !notificheAperte) { faccendeAperte = false }
 
     // "Proposte e conferme" va a capo su 360 e su 411dp (è ~124dp, una voce ne
     // ha 84-97): tutte le etichette tengono due righe (minLines) così icone ed
@@ -259,6 +325,7 @@ private fun GenitoreRoot(
                         onClick = {
                             destinazione = voce
                             notificheAperte = false
+                            faccendeAperte = false
                         },
                         icon = {
                             // L'etichetta sotto dice già il nome: l'icona tace.
@@ -284,15 +351,35 @@ private fun GenitoreRoot(
         // riapplicherebbero l'inset della status bar (doppio spazio su Android 15).
         Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
             when (destinazione) {
-                Destinazione.FINESTRA -> if (notificheAperte) {
-                    NotificheScreen(onChiudi = { notificheAperte = false }, vm = notificheVm)
-                } else {
-                    FinestraScreen(
+                Destinazione.FINESTRA -> when {
+                    notificheAperte -> NotificheScreen(
+                        onChiudi = { notificheAperte = false },
+                        vm = notificheVm,
+                        // (0.13) Da una notifica delle faccende: le faccende di quel figlio (e la foto).
+                        onApriFaccende = { figlioId, faccendaId ->
+                            if (figlioId != null) famigliaVm.scegli(figlioId)
+                            fotoDaAprire = faccendaId
+                            notificheAperte = false
+                            faccendeAperte = true
+                        },
+                    )
+                    faccendeAperte -> FaccendeScreen(
+                        onChiudi = { faccendeAperte = false },
+                        fotoRichiesta = fotoDaAprire,
+                        onFotoRichiestaConsumata = { fotoDaAprire = null },
+                        daiSubito = daiSubito,
+                        onDaiSubitoConsumato = { daiSubito = false },
+                    )
+                    else -> FinestraScreen(
                         notificheNonLette = nonLette,
                         onApriNotifiche = { notificheAperte = true },
                         onApriAvvisi = {
                             destinazione = Destinazione.IMPOSTAZIONI
                             avvisiDaMostrare = true
+                        },
+                        onApriFaccende = { dai ->
+                            daiSubito = dai
+                            faccendeAperte = true
                         },
                     )
                 }

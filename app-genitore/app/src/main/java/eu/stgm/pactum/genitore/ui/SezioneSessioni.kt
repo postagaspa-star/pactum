@@ -34,6 +34,7 @@ import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.EsitiSessione
 import eu.stgm.pactum.genitore.dati.MASSIMO_MOTIVAZIONE_SESSIONE
+import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.Sessione
 
 // (0.11) Le sessioni nella Panoramica (contratto v3.5). In cima, insieme alle
@@ -398,6 +399,7 @@ internal fun LazyListScope.sezioneSessioni(
     onTutteLeSvolte: () -> Unit,
     approvateAperte: Boolean,
     onApprovate: () -> Unit,
+    io: RiferimentoGenitore? = null,
 ) {
     if (svolte.isEmpty() && approvate.isEmpty() && nonPiuValide.isEmpty()) return
     item(key = "sessioni-titolo") {
@@ -454,6 +456,7 @@ internal fun LazyListScope.sezioneSessioni(
                         sessione = sessione,
                         nomiFinestra = nomiFinestra,
                         telefono = telefono(sessione.dispositivoId ?: sessione.dispositivo?.id),
+                        io = io,
                     )
                 }
             }
@@ -490,9 +493,18 @@ private fun RigaSessioneSvolta(sessione: SessioneRaccontata, telefono: String?) 
     }
 }
 
-/** Una sessione approvata: il nome, e le sue app in una riga. */
+/**
+ * Una sessione approvata: il nome, e le sue app in una riga. (0.13) Con più
+ * genitori (contratto v3.6), anche chi ha deciso per ultimo: "ultima decisione:
+ * Mamma" (può essere il no a un cambio, non per forza il sì).
+ */
 @Composable
-private fun RigaSessioneApprovata(sessione: Sessione, nomiFinestra: Map<String, String>, telefono: String?) {
+private fun RigaSessioneApprovata(
+    sessione: Sessione,
+    nomiFinestra: Map<String, String>,
+    telefono: String?,
+    io: RiferimentoGenitore? = null,
+) {
     val p = parole()
     val app = elencoAppSessione(p, appDellaSessione(sessione.app, sessione.nomi, nomiFinestra))
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
@@ -504,6 +516,14 @@ private fun RigaSessioneApprovata(sessione: Sessione, nomiFinestra: Map<String, 
             Text(
                 text = app,
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Spazi.xs),
+            )
+        }
+        testoUltimaDecisione(p, sessione, io)?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = Spazi.xs),
             )

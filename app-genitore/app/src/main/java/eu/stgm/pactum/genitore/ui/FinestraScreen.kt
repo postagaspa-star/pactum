@@ -27,12 +27,14 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -76,6 +78,7 @@ import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.ModificaStorico
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.StatoBonus
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
 import eu.stgm.pactum.genitore.dati.TipiRegola
@@ -117,6 +120,8 @@ fun FinestraScreen(
     notificheNonLette: Int,
     onApriNotifiche: () -> Unit,
     onApriAvvisi: () -> Unit = {},
+    // (0.13) La pagina delle faccende; [dai] = con "Dai faccende" già aperto.
+    onApriFaccende: (dai: Boolean) -> Unit = {},
     vm: FinestraViewModel = viewModel(),
     famigliaVm: FamigliaViewModel = viewModel(),
     proposteVm: ProposteViewModel = viewModel(),
@@ -233,6 +238,18 @@ fun FinestraScreen(
             val finestra = stato.finestra.takeIf { stato.di(figlioId) }
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when {
+                    // (0.13) 401: il collegamento di questo telefono non vale più (un
+                    // altro genitore l'ha tolto). Non è la rete, e i dati di prima non
+                    // si mostrano come se valessero.
+                    famiglia.collegamentoNonValido -> Centro {
+                        StatoPrimaApertura(
+                            titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                            testo = stringResource(R.string.collegamento_non_valido),
+                            centrato = true,
+                            modifier = Modifier.padding(horizontal = Spazi.xxl),
+                        )
+                    }
+
                     !stato.di(figlioId) || (stato.caricamento && finestra == null) ->
                         Caricamento(stringResource(R.string.finestra_caricamento))
 
@@ -291,6 +308,8 @@ fun FinestraScreen(
                         onAvvisoSessione = { messaggio ->
                             ambito.launch { snackbarHostState.showSnackbar(testi.testo(messaggio)) }
                         },
+                        onApriFaccende = onApriFaccende,
+                        io = famiglia.io,
                     )
                 }
             }
@@ -346,6 +365,8 @@ private fun ContenutoFinestra(
     decisioneSessioneInCorso: Boolean = false,
     onDecidiSessione: (SessioneDaApprovare, String, String?) -> Unit = { _, _, _ -> },
     onAvvisoSessione: (Int) -> Unit = {},
+    onApriFaccende: (dai: Boolean) -> Unit = {},
+    io: RiferimentoGenitore? = null,
 ) {
     // Per raccontare storico ed eventi serve la regola: la finestra porta TUTTE
     // le regole (anche eliminate), quindi la mappa è completa.
@@ -398,6 +419,25 @@ private fun ContenutoFinestra(
     val nonPiuValide = remember(finestra) { sessioniNonPiuValide(finestra.sessioni, scollegati) }
     val conPiuTelefoni = remember(finestra) { piuTelefoni(finestra) }
     val telefonoDi: (Long?) -> String? = { id -> if (conPiuTelefoni) nomeDispositivo(id, dispositivi) else null }
+
+    // (0.13) Le faccende (contratto v3.6): in cima quando c'è qualcosa in corso (un
+    // blocco attivo o in arrivo, una foto ancora da guardare), se no dopo i
+    // dispositivi. Solo con la famiglia (v3): le faccende vogliono il figlio.
+    val adessoFaccende = remember(finestra) { Instant.now() }
+    val bloccoFaccende = remember(finestra) { finestra.faccende?.let { statoBlocco(it, adessoFaccende, finestra.blocco) } }
+    val fotoNuove = remember(finestra) { finestra.faccende?.let { fotoDaGuardare(it, adessoFaccende) } ?: 0 }
+    val faccendeInEvidenza = bloccoFaccende != null &&
+        (bloccoFaccende.attivo || bloccoFaccende.prossimo != null || fotoNuove > 0)
+    val senzaBlocco = remember(figlio) { dispositiviSenzaBlocco(figlio?.dispositivi.orEmpty()) }
+    val cardFaccende: @Composable () -> Unit = {
+        CardFaccende(
+            server = finestra.faccende != null,
+            stato = bloccoFaccende,
+            fotoNuove = fotoNuove,
+            senzaBlocco = senzaBlocco,
+            onApri = onApriFaccende,
+        )
+    }
 
     // (0.11) La domanda aperta su una sessione (approva / non approvare): quale, con
     // quale gesto, e la versione che il genitore aveva davanti. [vista] = il
@@ -483,6 +523,11 @@ private fun ContenutoFinestra(
             )
         }
 
+        // (0.13) Le faccende in corso: un blocco attivo o in arrivo, una foto da guardare.
+        if (figlio != null && faccendeInEvidenza) {
+            item(key = "faccende") { cardFaccende() }
+        }
+
         if (perDispositivo) {
             // (v3) L'anomalia occupa spazio: un dispositivo che tace ha la sua
             // card in cima. Lo stato di tutti sta sotto la scheda del patto.
@@ -558,6 +603,11 @@ private fun ContenutoFinestra(
         // (v3) Una riga per dispositivo: chi è, che tipo, com'è il contatto.
         if (perDispositivo) {
             item { BloccoDispositivi(dispositivi) }
+        }
+
+        // (0.13) Le faccende, quando non c'è niente in corso.
+        if (figlio != null && !faccendeInEvidenza) {
+            item(key = "faccende") { cardFaccende() }
         }
 
         if (finestra.regole.isNotEmpty()) {
@@ -636,6 +686,7 @@ private fun ContenutoFinestra(
             onTutteLeSvolte = { tutteLeSvolte = !tutteLeSvolte },
             approvateAperte = approvateAperte,
             onApprovate = { approvateAperte = !approvateAperte },
+            io = io,
         )
 
         // --- 3. La storia -------------------------------------------------------
@@ -688,6 +739,70 @@ private fun ContenutoFinestra(
                 },
                 onAnnulla = chiudi,
             )
+        }
+    }
+}
+
+/**
+ * (0.13) Le faccende nella Panoramica: lo stato del blocco ("Blocco attivo dalle
+ * 16:00"), quante da fare, le foto da guardare, i dispositivi dove il blocco non
+ * parte, e i due gesti: "Dai faccende" e "Apri le faccende". [server] false = il
+ * server non conosce le faccende (più vecchio della v3.6): lo si dice, e basta.
+ */
+@Composable
+private fun CardFaccende(
+    server: Boolean,
+    stato: StatoBlocco?,
+    fotoNuove: Int,
+    senzaBlocco: List<DispositivoSenzaBlocco>,
+    onApri: (dai: Boolean) -> Unit,
+) {
+    val p = parole()
+    CardContenuto {
+        Column(modifier = Modifier.padding(Spazi.l)) {
+            Text(text = stringResource(R.string.faccende_titolo), style = MaterialTheme.typography.titleMedium)
+            if (!server || stato == null) {
+                Text(
+                    text = stringResource(R.string.faccende_server_vecchio),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Spazi.xs),
+                )
+                return@Column
+            }
+            testoStatoBlocco(p, stato)?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (stato.attivo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = Spazi.xs),
+                )
+            }
+            listOfNotNull(testoQuanteDaFare(p, stato.daFare), testoFotoDaGuardare(p, fotoNuove)).forEach {
+                Text(text = it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = Spazi.xs))
+            }
+            // Dove il blocco non parte: conta quando ci sono faccende da fare.
+            if (stato.daFare > 0) {
+                senzaBlocco.forEach {
+                    Text(
+                        text = testoDispositivoSenzaBlocco(p, it),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = Spazi.xs),
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = Spazi.m),
+                horizontalArrangement = Arrangement.spacedBy(Spazi.s),
+            ) {
+                Button(onClick = { onApri(true) }, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.faccende_dai))
+                }
+                OutlinedButton(onClick = { onApri(false) }, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.faccende_apri))
+                }
+            }
         }
     }
 }

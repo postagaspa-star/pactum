@@ -36,8 +36,12 @@ android {
         // v0.12.0: accanto al nome di ogni sessione la prima emoji del suo tema
         // (TemaSessione in core-design, come nell'app del figlio). Le due app
         // viaggiano sempre alla stessa versione.
-        versionCode = 12
-        versionName = "0.12.0"
+        // v0.13.0: più genitori e le faccende (contratto v3.6) — un genitore si
+        // collega con un codice di 6 cifre, la famiglia ha i suoi genitori, e si
+        // danno faccende al figlio (con la foto da guardare e, entro 24 ore, da
+        // bocciare).
+        versionCode = 13
+        versionName = "0.13.0"
     }
 
     signingConfigs {

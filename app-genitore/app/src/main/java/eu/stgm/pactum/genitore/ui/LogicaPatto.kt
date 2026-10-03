@@ -471,6 +471,9 @@ fun proposteChiuse(proposte: List<Proposta>): List<Proposta> =
 
 /** true = il genitore può ritirare questa proposta: è sua ed è ancora in attesa. */
 fun ritirabile(proposta: Proposta): Boolean =
+    // (0.13) Con più genitori (contratto v3.6, "Precisazioni"): tutti i genitori
+    // sono uguali anche nel ritirare, quindi si ritira anche la proposta di un
+    // altro genitore (la card dice di chi è).
     proposta.autore == AutoriProposta.GENITORE && proposta.stato == StatiProposta.PENDENTE
 
 /** true = la proposta chiede di togliere la regola (il marcatore `{"azione": "elimina"}`). */

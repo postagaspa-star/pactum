@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
@@ -63,6 +64,8 @@ fun NotificheScreen(
     onChiudi: () -> Unit,
     vm: NotificheViewModel = viewModel(),
     famigliaVm: FamigliaViewModel = viewModel(),
+    // (0.13) Una notifica delle faccende apre le faccende del suo figlio (e la foto).
+    onApriFaccende: (figlioId: Long?, faccendaId: Long?) -> Unit = { _, _ -> },
 ) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     // (v3) Le notifiche sono di tutti i figli: la famiglia dice di chi è ciascuna.
@@ -206,9 +209,16 @@ fun NotificheScreen(
                                         stato.propostePerId,
                                         stato.nomi,
                                         stato.sessioniPerId,
+                                        // (0.13) Qui la riga non si tocca: c'è il pulsante.
+                                        nellaTendina = false,
                                     ),
                                     diChi = etichettaNotifica(notifica, famiglia.figli),
                                     onSegnaLetta = { vm.segnaLetta(notifica) },
+                                    onApriFaccende = if (notificaDiFaccende(notifica.tipo)) {
+                                        { onApriFaccende(notifica.figlioId, faccendaDellaNotifica(notifica)) }
+                                    } else {
+                                        null
+                                    },
                                 )
                             }
                         }
@@ -231,6 +241,7 @@ private fun RigaNotifica(
     testo: TestoNotifica,
     diChi: String?,
     onSegnaLetta: () -> Unit,
+    onApriFaccende: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
@@ -266,6 +277,20 @@ private fun RigaNotifica(
                 modifier = Modifier.padding(top = Spazi.xs),
             )
             TestoOrario(notifica.tsServer, Modifier.padding(top = Spazi.xs))
+            // (0.13) La foto della faccenda fatta, o le faccende finite.
+            if (onApriFaccende != null) {
+                TextButton(onClick = onApriFaccende) {
+                    Text(
+                        stringResource(
+                            if (notifica.tipo == TipiNotificaFaccende.FACCENDA_FATTA) {
+                                R.string.faccenda_guarda_foto
+                            } else {
+                                R.string.faccende_apri
+                            },
+                        ),
+                    )
+                }
+            }
         }
         IconButton(onClick = onSegnaLetta) {
             Icon(Icons.Outlined.Done, stringResource(R.string.notifica_segna_letta))
@@ -287,5 +312,8 @@ private fun iconaTipo(tipo: String): Painter = when (tipo) {
     "sospensione", "ripresa" -> painterResource(R.drawable.ic_dispositivo_computer)
     // (0.11) Le sessioni: sono del telefono.
     "sessione_da_approvare", "sessione_eliminata" -> painterResource(R.drawable.ic_dispositivo_telefono)
+    // (0.13) Le faccende: fatte.
+    TipiNotificaFaccende.FACCENDA_FATTA, TipiNotificaFaccende.FACCENDE_FINITE ->
+        rememberVectorPainter(Icons.Outlined.CheckCircle)
     else -> painterResource(R.drawable.ic_notifica_binocolo)
 }

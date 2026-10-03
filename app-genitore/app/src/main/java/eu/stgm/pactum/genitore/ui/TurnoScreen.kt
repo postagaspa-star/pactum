@@ -222,6 +222,8 @@ fun TurnoScreen(
                             // (0.11) Il numero accanto al nome conta anche le sessioni:
                             // una riga dice dove si decidono.
                             sessioniDaApprovare = famiglia.figlioScelto?.sessioniDaApprovare ?: 0,
+                            // (0.13) Chi sei tu: le proposte degli altri genitori col loro nome.
+                            io = famiglia.io,
                         )
                         sezioneDichiarazioni(
                             dichiarazioni = verdetti.dichiarazioni,
@@ -230,6 +232,7 @@ fun TurnoScreen(
                             onVerdetto = { id, verdetto, nota ->
                                 verdettiVm.emettiVerdetto(figlioId, id, verdetto, nota)
                             },
+                            io = famiglia.io,
                         )
                     }
                 }

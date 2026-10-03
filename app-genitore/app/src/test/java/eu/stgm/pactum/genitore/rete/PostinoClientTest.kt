@@ -236,7 +236,9 @@ class PostinoClientTest {
     @Test
     fun `il resto che non e una famiglia leggibile e un fallimento da ritentare`() {
         assertEquals(EsitoFamiglia.Fallita, PostinoClient.interpretaFamiglia(500, "boh"))
-        assertEquals(EsitoFamiglia.Fallita, PostinoClient.interpretaFamiglia(401, """{"detail": "x"}"""))
+        // (0.13) Un 401 non è più "da ritentare": il collegamento di questo telefono
+        // non vale più (un altro genitore l'ha tolto). V. GenitoriEFaccendeTest.
+        assertEquals(EsitoFamiglia.NonAutorizzato, PostinoClient.interpretaFamiglia(401, """{"detail": "x"}"""))
         assertEquals(EsitoFamiglia.Fallita, PostinoClient.interpretaFamiglia(200, "non è json"))
         assertEquals(EsitoFamiglia.Fallita, PostinoClient.interpretaFamiglia(200, null))
     }

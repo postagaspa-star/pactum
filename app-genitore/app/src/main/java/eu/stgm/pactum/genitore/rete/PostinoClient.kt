@@ -1,10 +1,21 @@
 package eu.stgm.pactum.genitore.rete
 
+import eu.stgm.pactum.genitore.dati.AbbinamentoGenitore
 import eu.stgm.pactum.genitore.dati.CodiceAbbinamento
+import eu.stgm.pactum.genitore.dati.CodiceGenitore
 import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.ConfigurazionePostino
+import eu.stgm.pactum.genitore.dati.CorpoAbbinaGenitore
+import eu.stgm.pactum.genitore.dati.CorpoBoccia
 import eu.stgm.pactum.genitore.dati.CorpoNomeFiglio
+import eu.stgm.pactum.genitore.dati.CorpoNomeGenitore
+import eu.stgm.pactum.genitore.dati.CorpoNuoveFaccende
 import eu.stgm.pactum.genitore.dati.CorpoNuovoDispositivo
+import eu.stgm.pactum.genitore.dati.Faccenda
+import eu.stgm.pactum.genitore.dati.PaccoFaccende
+import eu.stgm.pactum.genitore.dati.PaccoGenitori
+import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
+import eu.stgm.pactum.genitore.dati.TIPO_ABBINAMENTO_GENITORE
 import eu.stgm.pactum.genitore.dati.CorpoRispostaProposta
 import eu.stgm.pactum.genitore.dati.CorpoRispostaSessione
 import eu.stgm.pactum.genitore.dati.CorpoSegno
@@ -25,6 +36,7 @@ import eu.stgm.pactum.genitore.dati.PropostaDecisa
 import eu.stgm.pactum.genitore.dati.SegnoMandato
 import eu.stgm.pactum.genitore.dati.Sessione
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
@@ -78,6 +90,13 @@ sealed interface EsitoScrittura<out T> {
     data object Fallito : EsitoScrittura<Nothing>
 }
 
+/** (0.13) Lo stesso esito col dato trasformato: rifiuti e fallimenti restano com'erano. */
+fun <T, R> EsitoScrittura<T>.mappa(trasforma: (T) -> R): EsitoScrittura<R> = when (this) {
+    is EsitoScrittura.Riuscito -> EsitoScrittura.Riuscito(trasforma(dato))
+    is EsitoScrittura.Rifiutato -> this
+    EsitoScrittura.Fallito -> EsitoScrittura.Fallito
+}
+
 /**
  * Un codice di abbinamento appena arrivato, con l'ora del server scritta nella
  * stessa risposta (header `Date`): la scadenza si conta da lì e dall'orologio
@@ -94,6 +113,12 @@ data class CodiceRicevuto(val codice: CodiceAbbinamento, val oraServer: Instant?
 sealed interface EsitoFamiglia {
     data class Letta(val famiglia: Famiglia) : EsitoFamiglia
     data object ServerVecchio : EsitoFamiglia
+
+    /**
+     * (0.13) 401: il server non riconosce più il codice di questo telefono (un
+     * altro genitore l'ha tolto, o il codice è sbagliato). Non è la rete.
+     */
+    data object NonAutorizzato : EsitoFamiglia
     data object Fallita : EsitoFamiglia
 }
 
@@ -125,6 +150,94 @@ sealed interface EsitoRispostaSessione {
 }
 
 /**
+ * (0.13) Un codice di 6 cifre per il telefono di un genitore, con l'ora del server
+ * della stessa risposta (come [CodiceRicevuto]).
+ */
+data class CodiceGenitoreRicevuto(val codice: CodiceGenitore, val oraServer: Instant?)
+
+/**
+ * (0.13) Com'è andato POST /api/abbina col tipo "genitore" (contratto v3.6), nelle
+ * categorie che il genitore deve distinguere.
+ */
+sealed interface EsitoAbbinamento {
+    /** Collegato: il token (il server lo dà una volta sola) e chi sei. */
+    data class Collegato(val token: String, val genitore: RiferimentoGenitore?) : EsitoAbbinamento
+
+    /** Sbagliato, scaduto o già usato: il server dà la stessa risposta per i tre casi. */
+    data object CodiceNonValido : EsitoAbbinamento
+
+    /** Troppi codici sbagliati sul server: si aspetta, anche col codice giusto. */
+    data class TroppiTentativi(val riprovaTraSecondi: Long?) : EsitoAbbinamento
+
+    /**
+     * Il codice è di un telefono o di un computer del figlio ([tipoAtteso]): il
+     * server non l'ha consumato. null = il server non ha detto di che tipo.
+     */
+    data class TipoNonCorrispondente(val tipoAtteso: String?) : EsitoAbbinamento
+
+    /**
+     * Il server conosce i codici ma non quelli dei genitori (più vecchio della
+     * v3.6: il tipo "genitore" non lo accetta, 422). Serve aggiornarlo; intanto
+     * resta il codice d'accesso lungo.
+     */
+    data object ServerDaAggiornare : EsitoAbbinamento
+
+    /** A quell'indirizzo non c'è un server che conosca i codici (indirizzo sbagliato o server 0.7). */
+    data object ServerSenzaCodici : EsitoAbbinamento
+
+    /** Il server non si raggiunge. */
+    data object SenzaRete : EsitoAbbinamento
+
+    /** Qualsiasi altra cosa: si riprova. */
+    data object Errore : EsitoAbbinamento
+}
+
+/**
+ * (0.13) L'esito di GET /api/genitori: i genitori, o "server più vecchio della
+ * v3.6", o il collegamento di questo telefono che non vale più (401), o fallita.
+ */
+sealed interface EsitoGenitori {
+    data class Letti(val pacco: PaccoGenitori) : EsitoGenitori
+    data object ServerVecchio : EsitoGenitori
+    data object NonAutorizzato : EsitoGenitori
+    data object Fallita : EsitoGenitori
+}
+
+/** (0.13) L'esito di GET /api/faccende?figlio_id=n: come [EsitoGenitori]. */
+sealed interface EsitoFaccende {
+    data class Lette(val faccende: List<Faccenda>) : EsitoFaccende
+    data object ServerVecchio : EsitoFaccende
+    data object NonAutorizzato : EsitoFaccende
+    data object Fallita : EsitoFaccende
+}
+
+/**
+ * (0.13) L'esito di GET /api/faccende/{id}/foto. La foto arriva come byte e resta
+ * in memoria: non si scrive mai su disco, né in galleria.
+ */
+sealed interface EsitoFoto {
+    class Arrivata(val byte: ByteArray) : EsitoFoto
+
+    /** La foto non c'è: mai arrivata, bocciata o già cancellata (dopo 30 giorni). */
+    data object NonTrovata : EsitoFoto
+    data object ServerVecchio : EsitoFoto
+    data object NonAutorizzato : EsitoFoto
+    data object Fallita : EsitoFoto
+}
+
+/**
+ * (0.13) Quello che le faccende chiedono al server: [PostinoClient] nell'app, un
+ * finto nei test (così la logica delle faccende si prova senza Android).
+ */
+interface FonteFaccende {
+    suspend fun leggiFaccende(figlioId: Long?): EsitoFaccende
+    suspend fun daiFaccende(corpo: CorpoNuoveFaccende): EsitoScrittura<List<Faccenda>?>
+    suspend fun bocciaFaccenda(faccendaId: Long, nota: String?): EsitoScrittura<Faccenda?>
+    suspend fun annullaFaccenda(faccendaId: Long): EsitoScrittura<Faccenda?>
+    suspend fun scaricaFoto(faccendaId: Long): EsitoFoto
+}
+
+/**
  * Client verso il server, lato genitore. Protocollo: docs/contratto-api.md
  * (fonte di verità — ogni modifica passa prima da lì).
  *
@@ -138,6 +251,9 @@ sealed interface EsitoRispostaSessione {
  *   POST {base}/api/proposte/{id}/ritira     → il ritiro di una proposta del genitore (v3.4)
  *   GET  {base}/api/sessioni?figlio_id=n     → le sessioni del figlio (v3.5)
  *   POST {base}/api/sessioni/{id}/risposta   → la decisione su una sessione (v3.5)
+ *   POST {base}/api/abbina {tipo: genitore}  → il codice di 6 cifre diventa un token (v3.6, senza token)
+ *   GET/POST/PATCH/DELETE genitori, codici   → i genitori (v3.6)
+ *   GET/POST faccende, foto, boccia, annulla → le faccende (v3.6)
  *   header: Authorization: Bearer <token del genitore>
  *
  * `figlioId` null = server 0.7 (o figlio non ancora noto): la richiesta parte
@@ -156,7 +272,7 @@ sealed interface EsitoRispostaSessione {
 class PostinoClient(
     private val configurazione: ConfigurazionePostino,
     perLaVedetta: Boolean = false,
-) {
+) : FonteFaccende {
 
     /** Il client delle richieste normali (letture e scritture): quello della vedetta ha il tempo massimo. */
     private val clientNormale: OkHttpClient = if (perLaVedetta) httpVedetta else http
@@ -416,6 +532,152 @@ class PostinoClient(
         return interpretaSenzaDato(risposta.codice, risposta.corpo)
     }
 
+    // --- I genitori (0.13, contratto v3.6) -------------------------------------------
+    // Come per i dispositivi: la creazione e i codici passano da [httpCreazioni],
+    // senza ritentativi; dopo un `Fallito` chi chiama rilegge i genitori. Un server
+    // più vecchio della v3.6 non conosce /api/genitori (404 "Not Found" o 405):
+    // [CodiciErrore.SERVER_DA_AGGIORNARE].
+
+    /** GET /api/genitori: chi sei tu e tutti i genitori (revocati compresi). */
+    suspend fun leggiGenitori(): EsitoGenitori {
+        val risposta = richiedi("GET", "/api/genitori", null) ?: return EsitoGenitori.Fallita
+        return interpretaGenitori(risposta.codice, risposta.corpo)
+    }
+
+    /** POST /api/genitori: un genitore nuovo, non ancora collegato, e il codice per collegarlo. */
+    suspend fun creaGenitore(nome: String): EsitoScrittura<CodiceGenitoreRicevuto> {
+        val corpo = json.encodeToString(CorpoNomeGenitore.serializer(), CorpoNomeGenitore(nome))
+        val risposta = richiedi("POST", "/api/genitori", corpo.toRequestBody(JSON_MEDIA_TYPE), httpCreazioni)
+            ?: return EsitoScrittura.Fallito
+        return codiceGenitoreDa(risposta)
+    }
+
+    /**
+     * POST /api/genitori/{id}/codice: un codice nuovo per un genitore già creato
+     * (telefono cambiato o reinstallato). Annulla il codice di prima; quando viene
+     * usato, il collegamento di prima di quel genitore smette di funzionare.
+     */
+    suspend fun nuovoCodiceGenitore(genitoreId: Long): EsitoScrittura<CodiceGenitoreRicevuto> {
+        val risposta = richiedi("POST", "/api/genitori/$genitoreId/codice", CORPO_VUOTO, httpCreazioni)
+            ?: return EsitoScrittura.Fallito
+        return codiceGenitoreDa(risposta)
+    }
+
+    /** PATCH /api/genitori/{id}: il nome nuovo (anche di un altro genitore: sono tutti uguali). */
+    suspend fun rinominaGenitore(genitoreId: Long, nome: String): EsitoScrittura<Unit> {
+        val corpo = json.encodeToString(CorpoNomeGenitore.serializer(), CorpoNomeGenitore(nome))
+        val risposta = scrivi("PATCH", "/api/genitori/$genitoreId", corpo) ?: return EsitoScrittura.Fallito
+        return interpretaNuovaRotta(risposta.codice, risposta.corpo)
+    }
+
+    /**
+     * DELETE /api/genitori/{id}: la REVOCA (il suo telefono smette di vedere il
+     * patto). Niente si cancella. `non_te_stesso`, `ultimo_genitore` sono rifiuti.
+     */
+    suspend fun togliGenitore(genitoreId: Long): EsitoScrittura<Unit> {
+        val risposta = richiedi("DELETE", "/api/genitori/$genitoreId", null) ?: return EsitoScrittura.Fallito
+        return interpretaNuovaRotta(risposta.codice, risposta.corpo)
+    }
+
+    private fun codiceGenitoreDa(risposta: RispostaHttp): EsitoScrittura<CodiceGenitoreRicevuto> =
+        when (val esito = interpretaCodiceGenitore(risposta.codice, risposta.corpo)) {
+            is EsitoScrittura.Riuscito -> EsitoScrittura.Riuscito(CodiceGenitoreRicevuto(esito.dato, risposta.oraServer))
+            is EsitoScrittura.Rifiutato -> esito
+            EsitoScrittura.Fallito -> EsitoScrittura.Fallito
+        }
+
+    // --- Le faccende (0.13, contratto v3.6) ------------------------------------------
+
+    /**
+     * GET /api/faccende?figlio_id=n: tutte le faccende da fare, più le fatte e le
+     * annullate degli ultimi 30 giorni, dalla più recente.
+     */
+    override suspend fun leggiFaccende(figlioId: Long?): EsitoFaccende {
+        val risposta = richiedi("GET", conFiglio("/api/faccende", figlioId), null) ?: return EsitoFaccende.Fallita
+        return interpretaFaccende(risposta.codice, risposta.corpo)
+    }
+
+    /**
+     * POST /api/faccende: da 1 a 10 faccende al figlio, con lo stesso inizio del
+     * blocco. Una creazione: niente ritentativi automatici (due invii farebbero
+     * due volte le faccende); dopo un `Fallito` chi chiama rilegge l'elenco.
+     * Il dato è null se il server ha detto sì ma il corpo non si legge.
+     */
+    override suspend fun daiFaccende(corpo: CorpoNuoveFaccende): EsitoScrittura<List<Faccenda>?> {
+        val testo = json.encodeToString(CorpoNuoveFaccende.serializer(), corpo)
+        val risposta = richiedi("POST", "/api/faccende", testo.toRequestBody(JSON_MEDIA_TYPE), httpCreazioni)
+            ?: return EsitoScrittura.Fallito
+        return interpretaNuovaRotta(risposta.codice, risposta.corpo, PaccoFaccende.serializer())
+            .mappa { it?.faccende }
+    }
+
+    /**
+     * POST /api/faccende/{id}/boccia: la foto non va, la faccenda torna da fare e
+     * il blocco riparte subito. Solo entro 24 ore dalla foto (`non_bocciabile`).
+     * Come le creazioni, senza ritentativi automatici ([httpCreazioni]): un secondo
+     * invio fatto in silenzio dalla rete, dopo un primo arrivato al server, si
+     * prenderebbe un `non_bocciabile` al posto del "fatto".
+     */
+    override suspend fun bocciaFaccenda(faccendaId: Long, nota: String?): EsitoScrittura<Faccenda?> {
+        val corpo = json.encodeToString(CorpoBoccia.serializer(), CorpoBoccia(nota))
+        val risposta = richiedi(
+            "POST",
+            "/api/faccende/$faccendaId/boccia",
+            corpo.toRequestBody(JSON_MEDIA_TYPE),
+            httpCreazioni,
+        ) ?: return EsitoScrittura.Fallito
+        return interpretaNuovaRotta(risposta.codice, risposta.corpo, Faccenda.serializer())
+    }
+
+    /** POST /api/faccende/{id}/annulla: solo una faccenda da fare (`non_annullabile`). Senza ritentativi, come "Boccia". */
+    override suspend fun annullaFaccenda(faccendaId: Long): EsitoScrittura<Faccenda?> {
+        val risposta = richiedi("POST", "/api/faccende/$faccendaId/annulla", CORPO_VUOTO, httpCreazioni)
+            ?: return EsitoScrittura.Fallito
+        return interpretaNuovaRotta(risposta.codice, risposta.corpo, Faccenda.serializer())
+    }
+
+    /**
+     * GET /api/faccende/{id}/foto, col token come tutto il resto. La foto arriva
+     * in memoria e lì resta: niente file, niente galleria. Oltre [MASSIMO_BYTE_FOTO]
+     * non si legge (il server ne tiene al massimo 4 MB).
+     */
+    override suspend fun scaricaFoto(faccendaId: Long): EsitoFoto {
+        if (!configurazione.completa) return EsitoFoto.Fallita
+        val richiesta = try {
+            richiesta("/api/faccende/$faccendaId/foto").get().build()
+        } catch (e: IllegalArgumentException) {
+            return EsitoFoto.Fallita
+        }
+        return suspendCancellableCoroutine { continuazione ->
+            val chiamata = clientNormale.newCall(richiesta)
+            continuazione.invokeOnCancellation { chiamata.cancel() }
+            chiamata.enqueue(
+                object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        if (continuazione.isActive) continuazione.resume(EsitoFoto.Fallita)
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        val esito = try {
+                            response.use { risposta ->
+                                if (risposta.isSuccessful) {
+                                    leggiAlMassimo(risposta.body?.byteStream(), MASSIMO_BYTE_FOTO)
+                                        ?.let { EsitoFoto.Arrivata(it) }
+                                        ?: EsitoFoto.Fallita
+                                } else {
+                                    interpretaFotoMancante(risposta.code, risposta.body?.string())
+                                }
+                            }
+                        } catch (e: IOException) {
+                            EsitoFoto.Fallita
+                        }
+                        if (continuazione.isActive) continuazione.resume(esito)
+                    }
+                },
+            )
+        }
+    }
+
     suspend fun segnaLetta(notificaId: Long): Boolean {
         val risposta = richiedi("POST", "/api/notifiche/$notificaId/letta", CORPO_VUOTO)
         return risposta != null && risposta.codice in 200..299
@@ -524,6 +786,8 @@ class PostinoClient(
                     ?.let { EsitoFamiglia.Letta(it) }
                     ?: EsitoFamiglia.Fallita
             codice == 404 -> EsitoFamiglia.ServerVecchio
+            // (0.13) Il codice di questo telefono non vale più: non è la rete.
+            codice == 401 -> EsitoFamiglia.NonAutorizzato
             else -> EsitoFamiglia.Fallita
         }
 
@@ -638,6 +902,179 @@ class PostinoClient(
             }
         }
 
+        // --- (0.13) Genitori, abbinamento e faccende (contratto v3.6) -------------------
+
+        /** Oltre questa misura una foto non si legge: il server ne tiene al massimo 4 MB. */
+        const val MASSIMO_BYTE_FOTO = 8 * 1024 * 1024
+
+        /**
+         * GET /api/genitori dal codice HTTP. Una rotta che il server non conosce (404
+         * "Not Found", 405) vuol dire server più vecchio della v3.6: per i genitori
+         * serve aggiornarlo. Tutto il resto che non è un elenco leggibile è un fallimento.
+         */
+        internal fun interpretaGenitori(codice: Int, corpo: String?): EsitoGenitori = when {
+            codice in 200..299 ->
+                corpo?.let { decodifica(PaccoGenitori.serializer(), it) }
+                    ?.let { EsitoGenitori.Letti(it) }
+                    ?: EsitoGenitori.Fallita
+            codice == 405 -> EsitoGenitori.ServerVecchio
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoGenitori.ServerVecchio
+            codice == 401 -> EsitoGenitori.NonAutorizzato
+            else -> EsitoGenitori.Fallita
+        }
+
+        /** GET /api/faccende dal codice HTTP: come [interpretaGenitori]. */
+        internal fun interpretaFaccende(codice: Int, corpo: String?): EsitoFaccende = when {
+            codice in 200..299 ->
+                corpo?.let { decodifica(PaccoFaccende.serializer(), it) }
+                    ?.let { EsitoFaccende.Lette(it.faccende) }
+                    ?: EsitoFaccende.Fallita
+            codice == 405 -> EsitoFaccende.ServerVecchio
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoFaccende.ServerVecchio
+            codice == 401 -> EsitoFaccende.NonAutorizzato
+            else -> EsitoFaccende.Fallita
+        }
+
+        /**
+         * Il codice di un genitore (creato, o nuovo). Serve il codice: un 2xx che
+         * non lo porta è `Fallito`, e chi chiama rilegge i genitori e ne chiede uno
+         * nuovo. Una rotta che il server non conosce = server da aggiornare.
+         */
+        internal fun interpretaCodiceGenitore(codice: Int, corpo: String?): EsitoScrittura<CodiceGenitore> = when {
+            codice in 200..299 ->
+                corpo?.let { decodifica(CodiceGenitore.serializer(), it) }
+                    ?.takeIf { it.codice.isNotBlank() }
+                    ?.let { EsitoScrittura.Riuscito(it) }
+                    ?: EsitoScrittura.Fallito
+            codice == 405 -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            else -> rifiuto(codice, corpo)
+        }
+
+        /**
+         * Una scrittura su una rotta della v3.6 di cui basta sapere che è andata (un
+         * nome cambiato, una revoca): qualunque 2xx. Una rotta che il server non
+         * conosce = server da aggiornare; un 404 della rotta (`genitore non trovato`)
+         * = [CodiciErrore.NON_TROVATO]; il resto come ogni scrittura.
+         */
+        internal fun interpretaNuovaRotta(codice: Int, corpo: String?): EsitoScrittura<Unit> = when {
+            codice in 200..299 -> EsitoScrittura.Riuscito(Unit)
+            codice == 405 -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            else -> rifiuto(codice, corpo)
+        }
+
+        /**
+         * Come [interpretaNuovaRotta], col dato della risposta (null se il corpo non
+         * si legge): conta il 2xx, non la forma del corpo. Un "sì" del server con un
+         * corpo inatteso non deve far dire "riprova" su un gesto già fatto — una
+         * faccenda bocciata due volte, faccende date due volte.
+         */
+        internal fun <T> interpretaNuovaRotta(
+            codice: Int,
+            corpo: String?,
+            serializer: kotlinx.serialization.KSerializer<T>,
+        ): EsitoScrittura<T?> = when {
+            codice in 200..299 -> EsitoScrittura.Riuscito(corpo?.let { decodifica(serializer, it) })
+            codice == 405 -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+            else -> rifiuto(codice, corpo)
+        }
+
+        /**
+         * Una foto che non è arrivata: un 404 della rotta (`foto non trovata`, ma
+         * anche `faccenda non trovata`) = la foto non c'è; una rotta che il server
+         * non conosce = server da aggiornare; il resto = da riprovare.
+         */
+        internal fun interpretaFotoMancante(codice: Int, corpo: String?): EsitoFoto = when {
+            codice == 405 -> EsitoFoto.ServerVecchio
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoFoto.ServerVecchio
+            codice == 404 -> EsitoFoto.NonTrovata
+            codice == 401 -> EsitoFoto.NonAutorizzato
+            else -> EsitoFoto.Fallita
+        }
+
+        /** I byte di [flusso], al massimo [massimo]; null se ce ne sono di più (o se manca). */
+        internal fun leggiAlMassimo(flusso: java.io.InputStream?, massimo: Int): ByteArray? {
+            if (flusso == null) return null
+            val uscita = java.io.ByteArrayOutputStream()
+            val pezzo = ByteArray(16 * 1024)
+            var letti = 0
+            while (true) {
+                val n = flusso.read(pezzo)
+                if (n < 0) break
+                letti += n
+                if (letti > massimo) return null
+                uscita.write(pezzo, 0, n)
+            }
+            return uscita.toByteArray().takeIf { it.isNotEmpty() }
+        }
+
+        /**
+         * POST /api/abbina col tipo "genitore" (contratto v3.6): nessun token (è
+         * proprio quello che si chiede). Come le creazioni, niente ritentativo
+         * automatico: il codice vale una volta sola, e un secondo invio dopo una
+         * risposta persa riceverebbe "codice non valido" al posto del collegamento.
+         * [NonCancellable]: il token arriva una volta sola, e una risposta persa
+         * perché chi chiama ha rinunciato lascerebbe il codice consumato per niente.
+         * [serverUrl] è già normalizzato (normalizzaUrlServer).
+         */
+        suspend fun abbinaGenitore(serverUrl: String, codice: String, versioneApp: String?): EsitoAbbinamento =
+            withContext(NonCancellable + Dispatchers.IO) {
+                val corpo = json.encodeToString(
+                    CorpoAbbinaGenitore.serializer(),
+                    CorpoAbbinaGenitore(codice = codice, tipo = TIPO_ABBINAMENTO_GENITORE, versioneApp = versioneApp),
+                )
+                try {
+                    val richiesta = Request.Builder()
+                        .url("$serverUrl/api/abbina")
+                        .post(corpo.toRequestBody(JSON_MEDIA_TYPE))
+                        .build()
+                    httpCreazioni.newCall(richiesta).execute().use { risposta ->
+                        interpretaAbbinamento(risposta.code, risposta.body?.string())
+                    }
+                } catch (e: IOException) {
+                    EsitoAbbinamento.SenzaRete
+                } catch (e: IllegalArgumentException) {
+                    EsitoAbbinamento.Errore // indirizzo che non è un URL: non è un motivo per crashare
+                }
+            }
+
+        /**
+         * La risposta di POST /api/abbina tradotta in un esito. L'errore si legge sia
+         * dentro `detail` (FastAPI) sia in cima (il contratto). Un 200 senza token
+         * non collega niente: meglio dirlo che salvare il vuoto. Il 422 è il server
+         * più vecchio della v3.6, che il tipo "genitore" non lo conosce.
+         */
+        internal fun interpretaAbbinamento(codice: Int, corpo: String?): EsitoAbbinamento {
+            if (codice in 200..299) {
+                val risposta = corpo?.let { decodifica(AbbinamentoGenitore.serializer(), it) }
+                val token = risposta?.token?.trim().orEmpty()
+                return if (token.isEmpty()) EsitoAbbinamento.Errore else EsitoAbbinamento.Collegato(token, risposta?.genitore)
+            }
+            val errore = codiceErrore(corpo)
+            return when {
+                errore == CodiciErrore.TROPPI_TENTATIVI || codice == 429 ->
+                    EsitoAbbinamento.TroppiTentativi(riprovaTraSecondi(corpo)?.takeIf { it > 0 })
+                // Prima del 409 generico: il codice è buono, ma per un dispositivo.
+                errore == CodiciErrore.TIPO_NON_CORRISPONDENTE ->
+                    EsitoAbbinamento.TipoNonCorrispondente(tipoAtteso(corpo))
+                errore == CodiciErrore.CODICE_NON_VALIDO || codice == 409 -> EsitoAbbinamento.CodiceNonValido
+                codice == 422 -> EsitoAbbinamento.ServerDaAggiornare
+                codice == 404 || codice == 405 -> EsitoAbbinamento.ServerSenzaCodici
+                else -> EsitoAbbinamento.Errore
+            }
+        }
+
+        /** Il `tipo_atteso` di un 409 `tipo_non_corrispondente`, in minuscolo; null se manca. */
+        private fun tipoAtteso(corpo: String?): String? {
+            val (dettaglio, oggetto) = corpoDelRifiuto(corpo) ?: return null
+            return (testo(dettaglio?.get("tipo_atteso")) ?: testo(oggetto["tipo_atteso"]))
+                ?.trim()
+                ?.lowercase()
+                ?.takeIf { it.isNotEmpty() }
+        }
+
         /**
          * (0.10) true = un 404 della rotta che non esiste: `{"detail": "Not Found"}`,
          * la risposta di FastAPI a un indirizzo che non conosce, oppure un corpo che
@@ -667,6 +1104,9 @@ class PostinoClient(
                 codiceErrore(corpo) ?: CodiciErrore.TROPPI_TENTATIVI,
                 riprovaTraSecondi(corpo),
             )
+            // (0.13) 401 = il codice di questo telefono non vale più (un altro
+            // genitore l'ha tolto, contratto v3.6): non è la rete, e "riprova" non serve.
+            401 -> EsitoScrittura.Rifiutato(CodiciErrore.COLLEGAMENTO_NON_VALIDO)
             else -> EsitoScrittura.Fallito
         }
 

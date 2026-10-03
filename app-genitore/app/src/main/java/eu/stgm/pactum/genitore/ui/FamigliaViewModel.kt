@@ -9,10 +9,14 @@ import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.Dispositivo
 import eu.stgm.pactum.genitore.dati.Famiglia
 import eu.stgm.pactum.genitore.dati.Figlio
+import eu.stgm.pactum.genitore.dati.Genitore
 import eu.stgm.pactum.genitore.dati.Impostazioni
+import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.TipiDispositivo
+import eu.stgm.pactum.genitore.rete.CodiceGenitoreRicevuto
 import eu.stgm.pactum.genitore.rete.CodiceRicevuto
 import eu.stgm.pactum.genitore.rete.EsitoFamiglia
+import eu.stgm.pactum.genitore.rete.EsitoGenitori
 import eu.stgm.pactum.genitore.rete.EsitoScrittura
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import kotlinx.coroutines.Job
@@ -53,7 +57,16 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
         val ricevutoMs: Long,
         /** Il dispositivo era già collegato: il codice lo ricollega. */
         val ricollegamento: Boolean,
+        /**
+         * (0.13) Il codice è per il telefono di un GENITORE (contratto v3.6), non per
+         * un dispositivo del figlio: allora [dispositivoId] è null e il genitore è
+         * [genitoreId]; [nomeDispositivo] è il suo nome.
+         */
+        val genitoreId: Long? = null,
     ) {
+        /** (0.13) true = un codice per un genitore. */
+        val perGenitore: Boolean get() = genitoreId != null
+
         /** I secondi che restano a [adessoMs] (orologio monotono); 0 = scaduto. */
         fun rimasti(adessoMs: Long = SystemClock.elapsedRealtime()): Long =
             secondiRimasti(validita, adessoMs - ricevutoMs)
@@ -62,7 +75,9 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
     /** Un esito da dire una volta (snackbar) e poi consumare. */
     sealed interface Evento {
         data class Fatto(val messaggio: Int) : Evento
-        data class Errore(val codice: String?, val secondi: Long?) : Evento
+
+        /** [suGenitore] (0.13): il gesto era su un genitore (un 404 lo dice così). */
+        data class Errore(val codice: String?, val secondi: Long?, val suGenitore: Boolean = false) : Evento
     }
 
     data class StatoFamiglia(
@@ -82,6 +97,26 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
         val lavoroInCorso: Boolean = false,
         val codice: CodiceMostrato? = null,
         val evento: Evento? = null,
+        /**
+         * (0.13) Chi sei tu (contratto v3.6: `io` di GET /api/famiglia e di GET
+         * /api/genitori). null = server più vecchio, o non ancora letto: allora
+         * tutto quello che ha fatto "il genitore" è tuo, come prima.
+         */
+        val io: RiferimentoGenitore? = null,
+        /** (0.13) I genitori, revocati compresi (GET /api/genitori): solo dove servono, nelle Impostazioni. */
+        val genitori: List<Genitore> = emptyList(),
+        /** (0.13) Almeno una lettura dei genitori è andata. */
+        val genitoriLetti: Boolean = false,
+        /** (0.13) Il server non conosce /api/genitori: per più genitori serve aggiornarlo. */
+        val genitoriServerVecchio: Boolean = false,
+        /** (0.13) L'ultima lettura dei genitori è fallita: quelli mostrati sono di prima. */
+        val genitoriErrore: Boolean = false,
+        /**
+         * (0.13) Il server non riconosce più il collegamento di questo telefono (401:
+         * un altro genitore l'ha tolto, o il codice è sbagliato). Non è la rete, e lo
+         * si dice per quello che è.
+         */
+        val collegamentoNonValido: Boolean = false,
     ) {
         val figlioScelto: Figlio? get() = figlioEffettivo(figli, sceltoSalvato)
 
@@ -114,6 +149,7 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
                 sceltoSalvato = attuale.sceltoSalvato ?: salvato,
                 figli = if (attuale.lettaDalServer || ricordata == null) attuale.figli else ricordata.figli,
                 pronta = attuale.pronta || ricordata != null,
+                io = attuale.io ?: ricordata?.io,
             )
             aggiorna()
         }
@@ -145,6 +181,9 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
                         errore = false,
                         lettaDalServer = true,
                         configurazioneMancante = false,
+                        collegamentoNonValido = false,
+                        // (0.13) Chi sei tu: un server più vecchio della v3.6 non lo dice.
+                        io = esito.famiglia.io,
                     )
                 }
                 EsitoFamiglia.ServerVecchio -> {
@@ -156,8 +195,18 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
                         errore = false,
                         lettaDalServer = true,
                         configurazioneMancante = false,
+                        collegamentoNonValido = false,
+                        io = null,
                     )
                 }
+                // (0.13) 401: il collegamento di questo telefono non vale più (un altro
+                // genitore l'ha tolto). Non è la rete: si dice per quello che è.
+                EsitoFamiglia.NonAutorizzato -> _stato.value = _stato.value.copy(
+                    pronta = true,
+                    errore = false,
+                    collegamentoNonValido = true,
+                    configurazioneMancante = false,
+                )
                 // Si tiene la famiglia di prima (o quella ricordata): la scelta resta
                 // valida, e le schermate dicono da sole che i dati non sono aggiornati.
                 EsitoFamiglia.Fallita -> _stato.value = _stato.value.copy(
@@ -176,6 +225,7 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
      */
     fun ricomincia() {
         lettura?.cancel()
+        letturaGenitori?.cancel()
         _stato.value = StatoFamiglia()
         viewModelScope.launch {
             // Se il server è lo stesso la scelta è ancora salvata e resta valida.
@@ -288,6 +338,131 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // --- (0.13) I genitori (contratto v3.6) ------------------------------------------
+    // Si leggono solo dove servono (Impostazioni, sezione Famiglia), non a ogni giro
+    // del badge: chi sei tu lo dice già GET /api/famiglia.
+
+    private var letturaGenitori: Job? = null
+
+    /** Rilegge i genitori (GET /api/genitori). Un server più vecchio della v3.6 non li conosce. */
+    fun aggiornaGenitori() {
+        letturaGenitori?.cancel()
+        letturaGenitori = viewModelScope.launch {
+            val configurazione = impostazioni.leggiConfigurazione()
+            if (!configurazione.completa) return@launch
+            _stato.value = when (val esito = PostinoClient(configurazione).leggiGenitori()) {
+                is EsitoGenitori.Letti -> _stato.value.copy(
+                    genitori = esito.pacco.genitori.sortedBy { it.id },
+                    io = esito.pacco.io ?: _stato.value.io,
+                    genitoriLetti = true,
+                    genitoriServerVecchio = false,
+                    genitoriErrore = false,
+                )
+                EsitoGenitori.ServerVecchio -> _stato.value.copy(
+                    genitori = emptyList(),
+                    genitoriLetti = true,
+                    genitoriServerVecchio = true,
+                    genitoriErrore = false,
+                )
+                // (0.13) 401: come per la famiglia, non è la rete.
+                EsitoGenitori.NonAutorizzato -> _stato.value.copy(collegamentoNonValido = true)
+                EsitoGenitori.Fallita -> _stato.value.copy(genitoriErrore = true)
+            }
+        }
+    }
+
+    /** Come [rileggiSeLibera], per i genitori (il dialogo del codice di un genitore). */
+    fun rileggiGenitoriSeLibera() {
+        if (letturaGenitori?.isActive == true) return
+        aggiornaGenitori()
+    }
+
+    /**
+     * "Aggiungi un genitore": nasce non collegato, e il suo codice si mostra in
+     * grande. Se la rete cade, come per un figlio: prima di dire "riprova" si
+     * rileggono i genitori; se c'è, gli si chiede un codice nuovo (quello perso si
+     * annulla).
+     */
+    fun creaGenitore(nome: String) = gesto(suGenitori = true) { postino ->
+        val pulito = nome.trim()
+        val prima = _stato.value.genitori
+        when (val esito = postino.creaGenitore(pulito)) {
+            is EsitoScrittura.Riuscito -> {
+                mostraCodiceGenitore(esito.dato, nomeRiserva = pulito, ricollegamento = false)
+                null
+            }
+            is EsitoScrittura.Rifiutato -> errore(esito, suGenitore = true)
+            EsitoScrittura.Fallito -> {
+                val dopo = (postino.leggiGenitori() as? EsitoGenitori.Letti)?.pacco?.genitori
+                    ?: return@gesto Evento.Errore(CodiciErrore.ESITO_INCERTO, null, suGenitore = true)
+                val creato = genitoreCreato(prima, dopo, pulito)
+                    ?: return@gesto Evento.Errore(null, null, suGenitore = true)
+                when (val codice = postino.nuovoCodiceGenitore(creato.id)) {
+                    is EsitoScrittura.Riuscito -> {
+                        mostraCodiceGenitore(codice.dato, nomeRiserva = creato.nome, ricollegamento = false, idRiserva = creato.id)
+                        null
+                    }
+                    else -> Evento.Fatto(R.string.famiglia_genitore_aggiunto_senza_codice)
+                }
+            }
+        }
+    }
+
+    /** Un codice nuovo per un altro genitore (telefono cambiato, o primo collegamento non riuscito). */
+    fun nuovoCodiceGenitore(genitore: Genitore) = gesto(suGenitori = true) { postino ->
+        when (val esito = postino.nuovoCodiceGenitore(genitore.id)) {
+            is EsitoScrittura.Riuscito -> {
+                mostraCodiceGenitore(
+                    esito.dato,
+                    nomeRiserva = genitore.nome,
+                    ricollegamento = genitore.abbinato,
+                    idRiserva = genitore.id,
+                )
+                null
+            }
+            else -> errore(esito, suGenitore = true)
+        }
+    }
+
+    /** Il nome di un genitore (anche di un altro: sono tutti uguali). */
+    fun rinominaGenitore(genitoreId: Long, nome: String) = gesto(suGenitori = true) { postino ->
+        when (val esito = postino.rinominaGenitore(genitoreId, nome.trim())) {
+            is EsitoScrittura.Riuscito -> Evento.Fatto(R.string.famiglia_figlio_rinominato)
+            else -> errore(esito, suGenitore = true)
+        }
+    }
+
+    /** "Togli": la revoca. Il suo telefono smette di vedere il patto; niente si cancella. */
+    fun togliGenitore(genitore: Genitore) = gesto(suGenitori = true) { postino ->
+        when (val esito = postino.togliGenitore(genitore.id)) {
+            is EsitoScrittura.Riuscito -> Evento.Fatto(R.string.famiglia_genitore_tolto)
+            else -> errore(esito, suGenitore = true)
+        }
+    }
+
+    private fun mostraCodiceGenitore(
+        ricevuto: CodiceGenitoreRicevuto,
+        nomeRiserva: String,
+        ricollegamento: Boolean,
+        idRiserva: Long? = null,
+    ) {
+        val arrivo = SystemClock.elapsedRealtime()
+        val codice = ricevuto.codice
+        val id = codice.genitore?.id ?: idRiserva ?: return
+        _stato.value = _stato.value.copy(
+            codice = CodiceMostrato(
+                dispositivoId = null,
+                nomeDispositivo = codice.genitore?.nome?.takeIf { it.isNotBlank() } ?: nomeRiserva,
+                tipo = TipiDispositivo.TELEFONO,
+                codice = codice.codice,
+                validita = validitaCodice(codice.scadeTs, ricevuto.oraServer),
+                ricevutoMs = arrivo,
+                ricollegamento = ricollegamento,
+                genitoreId = id,
+            ),
+        )
+    }
+
     fun chiudiCodice() {
         _stato.value = _stato.value.copy(codice = null)
     }
@@ -301,7 +476,7 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
      * famiglia (anche dopo un rifiuto: un 404 vuol dire che la famiglia che
      * vediamo non è più quella vera).
      */
-    private fun gesto(azione: suspend (PostinoClient) -> Evento?) {
+    private fun gesto(suGenitori: Boolean = false, azione: suspend (PostinoClient) -> Evento?) {
         if (_stato.value.lavoroInCorso) return
         _stato.value = _stato.value.copy(lavoroInCorso = true)
         viewModelScope.launch {
@@ -309,10 +484,12 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
             val evento = if (configurazione.completa) {
                 azione(PostinoClient(configurazione))
             } else {
-                Evento.Errore(null, null)
+                Evento.Errore(null, null, suGenitore = suGenitori)
             }
             _stato.value = _stato.value.copy(lavoroInCorso = false, evento = evento)
             aggiorna()
+            // (0.13) Dopo un gesto sui genitori si rileggono anche loro.
+            if (suGenitori) aggiornaGenitori()
         }
     }
 
@@ -347,9 +524,9 @@ class FamigliaViewModel(application: Application) : AndroidViewModel(application
     private suspend fun famigliaDopoErrore(postino: PostinoClient): List<Figlio>? =
         (postino.leggiFamiglia() as? EsitoFamiglia.Letta)?.famiglia?.figli
 
-    private fun errore(esito: EsitoScrittura<*>): Evento = when (esito) {
-        is EsitoScrittura.Rifiutato -> Evento.Errore(esito.errore, esito.riprovaTraSecondi)
-        else -> Evento.Errore(null, null)
+    private fun errore(esito: EsitoScrittura<*>, suGenitore: Boolean = false): Evento = when (esito) {
+        is EsitoScrittura.Rifiutato -> Evento.Errore(esito.errore, esito.riprovaTraSecondi, suGenitore)
+        else -> Evento.Errore(null, null, suGenitore)
     }
 
     private fun decodificaFamiglia(json: String): Famiglia? = try {

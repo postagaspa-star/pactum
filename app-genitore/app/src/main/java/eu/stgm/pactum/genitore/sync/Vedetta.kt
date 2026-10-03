@@ -44,7 +44,9 @@ import eu.stgm.pactum.genitore.ui.digestDopoAggiornamento
 import eu.stgm.pactum.genitore.ui.dispositiviDellaFinestra
 import eu.stgm.pactum.genitore.ui.etichettaDi
 import eu.stgm.pactum.genitore.ui.etichettaNotifica
+import eu.stgm.pactum.genitore.ui.faccendaDellaNotifica
 import eu.stgm.pactum.genitore.ui.idAvvisoSilenzio
+import eu.stgm.pactum.genitore.ui.notificaDiFaccende
 import eu.stgm.pactum.genitore.ui.idDigest
 import eu.stgm.pactum.genitore.ui.istanteServer
 import eu.stgm.pactum.genitore.ui.nomiDelleApp
@@ -88,6 +90,14 @@ import java.time.LocalTime
  *
  * L'aggiornamento dell'app NON passa di qui: lo scarica solo il worker
  * (VedettaWorker), così un download lento non ferma i giri del servizio.
+ *
+ * (0.13) Dal contratto v3.6 ogni genitore legge le notifiche per conto suo: le
+ * non lette e `dopo_id` sono di questo genitore (del suo token), e quelle segnate
+ * qui restano non lette per gli altri. Il ricordo degli avvisati è di questo
+ * telefono e basta; un genitore appena collegato parte senza le notifiche di prima
+ * (per lui valgono come lette). I tipi che non si conoscono (anche quelli che il
+ * server aggiungerà) ripiegano sul titolo "Novità dal patto" e sul messaggio del
+ * server: un tipo nuovo non ferma il giro.
  *
  * Un giro alla volta in tutto il processo ([turno]): servizio e worker non
  * avvisano mai due volte la stessa novità. Ogni scrittura del giro porta con sé
@@ -158,7 +168,9 @@ class Vedetta(context: Context) {
         when (famiglia) {
             is EsitoFamiglia.Letta -> sorvegliaDispositivi(configurazione, figli)
             EsitoFamiglia.ServerVecchio -> sorvegliaSilenzioServerVecchio(configurazione, contesto.finestra(null))
-            EsitoFamiglia.Fallita -> Unit // si ritenta al giro completo dopo
+            // si ritenta al giro completo dopo; (0.13) un collegamento che non vale più
+            // lo dice l'app, non un avviso di silenzio
+            EsitoFamiglia.Fallita, EsitoFamiglia.NonAutorizzato -> Unit
         }
 
         // Il digest: per figlio in v3, uno solo sul server 0.7. Con la famiglia
@@ -198,7 +210,7 @@ class Vedetta(context: Context) {
                     erede = true,
                 )
             }
-            EsitoFamiglia.Fallita -> Unit
+            EsitoFamiglia.Fallita, EsitoFamiglia.NonAutorizzato -> Unit
         }
     }
 
@@ -554,6 +566,8 @@ class Vedetta(context: Context) {
             // (v3) Di quale figlio (e dispositivo): la stessa riga della lista in app.
             sopra = etichettaNotifica(notifica, nomi.figli),
             figlioId = notifica.figlioId,
+            // (0.13) Una faccenda fatta: toccarla apre la sua foto.
+            faccendaId = faccendaDellaNotifica(notifica),
         )
     }
 
@@ -588,6 +602,7 @@ class Vedetta(context: Context) {
         destinazione: String? = null,
         sopra: String? = null,
         figlioId: Long? = null,
+        faccendaId: Long? = null,
     ): Notification {
         val intent = Intent(context, MainActivity::class.java)
             .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -597,12 +612,15 @@ class Vedetta(context: Context) {
         if (figlioId != null) {
             intent.putExtra(MainActivity.EXTRA_FIGLIO, figlioId)
         }
-        // requestCode diverso per destinazione e figlio: con lo stesso
-        // PendingIntent Android riuserebbe gli extra del primo (le notifiche
-        // aprirebbero tutte la stessa scheda, sullo stesso figlio).
+        if (faccendaId != null) {
+            intent.putExtra(MainActivity.EXTRA_FACCENDA, faccendaId)
+        }
+        // requestCode diverso per destinazione, figlio e (0.13) faccenda: con lo
+        // stesso PendingIntent Android riuserebbe gli extra del primo (le notifiche
+        // aprirebbero tutte la stessa scheda, sullo stesso figlio, la stessa foto).
         val apriApp = PendingIntent.getActivity(
             context,
-            "${destinazione.orEmpty()}|${figlioId ?: ""}".hashCode(),
+            requestCodeAvviso(destinazione, figlioId, faccendaId),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -717,10 +735,24 @@ class Vedetta(context: Context) {
          * (0.11) Anche una sessione da approvare apre la Panoramica di quel figlio:
          * la sua card sta in cima. Una sessione eliminata apre la lista, come il resto.
          */
-        internal fun destinazionePerTipo(tipo: String): String = when (tipo) {
-            "nuova_proposta", "sessione_da_approvare" -> MainActivity.DEST_FINESTRA
-            "proposta_risposta", "proposta_annullata", "proposta_ritirata", "dichiarazione" -> MainActivity.DEST_TURNO
+        internal fun destinazionePerTipo(tipo: String): String = when {
+            tipo == "nuova_proposta" || tipo == "sessione_da_approvare" -> MainActivity.DEST_FINESTRA
+            tipo in setOf("proposta_risposta", "proposta_annullata", "proposta_ritirata", "dichiarazione") ->
+                MainActivity.DEST_TURNO
+            // (0.13) Le faccende (contratto v3.6): la pagina delle faccende di quel
+            // figlio, e per una faccenda fatta la sua foto.
+            notificaDiFaccende(tipo) -> MainActivity.DEST_FACCENDE
             else -> MainActivity.DEST_NOTIFICHE
+        }
+
+        /**
+         * (0.13) Il requestCode del tocco su un avviso: uno per destinazione, figlio e
+         * faccenda, così due avvisi diversi non si rubano gli extra. Con [faccendaId]
+         * null è quello di prima (stesso hash della 0.12).
+         */
+        internal fun requestCodeAvviso(destinazione: String?, figlioId: Long?, faccendaId: Long?): Int {
+            val base = "${destinazione.orEmpty()}|${figlioId ?: ""}"
+            return (if (faccendaId == null) base else "$base|$faccendaId").hashCode()
         }
     }
 }

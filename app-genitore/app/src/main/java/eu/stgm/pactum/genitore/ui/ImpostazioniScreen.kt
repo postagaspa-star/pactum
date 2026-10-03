@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -26,6 +28,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,8 +44,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.BuildConfig
@@ -51,6 +56,7 @@ import eu.stgm.pactum.genitore.aggiornamento.Aggiornatore
 import eu.stgm.pactum.genitore.aggiornamento.EsitoAggiornamento
 import eu.stgm.pactum.genitore.dati.ConfigurazionePostino
 import eu.stgm.pactum.genitore.dati.Impostazioni
+import eu.stgm.pactum.genitore.rete.EsitoAbbinamento
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import eu.stgm.pactum.genitore.servizio.EsenzioneBatteria
 import eu.stgm.pactum.genitore.servizio.MarcaConRisparmio
@@ -73,24 +79,32 @@ fun ImpostazioniScreen(
     mostraAvvisi: Boolean = false,
     onAvvisiMostrati: () -> Unit = {},
     famigliaVm: FamigliaViewModel = viewModel(),
-    finestraVm: FinestraViewModel = viewModel(),
-    proposteVm: ProposteViewModel = viewModel(),
-    verdettiVm: VerdettiViewModel = viewModel(),
-    notificheVm: NotificheViewModel = viewModel(),
+    collegamentoVm: CollegamentoViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val ambito = rememberCoroutineScope()
     val impostazioni = remember { Impostazioni(context.applicationContext) }
     val configurazioneSalvata by impostazioni.configurazione.collectAsState(initial = null)
+    val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
+    val collegamento by collegamentoVm.stato.collectAsStateWithLifecycle()
+    val p = parole()
 
-    // La famiglia si rilegge entrando qui: è il posto dove si cambia.
-    LaunchedEffect(Unit) { famigliaVm.aggiorna() }
+    // La famiglia si rilegge entrando qui: è il posto dove si cambia. (0.13) Anche
+    // i genitori, che si leggono solo qui.
+    LaunchedEffect(Unit) {
+        famigliaVm.aggiorna()
+        famigliaVm.aggiornaGenitori()
+    }
 
     var serverUrl by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
     var caricato by rememberSaveable { mutableStateOf(false) }
     var urlNonValido by rememberSaveable { mutableStateOf(false) }
     var provaInCorso by remember { mutableStateOf(false) }
+    // (0.13) Il collegamento con il codice di 6 cifre; il codice lungo dietro un tocco.
+    var codiceSei by rememberSaveable { mutableStateOf("") }
+    var codiceLungoAperto by rememberSaveable { mutableStateOf(false) }
+    var domandaCollega by rememberSaveable { mutableStateOf(false) }
     var controlloInCorso by remember { mutableStateOf(false) }
     val aggiornatore = remember { Aggiornatore(context.applicationContext) }
     val ultimaVerifica by impostazioni.ultimaVerificaRiuscita.collectAsState(initial = null)
@@ -110,6 +124,44 @@ fun ImpostazioniScreen(
         }
     }
 
+    // (0.13) Com'è andato il collegamento col codice di 6 cifre (anche se è finito
+    // mentre questa pagina era chiusa): il token è già salvato dal ViewModel.
+    LaunchedEffect(collegamento.esito) {
+        val esito = collegamento.esito ?: return@LaunchedEffect
+        collegamentoVm.consumaEsito()
+        val messaggio = if (esito is EsitoAbbinamento.Collegato) {
+            token = esito.token
+            codiceSei = ""
+            testoCollegato(p, esito.genitore)
+        } else {
+            messaggioAbbinamento(p, esito)
+        }
+        if (messaggio != null) ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+    }
+
+    // (0.13) Un telefono già collegato come genitore: prima di collegarlo come un altro, una domanda.
+    if (domandaCollega) {
+        val testo = domandaPrimaDiCollegare(p, configurazioneSalvata?.completa == true, famiglia.io)
+        AlertDialog(
+            onDismissRequest = { domandaCollega = false },
+            title = { Text(stringResource(R.string.connessione_conferma_titolo)) },
+            text = { Text(testo.orEmpty()) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        domandaCollega = false
+                        PostinoClient.normalizzaUrlServer(serverUrl)?.let { collegamentoVm.collega(it, codiceSei) }
+                    },
+                ) {
+                    Text(stringResource(R.string.connessione_collega))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { domandaCollega = false }) { Text(stringResource(R.string.azione_annulla)) }
+            },
+        )
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
@@ -127,8 +179,20 @@ fun ImpostazioniScreen(
             // Tre blocchi: connessione, digest, aggiornamenti. È l'unica
             // schermata densa dell'app, e va bene: è configurazione.
             TitoloSezione(stringResource(R.string.impostazioni_connessione_titolo))
+            // (0.13) Chi sei tu, quando il server lo dice (contratto v3.6); o che il
+            // collegamento di questo telefono non vale più (401).
+            val io = famiglia.io?.takeIf { configurazioneSalvata?.completa == true && !famiglia.collegamentoNonValido }
+            if (famiglia.collegamentoNonValido && configurazioneSalvata?.completa == true) {
+                RigaDatiVecchi(stringResource(R.string.collegamento_non_valido))
+            }
+            if (io != null) {
+                Text(
+                    text = stringResource(R.string.connessione_collegato_come, nomeDelGenitore(p, io.nome)),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
             Text(
-                text = stringResource(R.string.impostazioni_descrizione),
+                text = stringResource(R.string.connessione_codice_spiega),
                 style = MaterialTheme.typography.bodyMedium,
             )
             OutlinedTextField(
@@ -148,14 +212,21 @@ fun ImpostazioniScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // (0.13) Il codice di 6 cifre (contratto v3.6, POST /api/abbina col tipo
+            // "genitore"): lo crea un genitore già collegato. Solo cifre, al massimo 6.
+            // Collegamento e salvataggio li fa CollegamentoViewModel, in un blocco che
+            // la pagina non interrompe; quello che le schermate sanno del collegamento
+            // di prima lo fa dimenticare GenitoreRoot (MainActivity), a ogni cambio.
             OutlinedTextField(
-                value = token,
-                onValueChange = { token = it },
-                label = { Text(stringResource(R.string.impostazioni_token)) },
+                value = codiceSei,
+                onValueChange = { codiceSei = soloCifre(it) },
+                label = { Text(stringResource(R.string.connessione_codice)) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 modifier = Modifier.fillMaxWidth(),
             )
             Button(
+                enabled = codiceCompleto(codiceSei) && !collegamento.inCorso,
                 onClick = {
                     // Un URL scritto male e accettato in silenzio = un binocolo
                     // che non vede mai niente senza dirlo: si rifiuta subito.
@@ -166,23 +237,60 @@ fun ImpostazioniScreen(
                     } else {
                         urlNonValido = false
                         serverUrl = urlNormalizzato
-                        ambito.launch {
-                            impostazioni.salvaConfigurazione(urlNormalizzato, token)
-                            // Un altro server (o un altro codice) è un'altra famiglia:
-                            // niente di quello che si ricorda del server di prima
-                            // deve finire sotto il nome di un figlio di adesso.
-                            famigliaVm.ricomincia()
-                            finestraVm.dimentica()
-                            proposteVm.dimentica()
-                            verdettiVm.dimentica()
-                            notificheVm.dimentica()
-                            snackbarHostState.showSnackbar(messaggioSalvato)
+                        // Già collegato: prima una domanda (smetterà di essere chi è adesso).
+                        if (domandaPrimaDiCollegare(p, configurazioneSalvata?.completa == true, famiglia.io) != null) {
+                            domandaCollega = true
+                        } else {
+                            collegamentoVm.collega(urlNormalizzato, codiceSei)
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(stringResource(R.string.azione_salva))
+                Text(
+                    stringResource(if (collegamento.inCorso) R.string.connessione_in_corso else R.string.connessione_collega),
+                )
+            }
+
+            // Il codice d'accesso lungo, come prima della 0.13: per il primo genitore.
+            TextButton(onClick = { codiceLungoAperto = !codiceLungoAperto }) {
+                Text(
+                    stringResource(
+                        if (codiceLungoAperto) R.string.connessione_codice_lungo_chiudi else R.string.connessione_codice_lungo_apri,
+                    ),
+                )
+            }
+            if (codiceLungoAperto) {
+                Text(
+                    text = stringResource(R.string.impostazioni_descrizione),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = token,
+                    onValueChange = { token = it },
+                    label = { Text(stringResource(R.string.impostazioni_token)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    onClick = {
+                        val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
+                        if (urlNormalizzato == null) {
+                            urlNonValido = true
+                            ambito.launch { snackbarHostState.showSnackbar(messaggioUrlNonValido) }
+                        } else {
+                            urlNonValido = false
+                            serverUrl = urlNormalizzato
+                            ambito.launch {
+                                impostazioni.salvaConfigurazione(urlNormalizzato, token)
+                                snackbarHostState.showSnackbar(messaggioSalvato)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.azione_salva))
+                }
             }
 
             // Verifica onesta del canale: quando il server ha risposto l'ultima

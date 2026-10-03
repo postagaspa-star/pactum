@@ -64,6 +64,13 @@ data class Finestra(
     val sessioni: List<Sessione> = emptyList(),
     @SerialName("sessioni_da_approvare") val sessioniDaApprovare: Int = 0,
     @SerialName("sessioni_svolte") val sessioniSvolte: List<SessioneSvolta> = emptyList(),
+    // (0.13) Le faccende del figlio (contratto v3.6): tutte le da fare, più le
+    // fatte e le annullate degli ultimi 30 giorni. null (campo assente) = server
+    // più vecchio della v3.6: per le faccende serve aggiornarlo. Una lista vuota
+    // invece è "nessuna faccenda".
+    val faccende: List<Faccenda>? = null,
+    // (0.13) Il blocco delle faccende come lo vede il server; null = server vecchio.
+    val blocco: BloccoFaccende? = null,
 )
 
 // --- v3: famiglia, figli e dispositivi ----------------------------------------
@@ -78,9 +85,17 @@ object TipiDispositivo {
     const val COMPUTER = "computer"
 }
 
-/** GET /api/famiglia: i figli in ordine di id, ciascuno coi suoi dispositivi. */
+/**
+ * GET /api/famiglia: i figli in ordine di id, ciascuno coi suoi dispositivi.
+ * (0.13) Dalla v3.6 anche chi sei tu ([io]) e i genitori (con `revocato`); su
+ * un server più vecchio non ci sono (null, lista vuota): un genitore solo.
+ */
 @Serializable
-data class Famiglia(val figli: List<Figlio> = emptyList())
+data class Famiglia(
+    val figli: List<Figlio> = emptyList(),
+    val io: RiferimentoGenitore? = null,
+    val genitori: List<GenitoreFamiglia> = emptyList(),
+)
 
 @Serializable
 data class Figlio(
@@ -97,6 +112,10 @@ data class Figlio(
     // (0.11) Quante sue sessioni aspettano il genitore (nuove più cambi, contratto
     // v3.5): si sommano alle proposte nel numero accanto al nome. Assente = 0.
     @SerialName("sessioni_da_approvare") val sessioniDaApprovare: Int = 0,
+    // (0.13) Quante faccende ha da fare, e se il blocco è attivo adesso (contratto
+    // v3.6). Assenti (server più vecchio) = 0 e false.
+    @SerialName("faccende_da_fare") val faccendeDaFare: Int = 0,
+    @SerialName("blocco_attivo") val bloccoAttivo: Boolean = false,
 )
 
 /** Un dispositivo come lo racconta GET /api/famiglia (revocati compresi). */
@@ -221,6 +240,31 @@ object CodiciErrore {
     /** Coniato qui per il 404 (figlio o dispositivo che non esiste più): il 404 non porta un codice. */
     const val NON_TROVATO = "non_trovato"
 
+    // (v3.6) I genitori.
+    /** POST /api/abbina: il codice è di un altro tipo (un telefono o un computer del figlio). */
+    const val TIPO_NON_CORRISPONDENTE = "tipo_non_corrispondente"
+    const val TROPPI_GENITORI = "troppi_genitori"
+    const val NON_TE_STESSO = "non_te_stesso"
+    const val ULTIMO_GENITORE = "ultimo_genitore"
+
+    /**
+     * Un codice nuovo chiesto per un genitore già tolto. Il contratto v3.6 non lo
+     * elenca ancora; il server lo manda come `dispositivo_revocato` per i dispositivi.
+     */
+    const val GENITORE_REVOCATO = "genitore_revocato"
+
+    /**
+     * Coniato qui per il 401: il server non riconosce più il codice di questo
+     * telefono (un altro genitore l'ha tolto, o il codice d'accesso è sbagliato). Non
+     * è la rete: riprovare non serve, serve un codice nuovo.
+     */
+    const val COLLEGAMENTO_NON_VALIDO = "collegamento_non_valido"
+
+    // (v3.6) Le faccende.
+    const val TROPPE_FACCENDE = "troppe_faccende"
+    const val NON_BOCCIABILE = "non_bocciabile"
+    const val NON_ANNULLABILE = "non_annullabile"
+
     /**
      * Coniato qui: una creazione è rimasta senza risposta e nemmeno la famiglia si
      * è potuta rileggere. Non si sa se il server l'ha ricevuta: prima di riprovare
@@ -228,6 +272,171 @@ object CodiciErrore {
      */
     const val ESITO_INCERTO = "esito_incerto"
 }
+
+// --- I genitori (0.13, contratto v3.6) ------------------------------------------------
+// Più genitori, tutti uguali: vedono tutto, ricevono gli avvisi, propongono,
+// approvano, danno faccende. Ognuno ha il suo nome e il suo token. Il genitore 1
+// è quello del vecchio codice d'accesso lungo; gli altri si collegano con un
+// codice di 6 cifre creato da un genitore già collegato.
+
+/** Chi è un genitore, come lo allegano le risposte ("chi ha fatto cosa", `io`). */
+@Serializable
+data class RiferimentoGenitore(
+    val id: Long,
+    val nome: String = "",
+)
+
+/** Un genitore come lo racconta GET /api/genitori (revocati compresi). */
+@Serializable
+data class Genitore(
+    val id: Long,
+    val nome: String = "",
+    val abbinato: Boolean = true,
+    val revocato: Boolean = false,
+    @SerialName("creato_ts") val creatoTs: String? = null,
+)
+
+/** Un genitore come lo racconta GET /api/famiglia: senza `abbinato`. */
+@Serializable
+data class GenitoreFamiglia(
+    val id: Long,
+    val nome: String = "",
+    val revocato: Boolean = false,
+)
+
+/** GET /api/genitori: chi sei tu e tutti i genitori, in ordine di id. */
+@Serializable
+data class PaccoGenitori(
+    val io: RiferimentoGenitore? = null,
+    val genitori: List<Genitore> = emptyList(),
+)
+
+/** Corpo di POST /api/genitori e PATCH /api/genitori/{id}: il nome, 1-40 caratteri. */
+@Serializable
+data class CorpoNomeGenitore(val nome: String)
+
+/**
+ * Il codice di 6 cifre per collegare il telefono di un genitore: risposta di
+ * POST /api/genitori e di POST /api/genitori/{id}/codice. Stesse regole di quello
+ * dei dispositivi: 15 minuti, una volta sola.
+ */
+@Serializable
+data class CodiceGenitore(
+    val genitore: Genitore? = null,
+    val codice: String,
+    @SerialName("scade_ts") val scadeTs: String? = null,
+)
+
+/**
+ * Corpo di POST /api/abbina dall'app del genitore: il codice di 6 cifre, il tipo
+ * (sempre "genitore": un codice di un telefono o di un computer del figlio non
+ * si consuma qui) e la versione dell'app. Il tipo non ha un valore di riserva: i
+ * valori di riserva non si scrivono nel JSON, e senza tipo il server lo
+ * prenderebbe per un dispositivo.
+ */
+@Serializable
+data class CorpoAbbinaGenitore(
+    val codice: String,
+    val tipo: String,
+    @SerialName("versione_app") val versioneApp: String? = null,
+)
+
+/** Il `tipo` di POST /api/abbina per l'app del genitore (contratto v3.6). */
+const val TIPO_ABBINAMENTO_GENITORE = "genitore"
+
+/** Risposta di POST /api/abbina col tipo "genitore": il token (una volta sola) e chi sei. */
+@Serializable
+data class AbbinamentoGenitore(
+    val token: String = "",
+    val genitore: RiferimentoGenitore? = null,
+)
+
+// --- Le faccende (0.13, contratto v3.6) ----------------------------------------------
+// Un genitore dà al figlio delle faccende di casa. Da quando lo decide lui (subito
+// o da un'ora scelta), e finché il figlio non le ha fatte tutte mandando una foto
+// per ognuna, i suoi dispositivi sono bloccati. Un genitore può bocciare una foto
+// entro 24 ore: la faccenda si riapre e il blocco torna subito.
+
+/** Una faccenda come la manda il server (GET /api/faccende, la finestra, le risposte). */
+@Serializable
+data class Faccenda(
+    val id: Long,
+    @SerialName("figlio_id") val figlioId: Long? = null,
+    val titolo: String = "",
+    val nota: String? = null,
+    val stato: String = "",
+    /** Da quando blocca. Mai null nelle risposte del server. */
+    @SerialName("blocco_da") val bloccoDa: String? = null,
+    @SerialName("creata_ts") val creataTs: String? = null,
+    @SerialName("creata_da") val creataDa: RiferimentoGenitore? = null,
+    /** Quando è arrivata la foto (ora del server); resta anche quando la foto si cancella. */
+    @SerialName("foto_ts") val fotoTs: String? = null,
+    /** true = il file della foto c'è ancora (si tiene 30 giorni). */
+    val foto: Boolean = false,
+    val bocciature: Int = 0,
+    @SerialName("ultima_bocciatura") val ultimaBocciatura: Bocciatura? = null,
+    @SerialName("chiusa_ts") val chiusaTs: String? = null,
+    @SerialName("annullata_da") val annullataDa: RiferimentoGenitore? = null,
+)
+
+/** L'ultima bocciatura di una faccenda: quando, perché e chi. */
+@Serializable
+data class Bocciatura(
+    val ts: String? = null,
+    val nota: String? = null,
+    val da: RiferimentoGenitore? = null,
+)
+
+object StatiFaccenda {
+    const val DA_FARE = "da_fare"
+    const val FATTA = "fatta"
+    const val ANNULLATA = "annullata"
+}
+
+/**
+ * Il blocco delle faccende (GET /api/faccende/blocco, `blocco` nella finestra):
+ * [attivo] = c'è una faccenda da fare il cui blocco è già partito, [dal] = da
+ * quando; [prossimo] = se non è attivo, quando parte il prossimo.
+ */
+@Serializable
+data class BloccoFaccende(
+    val attivo: Boolean = false,
+    val dal: String? = null,
+    val prossimo: String? = null,
+)
+
+@Serializable
+data class PaccoFaccende(val faccende: List<Faccenda> = emptyList())
+
+/** Una faccenda nel corpo di POST /api/faccende: il titolo e la nota facoltativa. */
+@Serializable
+data class CorpoFaccenda(
+    val titolo: String,
+    val nota: String? = null,
+)
+
+/**
+ * Corpo di POST /api/faccende: il figlio (sempre: dare faccende al figlio
+ * sbagliato blocca il telefono sbagliato), da 1 a 10 faccende, e da quando
+ * bloccano. [bloccoDa] null non si scrive: vuol dire "subito".
+ */
+@Serializable
+data class CorpoNuoveFaccende(
+    @SerialName("figlio_id") val figlioId: Long,
+    val faccende: List<CorpoFaccenda>,
+    @SerialName("blocco_da") val bloccoDa: String? = null,
+)
+
+/** Corpo di POST /api/faccende/{id}/boccia: il perché, facoltativo. */
+@Serializable
+data class CorpoBoccia(val nota: String? = null)
+
+/** Quanti caratteri al massimo per il titolo di una faccenda, per la sua nota e per quella di una bocciatura. */
+const val MASSIMO_TITOLO_FACCENDA = 80
+const val MASSIMO_NOTA_FACCENDA = 300
+
+/** Quante faccende si danno al massimo in una volta. */
+const val MASSIMO_FACCENDE_PER_VOLTA = 10
 
 /** Risposta di POST /api/segno (v2.4): il riconoscimento a testo fisso è partito. */
 @Serializable
@@ -477,6 +686,12 @@ data class Proposta(
     // nate prima della v3.4, e tutte quelle di un server più vecchio, sono del
     // genitore: assente (o null) vale "genitore".
     val autore: String = AutoriProposta.GENITORE,
+    // (0.13) Quale genitore l'ha fatta (contratto v3.6, "Chi ha fatto cosa"); null
+    // sulle proposte del figlio e sui server più vecchi (un genitore solo).
+    val genitore: RiferimentoGenitore? = null,
+    // (0.13) Quale genitore ha risposto a una proposta del figlio; null se nessuno
+    // (o server più vecchio).
+    @SerialName("risposta_di") val rispostaDi: RiferimentoGenitore? = null,
 )
 
 /** La risposta a una proposta (presente quando qualcuno ha risposto): del figlio, o (0.10) del genitore. */
@@ -591,6 +806,8 @@ data class Sessione(
     val versione: Int? = null,
     @SerialName("creata_ts") val creataTs: String? = null,
     @SerialName("approvata_ts") val approvataTs: String? = null,
+    /** (0.13) Il genitore dell'ultima decisione (contratto v3.6); null = nessuna, o server vecchio. */
+    @SerialName("decisa_da") val decisaDa: RiferimentoGenitore? = null,
 )
 
 /**
@@ -695,6 +912,8 @@ data class Verdetto(
     // mostra così com'è, senza ricostruirla — cita l'arbitro di allora.
     val registro: String? = null,
     @SerialName("ts_server") val tsServer: String = "",
+    /** (0.13) Quale genitore l'ha dato (contratto v3.6); null = server vecchio. */
+    val da: RiferimentoGenitore? = null,
 )
 
 @Serializable

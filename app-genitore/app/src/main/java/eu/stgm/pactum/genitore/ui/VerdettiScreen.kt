@@ -24,6 +24,7 @@ import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Dichiarazione
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.StatiDichiarazione
 import eu.stgm.pactum.genitore.dati.TipiVerdetto
 
@@ -41,6 +42,7 @@ internal fun LazyListScope.sezioneDichiarazioni(
     regolePerId: Map<Long, RegolaFinestra>,
     invioInCorso: Boolean,
     onVerdetto: (Long, String, String?) -> Unit,
+    io: RiferimentoGenitore? = null,
 ) {
     val inAttesa = dichiarazioni.filter { it.stato == StatiDichiarazione.IN_ATTESA }
     val risolte = dichiarazioni.filter { it.stato != StatiDichiarazione.IN_ATTESA }
@@ -75,7 +77,7 @@ internal fun LazyListScope.sezioneDichiarazioni(
         item {
             Column(modifier = Modifier.fillMaxWidth().padding(top = Spazi.s)) {
                 SopraTitolo(stringResource(R.string.verdetti_nel_registro))
-                ListaRighe(risolte) { RigaRisolta(it, regolePerId[it.regolaId]) }
+                ListaRighe(risolte) { RigaRisolta(it, regolePerId[it.regolaId], io) }
             }
         }
     }
@@ -156,7 +158,7 @@ private fun CardInAttesa(
 }
 
 @Composable
-private fun RigaRisolta(dichiarazione: Dichiarazione, regola: RegolaFinestra?) {
+private fun RigaRisolta(dichiarazione: Dichiarazione, regola: RegolaFinestra?, io: RiferimentoGenitore? = null) {
     val arbitro = regola?.let { parametroTesto(it.parametri, "arbitro_nome") } ?: "?"
     // (v2.1) La frase del registro la congela il server sul verdetto (cita
     // l'arbitro di allora): si mostra QUELLA verbatim, non la si ricostruisce
@@ -174,6 +176,15 @@ private fun RigaRisolta(dichiarazione: Dichiarazione, regola: RegolaFinestra?) {
             Text(
                 text = stringResource(R.string.dichiarazione_verdetto_nota, it),
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Spazi.xs),
+            )
+        }
+        // (0.13) Con più genitori (contratto v3.6): la risposta di un altro genitore dice di chi è.
+        (chiHaFatto(dichiarazione.verdetto?.da, io) as? ChiHaFatto.Altro)?.let {
+            Text(
+                text = stringResource(R.string.dichiarazione_verdetto_da, it.nome),
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = Spazi.xs),
             )

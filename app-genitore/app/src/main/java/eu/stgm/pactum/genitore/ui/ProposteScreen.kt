@@ -40,11 +40,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
-import eu.stgm.pactum.genitore.dati.AutoriProposta
 import eu.stgm.pactum.genitore.dati.DirezioniProposta
 import eu.stgm.pactum.genitore.dati.EsitiRisposta
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.TipiRegola
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -96,6 +96,8 @@ internal fun LazyListScope.sezioneProposte(
     onDecidi: (Proposta, String, String?) -> Unit = { _, _, _ -> },
     onRitira: (Proposta) -> Unit = {},
     sessioniDaApprovare: Int = 0,
+    // (0.13) Chi sei tu (contratto v3.6): le proposte di un altro genitore dicono il suo nome.
+    io: RiferimentoGenitore? = null,
 ) {
     val daDecidere = proposteDaDecidere(proposte, giaChiuse, lettaAlle)
     val pendenti = proposteInAttesaDelFiglio(proposte, giaChiuse, lettaAlle)
@@ -169,6 +171,7 @@ internal fun LazyListScope.sezioneProposte(
                 regola = regolePerId[it.regolaId],
                 invioInCorso = invioInCorso,
                 onRitira = onRitira,
+                io = io,
             )
         }
     }
@@ -178,7 +181,7 @@ internal fun LazyListScope.sezioneProposte(
             Column(modifier = Modifier.fillMaxWidth().padding(top = Spazi.s)) {
                 SopraTitolo(stringResource(R.string.proposte_come_sono_andate))
                 ListaRighe(chiuse) {
-                    RigaPropostaChiusa(it, regolePerId[it.regolaId], nomeFiglio, piuDispositivi, nomi)
+                    RigaPropostaChiusa(it, regolePerId[it.regolaId], nomeFiglio, piuDispositivi, nomi, io)
                 }
             }
         }
@@ -425,8 +428,12 @@ private fun CardPropostaPendente(
     regola: RegolaFinestra?,
     invioInCorso: Boolean,
     onRitira: (Proposta) -> Unit,
+    io: RiferimentoGenitore? = null,
 ) {
     var domandaRitiro by rememberSaveable(proposta.id) { mutableStateOf(false) }
+    // (0.13) Una proposta di un altro genitore dice di chi è (e si può ritirare
+    // anche lei: tutti i genitori sono uguali, contratto v3.6).
+    val diUnAltro = chiHaFatto(proposta.genitore, io) as? ChiHaFatto.Altro
     if (domandaRitiro) {
         // La regola non cambia: la domanda lo dice, così "ritira" non sembra un "annulla tutto".
         AlertDialog(
@@ -456,6 +463,14 @@ private fun CardPropostaPendente(
                 TagDirezione(proposta.direzione)
                 Spacer(modifier = Modifier.weight(1f))
                 TestoOrario(proposta.tsServer)
+            }
+            if (diUnAltro != null) {
+                Text(
+                    text = stringResource(R.string.proposta_autore_genitore, diUnAltro.nome),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Spazi.s),
+                )
             }
             if (proposta.confronto.isNotBlank()) {
                 Text(
@@ -487,7 +502,7 @@ private fun CardPropostaPendente(
                     modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
-            // (0.10) Solo le tue, e solo finché sono in attesa.
+            // (0.10) Solo quelle dei genitori, e solo finché sono in attesa.
             if (ritirabile(proposta)) {
                 TextButton(
                     onClick = { domandaRitiro = true },
@@ -515,15 +530,15 @@ private fun RigaPropostaChiusa(
     nomeFiglio: String?,
     piuDispositivi: Boolean,
     nomi: Map<String, String>,
+    io: RiferimentoGenitore? = null,
 ) {
     val p = parole()
-    val delFiglio = proposta.autore == AutoriProposta.FIGLIO
     // Il confronto del server (la stessa frase che vede il figlio) quando si può
     // mostrare; poi su quale regola, e che cosa chiedeva: il confronto da solo non lo dice.
     val confronto = confrontoDaMostrare(p, proposta, regola, nomi)
     val riga = rigaProposta(p, proposta, regola, piuDispositivi, nomi)?.takeIf { it != confronto }
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
-        autoreProposta(p, proposta, nomeFiglio)?.let {
+        autoreProposta(p, proposta, nomeFiglio, io)?.let {
             Text(
                 text = it,
                 style = MaterialTheme.typography.labelSmall,
@@ -567,27 +582,17 @@ private fun RigaPropostaChiusa(
                 modifier = Modifier.padding(top = Spazi.xs),
             )
         }
-        // La risposta, quando c'è: esito + motivazione. Del figlio sulle tue, tua sulle sue.
-        proposta.risposta?.let { risposta ->
-            val accettata = risposta.esito == EsitiRisposta.ACCETTA
+        // La risposta, quando c'è: esito + motivazione. Del figlio sulle tue, tua (o,
+        // dalla 0.13, di un altro genitore: "Mamma ha accettato") sulle sue.
+        rispostaProposta(p, proposta, io)?.let { (esito, perche) ->
             Text(
-                text = stringResource(
-                    when {
-                        delFiglio && accettata -> R.string.proposta_tua_risposta_accettata
-                        delFiglio -> R.string.proposta_tua_risposta_rifiutata
-                        accettata -> R.string.proposta_risposta_accettata
-                        else -> R.string.proposta_risposta_rifiutata
-                    },
-                ),
+                text = esito,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = Spazi.s),
             )
-            risposta.motivazione?.takeIf { it.isNotBlank() }?.let {
+            if (perche != null) {
                 Text(
-                    text = stringResource(
-                        if (delFiglio) R.string.proposta_tua_risposta_motivazione else R.string.proposta_risposta_motivazione,
-                        it,
-                    ),
+                    text = perche,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

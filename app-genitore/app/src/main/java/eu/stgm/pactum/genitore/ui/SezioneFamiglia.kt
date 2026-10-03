@@ -42,6 +42,8 @@ import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Dispositivo
 import eu.stgm.pactum.genitore.dati.Figlio
+import eu.stgm.pactum.genitore.dati.Genitore
+import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.TipiDispositivo
 import kotlinx.coroutines.delay
 
@@ -75,6 +77,10 @@ fun SezioneFamiglia(
     var rinominaId by rememberSaveable { mutableStateOf<Long?>(null) }
     var nuovoDispositivoPer by rememberSaveable { mutableStateOf<Long?>(null) }
     var scollegaId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // (0.13) I dialoghi dei genitori.
+    var nuovoGenitore by rememberSaveable { mutableStateOf(false) }
+    var rinominaGenitoreId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var togliGenitoreId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     // Gli esiti si dicono una volta: consumati subito, poi in basso.
     LaunchedEffect(stato.evento) {
@@ -82,7 +88,8 @@ fun SezioneFamiglia(
         famigliaVm.consumaEvento()
         val messaggio = when (evento) {
             is FamigliaViewModel.Evento.Fatto -> context.getString(evento.messaggio)
-            is FamigliaViewModel.Evento.Errore -> messaggioRifiutoFamiglia(p, evento.codice, evento.secondi)
+            is FamigliaViewModel.Evento.Errore ->
+                messaggioRifiutoFamiglia(p, evento.codice, evento.secondi, evento.suGenitore)
         }
         mostraMessaggio(messaggio)
     }
@@ -98,36 +105,81 @@ fun SezioneFamiglia(
 
         stato.serverVecchio -> RigaVuota(stringResource(R.string.famiglia_server_vecchio))
 
-        stato.figli.isEmpty() && stato.errore -> {
-            RigaDatiVecchi(stringResource(R.string.famiglia_non_letta))
-            OutlinedButton(onClick = { famigliaVm.aggiorna() }) {
-                Text(stringResource(R.string.famiglia_riprova))
-            }
-        }
-
-        stato.figli.isEmpty() -> RigaVuota(stringResource(R.string.famiglia_caricamento))
-
         else -> {
-            // Una famiglia già in mano ma non riletta: si dice, non si finge fresca.
-            if (stato.errore) RigaDatiVecchi(stringResource(R.string.famiglia_non_letta))
-            stato.figli.forEach { figlio ->
-                CardFiglio(
-                    figlio = figlio,
-                    occupato = stato.lavoroInCorso,
-                    onRinomina = { rinominaId = figlio.id },
-                    onAggiungiDispositivo = { nuovoDispositivoPer = figlio.id },
-                    onNuovoCodice = { famigliaVm.nuovoCodice(it) },
-                    onScollega = { scollegaId = it.id },
-                )
-            }
-            OutlinedButton(
-                onClick = { nuovoFiglio = true },
-                enabled = !stato.lavoroInCorso,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.famiglia_aggiungi_figlio))
-            }
+            // (0.13) Prima i genitori (contratto v3.6), poi i figli.
+            BloccoGenitori(
+                stato = stato,
+                onAggiungi = { nuovoGenitore = true },
+                onRinomina = { rinominaGenitoreId = it.id },
+                onNuovoCodice = { famigliaVm.nuovoCodiceGenitore(it) },
+                onTogli = { togliGenitoreId = it.id },
+                onRiprova = { famigliaVm.aggiornaGenitori() },
+            )
+            SopraTitolo(stringResource(R.string.figli_titolo), modifier = Modifier.padding(top = Spazi.s))
+            BloccoFigli(
+                stato = stato,
+                onRiprova = { famigliaVm.aggiorna() },
+                onRinomina = { rinominaId = it },
+                onAggiungiDispositivo = { nuovoDispositivoPer = it },
+                onNuovoCodice = { famigliaVm.nuovoCodice(it) },
+                onScollega = { scollegaId = it },
+                onAggiungiFiglio = { nuovoFiglio = true },
+            )
         }
+    }
+
+    // --- (0.13) I dialoghi dei genitori -----------------------------------------------
+
+    if (nuovoGenitore) {
+        DialogoNome(
+            titolo = stringResource(R.string.famiglia_nuovo_genitore_titolo),
+            etichetta = stringResource(R.string.famiglia_nome_genitore),
+            iniziale = "",
+            conferma = stringResource(R.string.famiglia_crea_codice),
+            onConferma = { nome ->
+                nuovoGenitore = false
+                famigliaVm.creaGenitore(nome)
+            },
+            onAnnulla = { nuovoGenitore = false },
+            esempio = stringResource(R.string.famiglia_nome_genitore_esempio),
+        )
+    }
+
+    stato.genitori.firstOrNull { it.id == rinominaGenitoreId }?.let { genitore ->
+        DialogoNome(
+            titolo = stringResource(R.string.famiglia_rinomina_titolo, nomeDelGenitore(p, genitore.nome)),
+            etichetta = stringResource(R.string.famiglia_nome_genitore),
+            iniziale = genitore.nome,
+            conferma = stringResource(R.string.azione_salva),
+            onConferma = { nome ->
+                rinominaGenitoreId = null
+                famigliaVm.rinominaGenitore(genitore.id, nome)
+            },
+            onAnnulla = { rinominaGenitoreId = null },
+        )
+    }
+
+    stato.genitori.firstOrNull { it.id == togliGenitoreId }?.let { genitore ->
+        AlertDialog(
+            onDismissRequest = { togliGenitoreId = null },
+            title = { Text(stringResource(R.string.togli_genitore_titolo, nomeDelGenitore(p, genitore.nome))) },
+            text = { Text(stringResource(R.string.togli_genitore_testo)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        togliGenitoreId = null
+                        famigliaVm.togliGenitore(genitore)
+                    },
+                ) {
+                    Text(stringResource(R.string.famiglia_togli))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { togliGenitoreId = null }) {
+                    Text(stringResource(R.string.azione_annulla))
+                }
+            },
+        )
     }
 
     // --- I dialoghi -----------------------------------------------------------------
@@ -202,7 +254,12 @@ fun SezioneFamiglia(
     }
 
     stato.codice?.let { codice ->
-        val collegato = codiceUsato(stato.figli, codice.dispositivoId, codice.ricollegamento)
+        // (0.13) Un codice per un genitore si guarda fra i genitori, non fra i dispositivi.
+        val collegato = if (codice.perGenitore) {
+            codiceGenitoreUsato(stato.genitori, codice.genitoreId, codice.ricollegamento)
+        } else {
+            codiceUsato(stato.figli, codice.dispositivoId, codice.ricollegamento)
+        }
         // Finché il dialogo è aperto, il codice vale ancora e il dispositivo non
         // risulta collegato, si rilegge la famiglia ogni 5 secondi: quando il
         // figlio scrive il codice, il dialogo lo dice. Solo con l'app davanti.
@@ -210,11 +267,13 @@ fun SezioneFamiglia(
         // collegato): lì non si rilegge niente e resta il conto alla rovescia.
         val cicloVita = LocalLifecycleOwner.current.lifecycle
         LaunchedEffect(codice, collegato) {
-            if (collegato || codice.ricollegamento || codice.dispositivoId == null) return@LaunchedEffect
+            if (collegato || codice.ricollegamento || (codice.dispositivoId == null && !codice.perGenitore)) {
+                return@LaunchedEffect
+            }
             cicloVita.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (codice.rimasti() > 0) {
                     delay(INTERVALLO_CONTROLLO_CODICE_MS)
-                    famigliaVm.rileggiSeLibera()
+                    if (codice.perGenitore) famigliaVm.rileggiGenitoriSeLibera() else famigliaVm.rileggiSeLibera()
                 }
             }
         }
@@ -224,6 +283,13 @@ fun SezioneFamiglia(
             indirizzoServer = indirizzoServer,
             occupato = stato.lavoroInCorso,
             onNuovoCodice = {
+                val genitoreId = codice.genitoreId
+                if (genitoreId != null) {
+                    famigliaVm.nuovoCodiceGenitore(
+                        Genitore(id = genitoreId, nome = codice.nomeDispositivo, abbinato = codice.ricollegamento),
+                    )
+                    return@DialogoCodice
+                }
                 val id = codice.dispositivoId ?: return@DialogoCodice
                 famigliaVm.nuovoCodice(
                     Dispositivo(
@@ -236,6 +302,158 @@ fun SezioneFamiglia(
             },
             onChiudi = { famigliaVm.chiudiCodice() },
         )
+    }
+}
+
+/**
+ * (0.13) I figli, com'erano nella sezione prima dei genitori: la lettura che non
+ * arriva, l'elenco con i loro dispositivi, e "Aggiungi un figlio".
+ */
+@Composable
+private fun BloccoFigli(
+    stato: FamigliaViewModel.StatoFamiglia,
+    onRiprova: () -> Unit,
+    onRinomina: (Long) -> Unit,
+    onAggiungiDispositivo: (Long) -> Unit,
+    onNuovoCodice: (Dispositivo) -> Unit,
+    onScollega: (Long) -> Unit,
+    onAggiungiFiglio: () -> Unit,
+) {
+    when {
+        stato.figli.isEmpty() && stato.errore -> {
+            RigaDatiVecchi(stringResource(R.string.famiglia_non_letta))
+            OutlinedButton(onClick = onRiprova) {
+                Text(stringResource(R.string.famiglia_riprova))
+            }
+        }
+
+        stato.figli.isEmpty() -> RigaVuota(stringResource(R.string.famiglia_caricamento))
+
+        else -> {
+            // Una famiglia già in mano ma non riletta: si dice, non si finge fresca.
+            if (stato.errore) RigaDatiVecchi(stringResource(R.string.famiglia_non_letta))
+            stato.figli.forEach { figlio ->
+                CardFiglio(
+                    figlio = figlio,
+                    occupato = stato.lavoroInCorso,
+                    onRinomina = { onRinomina(figlio.id) },
+                    onAggiungiDispositivo = { onAggiungiDispositivo(figlio.id) },
+                    onNuovoCodice = onNuovoCodice,
+                    onScollega = { onScollega(it.id) },
+                )
+            }
+            OutlinedButton(
+                onClick = onAggiungiFiglio,
+                enabled = !stato.lavoroInCorso,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.famiglia_aggiungi_figlio))
+            }
+        }
+    }
+}
+
+/**
+ * (0.13) I genitori (contratto v3.6): chi sei tu, gli altri, e i gesti. Tutti i
+ * genitori sono uguali: ciascuno può rinominare gli altri, dare un codice nuovo,
+ * toglierli (non sé stesso, non l'ultimo). Un genitore tolto resta nell'elenco:
+ * le sue proposte, decisioni e faccende restano col suo nome.
+ */
+@Composable
+private fun BloccoGenitori(
+    stato: FamigliaViewModel.StatoFamiglia,
+    onAggiungi: () -> Unit,
+    onRinomina: (Genitore) -> Unit,
+    onNuovoCodice: (Genitore) -> Unit,
+    onTogli: (Genitore) -> Unit,
+    onRiprova: () -> Unit,
+) {
+    SopraTitolo(stringResource(R.string.genitori_titolo), modifier = Modifier.padding(top = Spazi.s))
+    when {
+        stato.genitoriServerVecchio -> RigaVuota(stringResource(R.string.genitori_server_vecchio))
+
+        !stato.genitoriLetti && stato.genitoriErrore -> {
+            RigaDatiVecchi(stringResource(R.string.genitori_non_letti))
+            OutlinedButton(onClick = onRiprova) {
+                Text(stringResource(R.string.famiglia_riprova))
+            }
+        }
+
+        !stato.genitoriLetti -> RigaVuota(stringResource(R.string.genitori_caricamento))
+
+        else -> {
+            if (stato.genitoriErrore) RigaDatiVecchi(stringResource(R.string.genitori_non_letti))
+            if (stato.genitori.isNotEmpty()) {
+                CardContenuto {
+                    ListaRighe(stato.genitori, modifier = Modifier.padding(horizontal = Spazi.l)) { genitore ->
+                        RigaGenitore(
+                            genitore = genitore,
+                            io = stato.io,
+                            genitori = stato.genitori,
+                            occupato = stato.lavoroInCorso,
+                            onRinomina = { onRinomina(genitore) },
+                            onNuovoCodice = { onNuovoCodice(genitore) },
+                            onTogli = { onTogli(genitore) },
+                        )
+                    }
+                }
+            }
+            OutlinedButton(
+                onClick = onAggiungi,
+                enabled = !stato.lavoroInCorso,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.famiglia_aggiungi_genitore))
+            }
+        }
+    }
+}
+
+/** Un genitore: il nome ("Mamma (tu)"), se è collegato, e i gesti che si possono fare. */
+@Composable
+private fun RigaGenitore(
+    genitore: Genitore,
+    io: RiferimentoGenitore?,
+    genitori: List<Genitore>,
+    occupato: Boolean,
+    onRinomina: () -> Unit,
+    onNuovoCodice: () -> Unit,
+    onTogli: () -> Unit,
+) {
+    val p = parole()
+    val nome = nomeDelGenitore(p, genitore.nome)
+    val stato = when {
+        genitore.revocato -> stringResource(R.string.genitore_stato_tolto)
+        !genitore.abbinato -> stringResource(R.string.genitore_stato_da_collegare)
+        else -> stringResource(R.string.genitore_stato_collegato)
+    }
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.s)) {
+        Text(
+            text = if (genitore.id == io?.id) stringResource(R.string.genitore_tu, nome) else nome,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            text = stato,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!genitore.revocato) {
+            Row {
+                TextButton(onClick = onRinomina, enabled = !occupato) {
+                    Text(stringResource(R.string.famiglia_rinomina))
+                }
+                if (puoiDareNuovoCodice(genitore, io)) {
+                    TextButton(onClick = onNuovoCodice, enabled = !occupato) {
+                        Text(stringResource(R.string.famiglia_nuovo_codice))
+                    }
+                }
+                if (puoiTogliere(genitore, io, genitori)) {
+                    TextButton(onClick = onTogli, enabled = !occupato) {
+                        Text(stringResource(R.string.famiglia_togli))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -345,6 +563,7 @@ private fun DialogoNome(
     conferma: String,
     onConferma: (String) -> Unit,
     onAnnulla: () -> Unit,
+    esempio: String? = null,
 ) {
     var nome by rememberSaveable { mutableStateOf(iniziale) }
     val troppoLungo = nome.trim().length > LUNGHEZZA_MASSIMA_NOME
@@ -356,6 +575,11 @@ private fun DialogoNome(
                 value = nome,
                 onValueChange = { nome = it },
                 label = { Text(etichetta) },
+                placeholder = if (esempio != null) {
+                    { Text(esempio) }
+                } else {
+                    null
+                },
                 singleLine = true,
                 isError = troppoLungo,
                 supportingText = {
@@ -484,7 +708,11 @@ private fun DialogoCodice(
     }
     val rimasti = codice.rimasti(adessoMs)
     val scaduto = rimasti <= 0 && !collegato
-    val scarica = indirizzoServer?.takeIf { it.isNotBlank() }?.let { "$it/scarica" }
+    val indirizzo = indirizzoServer?.takeIf { it.isNotBlank() }
+    val scarica = indirizzo?.let { "$it/scarica" }
+    // (0.13) Il codice di un altro genitore va nell'app del genitore, sul suo telefono.
+    val perGenitore = codice.perGenitore
+    val nuovoCodicePossibile = codice.dispositivoId != null || perGenitore
 
     AlertDialog(
         onDismissRequest = onChiudi,
@@ -496,7 +724,7 @@ private fun DialogoCodice(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = stringResource(R.string.codice_scrivilo),
+                    text = stringResource(if (perGenitore) R.string.codice_scrivilo_genitore else R.string.codice_scrivilo),
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                 )
@@ -529,13 +757,23 @@ private fun DialogoCodice(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
+                // (0.13) Un genitore nuovo scrive anche l'indirizzo del server: si dice quale.
+                if (perGenitore && indirizzo != null && !collegato) {
+                    SelectionContainer {
+                        Text(
+                            text = stringResource(R.string.codice_indirizzo_server, indirizzo),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
                 if (scarica != null) {
                     Text(
                         text = stringResource(
-                            if (codice.tipo == TipiDispositivo.COMPUTER) {
-                                R.string.codice_dove_computer
-                            } else {
-                                R.string.codice_dove_telefono
+                            when {
+                                perGenitore -> R.string.codice_dove_genitore
+                                codice.tipo == TipiDispositivo.COMPUTER -> R.string.codice_dove_computer
+                                else -> R.string.codice_dove_telefono
                             },
                             scarica,
                         ),
@@ -545,7 +783,9 @@ private fun DialogoCodice(
                 }
                 if (codice.ricollegamento) {
                     Text(
-                        text = stringResource(R.string.codice_ricollegamento),
+                        text = stringResource(
+                            if (perGenitore) R.string.codice_ricollegamento_genitore else R.string.codice_ricollegamento,
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -554,7 +794,7 @@ private fun DialogoCodice(
             }
         },
         confirmButton = {
-            if (scaduto && codice.dispositivoId != null) {
+            if (scaduto && nuovoCodicePossibile) {
                 Button(onClick = onNuovoCodice, enabled = !occupato) {
                     Text(stringResource(R.string.famiglia_nuovo_codice))
                 }
@@ -562,7 +802,7 @@ private fun DialogoCodice(
                 Button(onClick = onChiudi) { Text(stringResource(R.string.codice_fatto)) }
             }
         },
-        dismissButton = if (scaduto && codice.dispositivoId != null) {
+        dismissButton = if (scaduto && nuovoCodicePossibile) {
             { TextButton(onClick = onChiudi) { Text(stringResource(R.string.codice_fatto)) } }
         } else {
             null

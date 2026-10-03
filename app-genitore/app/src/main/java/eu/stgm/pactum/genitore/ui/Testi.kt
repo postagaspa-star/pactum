@@ -20,6 +20,7 @@ import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.Proposta
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.RiferimentoDispositivo
+import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.Sessione
 import eu.stgm.pactum.genitore.dati.StatiProposta
 import eu.stgm.pactum.genitore.dati.StatoSilenzio
@@ -372,7 +373,34 @@ fun descrizioneBuco(
         } else {
             parole.testo(R.string.manomissione_siti_non_leggibili)
         }
+        // (0.13) Dalla v3.6 il telefono dice anche QUALE permesso ha perso durante il
+        // blocco delle faccende ("il permesso nei dettagli"): l'accesso all'uso resta
+        // la frase di sempre; "Mostra sopra le altre app" si dice per nome; un altro
+        // permesso si dice senza inventarne il nome.
+        "permesso_revocato" -> when (tipoPermesso(campo(dettagli, "permesso"))) {
+            TipoPermesso.SOVRAPPOSIZIONE -> parole.testo(R.string.manomissione_permesso_sovrapposizione)
+            TipoPermesso.ALTRO -> parole.testo(R.string.manomissione_permesso_generico)
+            TipoPermesso.USO, null -> descrizioneBuco(parole, sottoTipo)
+        }
         else -> descrizioneBuco(parole, sottoTipo)
+    }
+}
+
+/** (0.13) Quale permesso ha perso il telefono del figlio, dal campo `permesso` dei dettagli. */
+private enum class TipoPermesso { USO, SOVRAPPOSIZIONE, ALTRO }
+
+/**
+ * Il nome del permesso nei dettagli di un `permesso_revocato` (contratto v3.6: "il
+ * permesso nei dettagli"; il nome esatto del valore il contratto non lo fissa, e
+ * si riconoscono le forme probabili). null = nessun permesso nei dettagli (le app
+ * di prima della 0.13): è l'accesso all'uso, come sempre.
+ */
+private fun tipoPermesso(permesso: String?): TipoPermesso? {
+    val valore = permesso?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+    return when {
+        listOf("overlay", "sovrappos", "sopra", "system_alert_window").any { it in valore } -> TipoPermesso.SOVRAPPOSIZIONE
+        listOf("usage", "uso", "utilizzo").any { it in valore } -> TipoPermesso.USO
+        else -> TipoPermesso.ALTRO
     }
 }
 
@@ -436,6 +464,8 @@ fun descrizioneBuco(parole: Parole, sottoTipo: String?): String = when (sottoTip
     // (v3) Dal computer, senza dettagli: la frase senza intervallo.
     "programma_chiuso" -> parole.testo(R.string.manomissione_programma_chiuso)
     "siti_non_leggibili" -> parole.testo(R.string.manomissione_siti_non_leggibili)
+    // (0.13) Il programma del computer chiuso mentre le faccende lo bloccavano.
+    "chiuso_durante_blocco" -> parole.testo(R.string.manomissione_chiuso_durante_blocco)
     else -> parole.testo(R.string.manomissione_generica, sottoTipo ?: "?")
 }
 
@@ -796,13 +826,28 @@ fun messaggioRifiutoProposta(codice: String?): Int = when (codice) {
  * codice che non si conosce dice solo che il server non ha accettato — non si
  * inventa un perché. [secondi] vale per il 429: quanto aspettare.
  */
-fun messaggioRifiutoFamiglia(parole: Parole, codice: String?, secondi: Long?): String = when (codice) {
+fun messaggioRifiutoFamiglia(
+    parole: Parole,
+    codice: String?,
+    secondi: Long?,
+    suGenitore: Boolean = false,
+): String = when (codice) {
     CodiciErrore.TROPPI_TENTATIVI -> if (secondi != null && secondi > 0) {
         parole.testo(R.string.famiglia_errore_troppi_tentativi_tra, attesaInMinuti(secondi))
     } else {
         parole.testo(R.string.famiglia_errore_troppi_tentativi)
     }
-    CodiciErrore.NON_TROVATO -> parole.testo(R.string.famiglia_errore_non_trovato)
+    // (0.13) Un genitore che non c'è più ha la sua frase.
+    CodiciErrore.NON_TROVATO ->
+        parole.testo(if (suGenitore) R.string.famiglia_errore_genitore_non_trovato else R.string.famiglia_errore_non_trovato)
+    // (0.13) I rifiuti sui genitori (contratto v3.6), e il server che non li conosce.
+    CodiciErrore.NON_TE_STESSO -> parole.testo(R.string.famiglia_errore_non_te_stesso)
+    CodiciErrore.ULTIMO_GENITORE -> parole.testo(R.string.famiglia_errore_ultimo_genitore)
+    CodiciErrore.TROPPI_GENITORI -> parole.testo(R.string.famiglia_errore_troppi_genitori)
+    CodiciErrore.GENITORE_REVOCATO -> parole.testo(R.string.famiglia_errore_genitore_revocato)
+    CodiciErrore.SERVER_DA_AGGIORNARE -> parole.testo(R.string.genitori_server_vecchio)
+    // (0.13) 401: il collegamento di QUESTO telefono non vale più. Non è la rete.
+    CodiciErrore.COLLEGAMENTO_NON_VALIDO -> parole.testo(R.string.collegamento_non_valido)
     CodiciErrore.DISPOSITIVO_REVOCATO -> parole.testo(R.string.famiglia_errore_dispositivo_scollegato)
     CodiciErrore.NOME_NON_VALIDO, PostinoClient.PARAMETRI_NON_VALIDI ->
         parole.testo(R.string.famiglia_errore_nome, LUNGHEZZA_MASSIMA_NOME)
@@ -1089,12 +1134,53 @@ fun confrontoDaMostrare(
     return proposta.confronto.takeIf { it.isNotBlank() && !raccontaUnCambioDiBersaglio(it) }
 }
 
-/** Chi ha fatto una proposta, per la storia: "Proposta tua" o "Proposta di Luca"; null per un autore che non si conosce. */
-fun autoreProposta(parole: Parole, proposta: Proposta, nomeFiglio: String?): String? = when (proposta.autore) {
-    AutoriProposta.GENITORE -> parole.testo(R.string.proposta_autore_tua)
+/**
+ * Chi ha fatto una proposta, per la storia: "Proposta tua" o "Proposta di Luca";
+ * null per un autore che non si conosce. (0.13) Con più genitori (contratto v3.6)
+ * una proposta di un altro genitore dice il suo nome: "Proposta di Mamma" ([io] =
+ * chi sei tu; senza, e su un server più vecchio, è "tua").
+ */
+fun autoreProposta(
+    parole: Parole,
+    proposta: Proposta,
+    nomeFiglio: String?,
+    io: RiferimentoGenitore? = null,
+): String? = when (proposta.autore) {
+    AutoriProposta.GENITORE -> when (val chi = chiHaFatto(proposta.genitore, io)) {
+        is ChiHaFatto.Altro -> parole.testo(R.string.proposta_autore_genitore, chi.nome)
+        else -> parole.testo(R.string.proposta_autore_tua)
+    }
     AutoriProposta.FIGLIO -> nomeDaScrivere(nomeFiglio)?.let { parole.testo(R.string.proposta_autore_figlio, it) }
         ?: parole.testo(R.string.proposta_autore_figlio_senza_nome)
     else -> null
+}
+
+/**
+ * (0.13) La risposta a una proposta, in due righe: com'è finita e il perché (null
+ * se non c'è). A una proposta del genitore risponde il figlio ("Il figlio ha
+ * accettato"); a una del figlio risponde un genitore: tu ("Hai accettato") o un
+ * altro ("Mamma ha accettato", dal `risposta_di` della v3.6). null = nessuna risposta.
+ */
+fun rispostaProposta(
+    parole: Parole,
+    proposta: Proposta,
+    io: RiferimentoGenitore? = null,
+): Pair<String, String?>? {
+    val risposta = proposta.risposta ?: return null
+    val accettata = risposta.esito == EsitiRisposta.ACCETTA
+    val perche = risposta.motivazione?.trim()?.takeIf { it.isNotEmpty() }
+    if (proposta.autore != AutoriProposta.FIGLIO) {
+        return parole.testo(if (accettata) R.string.proposta_risposta_accettata else R.string.proposta_risposta_rifiutata) to
+            perche?.let { parole.testo(R.string.proposta_risposta_motivazione, it) }
+    }
+    return when (val chi = chiHaFatto(proposta.rispostaDi, io)) {
+        is ChiHaFatto.Altro -> parole.testo(
+            if (accettata) R.string.proposta_risposta_genitore_accettata else R.string.proposta_risposta_genitore_rifiutata,
+            chi.nome,
+        ) to perche?.let { parole.testo(R.string.proposta_risposta_genitore_motivazione, chi.nome, it) }
+        else -> parole.testo(if (accettata) R.string.proposta_tua_risposta_accettata else R.string.proposta_tua_risposta_rifiutata) to
+            perche?.let { parole.testo(R.string.proposta_tua_risposta_motivazione, it) }
+    }
 }
 
 /** Com'è finita una proposta, in una parola; uno stato che non si conosce resta com'è. */
@@ -1520,8 +1606,12 @@ fun testoNotifica(
     proposte: Map<Long, Proposta> = emptyMap(),
     nomi: Map<String, String> = emptyMap(),
     sessioni: Map<Long, Sessione> = emptyMap(),
+    // (0.13) true = la notifica di sistema, che si tocca ("tocca per vedere la
+    // foto"); false = la lista in app, dove toccare la riga non fa niente e c'è il
+    // pulsante "Guarda la foto".
+    nellaTendina: Boolean = true,
 ): TestoNotifica =
-    fraseNotifica(parole, notifica, regolePerId, figli, proposte, nomi, sessioni)
+    fraseNotifica(parole, notifica, regolePerId, figli, proposte, nomi, sessioni, nellaTendina)
         ?: TestoNotifica(parole.testo(etichettaTipoNotifica(notifica.tipo)), notifica.messaggio)
 
 /**
@@ -1555,6 +1645,9 @@ private fun etichettaTipoNotifica(tipo: String): Int = when (tipo) {
     "sessione_da_approvare" -> R.string.tipo_sessione_da_approvare
     "sessione_eliminata" -> R.string.tipo_sessione_eliminata
     "dichiarazione" -> R.string.tipo_dichiarazione
+    // (0.13) Le faccende (contratto v3.6): al genitore arrivano la foto e la fine.
+    TipiNotificaFaccende.FACCENDA_FATTA -> R.string.tipo_faccenda_fatta
+    TipiNotificaFaccende.FACCENDE_FINITE -> R.string.tipo_faccende_finite
     // (v3) Il computer che si spegne e si riaccende: non sono interruzioni.
     "sospensione" -> R.string.tipo_computer_spento
     "ripresa" -> R.string.tipo_computer_acceso
@@ -1570,6 +1663,7 @@ private fun fraseNotifica(
     proposte: Map<Long, Proposta>,
     nomi: Map<String, String>,
     sessioni: Map<Long, Sessione>,
+    nellaTendina: Boolean = true,
 ): TestoNotifica? {
     val payload = notifica.payload
     val regola = regolaIdNotifica(notifica)?.let { regolePerId[it] }
@@ -1653,6 +1747,37 @@ private fun fraseNotifica(
                 titolo = nomeFiglioDi(notifica, figli)?.let { parole.testo(R.string.notifica_sessione_eliminata, it, nome) }
                     ?: parole.testo(R.string.notifica_sessione_eliminata_senza_nome, nome),
                 testo = parole.testo(R.string.notifica_sessione_eliminata_testo),
+            )
+        }
+
+        // (0.13) "Faccenda fatta" / "Luca ha fatto «Svuota la lavastoviglie»: tocca
+        // per vedere la foto." Senza il titolo nel payload, il messaggio del server.
+        // Nella lista in app senza "tocca per…": lì c'è il pulsante "Guarda la foto".
+        TipiNotificaFaccende.FACCENDA_FATTA -> {
+            val faccenda = campo(payload, "titolo")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            val nome = nomeFiglioDi(notifica, figli)
+            val testo = when {
+                nellaTendina && nome != null -> parole.testo(R.string.notifica_faccenda_fatta, nome, faccenda)
+                nellaTendina -> parole.testo(R.string.notifica_faccenda_fatta_senza_nome, faccenda)
+                nome != null -> parole.testo(R.string.notifica_faccenda_fatta_lista, nome, faccenda)
+                else -> parole.testo(R.string.notifica_faccenda_fatta_lista_senza_nome, faccenda)
+            }
+            TestoNotifica(titolo, testo)
+        }
+
+        // (0.13) "Faccende finite" / la frase del server, che sa se il blocco era
+        // partito ("Luca ha finito le faccende: telefono e computer sbloccati"), e
+        // (solo nella tendina) dove si vedono le foto.
+        TipiNotificaFaccende.FACCENDE_FINITE -> {
+            val frase = notifica.messaggio.trim().takeIf { it.isNotEmpty() }
+            val tocca = parole.testo(R.string.notifica_faccende_finite_tocca)
+            TestoNotifica(
+                titolo,
+                when {
+                    !nellaTendina -> frase ?: return null
+                    frase != null -> "$frase\n$tocca"
+                    else -> tocca
+                },
             )
         }
 

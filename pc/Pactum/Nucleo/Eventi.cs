@@ -51,6 +51,14 @@ public static class Eventi
         ["dal"] = ts,
     }, ts);
 
+    /// <summary>
+    /// (0.13, contratto v3.6) Il programma è stato chiuso di colpo (per esempio dal Task Manager) mentre
+    /// un blocco delle faccende era attivo: al riavvio lo si dice. Solo per una chiusura improvvisa durante
+    /// un blocco, non dopo uno spegnimento, una disconnessione o una sospensione (quelli già si distinguono).
+    /// </summary>
+    public static Evento ChiusoDuranteBlocco(long ts) =>
+        Manomissione(new JsonObject { ["sotto_tipo"] = "chiuso_durante_blocco" }, ts);
+
     /// <summary>Un browser di cui non si riesce a leggere la barra degli indirizzi (una volta al giorno).</summary>
     public static Evento SitiNonLeggibili(string programma, string giorno, long ts) => Manomissione(new JsonObject
     {

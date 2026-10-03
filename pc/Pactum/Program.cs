@@ -160,9 +160,17 @@ internal static class Program
         // Un errore imprevisto non deve fermare la misura: si scrive nel diario e si va avanti.
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) => Log.Errore("eccezione non gestita nella finestra", e.Exception);
-        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Errore("eccezione non gestita", e.ExceptionObject as Exception);
+        // (0.13) Un crash vero (eccezione non gestita che chiude il processo) non deve diventare, al riavvio,
+        // un chiuso_durante_blocco: si scrive una chiusura "crash" in vivo.json, se il motore c'è già.
+        Motore.Motore? motorePerCrash = null;
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            Log.Errore("eccezione non gestita", e.ExceptionObject as Exception);
+            if (e.IsTerminating) motorePerCrash?.SegnaCrash();
+        };
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
+            // Un task non osservato non chiude il programma: si scrive nel diario e basta (niente "crash").
             Log.Errore("eccezione in un compito", e.Exception);
             e.SetObserved();
         };
@@ -196,6 +204,7 @@ internal static class Program
         }
 
         using var motore = new Motore.Motore(new Percorsi(opzioni.CartellaDati));
+        motorePerCrash = motore;
         if (opzioni.OpzioniIgnorate.Count > 0)
         {
             Log.Avviso($"opzioni di prova ignorate (valgono solo con --dati su una cartella di prova): {string.Join(", ", opzioni.OpzioniIgnorate)}");

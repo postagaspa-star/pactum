@@ -1,12 +1,14 @@
-# Pactum per il computer (v0.10)
+# Pactum per il computer (v0.13)
 
-Il programma per Windows 10/11 che fa sul computer quello che l'app del figlio fa sul telefono: misura, registra, avvisa, e mostra al figlio il suo patto. **Non blocca niente**, come tutto Pactum.
+Il programma per Windows 10/11 che fa sul computer quello che l'app del figlio fa sul telefono: misura, registra, avvisa, e mostra al figlio il suo patto. **Non blocca i singoli programmi o siti**, come tutto Pactum; l'unica cosa che blocca sono **le faccende** (0.13, contratto v3.6, decisione di Andrea in famiglia): finché non sono fatte, il computer resta coperto (v. "Il blocco delle faccende").
 
 Decisioni di Andrea (23/09/2026): il computer misura **programmi e siti**; il figlio gestisce le regole del computer **anche dal computer**, con una finestra completa; i siti si leggono **dalla barra degli indirizzi**, tenendo solo il dominio (v. `contratto-api.md`, "Sul computer"). Il protocollo col server è la **v3** del contratto.
 
 Decisioni di Andrea (30/09/2026, versione 0.9): un limite di tempo può valere su **tutto il computer** (contratto **v3.3**, `app_o_categoria = "totale"`), e quando si va oltre una regola, oltre al fumetto, si apre un **avviso a tutto schermo** che si chiude sempre.
 
 Decisione di Andrea (30/09/2026, versione 0.10): **«come adesso + proposte»**. Il figlio continua a cambiare da solo le sue regole (stringere subito, allentare dopo 4 giorni) e in più può **proporre un cambio al genitore**, che **se il genitore accetta vale subito**, anche se allenta (contratto **v3.4**, v. "Le proposte al genitore").
+
+Decisione di Andrea (02/10/2026, versione 0.13): **le faccende** (contratto **v3.6**). Un genitore dà al figlio delle faccende di casa; finché non le ha fatte tutte (una foto per ognuna, mandata **dal telefono**), **sul computer tutto è bloccato**: una finestra copre ogni schermo. È la prima cosa di Pactum che il genitore impone, e Andrea lo sa: è una regola decisa in famiglia, non un blocco di Pactum sul figlio. Si appoggia agli stessi strumenti dell'avviso a tutto schermo e resta onesta (v. "Il blocco delle faccende"). In più (02/10): **Minecraft Java** riconosciuto come `exe:minecraft-java` (v. "Cosa misura").
 
 ## Come è fatto
 
@@ -33,7 +35,7 @@ Decisione di Andrea (30/09/2026, versione 0.10): **«come adesso + proposte»**.
   - Ogni secondo prende il processo della finestra in primo piano e lo identifica con `exe:<nome.exe>` minuscolo.
   - Le app dello Store stanno dentro `ApplicationFrameHost.exe`: si risale al processo vero della finestra figlia.
   - Il nome leggibile viene dalla descrizione del file del programma ("Google Chrome"), altrimenti dal nome del file.
-  - **Titoli delle finestre: mai letti, mai salvati.**
+  - **Titoli delle finestre: mai letti, mai salvati.** (0.13) L'unica eccezione è Minecraft Java: quando il programma in primo piano è `javaw.exe` o `java.exe`, si legge il titolo della finestra solo per vedere se comincia con "Minecraft". In quel caso il tempo si conta sul programma `exe:minecraft-java`, nome "Minecraft (Java)", categoria giochi (contratto v3.6, `docs/categorie.md`). Il titolo si guarda e si butta: non si salva, non si manda, non finisce nei log.
 - **Tempo attivo**: conta solo se l'utente c'è:
   - un input negli ultimi 3 minuti (`GetLastInputInfo`), oppure
   - la finestra in primo piano è a schermo intero (film, giochi).
@@ -110,6 +112,23 @@ Decisione di Andrea (30/09/2026, versione 0.10): **«come adesso + proposte»**.
 
 `--prova-avvisi`, `--siti-solo`, `--prova-finestra`, `--esci-dopo` e `--esci-dopo-autoprova` servono solo alle prove: **valgono solo insieme a `--dati` con una cartella diversa da quella vera** (`%LOCALAPPDATA%\Pactum`). Senza, il programma le ignora e il diario lo scrive ("opzioni di prova ignorate…"): così nessuno le può aggiungere all'avvio per falsare quello che il programma misura o mostra, o per farlo chiudere da solo con una chiusura "pulita". Con `--dati` sulla cartella vera l'istanza resta quella del programma vero (non se ne apre una seconda sugli stessi dati). La prova rapida di `crea-pacchetto.ps1` (`--dati` in una cartella temporanea) funziona come prima.
 
+## Il blocco delle faccende (0.13, contratto v3.6)
+
+Decisione di Andrea: sul computer, quando ci sono faccende da fare, **tutto è bloccato**. È la prima cosa di Pactum che blocca, e la impone il genitore. Si tiene onesta: il programma non chiude, non minimizza e non tocca nessuna app (niente lavoro perso), le **copre** e basta; e chi la vuole aggirare ci riesce, ma resta nel registro, come sempre.
+
+- **Quando copre.** Il programma chiede spesso `GET /api/faccende/blocco` (contratto v3.6): ogni **30 secondi mentre è bloccato**, almeno ogni **minuto** altrimenti. Il blocco è attivo quando c'è almeno una faccenda `da_fare` con `blocco_da` già passato. Il `blocco` arriva anche dentro `GET /api/patto` (che la finestra legge ogni minuto): quello più fresco vince.
+- **Come copre.** Una finestra senza bordi, sempre in primo piano, copre **ogni schermo** (`Screen.AllScreens`, e si rifà se gli schermi cambiano). Dice "Prima le faccende", l'elenco con chi le ha date, e "Si sblocca da solo quando dal telefono hai mandato la foto di ogni faccenda". Non si chiude (Alt+F4 e simili ignorati), non si sposta e non si ridimensiona (ogni tentativo si annulla in `WM_WINDOWPOSCHANGING`), torna davanti se qualcosa la scavalca (controllo ogni ~mezzo secondo), copre la barra delle applicazioni. Prende il primo piano quando compare, e di nuovo se in primo piano torna a schermo intero un'altra app su uno schermo coperto (senza combattere col menu Start, che non è a schermo intero). Non chiude, non minimizza e non tocca le altre app: le copre e basta (niente lavoro perso). È una finestra WinForms, non una pagina della WebView2: compare subito, anche senza rete.
+- **Il limite di questo modo di coprire.** È una finestra, non un vero kiosk: alcune superfici di Windows restano **sopra** la copertura — il menu **Start**, i **Widget**, la **Game Bar** (Win+G), le **notifiche di sistema** e simili. Per questo non si promette "nessuna app usabile" in assoluto: Pactum non usa trucchi da virus (niente hook di tastiera, niente registro o Task Manager toccati) proprio per restare onesto, e in cambio non può coprire quelle superfici di sistema. Chi vuole aggirare il blocco ci riesce, ma resta nel registro, come sempre.
+- **Si toglie** solo quando il server dice che è finito (lista `da_fare` vuota), oppure quando Windows si spegne o l'utente esce (lo spegnimento **non si blocca mai**). Le foto si mandano **dal telefono**: il computer le vede e basta.
+- **Senza rete resta com'era.** Lo stato del blocco si salva su disco (`blocco.json`): un blocco attivo resta attivo finché il server non dice il contrario; un blocco **programmato** parte all'ora di `blocco_da` anche offline (ogni faccenda porta la sua ora). Un errore di rete o un 5xx non cambiano niente.
+- **Server vecchio.** Se `/api/faccende` risponde `404`/`405` (o il token non vale più, `401`/`403`), niente blocco e niente errori rumorosi: la copertura si toglie.
+- **Manomissione.** Se il programma viene chiuso di colpo (per esempio dal Task Manager) **mentre un blocco era attivo**, al riavvio manda in più una `manomissione {sotto_tipo: "chiuso_durante_blocco"}`. Vale sia se Windows è rimasto acceso (stesso avvio, nessuna chiusura pulita), sia se Windows è stato poi riavviato o spento **pulito**: in questo secondo caso si legge in sola lettura `HKLM\SYSTEM\CurrentControlSet\Control\Windows\ShutdownTime` (l'ora dell'ultimo spegnimento pulito) e, se è successivo all'ultimo "sono vivo", Pactum era già morto prima dello spegnimento. Uno spegnimento **non** pulito (corrente, schermata blu) non aggiorna quel valore, quindi non si dice niente. Mai dopo uno spegnimento/disconnessione/sospensione normali (quelli il programma già li distingue), e un **crash** del programma non conta (nel gestore delle eccezioni si scrive una chiusura "crash").
+- **Stato del blocco perso.** Se `blocco.json` manca o è rovinato all'avvio ma l'ultimo "sono vivo" diceva bloccato, il programma **resta coperto** con un elenco generico ("Ci sono faccende da fare") finché il server non risponde, e manda una `manomissione {sotto_tipo: "stato_blocco_perso"}`.
+- **Niente trucchi da virus.** Nessun hook di tastiera globale, niente registro di sistema in scrittura, Task Manager o impostazioni di sicurezza toccate. Del registro si leggono soltanto, in sola lettura, l'avvio di Windows (`BootId`) e l'ora dell'ultimo spegnimento pulito (`ShutdownTime`).
+- **Nella finestra** c'è la sezione **Faccende**: lo stato del blocco e l'elenco delle faccende da fare (solo da vedere, con chi le ha date e la nota), più quelle chiuse di recente. I dati vengono dal patto (`faccende` e `blocco`). In prova (`?prova=1`) il figlio di prova è **Luca**, con faccende finte; `?prova=1&vecchio=1` finge un server senza faccende.
+
+La logica (quando copre, la partenza programmata offline, la manomissione al riavvio, il riconoscimento di Minecraft) è separata dalle finestre WinForms, così è provabile: `Pactum/Nucleo/Blocco.cs` (la macchina degli stati), `Pactum/Nucleo/RegistroOnesto.cs` (`chiuso_durante_blocco`), `Pactum/Nucleo/Categorie.cs` (`Programma.ÈMinecraftJava`).
+
 ## Le proposte al genitore (0.10)
 
 Contratto v3.4: propone anche il figlio e risponde il genitore. Una sola proposta in attesa per regola, di chiunque sia.
@@ -182,7 +201,7 @@ Risposta di `GET /locale/oggi`:
 ## Aggiornamento
 
 - `GET /api/versione` → `computer`: ogni 12 ore il programma confronta `versione_code` col proprio.
-- (0.10) Il codice segue quello delle app del telefono: 0.8.0 = 8, 0.9.0 = 9, **0.10.0 = 10**. Il server per la 0.8 e la 0.9 annunciava per sbaglio 1 e 2, più bassi del codice del programma, e il programma non avvisava mai. Dalla 0.10 il server annuncia 10: anche il programma 0.8 già installato (codice 8) vede la versione nuova e lo dice.
+- (0.10) Il codice segue quello delle app del telefono: 0.8.0 = 8, 0.9.0 = 9, 0.10.0 = 10, **0.13.0 = 13**. Il server per la 0.8 e la 0.9 annunciava per sbaglio 1 e 2, più bassi del codice del programma, e il programma non avvisava mai. Dalla 0.10 il server annuncia il codice giusto: anche un programma più vecchio già installato vede la versione nuova e lo dice.
 - Se ce n'è una più nuova **avvisa e basta**: un fumetto "C'è una versione nuova di Pactum" e, al clic, apre la pagina `<server>/scarica` nel browser predefinito. Il programma **non scarica e non sostituisce niente da solo**: il figlio scarica lo zip e lo reinstalla come la prima volta (vedi Installazione). Così l'aggiornamento resta un gesto visibile e non un file che si cambia da sé (che un antivirus scambierebbe per un programma sospetto).
 
 ## Pacchetto

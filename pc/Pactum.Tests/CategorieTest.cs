@@ -210,11 +210,12 @@ public class CategorieTest
     {
         Assert.All(Categorie.ListeProgrammi.Keys.Concat(Categorie.ListeSiti.Keys).Concat(Categorie.ListeSottositi.Keys),
             c => Assert.Contains(c, Categorie.Tutte));
-        // I programmi: il nome del file in minuscolo, come nelle chiavi exe:.
-        Assert.All(Categorie.ListeProgrammi.Values.SelectMany(v => v), exe =>
+        // I programmi: il nome del file in minuscolo, come nelle chiavi exe:. L'unica eccezione è
+        // (0.13) minecraft-java, che non è un vero .exe ma per il server è una chiave exe: come le altre.
+        Assert.All(Categorie.ListeProgrammi.Values.SelectMany(v => v), voce =>
         {
-            Assert.Equal(Programma.Chiave(exe), Programma.Prefisso + exe);
-            Assert.EndsWith(".exe", exe, StringComparison.Ordinal);
+            Assert.Equal(Programma.Chiave(voce), Programma.Prefisso + voce);
+            if (voce != Programma.MinecraftJava) Assert.EndsWith(".exe", voce, StringComparison.Ordinal);
         });
         // I siti: esattamente il dominio che esce dalla barra degli indirizzi, altrimenti non combacerebbero mai.
         Assert.All(Categorie.ListeSiti.Values.SelectMany(v => v), sito => Assert.Equal(sito, Domini.DominioDellaPagina(sito)));
@@ -239,5 +240,34 @@ public class CategorieTest
     {
         Assert.Equal("minecraft", Programma.NomeDiRipiego("exe:minecraft.exe"));
         Assert.Equal("Notepad", Programma.NomeDiRipiego("Notepad.exe"));
+    }
+
+    // ---------- (0.13) Minecraft Java ----------
+
+    [Theory]
+    [InlineData("javaw.exe", "Minecraft 1.20.1", true)]
+    [InlineData("java.exe", "Minecraft* 1.21.4", true)]
+    [InlineData("javaw.exe", "Minecraft", true)]
+    [InlineData("javaw.exe", "  Minecraft 1.20.1", true)] // spazi iniziali tolti
+    [InlineData("JAVAW.EXE", "Minecraft 1.20.1", true)] // il nome del processo non guarda le maiuscole
+    [InlineData("javaw.exe", "Eclipse IDE", false)]
+    [InlineData("javaw.exe", "minecraft 1.20.1", false)] // il titolo sì: "Minecraft" con la M grande
+    [InlineData("javaw.exe", "", false)]
+    [InlineData("javaw.exe", null, false)]
+    [InlineData("chrome.exe", "Minecraft 1.20.1", false)] // solo java
+    [InlineData("minecraftlauncher.exe", "Minecraft", false)]
+    public void Minecraft_Java_e_javaw_col_titolo_giusto(string exe, string? titolo, bool atteso)
+    {
+        Assert.Equal(atteso, Programma.ÈMinecraftJava(exe, titolo));
+    }
+
+    [Fact]
+    public void Minecraft_Java_conta_come_gioco_con_la_sua_chiave_e_il_suo_nome()
+    {
+        Assert.Equal("minecraft-java", Programma.MinecraftJava);
+        Assert.Equal("exe:minecraft-java", Programma.Chiave(Programma.MinecraftJava));
+        Assert.Equal("Minecraft (Java)", Programma.NomeMinecraftJava);
+        Assert.Equal(Categorie.Giochi, Categorie.DiProgramma("exe:minecraft-java"));
+        Assert.Equal(Categorie.Giochi, Categorie.DiProgramma(Programma.Chiave(Programma.MinecraftJava)));
     }
 }

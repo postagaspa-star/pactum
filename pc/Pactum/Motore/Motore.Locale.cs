@@ -145,6 +145,9 @@ public sealed partial class Motore
             SalvaConfig();
         }
         patto = null;
+        // (0.13) Un computer appena abbinato (magari di un altro figlio) riparte senza blocco: si azzera lo
+        // stato e blocco.json, e la copertura si toglie. BloccoVisto è già false nella config nuova.
+        AdottaBlocco(StatoBlocco.Vuoto, Environment.TickCount64);
         Log.Info("computer abbinato");
         _ = Task.Run(() => SincronizzaAsync("abbinamento"));
         return new JsonObject

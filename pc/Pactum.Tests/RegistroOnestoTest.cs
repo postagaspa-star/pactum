@@ -201,4 +201,104 @@ public class RegistroOnestoTest
         Assert.True(Json.Booleano(e.Dettagli["volontario"]));
         Assert.Equal(Adesso, Json.Intero(e.Dettagli["dal"]));
     }
+
+    // ---------- (0.13) chiuso durante un blocco delle faccende ----------
+
+    private static StatoVivo VivoBloccato(long utc, long tick, long? boot = 121, string? chiusura = null, bool bloccato = false) =>
+        new() { UtcMs = utc, TickMs = tick, BootId = boot, Chiusura = chiusura, BloccatoFaccende = bloccato };
+
+    [Fact]
+    public void Chiuso_a_forza_durante_un_blocco_si_dice_al_riavvio()
+    {
+        // Ultimo "sono vivo" alle 17:30 con un blocco attivo, Windows mai riavviato, nessuna chiusura pulita.
+        var prima = VivoBloccato(Adesso - 30 * Minuto, 10 * Minuto, bloccato: true);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 40 * Minuto, 121);
+        Assert.NotNull(e.ProgrammaChiuso); // il buco di sempre
+        Assert.True(e.ChiusoDuranteBlocco); // in più: era un blocco
+        var evento = Eventi.ChiusoDuranteBlocco(Adesso);
+        Assert.Equal(TipiEvento.Manomissione, evento.Tipo);
+        Assert.Equal("chiuso_durante_blocco", Json.Testo(evento.Dettagli["sotto_tipo"]));
+    }
+
+    [Fact]
+    public void Chiuso_a_forza_senza_blocco_non_dice_chiuso_durante_blocco()
+    {
+        var prima = VivoBloccato(Adesso - 30 * Minuto, 10 * Minuto, bloccato: false);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 40 * Minuto, 121);
+        Assert.NotNull(e.ProgrammaChiuso);
+        Assert.False(e.ChiusoDuranteBlocco);
+    }
+
+    [Fact]
+    public void Dopo_uno_spegnimento_pulito_niente_chiuso_durante_blocco_anche_se_era_bloccato()
+    {
+        // Chiusura pulita (spegnimento): non è una manomissione, anche se il blocco era attivo.
+        var prima = VivoBloccato(Adesso - 30 * Minuto, 10 * Minuto, chiusura: Chiusure.Spegnimento, bloccato: true);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 40 * Minuto, 121);
+        Assert.Null(e.ProgrammaChiuso);
+        Assert.False(e.ChiusoDuranteBlocco);
+    }
+
+    [Fact]
+    public void Chiuso_durante_un_blocco_poi_Windows_spento_pulito_si_dice_al_riavvio()
+    {
+        // Avvio di Windows diverso, nessuna chiusura pulita di Pactum, bloccato; lo spegnimento PULITO di
+        // Windows è successivo all'ultimo "sono vivo" → Pactum era già morto prima dello spegnimento.
+        var prima = VivoBloccato(Adesso - 2 * 60 * Minuto, 300 * Minuto, boot: 120, bloccato: true);
+        long spentoPulito = Adesso - 60 * Minuto; // dopo l'ultimo "sono vivo" (−120 min)
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 5 * Minuto, 121, spentoPulito);
+        Assert.True(e.ChiusoDuranteBlocco);
+        Assert.NotNull(e.ProgrammaChiuso);
+        Assert.Equal("programma_chiuso", Json.Testo(e.ProgrammaChiuso!["sotto_tipo"]));
+        Assert.Equal(prima.UtcMs, Json.Intero(e.ProgrammaChiuso["dal"]));
+        Assert.Equal(spentoPulito, Json.Intero(e.ProgrammaChiuso["al"]));
+    }
+
+    [Fact]
+    public void Spegnimento_non_pulito_durante_un_blocco_non_dice_niente()
+    {
+        // ShutdownTime vecchio (<= l'ultimo "sono vivo"): corrente staccata o schermata blu, non lo aggiornano.
+        var prima = VivoBloccato(Adesso - 60 * Minuto, 300 * Minuto, boot: 120, bloccato: true);
+        long spentoVecchio = Adesso - 90 * Minuto; // PRIMA dell'ultimo "sono vivo"
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 5 * Minuto, 121, spentoVecchio);
+        Assert.False(e.ChiusoDuranteBlocco);
+        Assert.Null(e.ProgrammaChiuso);
+    }
+
+    [Fact]
+    public void Riavvio_di_Windows_senza_sapere_lo_spegnimento_non_dice_niente()
+    {
+        // ShutdownTime non leggibile (null): non si inventa una manomissione.
+        var prima = VivoBloccato(Adesso - 30 * Minuto, 300 * Minuto, boot: 120, bloccato: true);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 2 * Minuto, 121, null);
+        Assert.False(e.ChiusoDuranteBlocco);
+    }
+
+    [Fact]
+    public void Non_bloccato_e_Windows_riavviato_non_e_chiuso_durante_blocco_anche_con_ShutdownTime()
+    {
+        // Non era bloccato: lo spegnimento pulito successivo non è una manomissione del blocco.
+        var prima = VivoBloccato(Adesso - 2 * 60 * Minuto, 300 * Minuto, boot: 120, bloccato: false);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 5 * Minuto, 121, Adesso - 60 * Minuto);
+        Assert.False(e.ChiusoDuranteBlocco);
+        Assert.Null(e.ProgrammaChiuso);
+    }
+
+    [Fact]
+    public void Un_crash_non_diventa_una_manomissione()
+    {
+        // Chiusura "crash" scritta dal gestore delle eccezioni: niente programma_chiuso né chiuso_durante_blocco.
+        var prima = VivoBloccato(Adesso - 30 * Minuto, 10 * Minuto, chiusura: Chiusure.Crash, bloccato: true);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 40 * Minuto, 121);
+        Assert.Null(e.ProgrammaChiuso);
+        Assert.False(e.ChiusoDuranteBlocco);
+    }
+
+    [Fact]
+    public void La_manomissione_stato_blocco_perso_ha_il_suo_sotto_tipo()
+    {
+        var e = Eventi.Manomissione(new System.Text.Json.Nodes.JsonObject { ["sotto_tipo"] = "stato_blocco_perso" }, Adesso);
+        Assert.Equal(TipiEvento.Manomissione, e.Tipo);
+        Assert.Equal("stato_blocco_perso", Json.Testo(e.Dettagli["sotto_tipo"]));
+    }
 }

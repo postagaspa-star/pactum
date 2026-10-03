@@ -53,6 +53,9 @@ public static class Categorie
             "cod.exe", "destiny2.exe", "tslgame.exe", "rainbowsix.exe", "eldenring.exe", "geometrydash.exe",
             "fallguys_client_game.exe", "marvel-win64-shipping.exe", "rustclient.exe", "hollow_knight.exe",
             "palworld-win64-shipping.exe", "helldivers2.exe",
+            // (0.13) Minecraft Java gira come javaw.exe/java.exe: col titolo giusto lo contiamo
+            // exe:minecraft-java (v. Programma.ÈMinecraftJava), e come programma sta nei giochi.
+            Programma.MinecraftJava,
         },
         [Video] = new[]
         {
@@ -185,6 +188,31 @@ public static class Programma
 {
     public const string Prefisso = "exe:";
     public const string PrefissoSito = "sito:";
+
+    /// <summary>
+    /// (0.13) La chiave "programma" di Minecraft nell'edizione Java (contratto v3.6): non è un vero
+    /// <c>.exe</c> (gira dentro <c>javaw.exe</c>/<c>java.exe</c>), ma per il server è una chiave
+    /// <c>exe:</c> come le altre, anche nelle regole (<c>exe:minecraft-java</c>).
+    /// </summary>
+    public const string MinecraftJava = "minecraft-java";
+
+    /// <summary>Il nome leggibile di <c>exe:minecraft-java</c>.</summary>
+    public const string NomeMinecraftJava = "Minecraft (Java)";
+
+    private static readonly HashSet<string> EseguibiliJava = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "javaw.exe", "java.exe",
+    };
+
+    /// <summary>
+    /// (0.13) È Minecraft Java? Lo è quando il programma in primo piano è <c>javaw.exe</c> o
+    /// <c>java.exe</c> e il titolo della sua finestra comincia con "Minecraft". Il titolo si legge SOLO
+    /// per questo controllo e si butta: non entra nei dati né nei log (contratto v3.6). Logica pura:
+    /// chi legge il titolo (<see cref="Sistema.PrimoPiano"/>) lo passa qui e non lo tiene.
+    /// </summary>
+    public static bool ÈMinecraftJava(string? exe, string? titolo) =>
+        exe != null && EseguibiliJava.Contains(exe)
+        && titolo != null && titolo.TrimStart().StartsWith("Minecraft", StringComparison.Ordinal);
 
     public static string Chiave(string nomeFile) => Prefisso + nomeFile.Trim().ToLowerInvariant();
 

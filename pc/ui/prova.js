@@ -20,7 +20,9 @@
  *                         server resta ricordato (si riparte da "Collega")
  *   ?prova=1&vecchio=1    (0.10) un server di prima della v3.4: niente proposte
  *                         del figlio (403 a «Proponi al genitore», 404 a
- *                         «Ritira»), niente `autore` né `proposte_inviate`
+ *                         «Ritira»), niente `autore` né `proposte_inviate`;
+ *                         (0.13) niente faccende né blocco (la sezione Faccende
+ *                         dice che il server va aggiornato)
  * Nella barra a sinistra c'è anche l'interruttore "Simula rete assente".
  */
 (function (radice) {
@@ -205,6 +207,35 @@
         {
           id: 26, regola_id: 15, giorno: g(6), esito: 'fallimento', nota: 'Pioveva forte e non sono uscito',
           stato: 'registrata', ts_server: isoTs(traMinuti(-6 * MINUTI_GIORNO - 60)), verdetto: null,
+        },
+      ],
+      // (0.13, contratto v3.6) Le faccende di Luca: due da fare (blocco già attivo), una rimandata, una
+      // fatta e una annullata. Le foto si mandano dal telefono: qui si vedono e basta.
+      faccende: [
+        {
+          id: 53, figlio_id: 1, titolo: 'Riordina la camera', nota: 'anche sotto il letto',
+          stato: 'da_fare', blocco_da: isoTs(traMinuti(-110)), creata_ts: isoTs(traMinuti(-130)),
+          creata_da: { id: 3, nome: 'Papà' }, foto_ts: null, foto: false,
+          bocciature: 1, ultima_bocciatura: { ts: isoTs(traMinuti(-40)), nota: 'si vede ancora il pavimento pieno', da: { id: 3, nome: 'Papà' } },
+          chiusa_ts: null, annullata_da: null,
+        },
+        {
+          id: 52, figlio_id: 1, titolo: 'Svuota la lavastoviglie', nota: 'anche le pentole',
+          stato: 'da_fare', blocco_da: isoTs(traMinuti(-120)), creata_ts: isoTs(traMinuti(-125)),
+          creata_da: { id: 2, nome: 'Mamma' }, foto_ts: null, foto: false,
+          bocciature: 0, ultima_bocciatura: null, chiusa_ts: null, annullata_da: null,
+        },
+        {
+          id: 51, figlio_id: 1, titolo: 'Porta giù la spazzatura', nota: null,
+          stato: 'fatta', blocco_da: isoTs(traMinuti(-200)), creata_ts: isoTs(traMinuti(-205)),
+          creata_da: { id: 2, nome: 'Mamma' }, foto_ts: isoTs(traMinuti(-35)), foto: true,
+          bocciature: 0, ultima_bocciatura: null, chiusa_ts: isoTs(traMinuti(-35)), annullata_da: null,
+        },
+        {
+          id: 50, figlio_id: 1, titolo: 'Innaffia le piante', nota: null,
+          stato: 'annullata', blocco_da: isoTs(traMinuti(-320)), creata_ts: isoTs(traMinuti(-330)),
+          creata_da: { id: 3, nome: 'Papà' }, foto_ts: null, foto: false,
+          bocciature: 0, ultima_bocciatura: null, chiusa_ts: isoTs(traMinuti(-300)), annullata_da: { id: 3, nome: 'Papà' },
         },
       ],
       siti: [
@@ -479,7 +510,7 @@
       server: S.server,
       figlio: S.abbinato ? S.figlio : null,
       dispositivo: S.abbinato ? S.computer : null,
-      versione: '0.10.0',
+      versione: '0.13.0',
       ultimo_invio_ok: S.abbinato ? isoTs(S.ultimoInvio) : null,
       rete_ok: opzioni.rete,
       patto_aggiornato: S.abbinato ? isoTs(S.pattoAggiornato) : null,
@@ -640,11 +671,39 @@
       dispositivo: S.computer,
       striscia_dispositivo: strisciaDi(S.computer),
       dispositivi: [S.telefono, S.computer].map((d) => Object.assign({}, d, { striscia: strisciaDi(d) })),
+      // (0.13, contratto v3.6) Un server vecchio non le manda: lì la sezione dice che va aggiornato.
+      faccende: opzioni.vecchio ? undefined : faccende(),
+      blocco: opzioni.vecchio ? undefined : blocco(),
     };
   }
 
   function piuRecenti(a, b) {
     return String(b.ts_server).localeCompare(String(a.ts_server)) || b.id - a.id;
+  }
+
+  // (0.13, contratto v3.6) Le faccende e il blocco, come GET /api/faccende e GET /api/faccende/blocco.
+
+  /** Le faccende di Luca: le da_fare, più le chiuse di recente, dalla più recente. */
+  function faccende() {
+    return S.faccende.slice().sort((a, b) =>
+      String(b.creata_ts).localeCompare(String(a.creata_ts)) || b.id - a.id);
+  }
+
+  /** Lo stato del blocco, ricavato dai blocco_da come fa il server (e il programma offline). */
+  function blocco() {
+    const ms = (f) => new Date(f.blocco_da).getTime();
+    const daFare = S.faccende.filter((f) => f.stato === 'da_fare');
+    const passate = daFare.filter((f) => ms(f) <= Date.now()).map((f) => f.blocco_da).sort();
+    const future = daFare.filter((f) => ms(f) > Date.now()).map((f) => f.blocco_da).sort();
+    return {
+      attivo: passate.length > 0,
+      dal: passate.length ? passate[0] : null,
+      prossimo: passate.length ? null : (future.length ? future[0] : null),
+      da_fare: daFare.slice().sort((a, b) => ms(a) - ms(b)).map((f) => ({
+        id: f.id, titolo: f.titolo, nota: f.nota, blocco_da: f.blocco_da,
+        creata_da: f.creata_da, bocciature: f.bocciature, ultima_bocciatura: f.ultima_bocciatura,
+      })),
+    };
   }
 
   function creaRegola(corpo) {
@@ -841,6 +900,9 @@
     trovato = /^\/api\/proposte\/(\d+)\/ritira$/.exec(via);
     if (trovato && metodo === 'POST') return ritira(Number(trovato[1]));
     if (metodo === 'POST' && via === '/api/dichiarazioni') return dichiara(corpo);
+    // (0.13, contratto v3.6) Le faccende e il blocco. Un server vecchio non le conosce: 404.
+    if (metodo === 'GET' && via === '/api/faccende') return opzioni.vecchio ? errore(404, 'Not Found') : risposta(200, { faccende: faccende() });
+    if (metodo === 'GET' && via === '/api/faccende/blocco') return opzioni.vecchio ? errore(404, 'Not Found') : risposta(200, blocco());
     return errore(404, 'Not Found');
   }
 

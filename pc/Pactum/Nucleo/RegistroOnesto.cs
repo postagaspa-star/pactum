@@ -66,6 +66,9 @@ public sealed class StatoVivo
 
     /// <summary>Come si è chiuso il programma: null = mai chiuso bene (ancora acceso o chiuso a forza).</summary>
     [JsonPropertyName("chiusura")] public string? Chiusura { get; set; }
+
+    /// <summary>(0.13) Un blocco delle faccende era attivo all'ultimo "sono vivo": serve a <c>chiuso_durante_blocco</c>.</summary>
+    [JsonPropertyName("bloccato_faccende")] public bool BloccatoFaccende { get; set; }
 }
 
 public static class Chiusure
@@ -74,10 +77,18 @@ public static class Chiusure
     public const string Spegnimento = "spegnimento";
     public const string Disconnessione = "disconnessione";
     public const string Aggiornamento = "aggiornamento";
+
+    /// <summary>(0.13) Un errore imprevisto: una chiusura scritta nel gestore delle eccezioni, così al riavvio un crash non diventa una manomissione.</summary>
+    public const string Crash = "crash";
 }
 
 /// <summary>Cosa dire al server quando il programma riparte.</summary>
-public sealed record EsitoAvvio(bool StessoAvvioDiWindows, JsonObject? ProgrammaChiuso, JsonObject? CambioOra, string MotivoRipresa, long AvvioSistemaMs);
+/// <param name="ChiusoDuranteBlocco">
+/// (0.13) Il programma di prima è stato chiuso di colpo (stesso avvio di Windows, chiusura non pulita)
+/// mentre un blocco delle faccende era attivo: si manda in più una <c>manomissione chiuso_durante_blocco</c>.
+/// Mai dopo uno spegnimento, una disconnessione o una sospensione (lì <see cref="ProgrammaChiuso"/> è già null).
+/// </param>
+public sealed record EsitoAvvio(bool StessoAvvioDiWindows, JsonObject? ProgrammaChiuso, JsonObject? CambioOra, string MotivoRipresa, long AvvioSistemaMs, bool ChiusoDuranteBlocco = false);
 
 /// <summary>
 /// Il programma chiuso a forza: al riavvio si confronta l'ultimo "sono vivo" con
@@ -96,7 +107,13 @@ public static class Vivo
     /// </summary>
     public const long AvvioTardivoMs = 10 * 60_000;
 
-    public static EsitoAvvio ValutaAvvio(StatoVivo? precedente, long utcAdesso, long tickAdesso, long? bootIdAdesso)
+    /// <param name="spegnimentoPulitoMs">
+    /// (0.13) L'ora dell'ultimo spegnimento pulito di Windows (<c>HKLM\…\Control\Windows\ShutdownTime</c>),
+    /// in millisecondi UTC, o null se non si legge. Serve a riconoscere un programma chiuso di colpo durante
+    /// un blocco e poi un riavvio/spegnimento: se Windows si è spento pulito DOPO l'ultimo "sono vivo", Pactum
+    /// era già morto. Uno spegnimento non pulito (corrente, schermata blu) non aggiorna quel valore.
+    /// </param>
+    public static EsitoAvvio ValutaAvvio(StatoVivo? precedente, long utcAdesso, long tickAdesso, long? bootIdAdesso, long? spegnimentoPulitoMs = null)
     {
         long avvioAdesso = utcAdesso - tickAdesso;
         if (precedente == null) return new EsitoAvvio(false, null, null, "avvio", avvioAdesso);
@@ -119,6 +136,7 @@ public static class Vivo
             // sessione (dall'accensione a ora) va nel registro. Così, se il figlio toglie Pactum
             // dall'avvio automatico, non risulta "spento" all'infinito.
             JsonObject? tardivo = null;
+            bool chiusoDuranteBloccoCross = false;
             if (precedente.Chiusura != null && tickAdesso > AvvioTardivoMs)
             {
                 tardivo = new JsonObject
@@ -129,7 +147,22 @@ public static class Vivo
                     ["avvio_ritardato"] = true,
                 };
             }
-            return new EsitoAvvio(false, tardivo, null, "avvio", avvioAdesso);
+            else if (precedente.Chiusura == null && precedente.BloccatoFaccende
+                     && spegnimentoPulitoMs is long spento && spento > precedente.UtcMs)
+            {
+                // (0.13) Chiuso di colpo durante un blocco, poi Windows si è spento PULITO dopo l'ultimo
+                // "sono vivo": Pactum era già morto prima dello spegnimento. Il buco e la manomissione.
+                // Se lo spegnimento non è stato pulito (corrente, schermata blu) ShutdownTime resta vecchio
+                // (<= l'ultimo "sono vivo") e non si dice niente.
+                tardivo = new JsonObject
+                {
+                    ["sotto_tipo"] = "programma_chiuso",
+                    ["dal"] = precedente.UtcMs,
+                    ["al"] = spento,
+                };
+                chiusoDuranteBloccoCross = true;
+            }
+            return new EsitoAvvio(false, tardivo, null, "avvio", avvioAdesso, chiusoDuranteBloccoCross);
         }
 
         JsonObject? chiuso = null;
@@ -152,6 +185,8 @@ public static class Vivo
         }
 
         var motivo = precedente.Chiusura == Chiusure.Disconnessione ? "accesso" : "avvio";
-        return new EsitoAvvio(true, chiuso, cambioOra, motivo, avvioAdesso);
+        // (0.13) Chiuso di colpo (chiusura non pulita, stesso avvio di Windows) mentre un blocco era attivo.
+        bool chiusoDuranteBlocco = chiuso != null && precedente.BloccatoFaccende;
+        return new EsitoAvvio(true, chiuso, cambioOra, motivo, avvioAdesso, chiusoDuranteBlocco);
     }
 }

@@ -21,6 +21,10 @@ public sealed partial class Motore
     /// </summary>
     private static readonly TimeSpan IntervalloVeloce = TimeSpan.FromSeconds(60);
 
+    /// <summary>(0.13, contratto v3.6) GET /api/faccende/blocco: ogni 30 secondi da bloccato, ogni minuto altrimenti.</summary>
+    private static readonly TimeSpan IntervalloBloccoCoperto = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan IntervalloBlocco = TimeSpan.FromSeconds(60);
+
     // Protegge config, token e lo stato della rete.
     private readonly object stato = new();
     private readonly SemaphoreSlim giroRete = new(1, 1);
@@ -62,6 +66,7 @@ public sealed partial class Motore
         {
             await Task.Delay(TimeSpan.FromSeconds(3), annulla).ConfigureAwait(false);
             long prossimoGiro = long.MinValue;
+            long prossimoBlocco = long.MinValue;
             while (!annulla.IsCancellationRequested)
             {
                 if (Environment.TickCount64 >= prossimoGiro)
@@ -74,7 +79,14 @@ public sealed partial class Motore
                     // (0.10) Una proposta del figlio aspetta il genitore: se accetta, vale subito anche qui.
                     await GiroVeloceAsync().ConfigureAwait(false);
                 }
-                long resta = prossimoGiro - Environment.TickCount64;
+                if (Environment.TickCount64 >= prossimoBlocco)
+                {
+                    // (0.13) La risposta piccola del blocco: più spesso quando si è bloccati.
+                    await AggiornaBloccoAsync().ConfigureAwait(false);
+                    prossimoBlocco = Environment.TickCount64 + (long)(coperto ? IntervalloBloccoCoperto : IntervalloBlocco).TotalMilliseconds;
+                }
+                long prossimo = Math.Min(prossimoGiro, prossimoBlocco);
+                long resta = prossimo - Environment.TickCount64;
                 await Task.Delay(TimeSpan.FromMilliseconds(Math.Clamp(resta, 1_000, (long)IntervalloVeloce.TotalMilliseconds)), annulla).ConfigureAwait(false);
             }
         }
@@ -157,6 +169,77 @@ public sealed partial class Motore
         finally
         {
             giroRete.Release();
+        }
+    }
+
+    /// <summary>
+    /// (0.13, contratto v3.6) <c>GET /api/faccende/blocco</c>: la risposta piccola che i dispositivi
+    /// chiedono spesso. Le risposte, con la lettura più prudente possibile:
+    /// <list type="bullet">
+    /// <item>niente rete o un <c>5xx</c> → non si cambia niente (un blocco resta finché il server non dice il contrario);</item>
+    /// <item><c>200</c> → si adotta, e si segna che questo server conosce il blocco;</item>
+    /// <item><c>401</c> (dispositivo revocato) → si toglie la copertura;</item>
+    /// <item><c>403</c> → non si cambia niente (non è un "niente faccende");</item>
+    /// <item><c>404</c>/<c>405</c> → si toglie la copertura SOLO se il corpo è quello di FastAPI
+    /// (<c>{"detail":"Not Found"}</c> / <c>"Method Not Allowed"</c>) E questo server non ha mai mandato il
+    /// blocco: così un errore di un proxy su un server che le conosce non sblocca per sbaglio.</item>
+    /// </list>
+    /// Mai un'eccezione che fermi il ciclo di rete: come il giro veloce.
+    /// </summary>
+    internal async Task AggiornaBloccoAsync(TimeSpan? tempoMassimo = null)
+    {
+        try
+        {
+            var (server, tok) = Credenziali();
+            if (server == null || tok == null) return;
+            long chiestoTick = Environment.TickCount64;
+            var r = await postino.InviaAsync("GET", server, "api/faccende/blocco", tok, null, tempoMassimo).ConfigureAwait(false);
+            Annota(r);
+            if (r.Rete || r.Stato is 500 or 502 or 503 or 504) return; // senza rete: resta com'era
+            if (r.Ok && Json.Analizza(r.Corpo) is JsonObject o)
+            {
+                SegnaBloccoVisto();
+                AdottaBlocco(Blocco.Leggi(o), chiestoTick);
+            }
+            else if (r.Stato == 401)
+            {
+                AdottaBlocco(StatoBlocco.Vuoto, chiestoTick); // dispositivo revocato
+            }
+            else if (r.Stato is 404 or 405 && !BloccoVisto && ÈNonTrovatoDiFastApi(r))
+            {
+                AdottaBlocco(StatoBlocco.Vuoto, chiestoTick); // server che non conosce le faccende
+            }
+            // 403, o un 404/405 strano (proxy), o un server che il blocco l'aveva già mandato: non si cambia niente.
+        }
+        catch (Exception e)
+        {
+            Log.Errore("giro del blocco", e);
+        }
+    }
+
+    /// <summary>Il corpo è il "Not Found"/"Method Not Allowed" di FastAPI (un endpoint che non esiste), non un errore nostro con un <c>errore</c>.</summary>
+    private static bool ÈNonTrovatoDiFastApi(Risposta r)
+    {
+        var detail = Json.Testo((Json.Analizza(r.Corpo) as JsonObject)?["detail"])?.Trim();
+        return detail is "Not Found" or "Method Not Allowed";
+    }
+
+    /// <summary>(0.13) Questo server conosce il blocco: lo si ricorda (legato al server, azzerato al nuovo abbinamento).</summary>
+    private void SegnaBloccoVisto()
+    {
+        lock (stato)
+        {
+            if (config.BloccoVisto) return;
+            config.BloccoVisto = true;
+            SalvaConfig();
+        }
+    }
+
+    private bool BloccoVisto
+    {
+        get
+        {
+            lock (stato) return config.BloccoVisto;
         }
     }
 
@@ -245,6 +328,15 @@ public sealed partial class Motore
         }
         // Il patto riletto contiene già i bonus concessi prima della richiesta.
         lock (misura) bonusLocali.RemoveAll(b => b.UtcMs < chiestoAlle);
+        // (0.13, contratto v3.6) Il patto porta anche il blocco delle faccende: lo si adotta qui, così è
+        // fresco anche al giro della finestra (ogni minuto). Un patto di un server vecchio non ha il campo:
+        // lì il blocco lo tiene aggiornato il giro dedicato (AggiornaBloccoAsync). Si passa il tick della
+        // richiesta del patto: un patto vecchio arrivato dopo non scavalca una risposta più fresca di /blocco.
+        if (dati["blocco"] is JsonObject bloccoJson)
+        {
+            SegnaBloccoVisto();
+            AdottaBlocco(Blocco.Leggi(bloccoJson), chiestoTick);
+        }
         return true;
     }
 

@@ -53,6 +53,15 @@ public sealed partial class Motore : IDisposable
     private volatile string? chiusuraInCorso;
     private long chiusuraInCorsoDalTick;
 
+    // (0.13) Il blocco delle faccende (contratto v3.6). "coperto" = la finestra deve coprire gli schermi.
+    private readonly object bloccoLock = new();
+    private volatile StatoBlocco? statoBlocco;
+    private volatile bool coperto;
+    private IReadOnlyList<Faccenda> faccendeMostrate = Array.Empty<Faccenda>();
+    // Quando è stato chiesto lo stato del blocco che sto usando (orologio monotono): uno chiesto prima,
+    // che arriva dopo (un patto lento sopra una risposta fresca di /faccende/blocco), non lo sostituisce.
+    private long bloccoChiestoTick = long.MinValue;
+
     public Motore(Percorsi percorsi)
     {
         this.percorsi = percorsi;
@@ -69,6 +78,8 @@ public sealed partial class Motore : IDisposable
         if (registro.Ricorda(coda.Prossimi(CodaEventi.Massimo)) > 0) registroDaSalvare = true;
         notifiche = Archivio.LeggiJson<StatoNotifiche>(percorsi.Notifiche) ?? new StatoNotifiche();
         memoriaSerie = Archivio.LeggiJson<MemoriaSerie>(percorsi.Serie) ?? new MemoriaSerie();
+        // (0.13) Il blocco salvato: senza rete resta com'era, un blocco programmato parte all'ora giusta.
+        statoBlocco = Archivio.LeggiJson<StatoBlocco>(percorsi.Blocco);
         var salvato = Archivio.LeggiJson<PattoSalvato>(percorsi.Patto);
         if (salvato != null) patto = new PattoLocale(salvato.Patto, salvato.AggiornatoUtcMs);
 
@@ -95,6 +106,27 @@ public sealed partial class Motore : IDisposable
     /// </summary>
     public event Action<IReadOnlyList<Avviso>>? AvvisoTuttoSchermo;
 
+    /// <summary>
+    /// (0.13, contratto v3.6) Il blocco delle faccende è cambiato: coprire gli schermi con l'elenco,
+    /// oppure togliere la copertura. Arriva da un filo qualsiasi; chi ascolta marshalla sul filo grafico.
+    /// </summary>
+    public event Action<VistaBlocco>? CambioBlocco;
+
+    /// <summary>(0.13) Per i test e l'interfaccia: il blocco sta coprendo gli schermi adesso?</summary>
+    public bool Coperto => coperto;
+
+    /// <summary>
+    /// (0.13) Lo stato attuale del blocco, letto adesso: l'interfaccia lo rilegge quando arriva un
+    /// <see cref="CambioBlocco"/>, invece di fidarsi dell'ordine degli eventi fra i fili.
+    /// </summary>
+    public VistaBlocco VistaBloccoCorrente
+    {
+        get
+        {
+            lock (bloccoLock) return new VistaBlocco(coperto, faccendeMostrate);
+        }
+    }
+
     public bool Abbinato
     {
         get
@@ -106,7 +138,11 @@ public sealed partial class Motore : IDisposable
     public void Avvia()
     {
         Log.Info($"avvio Pactum {Versione.Nome}");
-        ValutaAvvio();
+        var precedenteVivo = Archivio.LeggiJson<StatoVivo>(percorsi.Vivo);
+        ValutaAvvio(precedenteVivo);
+        // (0.13) Il blocco: se blocco.json si è perso ma l'ultimo "sono vivo" diceva bloccato, resta coperto
+        // con un elenco generico finché il server non risponde. Poi si valuta la copertura dallo stato salvato.
+        PreparaBlocco(precedenteVivo, Tempo.AdessoUtcMs());
         ScriviVivo(null);
         filoMisura = new Thread(CicloMisura) { IsBackground = true, Name = "Pactum misura" };
         filoMisura.SetApartmentState(ApartmentState.MTA);
@@ -192,20 +228,22 @@ public sealed partial class Motore : IDisposable
 
     public void SchermoAcceso(bool acceso) => schermoAcceso = acceso;
 
-    private void ValutaAvvio()
+    private void ValutaAvvio(StatoVivo? precedente)
     {
-        var precedente = Archivio.LeggiJson<StatoVivo>(percorsi.Vivo);
         long adesso = Tempo.AdessoUtcMs();
-        var esito = Vivo.ValutaAvvio(precedente, adesso, Environment.TickCount64, IdAvvioWindows());
+        var esito = Vivo.ValutaAvvio(precedente, adesso, Environment.TickCount64, IdAvvioWindows(), IdSpegnimentoPulitoMs());
         if (esito.ProgrammaChiuso != null)
         {
             Log.Avviso(Json.Booleano(esito.ProgrammaChiuso["avvio_ritardato"]) == true
                 ? "avvio in ritardo: il computer era acceso senza Pactum"
                 : "il programma era stato chiuso mentre Windows era acceso");
         }
+        if (esito.ChiusoDuranteBlocco) Log.Avviso("il programma era stato chiuso durante un blocco delle faccende");
         if (esito.CambioOra != null) Log.Avviso("l'orologio è stato spostato mentre il programma era chiuso");
         if (!Abbinato) return;
         if (esito.ProgrammaChiuso != null) coda.Accoda(Eventi.Manomissione(esito.ProgrammaChiuso, adesso));
+        // (0.13) Chiuso di colpo durante un blocco delle faccende (per esempio dal Task Manager): lo si dice.
+        if (esito.ChiusoDuranteBlocco) coda.Accoda(Eventi.ChiusoDuranteBlocco(adesso));
         if (esito.CambioOra != null) coda.Accoda(Eventi.Manomissione(esito.CambioOra, adesso));
         coda.Accoda(Eventi.Ripresa(esito.MotivoRipresa, esito.AvvioSistemaMs, adesso));
     }
@@ -220,6 +258,7 @@ public sealed partial class Motore : IDisposable
                 TickMs = Environment.TickCount64,
                 BootId = IdAvvioWindows(),
                 Chiusura = chiusura,
+                BloccatoFaccende = coperto,
             });
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -241,6 +280,35 @@ public sealed partial class Motore : IDisposable
             return null;
         }
     }
+
+    /// <summary>
+    /// (0.13) L'ora dell'ultimo spegnimento PULITO di Windows (<c>HKLM\…\Control\Windows\ShutdownTime</c>),
+    /// in millisecondi UTC: un valore <c>FILETIME</c> di 8 byte, leggibile in sola lettura senza amministratore.
+    /// Serve a <see cref="Vivo.ValutaAvvio"/> per riconoscere un programma chiuso di colpo durante un blocco e
+    /// poi un riavvio/spegnimento pulito. Null se non si legge (uno spegnimento sporco non lo aggiorna: resta vecchio).
+    /// </summary>
+    internal static long? IdSpegnimentoPulitoMs()
+    {
+        try
+        {
+            using var k = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Windows");
+            if (k?.GetValue("ShutdownTime") is byte[] b && b.Length == 8)
+            {
+                return DateTimeOffset.FromFileTime(BitConverter.ToInt64(b, 0)).ToUnixTimeMilliseconds();
+            }
+            return null;
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException or IOException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// (0.13) Un errore imprevisto sta chiudendo il programma: si scrive una chiusura "crash" in vivo.json,
+    /// così al riavvio un crash non diventa una <c>manomissione</c> (né un <c>chiuso_durante_blocco</c>).
+    /// </summary>
+    public void SegnaCrash() => ScriviVivo(Chiusure.Crash);
 
     // ---------- La misura: un giro al secondo ----------
 
@@ -308,6 +376,10 @@ public sealed partial class Motore : IDisposable
             if (Abbinato) coda.Accoda(Eventi.SitiNonLeggibili(browser, oggi.Giorno, utc));
         }
 
+        // (0.13) Il blocco delle faccende: lo si guarda a ogni giro, così un blocco programmato parte
+        // all'ora giusta anche senza rete (la copia non cambia da sola, ma l'ora passa).
+        ValutaBlocco(utc);
+
         if (giri % GiriTraSalvataggi == 0 || esito.GiorniChiusi.Count > 0)
         {
             lock (misura) SalvaGiorno(contatore.Oggi);
@@ -337,9 +409,11 @@ public sealed partial class Motore : IDisposable
         return c;
     }
 
-    private Osservazione Osserva()
+    internal Osservazione Osserva()
     {
-        if (sospeso || bloccato || !Sessione.Disponibile()) return Osservazione.Assente;
+        // (0.13) Sotto la copertura del blocco non si misura: il tempo non conta (un gioco o un video a
+        // schermo intero dietro la copertura non deve diventare uno sforamento falso al genitore).
+        if (sospeso || bloccato || coperto || !Sessione.Disponibile()) return Osservazione.Assente;
         var finestra = ProvaPidFinestra is int pid ? PrimoPiano.LeggiFinestraDi(pid) : PrimoPiano.Leggi();
         if (finestra?.Exe == "lockapp.exe") return Osservazione.Assente;
         bool attivo = Presenza.Attivo(
@@ -562,6 +636,97 @@ public sealed partial class Motore : IDisposable
             }
         }
         return bonus;
+    }
+
+    // ---------- Il blocco delle faccende (contratto v3.6) ----------
+
+    /// <summary>
+    /// (0.13) Un nuovo stato del blocco (da <c>GET /api/faccende/blocco</c> o dal campo <c>blocco</c> del
+    /// patto): si salva su disco e si rivaluta la copertura. Senza rete non si chiama: il blocco resta com'era.
+    /// <paramref name="chiestoTick"/> (orologio monotono) è quando la richiesta è partita: uno stato chiesto
+    /// prima di quello in uso, e arrivato dopo, non lo sostituisce.
+    /// </summary>
+    internal void AdottaBlocco(StatoBlocco nuovo, long? chiestoTick = null)
+    {
+        long tick = chiestoTick ?? Environment.TickCount64;
+        lock (bloccoLock)
+        {
+            if (tick < bloccoChiestoTick) return;
+            bloccoChiestoTick = tick;
+            statoBlocco = nuovo;
+            try
+            {
+                Archivio.ScriviJson(percorsi.Blocco, nuovo);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Log.Errore("blocco.json non scritto", e);
+            }
+        }
+        ValutaBlocco(Tempo.AdessoUtcMs());
+    }
+
+    /// <summary>
+    /// (0.13) All'avvio: se <c>blocco.json</c> si è perso o era rovinato (<c>statoBlocco</c> nullo) ma
+    /// l'ultimo "sono vivo" diceva bloccato, si resta coperti con un elenco generico finché il server non
+    /// risponde, e si manda una <c>manomissione</c> <c>stato_blocco_perso</c>. Poi si valuta la copertura.
+    /// </summary>
+    internal void PreparaBlocco(StatoVivo? precedenteVivo, long adesso)
+    {
+        if (statoBlocco == null && precedenteVivo?.BloccatoFaccende == true)
+        {
+            lock (bloccoLock) statoBlocco = StatoBlocco.Generico();
+            Log.Avviso("stato del blocco perso: resto coperto finché il server non risponde");
+            if (Abbinato) coda.Accoda(Eventi.Manomissione(new JsonObject { ["sotto_tipo"] = "stato_blocco_perso" }, adesso));
+        }
+        ValutaBlocco(adesso);
+    }
+
+    /// <summary>
+    /// (0.13) Decide se gli schermi vanno coperti adesso: attivo se c'è una faccenda col <c>blocco_da</c>
+    /// già passato (contratto v3.6). Se la copertura o l'elenco cambiano, lo dice (<see cref="CambioBlocco"/>).
+    /// Non copre mai se il computer non è abbinato. Logica semplice: la macchina degli stati vera è in
+    /// <see cref="StatoBlocco"/>, provata nei test; qui si scrive solo il cambiamento.
+    /// </summary>
+    internal void ValutaBlocco(long adesso)
+    {
+        var s = statoBlocco;
+        bool nuovoCoperto = Abbinato && s != null && s.AttivoA(adesso);
+        var faccende = nuovoCoperto ? s!.DaMostrare() : Array.Empty<Faccenda>();
+
+        bool cambiaCopertura;
+        bool cambia;
+        lock (bloccoLock)
+        {
+            cambiaCopertura = nuovoCoperto != coperto;
+            cambia = cambiaCopertura || (nuovoCoperto && !StessoElenco(faccendeMostrate, faccende));
+            coperto = nuovoCoperto;
+            faccendeMostrate = faccende;
+        }
+        if (!cambia) return;
+        // (0.13) Il segno in vivo.json segue la copertura subito, non al prossimo salvataggio periodico:
+        // così un programma chiuso di colpo durante un blocco si riconosce al riavvio.
+        if (cambiaCopertura) ScriviVivo(ChiusuraDaScrivere());
+        Log.Info(nuovoCoperto ? $"blocco delle faccende attivo: {faccende.Count} da fare" : "blocco delle faccende tolto");
+        try
+        {
+            CambioBlocco?.Invoke(new VistaBlocco(nuovoCoperto, faccende));
+        }
+        catch (Exception e)
+        {
+            Log.Errore("cambio del blocco non consegnato", e);
+        }
+    }
+
+    private static bool StessoElenco(IReadOnlyList<Faccenda> a, IReadOnlyList<Faccenda> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            if (a[i].Id != b[i].Id || a[i].Titolo != b[i].Titolo || a[i].Nota != b[i].Nota
+                || a[i].DataDa != b[i].DataDa || a[i].BloccoDaMs != b[i].BloccoDaMs) return false;
+        }
+        return true;
     }
 
     public void Dispose()

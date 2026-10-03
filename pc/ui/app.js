@@ -23,6 +23,7 @@
     { id: 'oggi', titolo: 'Oggi', icona: 'oggi', gruppo: 1 },
     { id: 'regole', titolo: 'Le mie regole', icona: 'regole', gruppo: 1 },
     { id: 'proposte', titolo: 'Proposte', icona: 'proposte', gruppo: 1 },
+    { id: 'faccende', titolo: 'Faccende', icona: 'faccende', gruppo: 1 },
     { id: 'diario', titolo: 'Diario', icona: 'diario', gruppo: 1 },
     { id: 'siti', titolo: 'Siti', icona: 'siti', gruppo: 2 },
     { id: 'cosa-vede', titolo: 'Cosa vede tuo padre', icona: 'occhio', gruppo: 2 },
@@ -93,6 +94,7 @@
     oggi: [['rect', { x: 3.5, y: 5, width: 17, height: 15.5, rx: 3 }], ['path', { d: 'M3.5 10h17M8 3v4M16 3v4' }], ['circle', { cx: 12, cy: 15, r: 1.7, class: 'pieno' }]],
     regole: [['path', { d: 'M10 7h10M10 12h10M10 17h10' }], ['path', { d: 'M3.8 7l1.4 1.4L7.8 5.8M3.8 12l1.4 1.4 2.6-2.6M3.8 17l1.4 1.4 2.6-2.6' }]],
     proposte: [['path', { d: 'M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5z' }], ['path', { d: 'M8.5 8.5h7M8.5 11.5h4.5' }]],
+    faccende: [['rect', { x: 6, y: 4.5, width: 12, height: 16.5, rx: 2.2 }], ['path', { d: 'M9.3 4.5h5.4a1 1 0 0 1 1 1V7H8.3V5.5a1 1 0 0 1 1-1z' }], ['path', { d: 'M9 12.2l2 2 4-4' }]],
     diario: [['path', { d: 'M5 4.5h11.5A2.5 2.5 0 0 1 19 7v12.5H7.5A2.5 2.5 0 0 1 5 17z' }], ['path', { d: 'M5 17a2.5 2.5 0 0 1 2.5-2.5H19M9 8.5h6' }]],
     siti: [['circle', { cx: 12, cy: 12, r: 8.5 }], ['path', { d: 'M3.5 12h17M12 3.5c2.4 2.6 3.6 5.4 3.6 8.5s-1.2 5.9-3.6 8.5M12 3.5C9.6 6.1 8.4 8.9 8.4 12s1.2 5.9 3.6 8.5' }]],
     occhio: [['path', { d: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z' }], ['circle', { cx: 12, cy: 12, r: 3 }]],
@@ -646,6 +648,13 @@
           h('span', { class: 'solo-lettori' }, ', ' + n + ' da decidere')));
       }
     }
+    if (def.id === 'faccende') {
+      const n = faccendeDaFare();
+      if (n > 0) {
+        a.append(h('span', { class: 'contatore' }, h('span', { 'aria-hidden': 'true' }, String(n)),
+          h('span', { class: 'solo-lettori' }, ', ' + n + ' da fare')));
+      }
+    }
     return h('li', null, a);
   }
 
@@ -682,6 +691,7 @@
       case 'oggi': parti.push(...sezioneOggi()); break;
       case 'regole': parti.push(...sezioneRegole()); break;
       case 'proposte': parti.push(...sezioneProposte()); break;
+      case 'faccende': parti.push(...sezioneFaccende()); break;
       case 'diario': parti.push(...sezioneDiario()); break;
       case 'siti': parti.push(...sezioneSiti()); break;
       case 'cosa-vede': parti.push(...sezioneCosaVede()); break;
@@ -1396,6 +1406,91 @@
 
   // --- Diario ------------------------------------------------------------------------------
 
+  // --- Faccende (contratto v3.6) --------------------------------------------------------------
+
+  /** Le faccende del patto (GET /api/patto → faccende, v3.6), o null se il server non le manda ancora. */
+  function faccendeDelPatto() {
+    return S.patto && Array.isArray(S.patto.faccende) ? S.patto.faccende : null;
+  }
+
+  /** Lo stato del blocco (GET /api/patto → blocco, v3.6), o null se il server non lo manda ancora. */
+  function bloccoDelPatto() {
+    return S.patto && S.patto.blocco && typeof S.patto.blocco === 'object' ? S.patto.blocco : null;
+  }
+
+  /** Quante faccende restano da fare: per il numero accanto a "Faccende" nel menu. */
+  function faccendeDaFare() {
+    return (faccendeDelPatto() || []).filter((f) => f.stato === 'da_fare').length;
+  }
+
+  function sezioneFaccende() {
+    const parti = [h('p', { class: 'intro' }, 'Le faccende che un genitore ti ha dato. Le foto si mandano dal telefono: qui le vedi e basta. Finché non le hai fatte tutte, il computer resta coperto: è una regola decisa in famiglia, non un blocco di Pactum su di te.')];
+    const patto = S.patto;
+    if (!patto) {
+      if (!S.pattoNonAggiornato) parti.push(caricamento('Sto leggendo le faccende…'));
+      return parti;
+    }
+    const blocco = bloccoDelPatto();
+    const faccende = faccendeDelPatto();
+    if (!blocco && !faccende) {
+      parti.push(rigaVuota('info', 'Per le faccende serve aggiornare il server di Pactum.'));
+      return parti;
+    }
+    parti.push(schedaBlocco(blocco));
+
+    const daFare = (faccende || []).filter((f) => f.stato === 'da_fare');
+    const chiuse = (faccende || []).filter((f) => f.stato !== 'da_fare');
+    parti.push(titoloSezione('Da fare'));
+    if (!daFare.length) parti.push(rigaVuota('spunta', 'Nessuna faccenda da fare. Tutto a posto.'));
+    else daFare.forEach((f) => parti.push(cardFaccenda(f)));
+
+    if (chiuse.length) {
+      parti.push(titoloSezione('Chiuse di recente'));
+      parti.push(h('ul', { class: 'lista-dichiarazioni' }, chiuse.map(rigaFaccendaChiusa)));
+    }
+    return parti;
+  }
+
+  /** La scheda in cima: se il computer è bloccato, da quando, o quando partirà il blocco. */
+  function schedaBlocco(blocco) {
+    const scheda = h('section', { class: 'card', 'aria-label': 'Stato del blocco' });
+    if (blocco && blocco.attivo) {
+      const dal = T.quando(blocco.dal);
+      scheda.append(
+        h('p', { class: 'card-titolo' }, 'Il computer è bloccato: prima le faccende.'),
+        h('p', { class: 'secondario' }, (dal ? 'Bloccato ' + dal + '. ' : '') + 'Si sblocca da solo quando dal telefono hai mandato la foto di ogni faccenda.'));
+    } else if (blocco && blocco.prossimo) {
+      scheda.append(
+        h('p', { class: 'card-titolo' }, 'Il blocco parte ' + (T.dalQuando(blocco.prossimo) || 'più tardi') + '.'),
+        h('p', { class: 'secondario' }, 'Se le fai prima dal telefono, il blocco non parte.'));
+    } else {
+      scheda.append(
+        h('p', { class: 'card-titolo' }, 'Nessun blocco in corso.'),
+        h('p', { class: 'secondario' }, 'Quando un genitore ti dà delle faccende, finché non le fai il computer resta bloccato.'));
+    }
+    return scheda;
+  }
+
+  function cardFaccenda(f) {
+    const id = 'faccenda-' + f.id;
+    const chi = f.creata_da && f.creata_da.nome;
+    const card = h('article', { class: 'card', 'aria-labelledby': id },
+      h('p', { class: 'descrizione', id }, f.titolo || 'Faccenda'));
+    if (chi) card.append(h('p', { class: 'secondario' }, 'da ' + chi));
+    if (f.nota) card.append(h('p', { class: 'secondario' }, f.nota));
+    if (T.numero(f.bocciature) > 0) {
+      card.append(h('p', { class: 'piccolo secondario' }, 'Il genitore l\'ha rimandata: rifalla e manda una foto nuova dal telefono.'));
+    }
+    card.append(h('p', { class: 'piccolo secondario' }, 'La foto si manda dal telefono.'));
+    return card;
+  }
+
+  function rigaFaccendaChiusa(f) {
+    const li = h('li', { class: 'riga-dichiarazione' }, h('p', { class: 'riga-titolo' }, f.titolo || 'Faccenda'));
+    li.append(h('p', { class: 'secondario' }, f.stato === 'annullata' ? 'Annullata dal genitore.' : 'Fatta.'));
+    return li;
+  }
+
   function sezioneDiario() {
     const parti = [h('p', { class: 'intro' }, 'Com\'è andata con i tuoi impegni di vita reale, detto a viso aperto. Un successo aspetta la firma dell\'arbitro; un "non ce l\'ho fatta" è creduto sulla parola.')];
     const patto = S.patto;
@@ -1617,24 +1712,28 @@
         'Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.',
         'Le tue risposte alle sue proposte, con la tua motivazione se la scrivi.',
         'Le proposte che gli mandi tu, con il tuo perché se lo scrivi, e quelle che ritiri.',
+        'Le faccende che un genitore ti dà: quali sono, chi te le ha date, quando le hai fatte (la foto arriva dal telefono) e se le ha rimandate. E se il computer è bloccato perché ci sono faccende da fare.',
         'Quando il programma ha mandato l\'ultimo aggiornamento, e se da più di tre quarti d\'ora non ne manda mentre il computer è acceso.',
-        'Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, gli mandi o ritiri una proposta, o quando c\'è un\'interruzione nella registrazione.',
+        'Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, gli mandi o ritiri una proposta, o quando c\'è un\'interruzione nella registrazione (anche se Pactum è stato chiuso mentre un blocco delle faccende era in corso).',
       ]),
       blocco('COSA RESTA FUORI', [
         'Gli indirizzi completi delle pagine. Il programma legge l\'indirizzo della pagina aperta per un istante, ne ricava il nome del sito e butta via il resto: non lo salva, non lo manda, non lo mostra. Il genitore vede youtube.com, mai quale video.',
-        'I titoli delle pagine e delle finestre: non vengono mai letti.',
+        'I titoli delle finestre non vengono salvati né mandati. L\'unica volta che il programma legge un titolo è per capire se un gioco Java è Minecraft: lo guarda per un istante e lo butta, non lo salva e non lo manda.',
         'Quello che guardi, leggi, scrivi o cerchi dentro i programmi e i siti.',
         'I tuoi file, le foto e i video.',
         'I messaggi e le chat.',
         'Gli orari e l\'ordine delle visite ai siti: solo il totale del giorno.',
         'Dove sei: la posizione non viene mai letta.',
       ]),
-      // Le stesse tre frasi dell'app del telefono (cosa_vede_computer): stessi fatti, stesse parole.
+      // Le stesse frasi dell'app del telefono (cosa_vede_computer): stessi fatti, stesse parole.
+      blocco('BLOCCARE: SOLO LE FACCENDE', [
+        'Pactum non blocca i singoli programmi o siti: lì il genitore vede e basta, non limita.',
+        'L\'unica cosa che blocca sono le faccende. Quando un genitore te ne dà, finché non le fai tutte (una foto per ognuna, dal telefono) il computer resta coperto. È una regola decisa in famiglia, non un controllo nascosto: la copertura si vede, e se la chiudi resta scritto nel registro.',
+      ]),
       blocco('I SITI SUL COMPUTER', [
         'Il programma legge l\'indirizzo nella barra del browser e tiene solo il nome del sito: l\'indirizzo completo non viene mai salvato né mandato.',
         'È diverso dal telefono: sul telefono Pactum l\'indirizzo delle pagine non lo vede proprio. Sul computer il programma lo vede per un istante, ne tiene il nome del sito e butta il resto.',
         'In cambio sul computer si contano anche i minuti passati su ogni sito, non solo quante volte ci vai. Sempre per giorno, mai l\'ora.',
-        'Pactum non blocca niente: né programmi né siti.',
       ]),
       blocco('SOLO TUO', [
         'La serie di giorni di fila e il tuo record: si calcolano su questo computer e non partono mai.',

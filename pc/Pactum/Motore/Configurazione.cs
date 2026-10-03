@@ -24,6 +24,7 @@ public sealed class Percorsi
     public string Patto => Path.Combine(Radice, "patto.json");
     public string Sforamenti => Path.Combine(Radice, "sforamenti.json");
     public string Notifiche => Path.Combine(Radice, "notifiche.json");
+    public string Blocco => Path.Combine(Radice, "blocco.json");
     public string Serie => Path.Combine(Radice, "serie.json");
     public string Log => Path.Combine(Radice, "log");
     public string WebView => Path.Combine(Radice, "WebView2");
@@ -39,6 +40,13 @@ public sealed class Configurazione
     [JsonPropertyName("dispositivo")] public JsonObject? Dispositivo { get; set; }
     [JsonPropertyName("figlio")] public JsonObject? Figlio { get; set; }
     [JsonPropertyName("abbinato_il")] public string? AbbinatoIl { get; set; }
+
+    /// <summary>
+    /// (0.13) Questo server ha mandato almeno una volta il <c>blocco</c> delle faccende (contratto v3.6):
+    /// allora è un server che le conosce, e un <c>404</c>/<c>405</c> improvviso non deve togliere la copertura
+    /// (sarebbe più probabile un errore di un proxy). Si azzera a ogni nuovo abbinamento (config nuova).
+    /// </summary>
+    [JsonPropertyName("blocco_visto")] public bool BloccoVisto { get; set; }
 }
 
 /// <summary><c>notifiche.json</c>: fin dove sono già stati mostrati gli avvisi del server.</summary>

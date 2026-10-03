@@ -60,4 +60,18 @@ public static class Tempo
     }
 
     public static long AdessoUtcMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    /// <summary>
+    /// Un istante ISO 8601 col fuso (es. <c>2026-10-03T14:00:00+00:00</c>) in millisecondi UTC.
+    /// Serve ai <c>blocco_da</c> delle faccende (contratto v3.6). False se il testo non è una data con fuso.
+    /// </summary>
+    public static bool ProvaIsoMs(string? testo, out long ms)
+    {
+        ms = 0;
+        if (string.IsNullOrWhiteSpace(testo)) return false;
+        if (!DateTimeOffset.TryParse(testo, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dto)) return false;
+        ms = dto.ToUnixTimeMilliseconds();
+        return true;
+    }
 }

@@ -83,6 +83,36 @@ public static class Testi
         ? $"Il limite che ti sei dato: {Durata(limite)} al giorno, più {Durata(bonus)} di bonus oggi."
         : $"Il limite che ti sei dato: {Durata(limite)} al giorno.";
 
+    // ---------- Il blocco delle faccende (0.13, contratto v3.6) ----------
+
+    /// <summary>Il titolo della finestra che copre gli schermi quando ci sono faccende da fare.</summary>
+    public const string TitoloBlocco = "Prima le faccende";
+
+    /// <summary>La frase che dice come ci si sblocca (le foto si mandano dal telefono).</summary>
+    public const string SottoBlocco = "Si sblocca da solo quando dal telefono hai mandato la foto di ogni faccenda.";
+
+    /// <summary>"da Mamma" accanto a una faccenda, o stringa vuota se non si sa chi l'ha data.</summary>
+    public static string DaChi(string? chi) => string.IsNullOrWhiteSpace(chi) ? "" : "da " + chi!.Trim();
+
+    /// <summary>
+    /// Tutto il blocco in righe di testo semplice: per chi usa un lettore di schermo e per i test.
+    /// Il titolo, ogni faccenda (con chi l'ha data e la nota), e la frase di come ci si sblocca.
+    /// </summary>
+    public static string TestoBlocco(IReadOnlyCollection<Faccenda> faccende)
+    {
+        var righe = new List<string> { TitoloBlocco };
+        foreach (var f in faccende)
+        {
+            var riga = f.Titolo;
+            var chi = DaChi(f.DataDa);
+            if (chi.Length > 0) riga += " — " + chi;
+            if (!string.IsNullOrWhiteSpace(f.Nota)) riga += ": " + f.Nota!.Trim();
+            righe.Add(riga);
+        }
+        righe.Add(SottoBlocco);
+        return string.Join(Environment.NewLine, righe);
+    }
+
     /// <summary>Il nome di una fascia oraria del computer: "Niente computer dalle 22:00 alle 07:00".</summary>
     public static string FasciaRegola(string dalle, string alle) => $"Niente computer dalle {dalle} alle {alle}";
 

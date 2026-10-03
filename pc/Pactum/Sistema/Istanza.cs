@@ -9,7 +9,6 @@ public sealed class Istanza : IDisposable
 {
     private readonly Mutex mutex;
     private readonly EventWaitHandle apri;
-    private readonly EventWaitHandle esci;
     private readonly List<RegisteredWaitHandle> attese = new();
     private bool posseduto;
 
@@ -18,39 +17,22 @@ public sealed class Istanza : IDisposable
         var nome = @"Local\Pactum.Computer" + suffisso;
         mutex = new Mutex(true, nome, out posseduto);
         apri = new EventWaitHandle(false, EventResetMode.AutoReset, nome + ".Apri");
-        esci = new EventWaitHandle(false, EventResetMode.AutoReset, nome + ".Esci");
+        // (0.13) Niente evento ".Esci": era un segnale con nome che chiunque, nello stesso account, poteva far
+        // scattare (il codice è pubblico) per far chiudere Pactum come "aggiornamento" pulito, senza traccia.
+        // Non lo usava nessuno: tolto. Chi vuole chiudere Pactum usa il menu, o il Task Manager (che lascia traccia).
     }
 
     public bool Prima => posseduto;
 
     public event Action? RichiestaApertura;
-    public event Action? RichiestaUscita;
 
     /// <summary>Da chiamare nella prima istanza, quando è pronta a rispondere.</summary>
     public void Ascolta()
     {
         attese.Add(ThreadPool.RegisterWaitForSingleObject(apri, (_, _) => RichiestaApertura?.Invoke(), null, Timeout.Infinite, executeOnlyOnce: false));
-        attese.Add(ThreadPool.RegisterWaitForSingleObject(esci, (_, _) => RichiestaUscita?.Invoke(), null, Timeout.Infinite, executeOnlyOnce: false));
     }
 
     public void ChiediApertura() => apri.Set();
-
-    public void ChiediUscita() => esci.Set();
-
-    /// <summary>Aspetta che la prima istanza si chiuda e prende il suo posto.</summary>
-    public bool AspettaIlPosto(TimeSpan tempo)
-    {
-        if (posseduto) return true;
-        try
-        {
-            posseduto = mutex.WaitOne(tempo);
-        }
-        catch (AbandonedMutexException)
-        {
-            posseduto = true;
-        }
-        return posseduto;
-    }
 
     public void Dispose()
     {
@@ -68,6 +50,5 @@ public sealed class Istanza : IDisposable
         }
         mutex.Dispose();
         apri.Dispose();
-        esci.Dispose();
     }
 }

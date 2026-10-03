@@ -126,23 +126,23 @@ public class FormeJsonTest
     [Fact]
     public void La_versione_e_la_stessa_nel_programma_e_nel_file()
     {
-        Assert.Equal("0.10.0", Versione.Nome);
-        // (0.10) Il codice segue quello delle app del telefono: 0.10.0 = 10 (v. Versione).
-        Assert.Equal(10, Versione.Codice);
+        Assert.Equal("0.13.0", Versione.Nome);
+        // (0.13) Il codice segue quello delle app del telefono: 0.13.0 = 13 (v. Versione).
+        Assert.Equal(13, Versione.Codice);
         var assembly = typeof(Versione).Assembly;
-        Assert.Equal(new Version(0, 10, 0, 0), assembly.GetName().Version);
+        Assert.Equal(new Version(0, 13, 0, 0), assembly.GetName().Version);
         var file = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-        Assert.Equal("0.10.0.0", file.FileVersion);
+        Assert.Equal("0.13.0.0", file.FileVersion);
     }
 
     [Theory]
     [InlineData(2, false)]
-    [InlineData(9, false)]
-    [InlineData(10, false)]
-    [InlineData(11, true)]
+    [InlineData(12, false)]
+    [InlineData(13, false)]
+    [InlineData(14, true)]
     public async Task Una_versione_nuova_si_annuncia_solo_col_codice_del_computer_piu_alto(int codiceServer, bool annunciata)
     {
-        // (0.10) Il codice del computer segue quello delle app (la 0.10.0 è la 10): il programma annuncia
+        // (0.13) Il codice del computer segue quello delle app (la 0.13.0 è la 13): il programma annuncia
         // la successiva, e mai sé stesso o una vecchia (2 = il codice sbagliato che annunciava il server per la 0.9).
         await using var server = new ServerFinto(r => r.Percorso switch
         {
@@ -167,7 +167,7 @@ public class FormeJsonTest
         await motore.SincronizzaAsync("prova");
 
         Assert.Contains(server.Ricevute, r => r.Percorso == "/api/versione");
-        if (annunciata) Assert.Equal("È uscita la 0.11.0. Fai clic qui per aprire la pagina da cui scaricarla.", Assert.Single(avvisi));
+        if (annunciata) Assert.Equal("È uscita la 0.14.0. Fai clic qui per aprire la pagina da cui scaricarla.", Assert.Single(avvisi));
         else Assert.Empty(avvisi);
     }
 
@@ -245,7 +245,7 @@ public class FormeJsonTest
         Assert.False(Json.Booleano(s["abbinato"]));
         Assert.Null(s["figlio"]);
         Assert.Null(s["dispositivo"]);
-        Assert.Equal("0.10.0", Json.Testo(s["versione"]));
+        Assert.Equal("0.13.0", Json.Testo(s["versione"]));
     }
 
     [Theory]

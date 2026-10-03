@@ -26,8 +26,11 @@ public sealed class ContestoPactum : ApplicationContext
     private readonly NotifyIcon icona;
     private readonly Control invocatore;
     private readonly SentinellaSchermo schermo;
+    private readonly GestoreBlocco gestoreBlocco = new();
     private readonly Queue<(string Titolo, string Testo, string? Url, string? Sezione)> fumetti = new();
     private readonly System.Windows.Forms.Timer timerFumetti;
+    private readonly ToolStripMenuItem chiudiMenu;
+    private readonly ToolStripSeparator separatoreChiudi;
     private FinestraPactum? finestra;
     private FinestraAvviso? finestraAvviso;
     private string? urlFumettoInMostra;
@@ -53,8 +56,12 @@ public sealed class ContestoPactum : ApplicationContext
         var apri = new ToolStripMenuItem("Apri Pactum", null, (_, _) => Apri()) { Font = new Font(SystemFonts.MenuFont ?? Control.DefaultFont, FontStyle.Bold) };
         menu.Items.Add(apri);
         menu.Items.Add(new ToolStripMenuItem("Aggiorna adesso", null, async (_, _) => await AggiornaAdessoAsync()));
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Chiudi Pactum", null, async (_, _) => await ChiudiAsync()));
+        // (0.13) Durante un blocco delle faccende "Chiudi Pactum" non c'è: non si offre un modo pulito di
+        // chiudere il programma proprio mentre deve coprire. Il Task Manager resta (e lascia traccia).
+        separatoreChiudi = new ToolStripSeparator();
+        chiudiMenu = new ToolStripMenuItem("Chiudi Pactum", null, async (_, _) => await ChiudiAsync());
+        menu.Items.Add(separatoreChiudi);
+        menu.Items.Add(chiudiMenu);
 
         icona = new NotifyIcon { Icon = immagine, Text = "Pactum", ContextMenuStrip = menu, Visible = true };
         icona.DoubleClick += (_, _) => Apri();
@@ -66,6 +73,8 @@ public sealed class ContestoPactum : ApplicationContext
         motore.Fumetto += (titolo, testo, sezione) => SulFiloGrafico(() => AccodaFumetto(titolo, testo, null, sezione));
         motore.AvvisoTuttoSchermo += avvisi => SulFiloGrafico(() => MostraAvviso(avvisi));
         motore.AvvisoAggiornamento += (titolo, testo, url) => SulFiloGrafico(() => AccodaFumetto(titolo, testo, url));
+        // (0.13) Il blocco delle faccende: copre o scopre gli schermi. Mai durante le prove su file.
+        motore.CambioBlocco += vista => SulFiloGrafico(() => AggiornaBlocco(vista));
         schermo = new SentinellaSchermo(acceso => motore.SchermoAcceso(acceso));
 
         SystemEvents.PowerModeChanged += SuEnergia;
@@ -76,7 +85,6 @@ public sealed class ContestoPactum : ApplicationContext
         NetworkChange.NetworkAvailabilityChanged += SuRete;
 
         istanza.RichiestaApertura += () => SulFiloGrafico(Apri);
-        istanza.RichiestaUscita += () => SulFiloGrafico(() => Esci(Chiusure.Aggiornamento));
         istanza.Ascolta();
 
         motore.Avvia();
@@ -170,6 +178,9 @@ public sealed class ContestoPactum : ApplicationContext
 
     private async Task ChiudiAsync()
     {
+        // (0.13) Durante un blocco delle faccende non si chiude da qui (la voce è nascosta): e comunque la
+        // domanda di conferma non deve mai finire sotto la copertura, dove sembrerebbe un blocco.
+        if (motore.Coperto) return;
         // Nessuna domanda sotto l'avviso a tutto schermo (che resta sopra tutto, e che la domanda
         // disabiliterebbe: sembrerebbe un blocco). L'avviso si chiude prima, e finché la domanda è
         // aperta quelli nuovi aspettano: se Pactum resta aperto, compaiono dopo.
@@ -216,6 +227,8 @@ public sealed class ContestoPactum : ApplicationContext
         timerFumetti.Stop();
         finestra?.Close();
         ChiudiAvviso();
+        // Lo spegnimento non si blocca mai: le finestre del blocco si lasciano chiudere.
+        gestoreBlocco.Dispose();
         icona.Visible = false;
         icona.Dispose();
         schermo.Dispose();
@@ -283,6 +296,35 @@ public sealed class ContestoPactum : ApplicationContext
             {
                 Log.Errore("avviso a tutto schermo non liberato", ex);
             }
+        }
+    }
+
+    /// <summary>
+    /// (0.13, contratto v3.6) Il blocco delle faccende: copre tutti gli schermi con l'elenco, o toglie la
+    /// copertura quando il server dice che è finito. Nelle prove su file (<c>--prova-avvisi</c>) non copre
+    /// lo schermo di chi sta usando il PC: lo scrive nel diario e basta.
+    /// </summary>
+    private void AggiornaBlocco(VistaBlocco _ignorato)
+    {
+        if (uscito) return;
+        // (0.13) Non ci si fida dell'ordine degli eventi fra i fili: si rilegge lo stato attuale del motore.
+        var vista = motore.VistaBloccoCorrente;
+        // Durante un blocco "Chiudi Pactum" sparisce dal menu; torna quando il blocco finisce.
+        chiudiMenu.Visible = !vista.Coperto;
+        separatoreChiudi.Visible = !vista.Coperto;
+        if (opzioni.CartellaProvaAvvisi != null)
+        {
+            Log.Info(vista.Coperto ? $"blocco delle faccende (prova): coprirebbe gli schermi, {vista.Faccende.Count} da fare" : "blocco delle faccende (prova): toglierebbe la copertura");
+            return;
+        }
+        try
+        {
+            if (vista.Coperto) gestoreBlocco.Mostra(vista.Faccende);
+            else gestoreBlocco.Nascondi();
+        }
+        catch (Exception e)
+        {
+            Log.Errore("blocco delle faccende non aggiornato", e);
         }
     }
 

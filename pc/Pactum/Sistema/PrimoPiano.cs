@@ -23,6 +23,16 @@ public static class PrimoPiano
     public static FinestraAttiva? Leggi() => DaFinestra(Win32.GetForegroundWindow());
 
     /// <summary>
+    /// (0.13) Una finestra è a schermo intero su un monitor (e non è il desktop o la barra)? Serve al blocco
+    /// delle faccende: se in primo piano c'è a schermo intero un'altra app, la copertura prende il primo piano.
+    /// </summary>
+    public static bool ÈaSchermoIntero(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return false;
+        return !ClassiDesktop.Contains(Win32.ClasseDi(hwnd)) && SchermoIntero(hwnd);
+    }
+
+    /// <summary>
     /// Solo per le prove (<c>--prova-finestra</c>): la finestra principale di un processo al posto di
     /// quella in primo piano, così un browser di prova può restare ridotto a icona.
     /// </summary>
@@ -66,6 +76,15 @@ public static class PrimoPiano
 
         var classe = Win32.ClasseDi(hwnd);
         bool schermoIntero = !ClassiDesktop.Contains(classe) && SchermoIntero(hwnd);
+
+        // (0.13) Minecraft Java gira dentro javaw.exe/java.exe: col titolo della finestra che comincia
+        // per "Minecraft" lo contiamo exe:minecraft-java, "Minecraft (Java)", giochi (contratto v3.6). Il
+        // titolo si legge SOLO qui, e solo per questi due processi, e si butta: non esce da questa funzione.
+        if ((exe == "javaw.exe" || exe == "java.exe") && Programma.ÈMinecraftJava(exe, Win32.TitoloDi(hwnd)))
+        {
+            return new FinestraAttiva(hwnd, (int)pid, Programma.MinecraftJava,
+                Programma.Chiave(Programma.MinecraftJava), Programma.NomeMinecraftJava, schermoIntero);
+        }
         return new FinestraAttiva(hwnd, (int)pid, exe, Programma.Chiave(exe), NomeLeggibile(percorso, exe), schermoIntero);
     }
 

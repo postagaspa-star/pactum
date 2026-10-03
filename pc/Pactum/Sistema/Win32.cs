@@ -3,7 +3,11 @@ using System.Text;
 
 namespace Pactum.Sistema;
 
-/// <summary>Le chiamate di Windows che servono al motore. Nessuna legge i titoli delle finestre.</summary>
+/// <summary>
+/// Le chiamate di Windows che servono al motore. L'unica che legge il titolo di una finestra è
+/// <see cref="TitoloDi"/>, usata SOLO per riconoscere Minecraft Java (contratto v3.6): il titolo si
+/// legge, si guarda l'inizio e si butta, non entra mai nei dati né nei log.
+/// </summary>
 internal static class Win32
 {
     [StructLayout(LayoutKind.Sequential)]
@@ -34,6 +38,18 @@ internal static class Win32
         public int cbData;
         public IntPtr pbData;
     }
+
+    /// <summary>(0.13) Per tenere la finestra del blocco ferma e grande come il suo schermo (WM_WINDOWPOSCHANGING).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPOS
+    {
+        public IntPtr hwnd;
+        public IntPtr hwndInsertAfter;
+        public int x, y, cx, cy;
+        public uint flags;
+    }
+
+    public const int WM_WINDOWPOSCHANGING = 0x0046;
 
     public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 
@@ -84,6 +100,10 @@ internal static class Win32
     /// <summary>La CLASSE della finestra (es. "Progman"), non il titolo.</summary>
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+    /// <summary>Il titolo della finestra (0.13): v. la nota in testa, si usa solo per Minecraft Java.</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -160,5 +180,15 @@ internal static class Win32
     {
         var sb = new StringBuilder(128);
         return GetClassName(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
+    }
+
+    /// <summary>
+    /// (0.13) Il titolo della finestra, per il solo controllo di Minecraft Java. Il valore si guarda
+    /// e si butta: non si salva, non si manda, non finisce nei log (contratto v3.6).
+    /// </summary>
+    public static string TitoloDi(IntPtr hwnd)
+    {
+        var sb = new StringBuilder(256);
+        return GetWindowText(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
     }
 }

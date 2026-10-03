@@ -37,6 +37,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.faccende.StatoBlocco
+import eu.stgm.pactum.figlio.faccende.VistaFaccende
 import eu.stgm.pactum.figlio.permessi.StatoPermessi
 import eu.stgm.pactum.figlio.servizio.PactumService
 import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
@@ -46,6 +48,9 @@ import eu.stgm.pactum.figlio.sessione.RichiestaTermine
 import eu.stgm.pactum.figlio.ui.ConSessioneInCorso
 import eu.stgm.pactum.figlio.ui.CosaVedeScreen
 import eu.stgm.pactum.figlio.ui.DichiarazioniScreen
+import eu.stgm.pactum.figlio.ui.ConFaccendePrima
+import eu.stgm.pactum.figlio.ui.FaccendeScreen
+import eu.stgm.pactum.figlio.ui.rememberBloccoFaccende
 import eu.stgm.pactum.figlio.ui.ImpostazioniScreen
 import eu.stgm.pactum.figlio.ui.OggiScreen
 import eu.stgm.pactum.figlio.ui.OnboardingScreen
@@ -158,6 +163,9 @@ class MainActivity : ComponentActivity() {
 
         /** (0.11) "Termina la sessione" della notifica fissa: Oggi, con la conferma aperta. */
         const val DEST_TERMINA_SESSIONE = "termina_sessione"
+
+        /** (0.13) Le faccende: dalla barriera ("Apri Pactum") e dalle loro notifiche. */
+        const val DEST_FACCENDE = "faccende"
     }
 }
 
@@ -165,10 +173,14 @@ class MainActivity : ComponentActivity() {
  * Le schede (redesign C8). La scheda Bonus non c'è più: il bonus vive sulla
  * riga della regola, in Oggi, dove il contesto è già dato. Le icone sono
  * disegnate per Pactum (C4), sul modello del quadretto della striscia.
- * (0.11) In più le Sessioni (contratto v3.5), accanto alle regole.
+ * (0.11) In più le Sessioni (contratto v3.5), accanto alle regole. (0.13) E
+ * le Faccende (contratto v3.6), subito dopo Oggi, ma solo quando ce ne sono
+ * (da fare, o chiuse negli ultimi 30 giorni) o il telefono è bloccato: chi
+ * non ha faccende non vede una scheda vuota.
  */
 private enum class Scheda(val icona: Int, val etichetta: Int, val destinazione: String) {
     OGGI(R.drawable.ic_scheda_oggi, R.string.scheda_oggi, MainActivity.DEST_OGGI),
+    FACCENDE(R.drawable.ic_scheda_faccende, R.string.scheda_faccende, MainActivity.DEST_FACCENDE),
     REGOLE(R.drawable.ic_scheda_regole, R.string.scheda_regole, MainActivity.DEST_REGOLE),
     SESSIONI(R.drawable.ic_scheda_sessioni, R.string.scheda_sessioni, MainActivity.DEST_SESSIONI),
     PROPOSTE(R.drawable.ic_scheda_proposte, R.string.scheda_proposte, MainActivity.DEST_PROPOSTE),
@@ -197,13 +209,28 @@ private fun PactumRoot(
         onPauseOrDispose { }
     }
 
+    // (0.13) Il blocco delle faccende, letto prima di tutto: con un blocco, con
+    // faccende da fare, o arrivando da "Apri Pactum" o da una notifica di
+    // faccende, la pagina Faccende viene prima dei permessi e della prima
+    // regola. Le foto non hanno bisogno né di regole né dell'accesso all'uso:
+    // un telefono bloccato deve poter mandare le foto sempre.
+    val memoriaBlocco by StatoBlocco.memoria.collectAsStateWithLifecycle()
+    val bloccato = rememberBloccoFaccende()
+    var arrivoFaccende by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(destinazioneRichiesta) {
+        if (destinazioneRichiesta == MainActivity.DEST_FACCENDE) arrivoFaccende = true
+    }
+    val faccendePrima = VistaFaccende.primaDelResto(bloccato, memoriaBlocco, arrivoFaccende)
+
     if (!statoPermessi.accessoUso) {
-        // (0.11) Anche qui, se c'è una sessione in corso, si può terminare.
-        ConSessioneInCorso {
-            OnboardingScreen(
-                statoPermessi = statoPermessi,
-                onAggiorna = { statoPermessi = StatoPermessi.leggi(context) },
-            )
+        ConFaccendePrima(faccendePrima, R.string.faccende_poi_permessi) {
+            // (0.11) Anche qui, se c'è una sessione in corso, si può terminare.
+            ConSessioneInCorso {
+                OnboardingScreen(
+                    statoPermessi = statoPermessi,
+                    onAggiorna = { statoPermessi = StatoPermessi.leggi(context) },
+                )
+            }
         }
         return
     }
@@ -219,8 +246,10 @@ private fun PactumRoot(
             return
         }
         false -> {
-            ConSessioneInCorso {
-                CosaVedeScreen(onHoCapito = { ambito.launch { impostazioni.registraCosaVedeVista() } })
+            ConFaccendePrima(faccendePrima, R.string.faccende_poi_cosa_vede) {
+                ConSessioneInCorso {
+                    CosaVedeScreen(onHoCapito = { ambito.launch { impostazioni.registraCosaVedeVista() } })
+                }
             }
             return
         }
@@ -321,20 +350,30 @@ private fun PactumRoot(
                 CircularProgressIndicator()
             }
         } else {
-            ConSessioneInCorso { PrimaRegolaScreen(vm = regoleVm) }
+            ConFaccendePrima(faccendePrima, R.string.faccende_poi_prima_regola) {
+                ConSessioneInCorso { PrimaRegolaScreen(vm = regoleVm) }
+            }
         }
         return
     }
 
+    // (0.13) La scheda Faccende c'è quando ci sono faccende, o quando ci si è
+    // arrivati (dalla barriera, da una notifica): non sparisce sotto il dito.
+    val conFaccende = memoriaBlocco.haFaccende || scheda == Scheda.FACCENDE
     Scaffold(
         bottomBar = {
             NavigationBar {
-                Scheda.entries.forEach { voce ->
+                Scheda.entries.filter { it != Scheda.FACCENDE || conFaccende }.forEach { voce ->
                     NavigationBarItem(
                         selected = scheda == voce,
                         onClick = { nomeScheda = voce.name },
                         icon = {
-                            val inAttesa = if (voce == Scheda.PROPOSTE) statoProposte.pendenti else 0
+                            val inAttesa = when (voce) {
+                                Scheda.PROPOSTE -> statoProposte.pendenti
+                                // (0.13) Quante faccende ci sono da fare.
+                                Scheda.FACCENDE -> memoriaBlocco.daFare.size
+                                else -> 0
+                            }
                             BadgedBox(
                                 badge = {
                                     // Il Badge di default è `error`, rosso: fuori
@@ -369,6 +408,7 @@ private fun PactumRoot(
                 )
                 // (0.10) Dalla regola si va alla proposta che aspetta su di lei.
                 Scheda.REGOLE -> RegoleScreen(onApriProposte = { nomeScheda = Scheda.PROPOSTE.name })
+                Scheda.FACCENDE -> FaccendeScreen()
                 Scheda.SESSIONI -> SessioniScreen()
                 Scheda.PROPOSTE -> ProposteScreen()
                 Scheda.DIARIO -> DichiarazioniScreen()

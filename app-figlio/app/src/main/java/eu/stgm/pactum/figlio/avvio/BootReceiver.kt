@@ -9,6 +9,7 @@ import eu.stgm.pactum.figlio.dati.CodaEventi
 import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.TipiEvento
+import eu.stgm.pactum.figlio.faccende.ControlloBlocco
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.servizio.PactumService
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
@@ -78,6 +79,9 @@ class BootReceiver : BroadcastReceiver() {
                 // ancora, riparte qui. Senza, il registro dei siti si
                 // interromperebbe in silenzio a ogni spegnimento.
                 OsservazioneSiti.riprendiSeConsentita(context)
+                // (0.13) Le sveglie non sopravvivono al riavvio: quella del
+                // prossimo blocco delle faccende si richiede qui.
+                runCatching { ControlloBlocco.dopo(context) }
                 CodaEventi(context).accoda(
                     Evento(
                         tipo = TipiEvento.RIAVVIO,

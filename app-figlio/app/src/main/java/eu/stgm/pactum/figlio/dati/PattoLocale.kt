@@ -1,6 +1,7 @@
 package eu.stgm.pactum.figlio.dati
 
 import android.content.Context
+import eu.stgm.pactum.figlio.faccende.ControlloBlocco
 import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -53,6 +54,9 @@ class PattoLocale(context: Context) {
             // cambio di collegamento: le sessioni di un altro dispositivo non
             // rientrano da una lettura vecchia. Mai a spese della copia del patto.
             runCatching { ArchivioSessioni.daServer(app, patto) }
+            // (0.13) E il blocco delle faccende con il loro elenco: un patto
+            // fresco vale come una risposta del server sul blocco.
+            runCatching { ControlloBlocco.daPatto(app, patto) }
             true
         }
     }

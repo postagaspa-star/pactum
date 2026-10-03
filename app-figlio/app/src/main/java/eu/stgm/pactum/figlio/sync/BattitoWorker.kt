@@ -10,24 +10,24 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.core.app.NotificationManagerCompat
 import eu.stgm.pactum.figlio.BuildConfig
-import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.aggiornamento.Aggiornatore
 import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.dati.AncoraTempo
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.CodaEventi
-import eu.stgm.pactum.figlio.dati.ContestoDispositivi
 import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
-import eu.stgm.pactum.figlio.dati.Notifica
-import eu.stgm.pactum.figlio.dati.Patto
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.TipiEvento
-import eu.stgm.pactum.figlio.dati.TipiNotifica
 import eu.stgm.pactum.figlio.giornata.ChiusuraSerale
 import eu.stgm.pactum.figlio.misura.FotografiaUso
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
-import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
+import eu.stgm.pactum.figlio.faccende.ConsegnaFoto
+import eu.stgm.pactum.figlio.faccende.ArchivioBlocco
+import eu.stgm.pactum.figlio.faccende.ControlloBlocco
+import eu.stgm.pactum.figlio.faccende.PermessiRevocati
+import eu.stgm.pactum.figlio.faccende.Orologio
+import eu.stgm.pactum.figlio.notifiche.NovitaDalPatto
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.servizio.PactumService
@@ -36,16 +36,9 @@ import eu.stgm.pactum.figlio.siti.Domini
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import eu.stgm.pactum.figlio.siti.RegistroSiti
 import eu.stgm.pactum.figlio.siti.ReteDns
-import eu.stgm.pactum.figlio.ui.NovitaProposta
-import eu.stgm.pactum.figlio.ui.TestoProposta
-import eu.stgm.pactum.figlio.ui.avvisoNovitaProposta
-import eu.stgm.pactum.figlio.ui.avvisoRispostaSessione
-import eu.stgm.pactum.figlio.ui.raccontoProposta
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
@@ -139,7 +132,10 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         // alla sentinella anche offline. In runCatching (come PactumService): un
         // errore qui NON deve saltare battito ed eventi di questo giro.
         runCatching {
-            postino.leggiPatto()?.let { patto ->
+            val (letto, codicePatto) = postino.leggiPattoConCodice()
+            // (0.13) 401: questo telefono non è più collegato, il blocco si toglie.
+            if (codicePatto == 401) ControlloBlocco.scollegato(context)
+            letto?.let { patto ->
                 PattoLocale(context).salva(patto)
                 // Serie e record si aggiornano anche quando l'app resta chiusa:
                 // una serie di 12 giorni mai guardata è comunque un record.
@@ -154,6 +150,11 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         runCatching { ChiusuraSerale.controlla(context) }
         // (0.11) E una "Termina la sessione" rimasta senza rete.
         runCatching { ConsegnaSessioni.riprovaSeServe(context, forza = true) }
+        // (0.13) Le faccende a schermo spento: le foto in coda, il blocco
+        // (il patto appena letto lo porta già: qui la sveglia, l'avviso della
+        // partenza e i permessi mancanti durante il blocco).
+        runCatching { ConsegnaFoto.riprovaSeServe(context, forza = true) }
+        runCatching { ControlloBlocco.dopo(context) }
 
         val battitoOk = postino.inviaBattito(
             Battito(
@@ -165,12 +166,15 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         if (battitoOk) impostazioni.registraBattitoConsegnato()
 
         val eventi = coda.inAttesa()
-        val eventiOk = postino.inviaEventi(eventi)
-        if (eventiOk) coda.rimuoviConsegnati(eventi)
+        // (0.13) In pacchi più piccoli se il server dice che il corpo è troppo
+        // grande: escono dalla coda solo quelli arrivati (o impossibili da mandare).
+        val esitoEventi = postino.inviaEventi(eventi)
+        coda.rimuoviConsegnati(esitoEventi.consegnati + esitoEventi.scartati)
+        val eventiOk = esitoEventi.tutti
 
-        // Le notifiche del figlio (nuova proposta, verdetto): best effort,
-        // il giro dopo recupera le arretrate.
-        avvisaNovitaDelPatto(context, impostazioni, postino)
+        // Le notifiche del figlio (nuova proposta, verdetto, dalla 0.13 le
+        // faccende): best effort, il giro dopo recupera le arretrate.
+        NovitaDalPatto.avvisa(context, impostazioni, postino)
 
         // Auto-aggiornamento (tappa 6): in runCatching come il sync del patto —
         // un errore di rete o d'installazione non deve saltare l'esito del giro.
@@ -196,20 +200,14 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
     ) {
         val adesso = System.currentTimeMillis()
 
-        val usoOra = PermessiHelper.haAccessoUso(context)
-        val usoNoto = impostazioni.leggiAccessoUsoNoto()
-        if (usoNoto == true && !usoOra) {
-            coda.accoda(manomissionePermesso("permesso_revocato", adesso))
-            // Le notifiche sono ancora attive (è l'accesso all'uso a mancare):
-            // un promemoria gentile aiuta a rimettere a posto il patto.
-            AvvisiLocali.avvisa(
-                context,
-                id = AvvisiLocali.ID_MANOMISSIONE_PERMESSO,
-                titolo = context.getString(R.string.notifica_permesso_revocato_titolo),
-                testo = context.getString(R.string.notifica_permesso_revocato_testo),
-            )
-        }
-        if (usoNoto != usoOra) impostazioni.registraAccessoUsoNoto(usoOra)
+        // (0.13) L'accesso all'uso (sempre) e "Mostra sopra le altre app"
+        // (durante il blocco delle faccende), con il permesso nei dettagli:
+        // sotto lo stesso lucchetto del giro delle faccende, niente doppioni.
+        PermessiRevocati.controlla(
+            context,
+            bloccoAttivo = ArchivioBlocco.leggi(context).attivoAdesso(Orologio.adesso()),
+            adesso = adesso,
+        )
 
         val notifOra = NotificationManagerCompat.from(context).areNotificationsEnabled()
         val notifNote = impostazioni.leggiNotificheNote()
@@ -226,131 +224,6 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         tsDevice = adesso,
         dettagli = buildJsonObject { put("sotto_tipo", sottoTipo) },
     )
-
-    /**
-     * Alza una notifica locale per ogni notifica del server mai avvisata prima
-     * (il GET col token del figlio restituisce solo le sue: nuove proposte,
-     * verdetti, il segno del genitore; dalla 0.10 anche le sue risposte alle
-     * proposte del figlio e i ritiri delle sue) e poi le marca lette sul server.
-     * Senza permesso non si avvisa E non si segna né marca: appena il permesso
-     * arriva, il giro successivo recupera (marcare prima di avvisare perderebbe l'avviso).
-     */
-    private suspend fun avvisaNovitaDelPatto(
-        context: Context,
-        impostazioni: Impostazioni,
-        postino: PostinoClient,
-    ) {
-        val notifiche = postino.leggiNotifiche() ?: return
-        if (notifiche.isEmpty()) return
-        if (!AvvisiLocali.puoAvvisare(context)) return
-
-        val giaAvvisate = impostazioni.leggiIdAvvisati()
-        val nuove = notifiche.filter { it.id !in giaAvvisate }
-        // (0.10) Il genitore ha risposto a una proposta del figlio, o ha ritirato
-        // la sua: si dice con parole del figlio (TestoProposta.novita).
-        val novita = nuove
-            .mapNotNull { notifica -> TestoProposta.novita(notifica.tipo, notifica.payload)?.let { notifica.id to it } }
-            .toMap()
-        // La copia del patto appena sincronizzata in questo giro: serve a dire
-        // su quale regola verte una nuova proposta (o una risposta, o un ritiro).
-        // (0.11) E il nome e il perché del genitore di una sessione decisa.
-        val patto = if (novita.isNotEmpty() ||
-            nuove.any { it.tipo == TipiNotifica.NUOVA_PROPOSTA || it.tipo == TipiNotifica.SESSIONE_RISPOSTA }
-        ) {
-            PattoLocale(context).leggi()
-        } else {
-            null
-        }
-        // (0.10) Per risposte e ritiri: la proposta chiusa, col confronto e il
-        // perché del genitore; la regola, se non è in questo patto (di un altro
-        // dispositivo), da GET /api/regole. Solo quando servono.
-        val proposte = if (novita.isNotEmpty()) postino.leggiProposte().orEmpty() else emptyList()
-        val diQuestoPatto = patto?.regole.orEmpty()
-        val regole = if (novita.values.any { n -> diQuestoPatto.none { it.id == n.regolaId } }) {
-            (diQuestoPatto + postino.leggiRegole().orEmpty()).distinctBy { it.id }
-        } else {
-            diQuestoPatto
-        }
-        nuove.forEach { notifica ->
-            val n = novita[notifica.id]
-            val (titolo, testo) = n
-                ?.let {
-                    avvisoNovitaProposta(
-                        context,
-                        novita = it,
-                        proposta = proposte.firstOrNull { p -> p.id == it.propostaId },
-                        regola = regole.firstOrNull { r -> r.id == it.regolaId },
-                        contesto = patto?.contestoDispositivi() ?: ContestoDispositivi(),
-                        messaggio = notifica.messaggio,
-                    )
-                }
-                // (0.11) Il genitore ha deciso su una sessione o sul suo cambio.
-                ?: notifica.takeIf { it.tipo == TipiNotifica.SESSIONE_RISPOSTA }
-                    ?.let { avvisoRispostaSessione(context, it.payload, it.messaggio, patto) }
-                ?: (AvvisiLocali.titoloTipo(context, notifica.tipo) to testoNotifica(context, notifica, patto))
-            // (0.10) La proposta ritirata dal genitore non resta annunciata in
-            // tendina come "Nuova proposta del genitore": quella si toglie.
-            if (n is NovitaProposta.Ritiro) {
-                n.propostaId?.let { AvvisiLocali.cancella(context, AvvisiLocali.idProposta(it)) }
-            }
-            // (0.10) La nuova proposta ha l'id della proposta (per poterla togliere
-            // se viene ritirata); le altre quello della notifica del server.
-            val propostaAnnunciata = if (notifica.tipo == TipiNotifica.NUOVA_PROPOSTA) {
-                (notifica.payload["proposta_id"] as? JsonPrimitive)?.longOrNull
-            } else {
-                null
-            }
-            AvvisiLocali.avvisa(
-                context,
-                // Id con offset: l'id grezzo del server collide con la notifica
-                // fissa del testimone (FGS id 1), che verrebbe sostituita.
-                id = propostaAnnunciata?.let { AvvisiLocali.idProposta(it) }
-                    ?: AvvisiLocali.idNotificaServer(notifica.id),
-                titolo = titolo,
-                testo = testo,
-                destinazione = AvvisiLocali.destinazioneTipo(notifica.tipo),
-            )
-        }
-        if (nuove.isNotEmpty()) impostazioni.registraIdAvvisati(nuove.map { it.id })
-
-        // Marcate lette sul server (best effort, idempotente): senza, il server
-        // accumula le non lette all'infinito e, oltre il tetto locale di 500 id,
-        // il figlio si ri-avviserebbe le vecchie. Il giro dopo riprova le fallite.
-        notifiche.forEach { postino.marcaNotificaLetta(it.id) }
-    }
-
-    /**
-     * Il testo della notifica: quello del server, tranne per la nuova proposta.
-     * Lì il server dice "Nuova proposta del genitore: −15 min al giorno
-     * rispetto ad ora" (il titolo lo ripete già) e non dice su QUALE regola:
-     * si racconta come nella scheda Proposte, una riga per pezzo ("Ora:
-     * TikTok: al massimo 1 h al giorno", "Se accetti: …"). Regola non trovata
-     * = il testo del server.
-     */
-    private fun testoNotifica(context: Context, notifica: Notifica, patto: Patto?): String {
-        if (notifica.tipo != TipiNotifica.NUOVA_PROPOSTA || patto == null) return notifica.messaggio
-        val payload = notifica.payload
-        val regolaId = (payload["regola_id"] as? JsonPrimitive)?.longOrNull ?: return notifica.messaggio
-        val propostaId = (payload["proposta_id"] as? JsonPrimitive)?.longOrNull
-        // La pendente del patto ha i parametri proposti e il confronto ricalcolato
-        // sulla regola di adesso; il payload ha solo il confronto di allora.
-        val proposta = patto.propostePendenti.firstOrNull { it.id == propostaId }
-        val oggetto = TestoProposta.oggetto(
-            regolaId,
-            proposta?.direzione ?: (payload["direzione"] as? JsonPrimitive)?.contentOrNull,
-            proposta?.parametriProposti,
-            patto.regole,
-        ) ?: return notifica.messaggio
-        // (v3) Al telefono arrivano le proposte sulle sue regole e sulla vita
-        // reale (il server filtra per dispositivo); se una fosse di un altro
-        // dispositivo, la frase lo direbbe come nella scheda Proposte.
-        return raccontoProposta(
-            context = context,
-            confronto = proposta?.confronto ?: (payload["confronto"] as? JsonPrimitive)?.contentOrNull,
-            oggetto = oggetto,
-            contesto = patto.contestoDispositivi(),
-        ).testo
-    }
 
     /**
      * (v2.3) Fotografia cumulativa dei SITI di [giorno]: solo domini e quante

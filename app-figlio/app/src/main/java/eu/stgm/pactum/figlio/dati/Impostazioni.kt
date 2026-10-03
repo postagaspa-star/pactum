@@ -86,6 +86,8 @@ class Impostazioni(private val context: Context) {
         // stato istantaneo, così l'evento manomissione nasce una volta sola.
         val ACCESSO_USO_NOTO = booleanPreferencesKey("accesso_uso_noto")
         val NOTIFICHE_NOTE = booleanPreferencesKey("notifiche_note")
+        // (0.13) "Mostra sopra le altre app": serve alla barriera delle faccende.
+        val MOSTRA_SOPRA_NOTO = booleanPreferencesKey("mostra_sopra_noto")
         // L'ultimo versionCode per cui è già stato tentato l'auto-aggiornamento:
         // evita di riscaricare l'APK e ripresentare il dialogo a ogni giro.
         val VERSIONE_TENTATA = intPreferencesKey("versione_tentata")
@@ -373,6 +375,14 @@ class Impostazioni(private val context: Context) {
 
     suspend fun registraAccessoUsoNoto(concesso: Boolean) {
         context.dataStore.edit { p -> p[Chiavi.ACCESSO_USO_NOTO] = concesso }
+    }
+
+    /** (0.13) L'ultimo stato noto di "Mostra sopra le altre app" (null = mai osservato). */
+    suspend fun leggiMostraSopraNoto(): Boolean? =
+        context.dataStore.data.first()[Chiavi.MOSTRA_SOPRA_NOTO]
+
+    suspend fun registraMostraSopraNoto(concesso: Boolean) {
+        context.dataStore.edit { p -> p[Chiavi.MOSTRA_SOPRA_NOTO] = concesso }
     }
 
     suspend fun leggiNotificheNote(): Boolean? =

@@ -101,6 +101,8 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
     val ambito = rememberCoroutineScope()
     val inCorso = rememberSessioneInCorso()
     val avvioIncerto = rememberAvvioIncerto()
+    // (0.13) Col blocco delle faccende le sessioni non si iniziano.
+    val bloccoFaccende = rememberBloccoFaccende()
 
     // I dialoghi si ricordano per id: una rotazione o la morte del processo
     // non li chiudono. Per il modulo: null = chiuso, NUOVA_SESSIONE = nuova.
@@ -260,6 +262,7 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
                                     inCorsoQuesta = inCorso.attiva?.sessioneId == sessione.id,
                                     unaInCorso = inCorso.attiva != null,
                                     invioInCorso = stato.invioInCorso,
+                                    bloccoFaccende = bloccoFaccende,
                                     onInizia = {
                                         ricorda(sessione)
                                         vm.dimenticaEsiti()
@@ -383,6 +386,7 @@ private fun CardSessione(
     inCorsoQuesta: Boolean,
     unaInCorso: Boolean,
     invioInCorso: Boolean,
+    bloccoFaccende: Boolean,
     onInizia: () -> Unit,
     onModifica: () -> Unit,
     onElimina: () -> Unit,
@@ -452,7 +456,7 @@ private fun CardSessione(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (sessione.approvata && !inCorsoQuesta) {
-                    Button(enabled = !unaInCorso && !invioInCorso, onClick = onInizia) {
+                    Button(enabled = !unaInCorso && !invioInCorso && !bloccoFaccende, onClick = onInizia) {
                         Text(stringResource(R.string.sessione_inizia))
                     }
                     Spacer(modifier = Modifier.width(Spazi.s))
@@ -465,6 +469,9 @@ private fun CardSessione(
             }
             if (sessione.approvata && unaInCorso && !inCorsoQuesta) {
                 Nota(stringResource(R.string.sessione_una_gia_in_corso))
+            } else if (sessione.approvata && bloccoFaccende && !inCorsoQuesta) {
+                // (0.13) Il pulsante spento, e il perché.
+                Nota(stringResource(R.string.sessione_blocco_faccende))
             }
         }
     }

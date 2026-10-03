@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.PattoLocale
+import eu.stgm.pactum.figlio.faccende.ControlloBlocco
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.sessione.ConsegnaSessioni
 import eu.stgm.pactum.figlio.sessione.EsitiSessioni
@@ -238,6 +239,8 @@ class SessioniViewModel(application: Application) : AndroidViewModel(application
                 )
             }
             if (esito == EsitoAvvio.NonApprovata || esito == EsitoAvvio.NonTrovata) aggiorna()
+            // (0.13) Il server dice che il telefono è bloccato dalle faccende: il blocco si rilegge subito.
+            if (esito == EsitoAvvio.BloccoFaccende) runCatching { ControlloBlocco.interroga(getApplication()) }
         }
     }
 

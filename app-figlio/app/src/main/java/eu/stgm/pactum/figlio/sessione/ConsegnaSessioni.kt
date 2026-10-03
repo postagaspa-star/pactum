@@ -3,6 +3,8 @@ package eu.stgm.pactum.figlio.sessione
 import android.content.Context
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.PattoLocale
+import eu.stgm.pactum.figlio.faccende.ArchivioBlocco
+import eu.stgm.pactum.figlio.faccende.Orologio
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.servizio.PactumService
 import eu.stgm.pactum.figlio.sync.Ritento
@@ -156,6 +158,9 @@ object ConsegnaSessioni {
         if (ArchivioSessioni.leggi(app).inCorso(System.currentTimeMillis()) != null) {
             return EsitoAvvio.GiaInCorso(svoltaInCorso(app))
         }
+        // (0.13) Col blocco delle faccende una sessione non si avvia: il
+        // telefono lo sa già (anche senza rete), e non lo chiede al server.
+        if (ArchivioBlocco.leggi(app).attivoAdesso(Orologio.adesso())) return EsitoAvvio.BloccoFaccende
         val postino = PostinoClient(configurazione)
         // Prima le chiusure ancora in attesa: finché il server ha aperta la
         // sessione di prima, rifiuterebbe questa ("già in corso").

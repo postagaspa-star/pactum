@@ -7,6 +7,9 @@ import android.content.Context
 import android.os.PowerManager
 import eu.stgm.pactum.figlio.avviso.Chiamata
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
+import eu.stgm.pactum.figlio.faccende.GiudiceFaccende
+import eu.stgm.pactum.figlio.faccende.Orologio
+import eu.stgm.pactum.figlio.faccende.StatoBlocco
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 
 /**
@@ -43,6 +46,9 @@ class SorveglianzaSessione(context: Context, private val attiva: SessioneAttiva)
     private var contaNellUso: (String) -> Boolean? = { null }
     private var gruppoApk: (String) -> Boolean? = { null }
     private var rinfrescatoIl: Long? = null
+
+    /** (0.13) Le domande al sistema per il blocco delle faccende, solo mentre c'è. */
+    private var giudiceFaccende: GiudiceFaccende? = null
 
     /**
      * Un giro. [adesso] = orologio a muro (eventi e fine della sessione),
@@ -95,8 +101,28 @@ class SorveglianzaSessione(context: Context, private val attiva: SessioneAttiva)
             contaNellUso = contaNellUso,
             nelGruppoApk = gruppoApk,
             classe = traccia.classe,
+            // (0.13) Col blocco delle faccende: dove il blocco copre già, vale la sua barriera.
+            copertaDalBlocco = copertaDalBlocco(primoPiano),
         ),
     )
+
+    /**
+     * (0.13) Il blocco delle faccende copre già [primoPiano] adesso? Le
+     * risposte del sistema per il blocco si leggono solo mentre il blocco c'è.
+     * Se qualcosa va storto: no (la sessione decide da sola, come sempre).
+     */
+    private fun copertaDalBlocco(primoPiano: String?): Boolean = try {
+        val ora = Orologio.adesso()
+        if (!StatoBlocco.attivoAdesso(ora)) {
+            false
+        } else {
+            val giudice = giudiceFaccende ?: GiudiceFaccende(app).also { giudiceFaccende = it }
+            giudice.rinfresca(ora.monotono)
+            giudice.decidi(primoPiano, traccia.classe, traccia.precedente, ora).copri
+        }
+    } catch (e: Exception) {
+        false
+    }
 
     /** Da capo: dopo uno schermo spento, un blocco o un errore si riguarda tutto. */
     fun azzera() {

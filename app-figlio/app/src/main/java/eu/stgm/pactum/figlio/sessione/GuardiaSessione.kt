@@ -13,6 +13,9 @@ import eu.stgm.pactum.figlio.misura.Sessioni
 /** Perché la barriera copre, o non copre: lo dicono i test. */
 enum class MotivoBarriera {
     NESSUNA_SESSIONE,
+
+    /** (0.13) Il blocco delle faccende copre già quest'app: vale la sua barriera, più stretta. */
+    BLOCCO_FACCENDE,
     SESSIONE_FINITA,
 
     /** Una sessione che il ragazzo non sa ancora che è partita: niente barriera finché non glielo si dice. */
@@ -54,6 +57,12 @@ data class SituazioneBarriera(
     val nelGruppoApk: (String) -> Boolean?,
     /** La schermata (classe dell'activity) in primo piano, se si sa. */
     val classe: String? = null,
+    /**
+     * (0.13) Il blocco delle faccende copre già quest'app adesso
+     * (GuardiaFaccende): la barriera della sessione si fa da parte solo per
+     * queste. Per le altre vale la sessione: il più stretto dei due.
+     */
+    val copertaDalBlocco: Boolean = false,
 )
 
 object GuardiaSessione {
@@ -74,6 +83,12 @@ object GuardiaSessione {
     }
 
     private fun decidiDentro(s: SituazioneBarriera): DecisioneBarriera {
+        // (0.13) Col blocco delle faccende la sessione continua sul server, ma
+        // sul telefono vale il più stretto dei due (contratto v3.6): dove il
+        // blocco copre già, questa si fa da parte, così le due barriere non si
+        // aprono a vicenda; dove il blocco lascia libero (Wallet, gli SMS…) la
+        // sessione vale come sempre.
+        if (s.copertaDalBlocco) return lascia(MotivoBarriera.BLOCCO_FACCENDE)
         val sessione = s.sessione ?: return lascia(MotivoBarriera.NESSUNA_SESSIONE)
         if (s.adesso >= sessione.fine) return lascia(MotivoBarriera.SESSIONE_FINITA)
         if (s.adesso < sessione.inizio - MemoriaSessioni.TOLLERANZA_INIZIO_MS) {
@@ -164,12 +179,22 @@ class TracciaPrimoPiano {
     var classe: String? = null
         private set
 
+    /**
+     * (0.13) L'app che era davanti appena prima di quella di adesso (chi ha
+     * aperto una pagina web, per la barriera delle faccende). Null dopo uno
+     * schermo spento o un blocco: chi riprende un'app dalle Recenti non ha un
+     * "prima" che l'abbia aperta.
+     */
+    var precedente: String? = null
+        private set
+
     private var istante = Long.MIN_VALUE
 
     fun evento(tipo: Int, pacchetto: String?, quando: Long, classeEvento: String? = null) {
         if (quando < istante) return
         when (tipo) {
             Sessioni.RIPRESA -> if (!pacchetto.isNullOrBlank()) {
+                if (pacchetto != attuale) precedente = attuale
                 attuale = pacchetto
                 classe = classeEvento
                 istante = quando
@@ -177,6 +202,7 @@ class TracciaPrimoPiano {
             Sessioni.SCHERMO_SPENTO, Sessioni.BLOCCO, Sessioni.SPEGNIMENTO, Sessioni.ACCENSIONE -> {
                 attuale = null
                 classe = null
+                precedente = null
                 istante = quando
             }
         }
@@ -185,6 +211,7 @@ class TracciaPrimoPiano {
     fun azzera() {
         attuale = null
         classe = null
+        precedente = null
         istante = Long.MIN_VALUE
     }
 }
@@ -228,6 +255,17 @@ class RitmoBarriera(
 
     /** In pausa per l'interruttore di sicurezza. */
     fun inPausa(adesso: Long): Boolean = pausaFino?.let { adesso < it } ?: false
+
+    /**
+     * (0.13) L'ultima apertura è arrivata sullo schermo: non conta per
+     * l'interruttore di sicurezza. Lo usa solo la barriera delle faccende:
+     * l'interruttore serve quando la barriera NON riesce a comparire (qualcosa
+     * gira in tondo), e una barriera comparsa e chiusa apposta (app, barriera,
+     * Home, di nuovo) non deve poterlo far scattare.
+     */
+    fun comparsa() {
+        lanci.removeLastOrNull()
+    }
 
     /**
      * Un giro: [primoPiano] = l'app davanti (null = non si sa); [copri] = la

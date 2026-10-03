@@ -787,4 +787,91 @@
     <string name="tema_relax">Relax</string>
     <string name="tema_programmazione">Programmazione</string>
     <string name="tema_stelline">Stelline</string>
+    <!-- (0.13) Le faccende (contratto v3.6): un genitore dà al figlio delle faccende di casa e,
+         finché non arriva una foto per ognuna, il telefono è bloccato tranne poche app. -->
+    <string name="scheda_faccende">Faccende</string>
+    <string name="faccende_titolo">Faccende</string>
+    <string name="faccende_caricamento">Sto leggendo le faccende…</string>
+    <string name="faccende_server_da_aggiornare">Per le faccende serve aggiornare il server di Pactum.</string>
+    <string name="faccende_vuoto">Nessuna faccenda da fare.</string>
+    <string name="faccende_intro">Le faccende te le dà un genitore. Quando ne hai fatta una, scatta la foto da qui: arriva al genitore e la faccenda è fatta.</string>
+    <string name="faccende_bloccato">Prima le faccende: il telefono è bloccato</string>
+    <string name="faccende_bloccato_spiega">Si sblocca da solo quando è arrivata la foto di ogni faccenda.</string>
+    <string name="faccende_usabili">Intanto puoi usare Telefono, SMS, Contatti, Fotocamera, Foto, Wallet, eWeLink, Tinaba e Impostazioni.</string>
+    <string name="faccende_prossimo_alle">Se non le hai fatte, alle %1$s il telefono si blocca</string>
+    <string name="faccende_prossimo_domani">Se non le hai fatte, domani alle %1$s il telefono si blocca</string>
+    <string name="faccende_prossimo_giorno">Se non le hai fatte, %1$s alle %2$s il telefono si blocca</string>
+    <string name="faccende_anticipo">Puoi farle anche prima: se arrivano tutte le foto prima di allora, il blocco non parte.</string>
+    <string name="faccende_sezione_da_fare">Da fare</string>
+    <string name="faccende_sezione_chiuse">Fatte e annullate</string>
+    <string name="faccende_genitore_senza_nome">Il genitore</string>
+    <string name="faccenda_senza_titolo">Faccenda senza titolo</string>
+    <!-- Sulla barriera, sotto il titolo della faccenda: chi te l'ha data. -->
+    <string name="faccenda_da">da %1$s</string>
+    <string name="faccenda_data_da">Da %1$s</string>
+    <string name="faccenda_nota">Nota: %1$s</string>
+    <string name="faccenda_blocca_subito">Blocca il telefono da subito</string>
+    <string name="faccenda_blocca_alle">Blocca il telefono dalle %1$s</string>
+    <string name="faccenda_blocca_domani">Blocca il telefono domani dalle %1$s</string>
+    <string name="faccenda_blocca_giorno">Blocca il telefono %1$s dalle %2$s</string>
+    <string name="faccenda_bocciata">%1$s ha bocciato la foto: rifalla e scattane un\'altra.</string>
+    <string name="faccenda_bocciata_con_nota">%1$s ha bocciato la foto: «%2$s»</string>
+    <plurals name="faccenda_bocciature">
+        <item quantity="one">Bocciata una volta</item>
+        <item quantity="other">Bocciata %1$d volte</item>
+    </plurals>
+    <string name="faccenda_foto_in_coda">Foto pronta: parte da sola appena c\'è rete</string>
+    <string name="faccenda_foto_mandata">Foto mandata</string>
+    <string name="faccenda_foto_rifiutata">La foto non è stata accettata: scattane un\'altra.</string>
+    <string name="faccenda_scatta">Scatta la foto</string>
+    <string name="faccenda_scatta_di_nuovo">Scatta di nuovo</string>
+    <string name="faccenda_stato_fatta">Fatta</string>
+    <string name="faccenda_stato_annullata">Annullata</string>
+    <string name="faccenda_foto_arrivata">Foto arrivata: %1$s</string>
+    <string name="faccenda_vedi_foto">Vedi la foto</string>
+    <string name="faccenda_foto_non_piu">La foto non c\'è più: si tiene 30 giorni.</string>
+    <string name="faccenda_annullata_da">Annullata da %1$s</string>
+    <string name="faccenda_foto_descrizione">La foto della faccenda</string>
+    <string name="faccenda_foto_non_c_e">Questa foto non c\'è più.</string>
+    <string name="faccenda_foto_non_scaricata">Non riesco a scaricare la foto: controlla la connessione e riprova.</string>
+    <string name="faccende_foto_pronta">Foto pronta: la mando adesso. Se manca la rete, parte da sola appena torna.</string>
+    <string name="faccende_foto_non_riuscita">Non sono riuscito a preparare la foto: scattala di nuovo.</string>
+    <string name="faccende_nessuna_fotocamera">Su questo telefono non trovo una fotocamera da aprire.</string>
+    <!-- La barriera delle faccende: un solo pulsante, Apri Pactum, che porta alla pagina Faccende. -->
+    <string name="barriera_faccende_titolo">Prima le faccende</string>
+    <string name="barriera_faccende_testo">Il telefono è bloccato finché non arriva la foto di ogni faccenda. Le foto si scattano da Pactum.</string>
+    <string name="barriera_faccende_apri">Apri Pactum</string>
+    <!-- La copertura sopra una finestrella (picture-in-picture) o uno schermo diviso durante il blocco. -->
+    <string name="finestrella_testo">Una finestrella o lo schermo diviso mostra un\'app che durante il blocco non si usa. Chiudila: tocca «Chiudi la finestrella» e trascinala sulla X, oppure chiudi lo schermo diviso.</string>
+    <string name="finestrella_aiuto">Se non vedi nessuna finestrella, spegni e riaccendi lo schermo.</string>
+    <string name="finestrella_chiudi">Chiudi la finestrella</string>
+    <!-- 401 sul blocco: questo telefono non è più collegato, e il blocco è tolto. -->
+    <string name="faccende_scollegato">Questo telefono non è più collegato a Pactum: il blocco delle faccende è tolto. Chiedi al genitore un codice nuovo e inseriscilo nelle Impostazioni.</string>
+    <!-- Prima delle schede, quando c'è un blocco o ci sono faccende: per arrivare al resto. -->
+    <string name="faccende_poi_prima_regola">Crea la prima regola</string>
+    <string name="faccende_poi_permessi">Dai i permessi a Pactum</string>
+    <string name="faccende_poi_cosa_vede">Leggi cosa vede il genitore</string>
+    <string name="faccende_torna">Hai delle faccende da fare: torna alle faccende</string>
+    <!-- Con il blocco delle faccende le sessioni non si iniziano. -->
+    <string name="sessione_blocco_faccende">Prima le faccende: le sessioni si iniziano quando le hai fatte.</string>
+    <string name="sessione_esito_blocco_faccende">Prima le faccende: finché non le hai fatte, le sessioni non si iniziano.</string>
+    <!-- Le notifiche delle faccende, col nome vero del genitore. -->
+    <string name="canale_faccende_nome">Faccende</string>
+    <string name="canale_faccende_descrizione">Le faccende che ti dà un genitore, quando il telefono si blocca, le foto bocciate e le faccende annullate.</string>
+    <string name="tipo_faccende">Faccende</string>
+    <string name="notifica_blocco_partito">Prima le faccende: il telefono è bloccato</string>
+    <string name="notifica_blocco_partito_testo">Si sblocca da solo quando è arrivata la foto di ogni faccenda. Le trovi in Pactum.</string>
+    <plurals name="notifica_faccende_nuove">
+        <item quantity="one">%1$s ti ha dato una faccenda</item>
+        <item quantity="other">%1$s ti ha dato %2$d faccende</item>
+    </plurals>
+    <string name="notifica_faccende_blocco_subito">%1$s · blocco da subito</string>
+    <string name="notifica_faccende_blocco_alle">%1$s · blocco dalle %2$s</string>
+    <string name="notifica_faccende_blocco_domani">%1$s · blocco domani dalle %2$s</string>
+    <string name="notifica_faccende_blocco_giorno">%1$s · blocco %2$s dalle %3$s</string>
+    <string name="notifica_faccende_nuove_testo">Quando ne hai fatta una, scatta la foto da Pactum.</string>
+    <string name="notifica_faccenda_bocciata">%1$s ha bocciato «%2$s»</string>
+    <string name="notifica_faccenda_bocciata_testo">Rifalla e scatta un\'altra foto da Pactum: fino ad allora il telefono resta bloccato.</string>
+    <string name="notifica_faccenda_annullata">%1$s ha annullato «%2$s»</string>
+    <string name="notifica_faccenda_annullata_testo">Questa non la devi più fare.</string>
 </resources>

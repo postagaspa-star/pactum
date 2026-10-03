@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import eu.stgm.pactum.design.GiornoPatto
 import eu.stgm.pactum.design.segnaleDaStato
+import eu.stgm.pactum.figlio.faccende.BloccoDalServer
+import eu.stgm.pactum.figlio.faccende.FaccendaLocale
+import eu.stgm.pactum.figlio.faccende.Istante
+import eu.stgm.pactum.figlio.faccende.LetturaFaccende
 import eu.stgm.pactum.figlio.sessione.LetturaSessioni
 import eu.stgm.pactum.figlio.sessione.SessioneDefinita
 import eu.stgm.pactum.figlio.sessione.SessioneSvolta
@@ -66,6 +70,11 @@ data class Patto(
     @SerialName("sessioni") val sessioniGrezze: JsonElement? = null,
     @SerialName("sessione_in_corso") val sessioneInCorsoGrezza: JsonElement? = null,
     @SerialName("sessioni_svolte") val sessioniSvolteGrezze: JsonElement? = null,
+    // (0.13, v3.6) Le faccende e il blocco, tenuti grezzi e letti a parte
+    // (LetturaFaccende) come le sessioni. `blocco` assente = server di prima
+    // della v3.6: il blocco del telefono resta com'era.
+    @SerialName("faccende") val faccendeGrezze: JsonElement? = null,
+    @SerialName("blocco") val bloccoGrezzo: JsonElement? = null,
     // App-interno (NON dal server): il giorno del patto in cui `bonusOggiPerRegola`
     // è valido, stampato da PattoLocale al salvataggio. Se al momento della
     // valutazione non è più oggi (notte offline), i bonus di "oggi" non valgono.
@@ -75,6 +84,14 @@ data class Patto(
     // col collegamento vecchio e arrivata dopo un nuovo abbinamento non deve
     // entrare nella copia locale: sarebbe il patto di un altro dispositivo.
     @SerialName("letto_con") val lettoCon: String? = null,
+    // App-interno (NON dal server): (0.13) quando è partita e arrivata la
+    // lettura, sull'orologio che non si sposta, e l'ora del server della
+    // risposta (Date). Una lettura lenta non rimette un blocco delle faccende
+    // già tolto da una risposta più fresca, e il blocco programmato parte
+    // all'ora del server (MemoriaBlocco.conServer).
+    @SerialName("letta_il") val lettaIl: Istante? = null,
+    @SerialName("arrivata_il") val arrivataIl: Istante? = null,
+    @SerialName("data_server") val dataServer: Long? = null,
 ) {
     /** La striscia nel linguaggio del design system (core-design). */
     fun giorniPatto(): List<GiornoPatto> = striscia.inGiorniPatto()
@@ -90,6 +107,12 @@ data class Patto(
 
     /** (0.11) Le sessioni svolte che toccano gli 8 giorni: i periodi che non contano. */
     val sessioniSvolte: List<SessioneSvolta> get() = LetturaSessioni.svolte(sessioniSvolteGrezze)
+
+    /** (0.13) Il blocco delle faccende per il server, null se non lo dice (server vecchio) o non si legge. */
+    val blocco: BloccoDalServer? get() = LetturaFaccende.blocco(bloccoGrezzo)
+
+    /** (0.13) Tutte le faccende (da fare e chiuse da poco), null se il patto non le porta. */
+    val faccende: List<FaccendaLocale>? get() = LetturaFaccende.faccende(faccendeGrezze)
 
     /**
      * (v3) Le regole che valgono su QUESTO telefono: le sue e quelle di vita

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- (0.13) L'unica cartella che Pactum condivide: quella degli scatti delle
+     faccende, dove la fotocamera scrive la foto appena fatta. Lo scatto si
+     cancella appena è stato preparato (FotoFaccenda). -->
+<paths>
+    <files-path
+        name="scatti"
+        path="faccende/scatti/" />
+</paths>

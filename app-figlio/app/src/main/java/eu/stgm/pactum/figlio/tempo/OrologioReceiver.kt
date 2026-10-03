@@ -9,6 +9,7 @@ import eu.stgm.pactum.figlio.dati.CodaEventi
 import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.TipiEvento
+import eu.stgm.pactum.figlio.faccende.ControlloBlocco
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -70,6 +71,11 @@ class OrologioReceiver : BroadcastReceiver() {
 
         val ancora = impostazioni.leggiAncoraTempo()
         val riavviatoNelFrattempo = ancora != null && elapsedAdesso < ancora.elapsedRealtime
+        // (0.13) Un cambio d'ora a mano (o che non si sa misurare): il blocco
+        // delle faccende rimette in fila le risposte del server da capo.
+        val aMano = ancora == null || riavviatoNelFrattempo ||
+            abs(adesso - (ancora.wallClock + (elapsedAdesso - ancora.elapsedRealtime))) > SOGLIA_SCARTO_MS
+        if (aMano) runCatching { ControlloBlocco.cambioOra(context) }
         if (ancora != null && !riavviatoNelFrattempo) {
             val attesa = ancora.wallClock + (elapsedAdesso - ancora.elapsedRealtime)
             val scarto = adesso - attesa

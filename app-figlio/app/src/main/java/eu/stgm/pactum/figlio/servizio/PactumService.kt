@@ -10,6 +10,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -25,6 +27,15 @@ import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.PattoLocale
+import eu.stgm.pactum.figlio.faccende.ArchivioBlocco
+import eu.stgm.pactum.figlio.faccende.ArchivioCodaFoto
+import eu.stgm.pactum.figlio.faccende.ConsegnaFoto
+import eu.stgm.pactum.figlio.faccende.ControlloBlocco
+import eu.stgm.pactum.figlio.faccende.CoperturaFinestrelle
+import eu.stgm.pactum.figlio.faccende.Orologio
+import eu.stgm.pactum.figlio.faccende.FotoFaccenda
+import eu.stgm.pactum.figlio.faccende.SorveglianzaFaccende
+import eu.stgm.pactum.figlio.faccende.StatoBlocco
 import eu.stgm.pactum.figlio.giornata.ChiusuraSerale
 import eu.stgm.pactum.figlio.giornata.TestoSerale
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
@@ -89,6 +100,14 @@ import java.time.ZonedDateTime
  * (0.12) Quando una Sessione finisce da sola (o la chiude il server), la sua
  * pagina animata della fine: sopra l'app in uso solo nei primi 10 minuti,
  * altrimenti una notifica e la pagina in Pactum (mostraFineSeServe).
+ *
+ * (0.13) Le faccende, in due loop a parte: il giro che chiede il blocco al
+ * server (almeno ogni minuto a schermo acceso, subito allo sblocco, quando
+ * arriva una notifica di faccende, una foto arriva o torna la rete) e manda le
+ * foto in coda (avviaLoopFaccende); e, solo mentre il telefono è bloccato, la
+ * barriera "Prima le faccende", circa una volta al secondo
+ * (avviaLoopBarrieraFaccende). Col blocco la barriera delle Sessioni si fa da
+ * parte: vale questa, più stretta.
  */
 class PactumService : Service() {
 
@@ -97,6 +116,21 @@ class PactumService : Service() {
     private var loopSentinella: Job? = null
     private var loopSerale: Job? = null
     private var loopSessione: Job? = null
+    private var loopFaccende: Job? = null
+    private var loopBarrieraFaccende: Job? = null
+
+    // (0.13) Lo schermo che si riaccende o si sblocca sveglia il giro delle
+    // faccende (il blocco si chiede subito). Un canale suo: quello della
+    // sentinella lo consuma lei.
+    private val accensioniFaccende = Channel<Unit>(Channel.CONFLATED)
+
+    // (0.13) La rete che torna: le foto in coda partono subito, e il blocco si richiede.
+    private val ascoltoRete = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            ConsegnaFoto.reteTornata(applicationContext)
+            ControlloBlocco.richiedi()
+        }
+    }
 
     // (0.9) Lo spegnimento dello schermo sveglia subito la sentinella: l'uso
     // fino a quell'istante si guarda adesso, non al giro dopo. (0.11)
@@ -113,6 +147,8 @@ class PactumService : Service() {
                 Intent.ACTION_SCREEN_OFF -> spegnimenti.trySend(Unit)
                 Intent.ACTION_SCREEN_ON -> {
                     accensioni.trySend(Unit)
+                    accensioniFaccende.trySend(Unit)
+                    StatoBlocco.svegliati()
                     ambito.launch(Dispatchers.IO) {
                         protetto { ArchivioSessioni.ricalcola(applicationContext) }
                         aggiornaNotifica(StatoSessione.attivaAdesso())
@@ -121,6 +157,9 @@ class PactumService : Service() {
                 }
                 Intent.ACTION_USER_PRESENT -> {
                     accensioni.trySend(Unit)
+                    // (0.13) Allo sblocco dello schermo il blocco si chiede subito.
+                    accensioniFaccende.trySend(Unit)
+                    StatoBlocco.svegliati()
                     ambito.launch(Dispatchers.IO) { protetto { mostraFineSeServe() } }
                 }
             }
@@ -129,6 +168,7 @@ class PactumService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        vivo = true
         creaCanale()
         // SCREEN_OFF e SCREEN_ON si ricevono solo da un ricevitore registrato a mano, finché il servizio vive.
         ContextCompat.registerReceiver(
@@ -141,6 +181,11 @@ class PactumService : Service() {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        try {
+            getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(ascoltoRete)
+        } catch (e: Exception) {
+            // senza: le foto ripartono al giro, con attesa crescente
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -158,14 +203,22 @@ class PactumService : Service() {
         avviaLoopSentinella()
         avviaLoopSerale()
         avviaLoopSessione()
+        avviaLoopFaccende()
+        avviaLoopBarrieraFaccende()
         return START_STICKY
     }
 
     override fun onDestroy() {
+        vivo = false
         try {
             unregisterReceiver(ricevitoreSchermo)
         } catch (e: IllegalArgumentException) {
             // mai registrato: niente da togliere
+        }
+        try {
+            getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(ascoltoRete)
+        } catch (e: Exception) {
+            // mai registrato
         }
         ambito.cancel()
         super.onDestroy()
@@ -319,6 +372,99 @@ class PactumService : Service() {
                 }
                 // Arrivata alla fine: non è più "in corso" per nessuno.
                 protetto { ArchivioSessioni.ricalcola(applicationContext) }
+            }
+        }
+    }
+
+    /**
+     * (0.13) Il giro delle faccende: il blocco dal server almeno ogni minuto a
+     * schermo acceso (subito allo sblocco, a una richiesta: notifica di
+     * faccende, foto arrivata, rete tornata, sveglia), poi quello che ne
+     * segue (ControlloBlocco.dopo: l'avviso, la sveglia, i permessi) e le foto
+     * in coda. A schermo spento niente domande: ci pensano il worker e la
+     * sveglia del blocco programmato.
+     */
+    private fun avviaLoopFaccende() {
+        if (loopFaccende?.isActive == true) return
+        val schermo = getSystemService(PowerManager::class.java)
+        loopFaccende = ambito.launch(Dispatchers.IO) {
+            protetto { ArchivioBlocco.leggi(applicationContext) }
+            protetto { FotoFaccenda.pulisciScattiVecchi(applicationContext) }
+            protetto { ArchivioCodaFoto.pulisciOrfani(applicationContext) }
+            var ultimaDomanda: Long? = null
+            while (isActive) {
+                val acceso = schermo?.isInteractive ?: true
+                val monotono = SystemClock.elapsedRealtime()
+                val ultima = ultimaDomanda
+                if (acceso && (ultima == null || monotono - ultima >= CadenzaSentinella.INTERVALLO_MS)) {
+                    protetto { ControlloBlocco.interroga(applicationContext) }
+                    ultimaDomanda = monotono
+                } else {
+                    protetto { ControlloBlocco.dopo(applicationContext) }
+                }
+                protetto { ConsegnaFoto.riprovaSeServe(applicationContext) }
+                val prossimaDomanda = ultimaDomanda?.let { it + CadenzaSentinella.INTERVALLO_MS - SystemClock.elapsedRealtime() }
+                val attesa = (prossimaDomanda ?: CadenzaSentinella.INTERVALLO_MS)
+                    .coerceIn(ATTESA_MINIMA_FACCENDE_MS, CadenzaSentinella.INTERVALLO_MS)
+                val svegliato = withTimeoutOrNull(attesa) {
+                    select {
+                        ControlloBlocco.richieste.onReceive { true }
+                        accensioniFaccende.onReceive { true }
+                    }
+                } == true
+                // Una richiesta, o lo schermo che si riaccende: si chiede subito.
+                if (svegliato) ultimaDomanda = null
+            }
+        }
+    }
+
+    /**
+     * (0.13) La barriera delle faccende, solo mentre il telefono è bloccato:
+     * un giro circa ogni secondo a schermo acceso e sbloccato. Il blocco
+     * dipende anche dall'ora (parte da solo all'ora di `prossimo`): fuori dal
+     * blocco il giro dorme fino a quell'ora, o finché qualcosa lo sveglia (la
+     * sveglia del blocco, lo schermo che si riaccende, una risposta nuova).
+     */
+    private fun avviaLoopBarrieraFaccende() {
+        if (loopBarrieraFaccende?.isActive == true) return
+        loopBarrieraFaccende = ambito.launch(Dispatchers.IO) {
+            protetto { ArchivioBlocco.leggi(applicationContext) }
+            // Un solo giro per tutto il blocco: il ritmo delle aperture (e il
+            // suo interruttore di sicurezza) non riparte a ogni risposta del server.
+            var sorveglianza: SorveglianzaFaccende? = null
+            var bloccatoPrima = false
+            while (isActive) {
+                val ora = Orologio.adesso()
+                val memoria = StatoBlocco.memoria.value
+                if (!memoria.attivoAdesso(ora)) {
+                    if (bloccatoPrima) {
+                        // Finito: niente più copertura, e il prossimo blocco riparte da capo.
+                        sorveglianza?.daCapo()
+                        CoperturaFinestrelle.togli(applicationContext)
+                    }
+                    bloccatoPrima = false
+                    val attesa = memoria.attesaPartenza(ora)?.coerceAtLeast(MINIMO_ATTESA_MS) ?: Long.MAX_VALUE
+                    // Fino all'ora del blocco, o finché qualcosa cambia (una
+                    // risposta nuova, la sveglia, lo schermo che si riaccende).
+                    withTimeoutOrNull(attesa) { StatoBlocco.sveglia.receive() }
+                    // Partito adesso: l'avviso, subito.
+                    if (StatoBlocco.attivoAdesso()) protetto { ControlloBlocco.dopo(applicationContext) }
+                    continue
+                }
+                val giro = sorveglianza ?: SorveglianzaFaccende(applicationContext).also { sorveglianza = it }
+                // All'inizio di ogni blocco chi c'è davanti si cerca nelle ultime 24 ore.
+                if (!bloccatoPrima) giro.daCapo()
+                bloccatoPrima = true
+                val attesa = try {
+                    giro.giro(ora)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Dopo un errore, tutto da capo con la finestra lunga.
+                    giro.daCapo()
+                    SorveglianzaFaccende.ATTESA_ERRORE_MS
+                }
+                delay(attesa.coerceAtLeast(MINIMO_ATTESA_MS))
             }
         }
     }
@@ -510,6 +656,14 @@ class PactumService : Service() {
         private const val ID_NOTIFICA = 1
         private const val INTERVALLO_BATTITO_MS = 15L * 60 * 1000
         private const val MINIMO_ATTESA_MS = 50L
+
+        /** (0.13) Tra una domanda e l'altra sul blocco, mai meno di un secondo. */
+        private const val ATTESA_MINIMA_FACCENDE_MS = 1_000L
+
+        /** (0.13) Il servizio è in piedi in questo processo (la sveglia del blocco non lo riavvia per niente). */
+        @Volatile
+        var vivo: Boolean = false
+            private set
 
         fun avvia(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, PactumService::class.java))

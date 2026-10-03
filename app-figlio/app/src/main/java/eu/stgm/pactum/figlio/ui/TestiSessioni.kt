@@ -90,6 +90,7 @@ fun testoEsitoAvvio(context: Context, esito: EsitoAvvio, adesso: Long = System.c
         testoFinoAlle(context, it.fine, adesso, R.string.sessione_iniziata, R.string.sessione_iniziata_domani)
     } ?: context.getString(R.string.sessione_iniziata_semplice)
     EsitoAvvio.NonApprovata -> context.getString(R.string.sessione_esito_non_approvata)
+    EsitoAvvio.BloccoFaccende -> context.getString(R.string.sessione_esito_blocco_faccende)
     is EsitoAvvio.GiaInCorso -> esito.svolta?.let {
         testoFinoAlle(
             context,

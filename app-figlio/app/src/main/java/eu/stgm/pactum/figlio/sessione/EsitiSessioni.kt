@@ -43,6 +43,12 @@ sealed interface EsitoAvvio {
     /** 409 `sessione_non_approvata`. */
     data object NonApprovata : EsitoAvvio
 
+    /**
+     * (0.13) 409 `blocco_faccende`, o il telefono già bloccato dalle faccende:
+     * con il blocco una sessione non si avvia (contratto v3.6).
+     */
+    data object BloccoFaccende : EsitoAvvio
+
     /** 409 `sessione_gia_in_corso`. [svolta] = quella in corso, se si è ritrovata: la sua fine vera. */
     data class GiaInCorso(val svolta: SvoltaLocale? = null) : EsitoAvvio
 
@@ -129,6 +135,7 @@ object EsitiSessioni {
         return when (errore(corpo)) {
             "sessione_non_approvata" -> EsitoAvvio.NonApprovata
             "sessione_gia_in_corso" -> EsitoAvvio.GiaInCorso()
+            "blocco_faccende" -> EsitoAvvio.BloccoFaccende
             "dispositivo_revocato" -> EsitoAvvio.Scollegato
             else -> when {
                 codiceHttp == 0 -> if (incerta) EsitoAvvio.Incerto else EsitoAvvio.SenzaRete

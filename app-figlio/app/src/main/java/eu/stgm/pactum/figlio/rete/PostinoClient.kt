@@ -22,6 +22,8 @@ import eu.stgm.pactum.figlio.dati.PropostaIn
 import eu.stgm.pactum.figlio.dati.ProposteDelFiglio
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.RispostaPropostaIn
+import eu.stgm.pactum.figlio.faccende.Orologio
+import eu.stgm.pactum.figlio.sync.PacchiEventi
 import eu.stgm.pactum.figlio.sessione.AvvioSessioneIn
 import eu.stgm.pactum.figlio.sessione.SessioneIn
 import eu.stgm.pactum.figlio.sessione.SessioneModificaIn
@@ -59,6 +61,7 @@ import javax.net.ssl.SSLHandshakeException
  *        /api/proposte/{id}/risposta                    → mutazioni con esito HTTP
  *   POST {base}/api/proposte · /api/proposte/{id}/ritira (v3.4) → le proposte del figlio
  *   GET/POST/PATCH/DELETE {base}/api/sessioni · …/{id}/avvia · …/in_corso/termina (v3.5) → le Sessioni
+ *   GET {base}/api/faccende · /api/faccende/blocco · GET/PUT /api/faccende/{id}/foto (v3.6) → le faccende
  *   POST {base}/api/abbina (v3, senza token)            → il codice di 6 cifre diventa un token
  *   header: Authorization: Bearer <token di questo dispositivo>
  *
@@ -79,12 +82,31 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     suspend fun inviaBattito(battito: Battito): Boolean =
         inviaSemplice("/api/battito", json.encodeToString(Battito.serializer(), battito))
 
-    suspend fun inviaEventi(eventi: List<Evento>): Boolean {
-        if (eventi.isEmpty()) return true
-        return inviaSemplice(
-            "/api/eventi",
-            json.encodeToString(PaccoEventi.serializer(), PaccoEventi(eventi)),
-        )
+    /**
+     * La coda degli eventi, in pacchi (0.13): tutta in una volta, e se il
+     * server risponde 413 (corpo oltre 8 MB) in pacchi sempre più piccoli
+     * (PacchiEventi). Restituisce quali eventi sono arrivati (o sono da
+     * togliere perché troppo grandi anche da soli) e se non è rimasto niente.
+     */
+    suspend fun inviaEventi(eventi: List<Evento>): PacchiEventi.Esito<Evento> =
+        PacchiEventi.consegna(eventi) { pacco -> inviaPaccoEventi(pacco) }
+
+    /** Un pacco di eventi: il codice HTTP (0 = rete, URL malformato o non configurato). */
+    private suspend fun inviaPaccoEventi(eventi: List<Evento>): Int {
+        if (!configurazione.completa) return 0
+        val corpo = json.encodeToString(PaccoEventi.serializer(), PaccoEventi(eventi))
+        return withContext(Dispatchers.IO) {
+            try {
+                val richiesta = richiesta("/api/eventi")
+                    .post(corpo.toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+                http.newCall(richiesta).execute().use { it.code }
+            } catch (e: IOException) {
+                0
+            } catch (e: IllegalArgumentException) {
+                0
+            }
+        }
     }
 
     /**
@@ -119,11 +141,17 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
 
     /** Il patto e il codice HTTP della lettura: 401 = questo telefono non è più collegato. */
     suspend fun leggiPattoConCodice(): Pair<Patto?, Int> {
-        val (corpo, codice) = leggiConCodice("/api/patto")
-        val patto = corpo
+        // (0.13) Quando è partita e arrivata la domanda (sull'orologio che non
+        // si sposta) e l'ora del server: una lettura lenta del patto non deve
+        // rimettere un blocco delle faccende tolto da una risposta più fresca,
+        // e il blocco programmato parte all'ora del server, non del telefono.
+        val partita = Orologio.adesso()
+        val lettura = leggiConData("/api/patto")
+        val arrivata = Orologio.adesso()
+        val patto = lettura.corpo
             ?.let { decodifica(Patto.serializer(), it) }
-            ?.copy(lettoCon = configurazione.impronta)
-        return patto to codice
+            ?.copy(lettoCon = configurazione.impronta, lettaIl = partita, arrivataIl = arrivata, dataServer = lettura.dataServer)
+        return patto to lettura.codice
     }
 
     /**
@@ -266,6 +294,73 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     suspend fun terminaSessione(corpo: TerminaSessioneIn): RispostaHttp =
         mutazione("POST", "/api/sessioni/in_corso/termina", json.encodeToString(TerminaSessioneIn.serializer(), corpo))
 
+    // --- (0.13, v3.6) Le faccende --------------------------------------------
+    // Un server di prima della v3.6 risponde 404 o 405: lo legge EsitiFaccende.
+
+    /**
+     * GET /api/faccende/blocco: la risposta piccola che si chiede spesso. Il
+     * corpo (null se non 2xx), il codice e l'ora del server (intestazione Date).
+     */
+    suspend fun leggiBlocco(): LetturaConData = leggiConData("/api/faccende/blocco")
+
+    /** GET /api/faccende: le da fare e quelle chiuse negli ultimi 30 giorni. */
+    suspend fun leggiFaccende(): Pair<String?, Int> = leggiConCodice("/api/faccende")
+
+    /**
+     * PUT /api/faccende/{id}/foto, il corpo = il JPEG (non JSON). Mai ritentata
+     * da OkHttp: la ritenta la coda (ConsegnaFoto), e il server accetta la
+     * stessa foto due volte senza farne due. [bocciature] = quante bocciature
+     * aveva la faccenda quando la foto è stata scattata (`?bocciature=N`): se
+     * intanto è stata bocciata di nuovo, il server risponde 409
+     * `bocciata_nel_frattempo` e la foto vecchia non sblocca niente.
+     */
+    suspend fun mandaFoto(faccendaId: Long, jpeg: ByteArray, bocciature: Int): RispostaHttp {
+        if (!configurazione.completa) return RispostaHttp(ok = false, codice = 0, corpo = null)
+        return withContext(Dispatchers.IO) {
+            try {
+                val richiesta = richiesta("/api/faccende/$faccendaId/foto?bocciature=${bocciature.coerceAtLeast(0)}")
+                    .put(jpeg.toRequestBody(JPEG_MEDIA_TYPE))
+                    .build()
+                httpFoto.newCall(richiesta).execute().use { risposta ->
+                    RispostaHttp(ok = risposta.isSuccessful, codice = risposta.code, corpo = risposta.body?.string())
+                }
+            } catch (e: IOException) {
+                RispostaHttp(ok = false, codice = 0, corpo = null, incerta = forseArrivata(e))
+            } catch (e: IllegalArgumentException) {
+                RispostaHttp(ok = false, codice = 0, corpo = null)
+            }
+        }
+    }
+
+    /**
+     * GET /api/faccende/{id}/foto su [destinazione]: il codice HTTP (200 =
+     * scaricata tutta; 404 = la foto non c'è, o il server non conosce le
+     * faccende; 0 = niente rete).
+     */
+    suspend fun scaricaFoto(faccendaId: Long, destinazione: File): Int {
+        if (!configurazione.completa) return 0
+        return withContext(Dispatchers.IO) {
+            try {
+                val richiesta = richiesta("/api/faccende/$faccendaId/foto").get().build()
+                httpFoto.newCall(richiesta).execute().use { risposta ->
+                    val corpo = risposta.body
+                    if (!risposta.isSuccessful || corpo == null) return@use risposta.code
+                    val temp = File(destinazione.parentFile, destinazione.name + ".tmp")
+                    temp.outputStream().use { out -> corpo.byteStream().copyTo(out) }
+                    if (!temp.renameTo(destinazione)) {
+                        destinazione.delete()
+                        if (!temp.renameTo(destinazione)) return@use 0
+                    }
+                    risposta.code
+                }
+            } catch (e: IOException) {
+                0
+            } catch (e: IllegalArgumentException) {
+                0
+            }
+        }
+    }
+
     // --- Interni -------------------------------------------------------------
 
     private suspend fun inviaSemplice(percorso: String, corpo: String): Boolean {
@@ -301,6 +396,33 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
                 null to 0
             } catch (e: IllegalArgumentException) {
                 null to 0
+            }
+        }
+    }
+
+    /** (0.13) Una lettura col corpo (null se non 2xx), il codice e l'ora del server della risposta. */
+    data class LetturaConData(val corpo: String?, val codice: Int, val dataServer: Long?)
+
+    private suspend fun leggiConData(percorso: String): LetturaConData {
+        if (!configurazione.completa) return LetturaConData(null, 0, null)
+        return withContext(Dispatchers.IO) {
+            try {
+                val richiesta = richiesta(percorso).get().build()
+                http.newCall(richiesta).execute().use { risposta ->
+                    LetturaConData(
+                        corpo = if (risposta.isSuccessful) risposta.body?.string() else null,
+                        codice = risposta.code,
+                        dataServer = try {
+                            risposta.headers.getDate("Date")?.time
+                        } catch (e: Exception) {
+                            null
+                        },
+                    )
+                }
+            } catch (e: IOException) {
+                LetturaConData(null, 0, null)
+            } catch (e: IllegalArgumentException) {
+                LetturaConData(null, 0, null)
             }
         }
     }
@@ -354,6 +476,7 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         }
 
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+        private val JPEG_MEDIA_TYPE = "image/jpeg".toMediaType()
         private val CORPO_VUOTO = ByteArray(0).toRequestBody(null)
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
@@ -388,6 +511,16 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
             .retryOnConnectionFailure(false)
             .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
             .dns(DnsPrimaIpv4())
+            .build()
+
+        /**
+         * (0.13) Le foto delle faccende: come le mutazioni (niente ritentativo
+         * di OkHttp, prima IPv4), ma con più tempo per mandare e ricevere 2-3
+         * MB su una rete mobile lenta.
+         */
+        private val httpFoto: OkHttpClient = httpMutazioni.newBuilder()
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
             .build()
 
         /**

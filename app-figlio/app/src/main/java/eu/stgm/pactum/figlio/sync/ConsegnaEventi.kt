@@ -60,9 +60,11 @@ object ConsegnaEventi {
         val coda = CodaEventi(app)
         fotografia?.let { coda.sostituisciUsoGiornaliero(it) }
         val eventi = coda.inAttesa()
-        val consegnati = PostinoClient(configurazione).inviaEventi(eventi)
-        if (consegnati) coda.rimuoviConsegnati(eventi)
-        return consegnati
+        // (0.13) In pacchi più piccoli se il server dice che il corpo è troppo
+        // grande: escono dalla coda solo quelli arrivati (o impossibili da mandare).
+        val esito = PostinoClient(configurazione).inviaEventi(eventi)
+        coda.rimuoviConsegnati(esito.consegnati + esito.scartati)
+        return esito.tutti
     }
 
     private fun registra(consegnati: Boolean, quando: Long) {

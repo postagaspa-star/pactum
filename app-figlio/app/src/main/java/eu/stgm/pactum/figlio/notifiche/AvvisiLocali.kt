@@ -9,6 +9,7 @@ import androidx.core.app.NotificationManagerCompat
 import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.TipiNotifica
+import eu.stgm.pactum.figlio.faccende.TipiNotificaFaccende
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 
 /**
@@ -38,6 +39,13 @@ object AvvisiLocali {
      */
     const val CANALE_PREAVVISI = "tempo_in_scadenza"
 
+    /**
+     * (0.13) Le faccende: quelle nuove, il blocco che parte, le bocciature e
+     * gli annullamenti. Importanza alta (il banner in alto), canale suo: chi
+     * lo spegne non spegne gli altri avvisi.
+     */
+    const val CANALE_FACCENDE = "faccende"
+
     /** Basi separate per non collidere tra loro né con la notifica fissa (FGS id 1). */
     private const val BASE_ID_SFORAMENTO = 1_000_000L
     private const val BASE_ID_SERVER = 2_000_000L
@@ -54,6 +62,9 @@ object AvvisiLocali {
 
     /** (0.12) "Sessione «Studio» finita", quando la pagina della fine non può aprirsi sopra le altre app. */
     const val ID_SESSIONE_FINITA = 7_000_002
+
+    /** (0.13) "Prima le faccende: il telefono è bloccato": uno alla volta. */
+    const val ID_BLOCCO_FACCENDE = 9_000_001
 
     /** (0.12) Il preavviso di una regola: quello di 1 minuto sostituisce quello di 5. */
     private const val BASE_ID_PREAVVISO = 8_000_000L
@@ -112,6 +123,18 @@ object AvvisiLocali {
         )
     }
 
+    private fun creaCanaleFaccende(context: Context) {
+        NotificationManagerCompat.from(context).createNotificationChannel(
+            NotificationChannelCompat.Builder(
+                CANALE_FACCENDE,
+                NotificationManagerCompat.IMPORTANCE_HIGH,
+            )
+                .setName(context.getString(R.string.canale_faccende_nome))
+                .setDescription(context.getString(R.string.canale_faccende_descrizione))
+                .build(),
+        )
+    }
+
     private fun creaCanalePreavvisi(context: Context) {
         NotificationManagerCompat.from(context).createNotificationChannel(
             NotificationChannelCompat.Builder(
@@ -143,6 +166,7 @@ object AvvisiLocali {
         when (canale) {
             CANALE_SFORAMENTI -> creaCanaleSforamenti(context)
             CANALE_PREAVVISI -> creaCanalePreavvisi(context)
+            CANALE_FACCENDE -> creaCanaleFaccende(context)
             else -> creaCanale(context)
         }
         val costruttore = NotificationCompat.Builder(context, canale)
@@ -186,7 +210,20 @@ object AvvisiLocali {
         TipiNotifica.VERDETTO -> context.getString(R.string.tipo_verdetto)
         TipiNotifica.SEGNO -> context.getString(R.string.tipo_segno)
         TipiNotifica.SESSIONE_RISPOSTA -> context.getString(R.string.tipo_sessione)
+        TipiNotificaFaccende.NUOVE_FACCENDE,
+        TipiNotificaFaccende.FACCENDA_BOCCIATA,
+        TipiNotificaFaccende.FACCENDA_ANNULLATA,
+        -> context.getString(R.string.tipo_faccende)
         else -> context.getString(R.string.tipo_novita)
+    }
+
+    /** (0.13) Il canale di una notifica del server: le faccende nel loro, il resto negli avvisi del patto. */
+    fun canaleTipo(tipo: String): String = when (tipo) {
+        TipiNotificaFaccende.NUOVE_FACCENDE,
+        TipiNotificaFaccende.FACCENDA_BOCCIATA,
+        TipiNotificaFaccende.FACCENDA_ANNULLATA,
+        -> CANALE_FACCENDE
+        else -> CANALE_PATTO
     }
 
     /**
@@ -194,7 +231,8 @@ object AvvisiLocali {
      * un tocco non deve mai finire nel vuoto. I tipi che non si conoscono
      * ancora aprono Oggi, la schermata del patto. (0.10) La risposta del
      * genitore a una tua proposta e il ritiro della sua aprono Proposte.
-     * (0.11) La sua decisione su una sessione apre Sessioni.
+     * (0.11) La sua decisione su una sessione apre Sessioni. (0.13) Le
+     * faccende aprono la pagina Faccende.
      */
     fun destinazioneTipo(tipo: String): String = when (tipo) {
         TipiNotifica.NUOVA_PROPOSTA,
@@ -203,6 +241,11 @@ object AvvisiLocali {
         -> MainActivity.DEST_PROPOSTE
         TipiNotifica.VERDETTO -> MainActivity.DEST_DIARIO
         TipiNotifica.SESSIONE_RISPOSTA -> MainActivity.DEST_SESSIONI
+        // (0.13) Le faccende (nuove, bocciate, annullate) aprono la loro pagina.
+        TipiNotificaFaccende.NUOVE_FACCENDE,
+        TipiNotificaFaccende.FACCENDA_BOCCIATA,
+        TipiNotificaFaccende.FACCENDA_ANNULLATA,
+        -> MainActivity.DEST_FACCENDE
         else -> MainActivity.DEST_OGGI
     }
 

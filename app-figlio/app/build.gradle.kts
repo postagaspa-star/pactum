@@ -31,10 +31,11 @@ android {
         // limite su tutto il telefono. 0.10: le proposte del figlio al genitore
         // (contratto v3.4). 0.11: le Sessioni (contratto v3.5). 0.12: i
         // preavvisi "il tempo sta per finire" e le pagine animate delle
-        // sessioni (nessun cambio al server). Nuova funzione = nuovo
-        // versionCode, altrimenti l'auto-aggiornamento non la propone.
-        versionCode = 12
-        versionName = "0.12.0"
+        // sessioni (nessun cambio al server). 0.13: le faccende e il loro
+        // blocco (contratto v3.6). Nuova funzione = nuovo versionCode,
+        // altrimenti l'auto-aggiornamento non la propone.
+        versionCode = 13
+        versionName = "0.13.0"
     }
 
     signingConfigs {

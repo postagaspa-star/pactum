@@ -28,6 +28,16 @@
          con "Mostra sopra le altre app", che il figlio concede (o no) dalle
          Impostazioni. Senza, resta la notifica. Non blocca niente. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- (0.13) Il blocco delle faccende programmato parte all'ora giusta anche
+         senza rete: una sveglia ESATTA lo dice ("Prima le faccende") anche a
+         telefono fermo. USE_EXACT_ALARM da Android 13 (concesso
+         all'installazione; la regola del Play Store sugli usi ammessi non conta
+         per un'app installata a mano), SCHEDULE_EXACT_ALARM solo su Android 12.
+         Se Android non la concede, si ripiega sulla sveglia inesatta. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
 
     <application
         android:name=".PactumApp"
@@ -80,6 +90,37 @@
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
             android:taskAffinity="eu.stgm.pactum.figlio.pagina" />
+
+        <!-- (0.13) La barriera delle faccende: "Prima le faccende", con un solo
+             pulsante, Apri Pactum. Come quella delle Sessioni: task suo, fuori
+             dalle recenti, aperta dal servizio con "Mostra sopra le altre
+             app". Mai sopra il blocco schermo (niente showWhenLocked). -->
+        <activity
+            android:name=".faccende.BarrieraFaccendeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="eu.stgm.pactum.figlio.faccende" />
+
+        <!-- (0.13) La foto di una faccenda: la fotocamera scrive lo scatto in un
+             file di Pactum, condiviso solo per quello scatto e solo in
+             scrittura temporanea (FileProvider, cartella faccende/scatti). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.foto"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_condivisi" />
+        </provider>
+
+        <!-- (0.13) La sveglia del blocco programmato delle faccende. Interno:
+             l'invoca solo il PendingIntent di AlarmManager. -->
+        <receiver
+            android:name=".faccende.SvegliaFaccendeReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
         <service
             android:name=".servizio.PactumService"

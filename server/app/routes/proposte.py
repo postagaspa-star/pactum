@@ -7,7 +7,12 @@ nello storico). Niente secondo passaggio dall'app.
 propone anche il figlio (da qualsiasi suo dispositivo) e risponde il genitore: ogni
 proposta ha il suo `autore` e risponde sempre l'altro. Una sola pendente per regola,
 chiunque l'abbia fatta. Chi ha proposto puo' ritirare la proposta finche' e'
-pendente."""
+pendente.
+
+(v3.6) Piu' genitori, tutti uguali: ogni proposta del genitore dice quale (`genitore`),
+e la risposta di un genitore a una proposta del figlio dice chi ha risposto
+(`risposta_di`). Nei messaggi per il figlio c'e' il nome del genitore al posto di "Il
+genitore"."""
 
 import json
 import sqlite3
@@ -18,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from .. import clock, config, confronto, famiglia
 from ..auth import Identita, richiede_patto
 from ..db import accoda_notifica, get_conn
+from ..genitori import Firme, ancora_valido
 from ..schemas import ProponiIn, RispostaPropostaIn
 from .regole import (
     MARCATORE_ELIMINA,
@@ -111,9 +117,22 @@ def _confronto_del_momento(conn: sqlite3.Connection, proposta: sqlite3.Row) -> t
     return vivo if vivo is not None else (proposta["confronto"], proposta["direzione"])
 
 
-def formatta_proposta(riga: sqlite3.Row, conn: sqlite3.Connection | None = None) -> dict:
+def formatta_proposta(
+    riga: sqlite3.Row, conn: sqlite3.Connection | None = None, firme: Firme | None = None
+) -> dict:
+    """(v3.6) `firme`: i genitori letti una volta per chi formatta un elenco; senza, si
+    leggono qui. Le righe di prima della v3.6 valgono come del genitore 1."""
     confronto_txt = riga["confronto"]
     direzione = riga["direzione"]
+    if firme is None and conn is not None:
+        firme = Firme(conn)
+    # (v3.6) Chi tra i genitori: chi ha proposto (solo sulle proposte del genitore) e chi
+    # ha risposto (solo a una proposta del figlio, una volta risposta).
+    genitore = risposta_di = None
+    if firme is not None and riga["autore"] == "genitore":
+        genitore = firme.di_o_primo(riga["genitore_id"])
+    if firme is not None and riga["autore"] == "figlio" and riga["risposta_esito"] is not None:
+        risposta_di = firme.di_o_primo(riga["risposta_genitore_id"])
     # Solo le pendenti si ricalcolano in lettura (v2.1), (v3.4) di tutti e due gli
     # autori: le chiuse conservano il confronto congelato al momento della risposta
     # (o del ritiro).
@@ -133,6 +152,8 @@ def formatta_proposta(riga: sqlite3.Row, conn: sqlite3.Connection | None = None)
         "ts_server": riga["ts_server"],
         "risposta": _risposta(riga),
         "autore": riga["autore"],  # (v3.4)
+        "genitore": genitore,  # (v3.6)
+        "risposta_di": risposta_di,
     }
 
 
@@ -185,6 +206,7 @@ def crea_proposta(
     ts = clock.iso(clock.now())
     conn.execute("BEGIN IMMEDIATE")
     try:
+        ancora_valido(conn, chi)  # (v3.6) un genitore non revocato nel frattempo
         if autore == "genitore" and figlio_id is not None:
             famiglia.figlio_o_404(conn, figlio_id)
         riga = conn.execute(
@@ -220,17 +242,27 @@ def crea_proposta(
         cursore = conn.execute(
             "INSERT INTO proposte"
             " (regola_id, parametri_proposti, motivazione, confronto, direzione, stato, usata,"
-            " ts_server, autore)"
-            " VALUES (?, ?, ?, ?, ?, 'pendente', 0, ?, ?)",
-            (corpo.regola_id, json.dumps(parametri), corpo.motivazione, testo, direzione, ts, autore),
+            " ts_server, autore, genitore_id)"
+            " VALUES (?, ?, ?, ?, ?, 'pendente', 0, ?, ?, ?)",
+            (corpo.regola_id, json.dumps(parametri), corpo.motivazione, testo, direzione, ts, autore,
+             chi.genitore_id),
         )
         proposta_id = cursore.lastrowid
+        payload = {
+            "proposta_id": proposta_id,
+            "regola_id": corpo.regola_id,
+            "confronto": testo,
+            "direzione": direzione,
+            "autore": autore,
+        }
         # (v3.4) Un'eliminazione si legge senza il verbo ripetuto (DI_ELIMINARE).
         if autore == "genitore":
+            # (v3.6) Col nome del genitore che propone, anche nel payload.
             destinatario = "figlio"
+            payload["genitore"] = Firme(conn).di(chi.genitore_id)
+            nome = payload["genitore"]["nome"]
             messaggio = (
-                f"Il genitore propone {DI_ELIMINARE}" if elimina
-                else f"Nuova proposta del genitore: {testo}"
+                f"{nome} propone {DI_ELIMINARE}" if elimina else f"Nuova proposta di {nome}: {testo}"
             )
         else:
             # (v3.4) La proposta del figlio la decide il genitore: col nome del figlio,
@@ -242,13 +274,7 @@ def crea_proposta(
             conn,
             "nuova_proposta",
             messaggio,
-            {
-                "proposta_id": proposta_id,
-                "regola_id": corpo.regola_id,
-                "confronto": testo,
-                "direzione": direzione,
-                "autore": autore,
-            },
+            payload,
             ts,
             destinatario=destinatario,
             # (v3) Sulla regola di un dispositivo: la vede quel dispositivo. Sulla
@@ -304,9 +330,10 @@ def elenca_proposte(
         figlio = famiglia.figlio_scelto(conn, figlio_id)["id"]
     autore = None if autori == "tutti" else "genitore"
     # conn passato: il confronto delle pendenti si ricalcola vs la regola attuale (v2.1).
+    firme = Firme(conn)
     return {
         "proposte": [
-            formatta_proposta(r, conn) for r in proposte_del_figlio(conn, figlio, autore=autore)
+            formatta_proposta(r, conn, firme) for r in proposte_del_figlio(conn, figlio, autore=autore)
         ]
     }
 
@@ -334,6 +361,7 @@ def rispondi_proposta(
     # gia' aggiornato (proposta non piu' pendente, conteggio regole attive nuovo).
     conn.execute("BEGIN IMMEDIATE")
     try:
+        ancora_valido(conn, chi)  # (v3.6)
         proposta = _proposta_o_404(conn, proposta_id)
         # (v3) Si risponde alle proposte del proprio figlio, di qualsiasi suo dispositivo.
         della_regola = _della_regola(conn, proposta, chi)
@@ -379,8 +407,10 @@ def rispondi_proposta(
 
         conn.execute(
             "UPDATE proposte SET stato = ?, usata = ?, confronto = ?, direzione = ?,"
-            " risposta_esito = ?, risposta_motivazione = ?, risposta_ts = ? WHERE id = ?",
-            (stato, usata, confronto_txt, direzione, corpo.esito, corpo.motivazione, ts, proposta_id),
+            " risposta_esito = ?, risposta_motivazione = ?, risposta_ts = ?,"
+            " risposta_genitore_id = ? WHERE id = ?",
+            (stato, usata, confronto_txt, direzione, corpo.esito, corpo.motivazione, ts,
+             chi.genitore_id, proposta_id),
         )
         payload = {
             "proposta_id": proposta_id,
@@ -403,13 +433,16 @@ def rispondi_proposta(
             # (v3.4) La risposta del genitore arriva a TUTTI i dispositivi del figlio
             # (dispositivo_id NULL): il figlio la cerca dove si trova, non per forza sul
             # dispositivo della regola. Un'eliminazione si legge senza il verbo ripetuto.
+            # (v3.6) Col nome del genitore che ha risposto, anche nel payload.
             verbo = "accettato" if corpo.esito == "accetta" else "rifiutato"
+            payload["genitore"] = Firme(conn).di(chi.genitore_id)
+            nome = payload["genitore"]["nome"]
             accoda_notifica(
                 conn,
                 "proposta_risposta",
-                f"Il genitore ha {verbo} la tua proposta {DI_ELIMINARE}"
+                f"{nome} ha {verbo} la tua proposta {DI_ELIMINARE}"
                 if parametri == MARCATORE_ELIMINA
-                else f"Il genitore ha {verbo} la tua proposta: {confronto_txt}",
+                else f"{nome} ha {verbo} la tua proposta: {confronto_txt}",
                 payload,
                 ts,
                 destinatario="figlio",
@@ -440,6 +473,7 @@ def ritira_proposta(
     # cambiato e riceve 409 proposta_non_pendente.
     conn.execute("BEGIN IMMEDIATE")
     try:
+        ancora_valido(conn, chi)  # (v3.6)
         proposta = _proposta_o_404(conn, proposta_id)
         della_regola = _della_regola(conn, proposta, chi)
         if proposta["autore"] != autore:
@@ -455,17 +489,22 @@ def ritira_proposta(
         )
         # Un'eliminazione si dice: "ha ritirato la sua proposta di eliminare la regola".
         di_cosa = f" {DI_ELIMINARE}" if _parametri(proposta) == MARCATORE_ELIMINA else ""
+        payload = {"proposta_id": proposta_id, "regola_id": proposta["regola_id"], "autore": autore}
         if autore == "figlio":
             destinatario = "genitore"
             nome = _nome_figlio(conn, della_regola["figlio_id"])
             messaggio = f"{nome} ha ritirato la sua proposta{di_cosa}"
         else:
-            destinatario, messaggio = "figlio", f"Il genitore ha ritirato la sua proposta{di_cosa}"
+            # (v3.6) Tutti i genitori sono uguali: ritira anche una proposta di un altro
+            # genitore. Il figlio legge il nome di chi l'ha ritirata.
+            payload["genitore"] = Firme(conn).di(chi.genitore_id)
+            destinatario = "figlio"
+            messaggio = f"{payload['genitore']['nome']} ha ritirato la sua proposta{di_cosa}"
         accoda_notifica(
             conn,
             "proposta_ritirata",
             messaggio,
-            {"proposta_id": proposta_id, "regola_id": proposta["regola_id"], "autore": autore},
+            payload,
             ts,
             destinatario=destinatario,
             # Col dispositivo della regola, come la nuova_proposta che l'aveva annunciata

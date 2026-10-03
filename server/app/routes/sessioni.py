@@ -24,7 +24,10 @@ definizioni, le decisioni del genitore e la storia delle sessioni svolte.
   processo in sottofondo.
 - Notifiche al genitore quando c'e' da decidere (al massimo un avviso aperto per
   sessione) e quando una sessione sparisce; al telefono della sessione quando il
-  genitore decide. Per l'inizio e la fine niente notifiche: si vedono nella finestra."""
+  genitore decide. Per l'inizio e la fine niente notifiche: si vedono nella finestra.
+- (v3.6) Ogni sessione dice quale genitore l'ha decisa l'ultima volta (`decisa_da`), e
+  il messaggio al figlio porta il suo nome. Con il blocco delle faccende attivo una
+  sessione non si avvia (409 blocco_faccende)."""
 
 import json
 import sqlite3
@@ -32,10 +35,11 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import clock, config, famiglia, siti
+from .. import clock, config, faccende, famiglia, siti
 from ..auth import Identita, richiede_dispositivo, richiede_genitore, richiede_patto
 from ..controllo_corpo import INTERO_MASSIMO, INTERO_MINIMO
 from ..db import accoda_notifica, get_conn
+from ..genitori import Firme, ancora_valido
 from ..schemas import (
     DURATA_MASSIMA_SESSIONE,
     SESSIONI_MASSIME_PER_DISPOSITIVO,
@@ -91,7 +95,18 @@ def _contenuto(riga: sqlite3.Row) -> dict:
     return {"nome": riga["nome"], "app": json.loads(riga["app"]), "nomi": json.loads(riga["nomi"])}
 
 
-def formatta_sessione(riga: sqlite3.Row, dispositivo: sqlite3.Row | None, note: dict) -> dict:
+def _decisa_da(riga: sqlite3.Row, firme: Firme) -> dict | None:
+    """(v3.6) Il genitore dell'ultima decisione. Una sessione di prima della v3.6 gia'
+    approvata o rifiutata e' stata decisa dal genitore 1 (allora l'unico); una mai
+    decisa non ha nessuno."""
+    if riga["decisa_genitore_id"] is not None:
+        return firme.di(riga["decisa_genitore_id"])
+    return firme.primo() if riga["stato"] in ("approvata", "rifiutata") else None
+
+
+def formatta_sessione(
+    riga: sqlite3.Row, dispositivo: sqlite3.Row | None, note: dict, firme: Firme
+) -> dict:
     contenuto = _contenuto(riga)
     modifica = json.loads(riga["modifica_in_attesa"]) if riga["modifica_in_attesa"] else None
     if modifica is not None:
@@ -109,6 +124,7 @@ def formatta_sessione(riga: sqlite3.Row, dispositivo: sqlite3.Row | None, note: 
         "versione": riga["versione"],
         "creata_ts": riga["creata_ts"],
         "approvata_ts": riga["approvata_ts"],
+        "decisa_da": _decisa_da(riga, firme),  # (v3.6)
     }
 
 
@@ -152,7 +168,8 @@ def sessioni_del_dispositivo(
         "SELECT * FROM sessioni WHERE dispositivo_id = ? AND eliminata_ts IS NULL ORDER BY id",
         (dispositivo["id"],),
     ).fetchall()
-    return [formatta_sessione(r, dispositivo, note) for r in righe]
+    firme = Firme(conn)
+    return [formatta_sessione(r, dispositivo, note, firme) for r in righe]
 
 
 def sessioni_del_figlio(
@@ -170,7 +187,8 @@ def sessioni_del_figlio(
         "SELECT * FROM sessioni WHERE figlio_id = ? AND eliminata_ts IS NULL ORDER BY id",
         (figlio_id,),
     ).fetchall()
-    return [formatta_sessione(r, per_id.get(r["dispositivo_id"]), note) for r in righe]
+    firme = Firme(conn)
+    return [formatta_sessione(r, per_id.get(r["dispositivo_id"]), note, firme) for r in righe]
 
 
 def sessioni_da_approvare(conn: sqlite3.Connection, figlio_id: int) -> int:
@@ -470,7 +488,8 @@ def crea_sessione(
         conn.rollback()
         raise
     return formatta_sessione(
-        _sessione_o_404(conn, sessione_id), dispositivo, etichette_note(conn, chi.figlio_id)
+        _sessione_o_404(conn, sessione_id), dispositivo, etichette_note(conn, chi.figlio_id),
+        Firme(conn),
     )
 
 
@@ -533,7 +552,8 @@ def modifica_sessione(
         conn.rollback()
         raise
     return formatta_sessione(
-        _sessione_o_404(conn, sessione_id), dispositivo, etichette_note(conn, chi.figlio_id)
+        _sessione_o_404(conn, sessione_id), dispositivo, etichette_note(conn, chi.figlio_id),
+        Firme(conn),
     )
 
 
@@ -642,12 +662,20 @@ def avvia_sessione(
     conn.execute("BEGIN IMMEDIATE")
     try:
         riga = _sessione_del_dispositivo(conn, sessione_id, chi)
-        _dispositivo_vivo(conn, chi.dispositivo_id)
+        dispositivo = _dispositivo_vivo(conn, chi.dispositivo_id)
         if riga["stato"] != "approvata":
             raise HTTPException(status_code=409, detail={"errore": "sessione_non_approvata"})
         _chiudi_scadute(conn, chi.dispositivo_id, ora)
         if _aperta(conn, chi.dispositivo_id) is not None:
             raise HTTPException(status_code=409, detail={"errore": "sessione_gia_in_corso"})
+        # (v3.6) Prima le faccende: col blocco attivo una sessione non parte. Dentro il
+        # lock, come gli altri controlli: una faccenda data in quel momento conta. Solo
+        # per i telefoni che conoscono le faccende (dalla 0.13): su quelli piu' vecchi il
+        # blocco non c'e', e blocco_faccende sarebbe un codice che non sanno leggere.
+        if faccende.conosce_le_faccende(dispositivo["versione_app"]) and faccende.blocco_attivo(
+            conn, chi.figlio_id, ora
+        ):
+            raise HTTPException(status_code=409, detail={"errore": "blocco_faccende"})
         try:
             svolta_id = conn.execute(
                 "INSERT INTO sessioni_svolte (sessione_id, dispositivo_id, nome, app, nomi,"
@@ -693,6 +721,7 @@ def rispondi_sessione(
     # gia' deciso e riceve 409 niente_da_decidere.
     conn.execute("BEGIN IMMEDIATE")
     try:
+        ancora_valido(conn, chi)  # (v3.6) non revocato nel frattempo
         riga = _sessione_o_404(conn, sessione_id)
         if corpo.figlio_id is not None and riga["figlio_id"] != corpo.figlio_id:
             raise HTTPException(status_code=404, detail=NON_TROVATA)
@@ -702,13 +731,14 @@ def rispondi_sessione(
         cambio = riga["stato"] == "approvata" and riga["modifica_in_attesa"] is not None
         if riga["stato"] != "in_attesa" and not cambio:
             raise HTTPException(status_code=409, detail={"errore": "niente_da_decidere"})
+        firme = Firme(conn)
         if corpo.versione != riga["versione"]:
             raise HTTPException(
                 status_code=409,
                 detail={
                     "errore": "richiesta_cambiata",
                     "sessione": formatta_sessione(
-                        riga, dispositivo, etichette_note(conn, riga["figlio_id"])
+                        riga, dispositivo, etichette_note(conn, riga["figlio_id"]), firme
                     ),
                 },
             )
@@ -743,16 +773,23 @@ def rispondi_sessione(
                 " WHERE id = ?",
                 (corpo.motivazione, sessione_id),
             )
+        # (v3.6) Chi ha deciso: resta anche se poi il figlio cambia la sessione.
+        conn.execute(
+            "UPDATE sessioni SET decisa_genitore_id = ? WHERE id = ?", (chi.genitore_id, sessione_id)
+        )
         _chiudi_avvisi_aperti(conn, riga)
         # Col nome che la sessione ha dopo la decisione (un cambio approvato puo'
-        # averla rinominata): e' quello che il figlio vedra' nell'elenco.
+        # averla rinominata): e' quello che il figlio vedra' nell'elenco. (v3.6) E col
+        # nome del genitore che ha deciso, anche nel payload.
         verbo = "ha approvato" if approva else "non ha approvato"
         cosa = f"il cambio alla sessione «{nome}»" if cambio else f"la sessione «{nome}»"
+        chi_decide = firme.di(chi.genitore_id)
         accoda_notifica(
             conn,
             "sessione_risposta",
-            f"Il genitore {verbo} {cosa}",
-            {"sessione_id": sessione_id, "nome": nome, "esito": corpo.esito, "cambio": cambio},
+            f"{chi_decide['nome']} {verbo} {cosa}",
+            {"sessione_id": sessione_id, "nome": nome, "esito": corpo.esito, "cambio": cambio,
+             "genitore": chi_decide},
             ts,
             destinatario="figlio",
             figlio_id=riga["figlio_id"],
@@ -763,5 +800,6 @@ def rispondi_sessione(
         conn.rollback()
         raise
     return formatta_sessione(
-        _sessione_o_404(conn, sessione_id), dispositivo, etichette_note(conn, riga["figlio_id"])
+        _sessione_o_404(conn, sessione_id), dispositivo, etichette_note(conn, riga["figlio_id"]),
+        Firme(conn),
     )

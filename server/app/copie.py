@@ -6,7 +6,12 @@ che gira dentro il server. Le copie vanno in PACTUM_BACKUP_DIR (in Docker /backu
 cioe' server/backup del NAS, che si vede dal gestore file); il database sta nel
 volume, che dal NAS non si vede. Stesso modo prudente della copia prima della
 migrazione v3 (db.py): VACUUM INTO in un file `.parziale`, fsync, e il nome vero
-solo quando la copia e' completa, su disco e controllata."""
+solo quando la copia e' completa, su disco e controllata.
+
+(v3.6) Insieme alla copia, una volta al giorno, la pulizia delle foto delle faccende
+(PuliziaFoto): via quelle arrivate da piu' di 30 giorni e i file senza faccenda. Gira
+anche se la cartella delle copie non c'e' (la copia allora resta spenta, la pulizia
+no), e all'avvio."""
 
 import asyncio
 import logging
@@ -19,7 +24,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import NoReturn
 
-from . import clock, config
+from . import clock, config, faccende
 from .config import Settings
 
 log = logging.getLogger("uvicorn.error")
@@ -219,15 +224,60 @@ class CopiaNotturna:
         """Un giro subito (la copia di recupero, se il NAS era spento alle 03:00) e poi
         uno al minuto, finche' `ferma` non scatta. Il lavoro su SQLite va in un thread:
         le richieste non aspettano la copia."""
-        while not ferma.is_set():
-            try:
-                await asyncio.to_thread(self.controlla)
-            except Exception:
-                log.exception("copia notturna del registro: errore inatteso, il compito continua")
-            try:
-                await asyncio.wait_for(ferma.wait(), timeout=INTERVALLO_SECONDI)
-            except TimeoutError:
-                pass
+        await _ogni_minuto(self.controlla, ferma, "copia notturna del registro")
+
+
+async def _ogni_minuto(controlla, ferma: asyncio.Event, nome: str) -> None:
+    """Un giro di `controlla` subito e poi uno al minuto, in un thread, finche' `ferma`
+    non scatta. Un errore inatteso finisce nel log e il compito continua."""
+    while not ferma.is_set():
+        try:
+            await asyncio.to_thread(controlla)
+        except Exception:
+            log.exception("%s: errore inatteso, il compito continua", nome)
+        try:
+            await asyncio.wait_for(ferma.wait(), timeout=INTERVALLO_SECONDI)
+        except TimeoutError:
+            pass
+
+
+class PuliziaFoto:
+    """(v3.6) La pulizia delle foto delle faccende (faccende.pulisci_foto): all'avvio
+    (`subito`) e poi una volta al giorno, la prima volta dopo le 03:00 del fuso del
+    patto, come la copia notturna. Un giro gia' fatto oggi dopo le 03:00 (anche quello
+    dell'avvio) non si ripete."""
+
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self._giorno_fatto: date | None = None
+        self._lucchetto = threading.Lock()
+
+    def _pulisci(self, ora: datetime) -> int | None:
+        try:
+            return faccende.pulisci_foto(self.db_path, ora)
+        except Exception as errore:
+            log.error("pulizia delle foto NON riuscita: %s. Riprovo domani dopo le 03:00.", errore)
+            return None
+
+    def subito(self) -> int | None:
+        with self._lucchetto:
+            ora = clock.now()
+            locale = ora.astimezone(config.fuso_patto())
+            if locale.hour >= ORA_COPIA:
+                self._giorno_fatto = locale.date()
+            return self._pulisci(ora)
+
+    def controlla(self) -> int | None:
+        with self._lucchetto:
+            ora = clock.now()
+            locale = ora.astimezone(config.fuso_patto())
+            if locale.hour < ORA_COPIA or locale.date() == self._giorno_fatto:
+                return None
+            self._giorno_fatto = locale.date()
+            return self._pulisci(ora)
+
+    async def gira(self, ferma: asyncio.Event) -> None:
+        await _ogni_minuto(self.controlla, ferma, "pulizia delle foto")
 
 
 def prepara_copia_notturna(settings: Settings) -> CopiaNotturna | None:

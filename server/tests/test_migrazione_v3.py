@@ -164,7 +164,8 @@ def test_ogni_riga_di_prima_resta_uguale_e_va_al_figlio_1(avvia, db_v24):
 
     for tabella in TABELLE_V24:
         assert len(dopo[tabella]) == len(prima[tabella]), tabella
-        nuove = {"figlio_id", "dispositivo_id", "autore"}  # autore: (v3.4), sotto
+        nuove = {"figlio_id", "dispositivo_id", "autore",  # autore: (v3.4), sotto
+                 "genitore_id", "risposta_genitore_id", "verdetto_genitore_id"}  # (v3.6)
         vecchie = [_senza(r, *nuove) for r in prima[tabella]]
         rimaste = [_senza(r, *nuove) for r in dopo[tabella]]
         if tabella in ("uso_giornaliero", "siti_giornalieri"):  # ricostruite: conta il contenuto

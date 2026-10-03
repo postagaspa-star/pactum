@@ -42,7 +42,9 @@ def _quanti_segni(db_path):
 def test_segno_mandato(client):
     risposta = _segno(client)
     assert risposta.status_code == 200
-    assert risposta.json() == {"mandato": True, "ts_server": "2026-07-14T10:00:00+00:00"}
+    # (v3.6) e chi l'ha mandato: il genitore 1 si chiama "Genitore" finche' non lo rinominano
+    assert risposta.json() == {"mandato": True, "ts_server": "2026-07-14T10:00:00+00:00",
+                               "da": {"id": 1, "nome": "Genitore"}}
 
 
 def test_segno_diventa_una_notifica_per_il_figlio(client):
@@ -51,7 +53,7 @@ def test_segno_diventa_una_notifica_per_il_figlio(client):
     assert len(segni) == 1
     assert segni[0]["destinatario"] == "figlio"
     assert segni[0]["messaggio"] == MESSAGGIO
-    assert segni[0]["payload"] == {}
+    assert segni[0]["payload"] == {"genitore": {"id": 1, "nome": "Genitore"}}  # (v3.6)
     assert segni[0]["ts_server"] == "2026-07-14T10:00:00+00:00"
     # e' del figlio: il genitore non la riceve e non la puo' marcare
     assert all(n["tipo"] != "segno" for n in _notifiche(client, GENITORE))

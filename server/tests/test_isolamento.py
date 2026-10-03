@@ -10,7 +10,6 @@ d'ambiente e un computer, Marta col suo telefono.
 - (v3.1) Le notifiche del figlio si leggono per dispositivo; le regole di un
   dispositivo revocato non si toccano piu' e non tengono in piedi il patto."""
 
-import hashlib
 import sqlite3
 from types import SimpleNamespace
 
@@ -256,26 +255,24 @@ def test_letture_per_dispositivo_isolate_fra_figli(client, famiglia):
     assert _ids_notifiche(client, famiglia.tel_andrea) == [di_andrea]
 
 
-def test_le_notifiche_del_genitore_restano_condivise(client, famiglia, db_path):
-    """(v3.1) Solo quelle del figlio si leggono per dispositivo: una notifica del
-    genitore marcata da un genitore e' letta per tutti i genitori."""
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute(
-            "INSERT INTO credenziali (ruolo, token_hash, origine, creata_ts)"
-            " VALUES ('genitore', ?, 'abbinamento', '2026-07-14T10:00:00+00:00')",
-            (hashlib.sha256(b"tok-secondo-genitore").hexdigest(),),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    secondo = {"Authorization": "Bearer tok-secondo-genitore"}
+def test_le_notifiche_del_genitore_si_leggono_per_genitore(client, famiglia):
+    """(v3.1) Le notifiche del figlio si leggono per dispositivo. (v3.6) E ora anche
+    quelle del genitore si leggono per genitore: una notifica marcata da un genitore
+    resta da leggere per gli altri, e il conteggio della famiglia e' di chi chiama."""
+    creato = client.post("/api/genitori", json={"nome": "Mamma"}, headers=GENITORE).json()
+    r = client.post("/api/abbina", json={"codice": creato["codice"], "tipo": "genitore"})
+    assert r.status_code == 200, r.text
+    secondo = {"Authorization": f"Bearer {r.json()['token']}"}
     eventi(client, famiglia.tel_andrea, {"id": "m-1", "tipo": "manomissione", "dettagli": {"sotto_tipo": "silenzio"}})
-    (notifica,) = _ids_notifiche(client, GENITORE)
-    assert _ids_notifiche(client, secondo) == [notifica]
+    (notifica,) = _ids_notifiche(client, secondo)
+    assert notifica in _ids_notifiche(client, GENITORE)
     assert client.post(f"/api/notifiche/{notifica}/letta", headers=secondo).status_code == 200
-    assert _ids_notifiche(client, GENITORE) == []
-    assert client.get("/api/famiglia", headers=GENITORE).json()["figli"][0]["notifiche_non_lette"] == 0
+    assert _ids_notifiche(client, secondo) == []
+    assert notifica in _ids_notifiche(client, GENITORE)  # per il genitore 1 resta da leggere
+    andrea = lambda h: next(f for f in client.get("/api/famiglia", headers=h).json()["figli"]
+                            if f["id"] == famiglia.andrea)
+    assert andrea(secondo)["notifiche_non_lette"] == 0
+    assert andrea(GENITORE)["notifiche_non_lette"] >= 1
 
 
 def test_vita_reale_del_figlio_da_ogni_dispositivo(client, famiglia):

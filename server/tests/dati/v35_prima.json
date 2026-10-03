@@ -1,0 +1,4571 @@
+{
+ "dichiarazioni_genitore": {
+  "dichiarazioni": [
+   {
+    "esito": "fallimento",
+    "giorno": "2026-09-23",
+    "id": 2,
+    "nota": null,
+    "regola_id": 4,
+    "stato": "registrata",
+    "ts_server": "2026-09-24T18:00:00+00:00",
+    "verdetto": null
+   },
+   {
+    "esito": "successo",
+    "giorno": "2026-09-24",
+    "id": 1,
+    "nota": null,
+    "regola_id": 4,
+    "stato": "confermata_per_conto",
+    "ts_server": "2026-09-24T18:00:00+00:00",
+    "verdetto": {
+     "nota": "sentita al telefono",
+     "registro": "confermato dal genitore per conto di Nonna",
+     "ts_server": "2026-09-24T18:00:00+00:00",
+     "verdetto": "conferma_per_conto"
+    }
+   }
+  ]
+ },
+ "famiglia": {
+  "figli": [
+   {
+    "dispositivi": [
+     {
+      "abbinato": true,
+      "id": 1,
+      "nome": "Telefono",
+      "revocato": false,
+      "stato_silenzio": {
+       "silente": true,
+       "spento": false,
+       "spento_dal": null,
+       "ultimo_battito": "2026-09-24T08:00:00+00:00"
+      },
+      "tipo": "telefono",
+      "versione_app": "0.12.0"
+     },
+     {
+      "abbinato": true,
+      "id": 2,
+      "nome": "Computer",
+      "revocato": false,
+      "stato_silenzio": {
+       "silente": true,
+       "spento": false,
+       "spento_dal": null,
+       "ultimo_battito": "2026-09-24T08:00:00+00:00"
+      },
+      "tipo": "computer",
+      "versione_app": "0.10.0"
+     }
+    ],
+    "id": 1,
+    "nome": "Luca",
+    "notifiche_non_lette": 12,
+    "proposte_da_decidere": 1,
+    "riepilogo": {
+     "giorni_fuori_regola": 1,
+     "interruzioni": 0
+    },
+    "sessioni_da_approvare": 2,
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ]
+   },
+   {
+    "dispositivi": [
+     {
+      "abbinato": true,
+      "id": 3,
+      "nome": "Telefono di Sara",
+      "revocato": false,
+      "stato_silenzio": {
+       "silente": true,
+       "spento": false,
+       "spento_dal": null,
+       "ultimo_battito": "2026-09-24T08:00:00+00:00"
+      },
+      "tipo": "telefono",
+      "versione_app": "0.12.0"
+     }
+    ],
+    "id": 2,
+    "nome": "Sara",
+    "notifiche_non_lette": 2,
+    "proposte_da_decidere": 0,
+    "riepilogo": {
+     "giorni_fuori_regola": 1,
+     "interruzioni": 1
+    },
+    "sessioni_da_approvare": 0,
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ]
+   }
+  ]
+ },
+ "finestra_luca": {
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_giornalieri": [
+   {
+    "giorno": "2026-09-24",
+    "minuti": 15
+   },
+   {
+    "giorno": "2026-09-25",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-26",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-27",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-28",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-29",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-30",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-01",
+    "minuti": 0
+   }
+  ],
+  "dispositivi": [
+   {
+    "abbinato": true,
+    "bonus": {
+     "giorno": {
+      "residui": 30,
+      "tetto": 30,
+      "usati": 0
+     },
+     "settimana": {
+      "residui": 90,
+      "tetto": 90,
+      "usati": 0
+     }
+    },
+    "bonus_giornalieri": [
+     {
+      "giorno": "2026-09-24",
+      "minuti": 15
+     },
+     {
+      "giorno": "2026-09-25",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-26",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-27",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-28",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-29",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-30",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-01",
+      "minuti": 0
+     }
+    ],
+    "id": 1,
+    "medie": {
+     "mese": {
+      "giorni": 7,
+      "minuti": 84
+     },
+     "settimana": {
+      "giorni": 6,
+      "minuti": 82
+     }
+    },
+    "nome": "Telefono",
+    "revocato": false,
+    "siti_recenti": [
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-24",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-25",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-26",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-27",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-28",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-29",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-30",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-01",
+      "totale_domini": null
+     }
+    ],
+    "stato_silenzio": {
+     "silente": true,
+     "spento": false,
+     "spento_dal": null,
+     "ultimo_battito": "2026-09-24T08:00:00+00:00"
+    },
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "telefono",
+    "uso_recente": [
+     {
+      "aggiornato_ts": "2026-09-24T18:00:00+00:00",
+      "app": [
+       {
+        "bonus": 15,
+        "chiave": "com.zhiliaoapp.musically",
+        "limite": 45,
+        "minuti": 75,
+        "nome": "TikTok",
+        "regola_id": 1
+       },
+       {
+        "chiave": "eu.spaggiari.classevivafamiglia",
+        "minuti": 20,
+        "nome": "ClasseViva"
+       }
+      ],
+      "bonus": 0,
+      "categorie": [],
+      "giorno": "2026-09-24",
+      "limite": 180,
+      "regola_id": 2,
+      "sessioni_minuti": null,
+      "totale_minuti": 95
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.zhiliaoapp.musically",
+        "limite": 45,
+        "minuti": 55,
+        "nome": "TikTok",
+        "regola_id": 1
+       },
+       {
+        "chiave": "eu.spaggiari.classevivafamiglia",
+        "minuti": 25,
+        "nome": "eu.spaggiari.classevivafamiglia"
+       }
+      ],
+      "bonus": 0,
+      "categorie": [],
+      "giorno": "2026-09-25",
+      "limite": 180,
+      "regola_id": 2,
+      "sessioni_minuti": 30,
+      "totale_minuti": 80
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.zhiliaoapp.musically",
+        "limite": 45,
+        "minuti": 56,
+        "nome": "TikTok",
+        "regola_id": 1
+       },
+       {
+        "chiave": "eu.spaggiari.classevivafamiglia",
+        "minuti": 25,
+        "nome": "eu.spaggiari.classevivafamiglia"
+       }
+      ],
+      "bonus": 0,
+      "categorie": [],
+      "giorno": "2026-09-26",
+      "limite": 180,
+      "regola_id": 2,
+      "sessioni_minuti": 30,
+      "totale_minuti": 81
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.zhiliaoapp.musically",
+        "limite": 45,
+        "minuti": 57,
+        "nome": "TikTok",
+        "regola_id": 1
+       },
+       {
+        "chiave": "eu.spaggiari.classevivafamiglia",
+        "minuti": 25,
+        "nome": "eu.spaggiari.classevivafamiglia"
+       }
+      ],
+      "bonus": 0,
+      "categorie": [],
+      "giorno": "2026-09-27",
+      "limite": 180,
+      "regola_id": 2,
+      "sessioni_minuti": 30,
+      "totale_minuti": 82
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.zhiliaoapp.musically",
+        "limite": 45,
+        "minuti": 58,
+        "nome": "TikTok",
+        "regola_id": 1
+       },
+       {
+        "chiave": "eu.spaggiari.classevivafamiglia",
+        "minuti": 25,
+        "nome": "eu.spaggiari.classevivafamiglia"
+       }
+      ],
+      "bonus": 0,
+      "categorie": [],
+      "giorno": "2026-09-28",
+      "limite": 180,
+      "regola_id": 2,
+      "sessioni_minuti": 30,
+      "totale_minuti": 83
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.zhiliaoapp.musically",
+        "limite": 45,
+        "minuti": 59,
+        "nome": "TikTok",
+        "regola_id": 1
+       },
+       {
+        "chiave": "eu.spaggiari.classevivafamiglia",
+        "minuti": 25,
+        "nome": "eu.spaggiari.classevivafamiglia"
+       }
+      ],
+      "bonus": 0,
+      "categorie": [],
+      "giorno": "2026-09-29",
+      "limite": 180,
+      "regola_id": 2,
+      "sessioni_minuti": 30,
+      "totale_minuti": 84
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.zhiliaoapp.musically",
+        "limite": 45,
+        "minuti": 60,
+        "nome": "TikTok",
+        "regola_id": 1
+       },
+       {
+        "chiave": "eu.spaggiari.classevivafamiglia",
+        "minuti": 25,
+        "nome": "eu.spaggiari.classevivafamiglia"
+       }
+      ],
+      "bonus": 0,
+      "categorie": [],
+      "giorno": "2026-09-30",
+      "limite": 180,
+      "regola_id": 2,
+      "sessioni_minuti": 30,
+      "totale_minuti": 85
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-01",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     }
+    ]
+   },
+   {
+    "abbinato": true,
+    "bonus": {
+     "giorno": {
+      "residui": 30,
+      "tetto": 30,
+      "usati": 0
+     },
+     "settimana": {
+      "residui": 90,
+      "tetto": 90,
+      "usati": 0
+     }
+    },
+    "bonus_giornalieri": [
+     {
+      "giorno": "2026-09-24",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-25",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-26",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-27",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-28",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-29",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-30",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-01",
+      "minuti": 0
+     }
+    ],
+    "id": 2,
+    "medie": {
+     "mese": {
+      "giorni": 7,
+      "minuti": 31
+     },
+     "settimana": {
+      "giorni": 6,
+      "minuti": 28
+     }
+    },
+    "nome": "Computer",
+    "revocato": false,
+    "siti_recenti": [
+     {
+      "aggiornato_ts": "2026-09-24T18:00:00+00:00",
+      "dns_cifrato": false,
+      "domini": [
+       {
+        "dominio": "youtube.com",
+        "minuti": 30,
+        "visite": 4
+       }
+      ],
+      "giorno": "2026-09-24",
+      "totale_domini": 1
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-25",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-26",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-27",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-28",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-29",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-30",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-01",
+      "totale_domini": null
+     }
+    ],
+    "stato_silenzio": {
+     "silente": true,
+     "spento": false,
+     "spento_dal": null,
+     "ultimo_battito": "2026-09-24T08:00:00+00:00"
+    },
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "computer",
+    "uso_recente": [
+     {
+      "aggiornato_ts": "2026-09-24T18:00:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "exe:minecraft.exe",
+        "limite": 90,
+        "minuti": 50,
+        "nome": "Minecraft",
+        "regola_id": 5
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-24",
+      "sessioni_minuti": null,
+      "totale_minuti": 50
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "exe:minecraft.exe",
+        "limite": 90,
+        "minuti": 25,
+        "nome": "Minecraft",
+        "regola_id": 5
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-25",
+      "sessioni_minuti": null,
+      "totale_minuti": 25
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "exe:minecraft.exe",
+        "limite": 90,
+        "minuti": 26,
+        "nome": "Minecraft",
+        "regola_id": 5
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-26",
+      "sessioni_minuti": null,
+      "totale_minuti": 26
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "exe:minecraft.exe",
+        "limite": 90,
+        "minuti": 27,
+        "nome": "Minecraft",
+        "regola_id": 5
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-27",
+      "sessioni_minuti": null,
+      "totale_minuti": 27
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "exe:minecraft.exe",
+        "limite": 90,
+        "minuti": 28,
+        "nome": "Minecraft",
+        "regola_id": 5
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-28",
+      "sessioni_minuti": null,
+      "totale_minuti": 28
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "exe:minecraft.exe",
+        "limite": 90,
+        "minuti": 29,
+        "nome": "Minecraft",
+        "regola_id": 5
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-29",
+      "sessioni_minuti": null,
+      "totale_minuti": 29
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "exe:minecraft.exe",
+        "limite": 90,
+        "minuti": 30,
+        "nome": "Minecraft",
+        "regola_id": 5
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-30",
+      "sessioni_minuti": null,
+      "totale_minuti": 30
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-01",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     }
+    ]
+   }
+  ],
+  "manomissioni_recenti": [],
+  "medie": {
+   "mese": {
+    "giorni": 7,
+    "minuti": 84
+   },
+   "settimana": {
+    "giorni": 6,
+    "minuti": 82
+   }
+  },
+  "proposte_pendenti": [
+   {
+    "autore": "figlio",
+    "confronto": "+20 min al giorno rispetto ad ora",
+    "direzione": "allenta",
+    "id": 6,
+    "motivazione": "per i compiti",
+    "parametri_proposti": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 200
+    },
+    "regola_id": 2,
+    "risposta": null,
+    "stato": "pendente",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   }
+  ],
+  "regole": [
+   {
+    "allentabile_dal": "2026-09-29T10:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 1,
+    "nome": "TikTok",
+    "parametri": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 45
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 2,
+    "parametri": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 180
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 3,
+    "parametri": {
+     "alle": "07:00",
+     "dalle": "22:00",
+     "giorni": [
+      "lun",
+      "mar",
+      "mer",
+      "gio",
+      "ven",
+      "sab",
+      "dom"
+     ]
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "fascia_oraria",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": null,
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 4,
+    "parametri": {
+     "arbitro_nome": "Nonna",
+     "descrizione": "Leggere 20 minuti",
+     "frequenza": "ogni giorno"
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "vita_reale",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "allentabile_dal": "2026-09-29T10:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 2,
+     "nome": "Computer",
+     "tipo": "computer"
+    },
+    "dispositivo_id": 2,
+    "figlio_id": 1,
+    "id": 5,
+    "nome": "Minecraft",
+    "parametri": {
+     "app_o_categoria": "exe:minecraft.exe",
+     "minuti_al_giorno": 90
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-09-25T10:00:00+00:00"
+   }
+  ],
+  "riepilogo": {
+   "giorni_fuori_regola": 1,
+   "interruzioni": 0
+  },
+  "segno_oggi": false,
+  "sessioni": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "approvata_ts": "2026-09-26T10:00:00+00:00",
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 1,
+    "modifica_in_attesa": {
+     "app": [
+      "eu.spaggiari.classevivafamiglia",
+      "com.google.android.apps.classroom",
+      "com.duolingo"
+     ],
+     "nome": "Studio",
+     "nomi": {
+      "com.google.android.apps.classroom": "Classroom",
+      "eu.spaggiari.classevivafamiglia": "ClasseViva"
+     },
+     "richiesta_ts": "2026-09-26T13:30:00+00:00"
+    },
+    "motivazione": null,
+    "nome": "Studio",
+    "nomi": {
+     "com.google.android.apps.classroom": "Classroom",
+     "eu.spaggiari.classevivafamiglia": "ClasseViva"
+    },
+    "stato": "approvata",
+    "versione": 3
+   },
+   {
+    "app": [
+     "com.supercell.clashroyale"
+    ],
+    "approvata_ts": null,
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 2,
+    "modifica_in_attesa": null,
+    "motivazione": "non e' studio",
+    "nome": "Giochi",
+    "nomi": {
+     "com.supercell.clashroyale": "Clash Royale"
+    },
+    "stato": "rifiutata",
+    "versione": 2
+   },
+   {
+    "app": [
+     "com.spotify.music"
+    ],
+    "approvata_ts": null,
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 3,
+    "modifica_in_attesa": null,
+    "motivazione": null,
+    "nome": "Musica",
+    "nomi": {
+     "com.spotify.music": "Spotify"
+    },
+    "stato": "in_attesa",
+    "versione": 1
+   }
+  ],
+  "sessioni_da_approvare": 2,
+  "sessioni_svolte": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "chiusura": "scaduta",
+    "dispositivo_id": 1,
+    "durata_minuti": 30,
+    "fine_prevista_ts": "2026-09-26T13:00:00+00:00",
+    "fine_ts": "2026-09-26T13:00:00+00:00",
+    "id": 2,
+    "in_corso": false,
+    "inizio_ts": "2026-09-26T12:30:00+00:00",
+    "nome": "Studio",
+    "nomi": {
+     "com.google.android.apps.classroom": "Classroom",
+     "eu.spaggiari.classevivafamiglia": "ClasseViva"
+    },
+    "sessione_id": 1
+   },
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "chiusura": "terminata",
+    "dispositivo_id": 1,
+    "durata_minuti": 60,
+    "fine_prevista_ts": "2026-09-26T11:00:00+00:00",
+    "fine_ts": "2026-09-26T10:30:00+00:00",
+    "id": 1,
+    "in_corso": false,
+    "inizio_ts": "2026-09-26T10:00:00+00:00",
+    "nome": "Studio",
+    "nomi": {
+     "com.google.android.apps.classroom": "Classroom",
+     "eu.spaggiari.classevivafamiglia": "ClasseViva"
+    },
+    "sessione_id": 1
+   }
+  ],
+  "sforamenti_recenti": [
+   {
+    "dettagli": {
+     "giorno": "2026-09-24",
+     "limite_efficace": 60,
+     "minuti_oltre": 15,
+     "regola_id": 1
+    },
+    "dispositivo_id": 1,
+    "id": "sfora-tel-0924",
+    "tipo": "sforamento",
+    "ts_device": null,
+    "ts_server": "2026-09-24T18:00:00+00:00"
+   }
+  ],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-24",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-25",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-26",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-27",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-28",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   }
+  ],
+  "stato_silenzio": {
+   "silente": true,
+   "spento": false,
+   "spento_dal": null,
+   "ultimo_battito": "2026-09-24T08:00:00+00:00"
+  },
+  "storico_modifiche": [
+   {
+    "azione": "modifica",
+    "concordata": true,
+    "direzione": "allenta",
+    "dopo": {
+     "app_o_categoria": "exe:minecraft.exe",
+     "minuti_al_giorno": 90
+    },
+    "id": 8,
+    "prima": {
+     "app_o_categoria": "exe:minecraft.exe",
+     "minuti_al_giorno": 60
+    },
+    "regola_id": 5,
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "azione": "modifica",
+    "concordata": true,
+    "direzione": "stringe",
+    "dopo": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 45
+    },
+    "id": 7,
+    "prima": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 60
+    },
+    "regola_id": 1,
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "azione": "creazione",
+    "concordata": false,
+    "direzione": null,
+    "dopo": {
+     "app_o_categoria": "exe:minecraft.exe",
+     "minuti_al_giorno": 60
+    },
+    "id": 5,
+    "prima": null,
+    "regola_id": 5,
+    "ts_server": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "azione": "creazione",
+    "concordata": false,
+    "direzione": null,
+    "dopo": {
+     "arbitro_nome": "Nonna",
+     "descrizione": "Leggere 20 minuti",
+     "frequenza": "ogni giorno"
+    },
+    "id": 4,
+    "prima": null,
+    "regola_id": 4,
+    "ts_server": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "azione": "creazione",
+    "concordata": false,
+    "direzione": null,
+    "dopo": {
+     "alle": "07:00",
+     "dalle": "22:00",
+     "giorni": [
+      "lun",
+      "mar",
+      "mer",
+      "gio",
+      "ven",
+      "sab",
+      "dom"
+     ]
+    },
+    "id": 3,
+    "prima": null,
+    "regola_id": 3,
+    "ts_server": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "azione": "creazione",
+    "concordata": false,
+    "direzione": null,
+    "dopo": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 180
+    },
+    "id": 2,
+    "prima": null,
+    "regola_id": 2,
+    "ts_server": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "azione": "creazione",
+    "concordata": false,
+    "direzione": null,
+    "dopo": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 60
+    },
+    "id": 1,
+    "prima": null,
+    "regola_id": 1,
+    "ts_server": "2026-09-24T08:00:00+00:00"
+   }
+  ],
+  "striscia": [
+   {
+    "data": "2026-09-24",
+    "stato": "rosso"
+   },
+   {
+    "data": "2026-09-25",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-26",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-27",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-28",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-29",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   }
+  ],
+  "uso_recente": [
+   {
+    "aggiornato_ts": "2026-09-24T18:00:00+00:00",
+    "app": [
+     {
+      "bonus": 15,
+      "chiave": "com.zhiliaoapp.musically",
+      "limite": 45,
+      "minuti": 75,
+      "nome": "TikTok",
+      "regola_id": 1
+     },
+     {
+      "chiave": "eu.spaggiari.classevivafamiglia",
+      "minuti": 20,
+      "nome": "ClasseViva"
+     }
+    ],
+    "bonus": 0,
+    "categorie": [],
+    "giorno": "2026-09-24",
+    "limite": 180,
+    "regola_id": 2,
+    "sessioni_minuti": null,
+    "totale_minuti": 95
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.zhiliaoapp.musically",
+      "limite": 45,
+      "minuti": 55,
+      "nome": "TikTok",
+      "regola_id": 1
+     },
+     {
+      "chiave": "eu.spaggiari.classevivafamiglia",
+      "minuti": 25,
+      "nome": "eu.spaggiari.classevivafamiglia"
+     }
+    ],
+    "bonus": 0,
+    "categorie": [],
+    "giorno": "2026-09-25",
+    "limite": 180,
+    "regola_id": 2,
+    "sessioni_minuti": 30,
+    "totale_minuti": 80
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.zhiliaoapp.musically",
+      "limite": 45,
+      "minuti": 56,
+      "nome": "TikTok",
+      "regola_id": 1
+     },
+     {
+      "chiave": "eu.spaggiari.classevivafamiglia",
+      "minuti": 25,
+      "nome": "eu.spaggiari.classevivafamiglia"
+     }
+    ],
+    "bonus": 0,
+    "categorie": [],
+    "giorno": "2026-09-26",
+    "limite": 180,
+    "regola_id": 2,
+    "sessioni_minuti": 30,
+    "totale_minuti": 81
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.zhiliaoapp.musically",
+      "limite": 45,
+      "minuti": 57,
+      "nome": "TikTok",
+      "regola_id": 1
+     },
+     {
+      "chiave": "eu.spaggiari.classevivafamiglia",
+      "minuti": 25,
+      "nome": "eu.spaggiari.classevivafamiglia"
+     }
+    ],
+    "bonus": 0,
+    "categorie": [],
+    "giorno": "2026-09-27",
+    "limite": 180,
+    "regola_id": 2,
+    "sessioni_minuti": 30,
+    "totale_minuti": 82
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.zhiliaoapp.musically",
+      "limite": 45,
+      "minuti": 58,
+      "nome": "TikTok",
+      "regola_id": 1
+     },
+     {
+      "chiave": "eu.spaggiari.classevivafamiglia",
+      "minuti": 25,
+      "nome": "eu.spaggiari.classevivafamiglia"
+     }
+    ],
+    "bonus": 0,
+    "categorie": [],
+    "giorno": "2026-09-28",
+    "limite": 180,
+    "regola_id": 2,
+    "sessioni_minuti": 30,
+    "totale_minuti": 83
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.zhiliaoapp.musically",
+      "limite": 45,
+      "minuti": 59,
+      "nome": "TikTok",
+      "regola_id": 1
+     },
+     {
+      "chiave": "eu.spaggiari.classevivafamiglia",
+      "minuti": 25,
+      "nome": "eu.spaggiari.classevivafamiglia"
+     }
+    ],
+    "bonus": 0,
+    "categorie": [],
+    "giorno": "2026-09-29",
+    "limite": 180,
+    "regola_id": 2,
+    "sessioni_minuti": 30,
+    "totale_minuti": 84
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.zhiliaoapp.musically",
+      "limite": 45,
+      "minuti": 60,
+      "nome": "TikTok",
+      "regola_id": 1
+     },
+     {
+      "chiave": "eu.spaggiari.classevivafamiglia",
+      "minuti": 25,
+      "nome": "eu.spaggiari.classevivafamiglia"
+     }
+    ],
+    "bonus": 0,
+    "categorie": [],
+    "giorno": "2026-09-30",
+    "limite": 180,
+    "regola_id": 2,
+    "sessioni_minuti": 30,
+    "totale_minuti": 85
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-01",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   }
+  ]
+ },
+ "finestra_sara": {
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_giornalieri": [
+   {
+    "giorno": "2026-09-24",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-25",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-26",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-27",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-28",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-29",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-30",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-01",
+    "minuti": 0
+   }
+  ],
+  "dispositivi": [
+   {
+    "abbinato": true,
+    "bonus": {
+     "giorno": {
+      "residui": 30,
+      "tetto": 30,
+      "usati": 0
+     },
+     "settimana": {
+      "residui": 90,
+      "tetto": 90,
+      "usati": 0
+     }
+    },
+    "bonus_giornalieri": [
+     {
+      "giorno": "2026-09-24",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-25",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-26",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-27",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-28",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-29",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-30",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-01",
+      "minuti": 0
+     }
+    ],
+    "id": 3,
+    "medie": {
+     "mese": {
+      "giorni": 7,
+      "minuti": 46
+     },
+     "settimana": {
+      "giorni": 6,
+      "minuti": 48
+     }
+    },
+    "nome": "Telefono di Sara",
+    "revocato": false,
+    "siti_recenti": [
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-24",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-25",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-26",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-27",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-28",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-29",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-30",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-01",
+      "totale_domini": null
+     }
+    ],
+    "stato_silenzio": {
+     "silente": true,
+     "spento": false,
+     "spento_dal": null,
+     "ultimo_battito": "2026-09-24T08:00:00+00:00"
+    },
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "telefono",
+    "uso_recente": [
+     {
+      "aggiornato_ts": "2026-09-24T18:00:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.instagram.android",
+        "limite": 45,
+        "minuti": 40,
+        "nome": "Instagram",
+        "regola_id": 6
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-24",
+      "sessioni_minuti": null,
+      "totale_minuti": 40
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.instagram.android",
+        "limite": 45,
+        "minuti": 45,
+        "nome": "Instagram",
+        "regola_id": 6
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-25",
+      "sessioni_minuti": null,
+      "totale_minuti": 45
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.instagram.android",
+        "limite": 45,
+        "minuti": 46,
+        "nome": "Instagram",
+        "regola_id": 6
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-26",
+      "sessioni_minuti": null,
+      "totale_minuti": 46
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.instagram.android",
+        "limite": 45,
+        "minuti": 47,
+        "nome": "Instagram",
+        "regola_id": 6
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-27",
+      "sessioni_minuti": null,
+      "totale_minuti": 47
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.instagram.android",
+        "limite": 45,
+        "minuti": 48,
+        "nome": "Instagram",
+        "regola_id": 6
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-28",
+      "sessioni_minuti": null,
+      "totale_minuti": 48
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.instagram.android",
+        "limite": 45,
+        "minuti": 49,
+        "nome": "Instagram",
+        "regola_id": 6
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-29",
+      "sessioni_minuti": null,
+      "totale_minuti": 49
+     },
+     {
+      "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.instagram.android",
+        "limite": 45,
+        "minuti": 50,
+        "nome": "Instagram",
+        "regola_id": 6
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-09-30",
+      "sessioni_minuti": null,
+      "totale_minuti": 50
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-01",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     }
+    ]
+   }
+  ],
+  "manomissioni_recenti": [
+   {
+    "dettagli": {
+     "sotto_tipo": "permesso_revocato"
+    },
+    "dispositivo_id": 3,
+    "id": "mano-sara-0924",
+    "tipo": "manomissione",
+    "ts_device": null,
+    "ts_server": "2026-09-24T18:00:00+00:00"
+   }
+  ],
+  "medie": {
+   "mese": {
+    "giorni": 7,
+    "minuti": 46
+   },
+   "settimana": {
+    "giorni": 6,
+    "minuti": 48
+   }
+  },
+  "proposte_pendenti": [],
+  "regole": [
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 3,
+     "nome": "Telefono di Sara",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 3,
+    "figlio_id": 2,
+    "id": 6,
+    "nome": "Instagram",
+    "parametri": {
+     "app_o_categoria": "com.instagram.android",
+     "minuti_al_giorno": 45
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   }
+  ],
+  "riepilogo": {
+   "giorni_fuori_regola": 1,
+   "interruzioni": 1
+  },
+  "segno_oggi": false,
+  "sessioni": [],
+  "sessioni_da_approvare": 0,
+  "sessioni_svolte": [],
+  "sforamenti_recenti": [
+   {
+    "dettagli": {
+     "giorno": "2026-09-29",
+     "limite_efficace": 45,
+     "minuti_oltre": 5,
+     "regola_id": 6
+    },
+    "dispositivo_id": 3,
+    "id": "sfora-sara-0929",
+    "tipo": "sforamento",
+    "ts_device": null,
+    "ts_server": "2026-09-26T13:30:00+00:00"
+   }
+  ],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-24",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-25",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-26",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-27",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-28",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   }
+  ],
+  "stato_silenzio": {
+   "silente": true,
+   "spento": false,
+   "spento_dal": null,
+   "ultimo_battito": "2026-09-24T08:00:00+00:00"
+  },
+  "storico_modifiche": [
+   {
+    "azione": "creazione",
+    "concordata": false,
+    "direzione": null,
+    "dopo": {
+     "app_o_categoria": "com.instagram.android",
+     "minuti_al_giorno": 45
+    },
+    "id": 6,
+    "prima": null,
+    "regola_id": 6,
+    "ts_server": "2026-09-24T08:00:00+00:00"
+   }
+  ],
+  "striscia": [
+   {
+    "data": "2026-09-24",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-25",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-26",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-27",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-28",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-29",
+    "stato": "rosso"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   }
+  ],
+  "uso_recente": [
+   {
+    "aggiornato_ts": "2026-09-24T18:00:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.instagram.android",
+      "limite": 45,
+      "minuti": 40,
+      "nome": "Instagram",
+      "regola_id": 6
+     }
+    ],
+    "categorie": [],
+    "giorno": "2026-09-24",
+    "sessioni_minuti": null,
+    "totale_minuti": 40
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.instagram.android",
+      "limite": 45,
+      "minuti": 45,
+      "nome": "Instagram",
+      "regola_id": 6
+     }
+    ],
+    "categorie": [],
+    "giorno": "2026-09-25",
+    "sessioni_minuti": null,
+    "totale_minuti": 45
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.instagram.android",
+      "limite": 45,
+      "minuti": 46,
+      "nome": "Instagram",
+      "regola_id": 6
+     }
+    ],
+    "categorie": [],
+    "giorno": "2026-09-26",
+    "sessioni_minuti": null,
+    "totale_minuti": 46
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.instagram.android",
+      "limite": 45,
+      "minuti": 47,
+      "nome": "Instagram",
+      "regola_id": 6
+     }
+    ],
+    "categorie": [],
+    "giorno": "2026-09-27",
+    "sessioni_minuti": null,
+    "totale_minuti": 47
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.instagram.android",
+      "limite": 45,
+      "minuti": 48,
+      "nome": "Instagram",
+      "regola_id": 6
+     }
+    ],
+    "categorie": [],
+    "giorno": "2026-09-28",
+    "sessioni_minuti": null,
+    "totale_minuti": 48
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.instagram.android",
+      "limite": 45,
+      "minuti": 49,
+      "nome": "Instagram",
+      "regola_id": 6
+     }
+    ],
+    "categorie": [],
+    "giorno": "2026-09-29",
+    "sessioni_minuti": null,
+    "totale_minuti": 49
+   },
+   {
+    "aggiornato_ts": "2026-09-26T13:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.instagram.android",
+      "limite": 45,
+      "minuti": 50,
+      "nome": "Instagram",
+      "regola_id": 6
+     }
+    ],
+    "categorie": [],
+    "giorno": "2026-09-30",
+    "sessioni_minuti": null,
+    "totale_minuti": 50
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-01",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   }
+  ]
+ },
+ "notifiche_computer": {
+  "notifiche": [
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 11,
+    "messaggio": "Esito della tua dichiarazione: confermato dal genitore per conto di Nonna",
+    "payload": {
+     "dichiarazione_id": 1,
+     "regola_id": 4,
+     "verdetto": "conferma_per_conto"
+    },
+    "tipo": "verdetto",
+    "ts_server": "2026-09-24T18:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 20,
+    "messaggio": "Il genitore ha accettato la tua proposta: +30 min al giorno rispetto ad ora",
+    "payload": {
+     "autore": "figlio",
+     "esito": "accetta",
+     "proposta_id": 3,
+     "regola_id": 5
+    },
+    "tipo": "proposta_risposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 22,
+    "messaggio": "Il genitore ha rifiutato la tua proposta: orario da 22:00-07:00 a 23:00-07:00",
+    "payload": {
+     "autore": "figlio",
+     "esito": "rifiuta",
+     "proposta_id": 4,
+     "regola_id": 3
+    },
+    "tipo": "proposta_risposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 23,
+    "messaggio": "Nuova proposta del genitore: descrizione: \"Leggere 20 minuti\" -> \"Leggere 30 minuti\"",
+    "payload": {
+     "autore": "genitore",
+     "confronto": "descrizione: \"Leggere 20 minuti\" -> \"Leggere 30 minuti\"",
+     "direzione": "allenta",
+     "proposta_id": 5,
+     "regola_id": 4
+    },
+    "tipo": "nuova_proposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 24,
+    "messaggio": "Il genitore ha ritirato la sua proposta",
+    "payload": {
+     "autore": "genitore",
+     "proposta_id": 5,
+     "regola_id": 4
+    },
+    "tipo": "proposta_ritirata",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   }
+  ]
+ },
+ "notifiche_genitore": {
+  "notifiche": [
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 7,
+    "messaggio": "Evento sforamento registrato",
+    "payload": {
+     "dettagli": {
+      "giorno": "2026-09-24",
+      "limite_efficace": 60,
+      "minuti_oltre": 15,
+      "regola_id": 1
+     },
+     "evento_id": "sfora-tel-0924"
+    },
+    "tipo": "sforamento",
+    "ts_server": "2026-09-24T18:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 3,
+    "figlio_id": 2,
+    "id": 8,
+    "messaggio": "Evento manomissione registrato",
+    "payload": {
+     "dettagli": {
+      "sotto_tipo": "permesso_revocato"
+     },
+     "evento_id": "mano-sara-0924"
+    },
+    "tipo": "manomissione",
+    "ts_server": "2026-09-24T18:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 9,
+    "messaggio": "Bonus di 15 minuti auto-concesso",
+    "payload": {
+     "minuti": 15,
+     "motivo": "video di scuola",
+     "regola_id": 1,
+     "residuo_giorno": 15,
+     "residuo_settimana": 75
+    },
+    "tipo": "bonus",
+    "ts_server": "2026-09-24T18:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 10,
+    "messaggio": "Dichiarazione del figlio: successo (2026-09-24)",
+    "payload": {
+     "dichiarazione_id": 1,
+     "esito": "successo",
+     "giorno": "2026-09-24",
+     "regola_id": 4
+    },
+    "tipo": "dichiarazione",
+    "ts_server": "2026-09-24T18:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 12,
+    "messaggio": "Dichiarazione del figlio: fallimento (2026-09-23)",
+    "payload": {
+     "dichiarazione_id": 2,
+     "esito": "fallimento",
+     "giorno": "2026-09-23",
+     "regola_id": 4
+    },
+    "tipo": "dichiarazione",
+    "ts_server": "2026-09-24T18:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 15,
+    "messaggio": "Regola 1 (limite_tempo) modificata (stringe)",
+    "payload": {
+     "azione": "modifica",
+     "concordata": true,
+     "direzione": "stringe",
+     "dopo": {
+      "app_o_categoria": "com.zhiliaoapp.musically",
+      "minuti_al_giorno": 45
+     },
+     "prima": {
+      "app_o_categoria": "com.zhiliaoapp.musically",
+      "minuti_al_giorno": 60
+     },
+     "regola_id": 1
+    },
+    "tipo": "modifica_regola",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 16,
+    "messaggio": "Il figlio ha risposto alla proposta: accetta",
+    "payload": {
+     "autore": "genitore",
+     "esito": "accetta",
+     "proposta_id": 1,
+     "regola_id": 1
+    },
+    "tipo": "proposta_risposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 18,
+    "messaggio": "Il figlio ha risposto alla proposta: rifiuta",
+    "payload": {
+     "autore": "genitore",
+     "esito": "rifiuta",
+     "proposta_id": 2,
+     "regola_id": 2
+    },
+    "tipo": "proposta_risposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 2,
+    "figlio_id": 1,
+    "id": 19,
+    "messaggio": "Luca propone: +30 min al giorno rispetto ad ora",
+    "payload": {
+     "autore": "figlio",
+     "confronto": "+30 min al giorno rispetto ad ora",
+     "direzione": "allenta",
+     "proposta_id": 3,
+     "regola_id": 5
+    },
+    "tipo": "nuova_proposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 21,
+    "messaggio": "Luca propone: orario da 22:00-07:00 a 23:00-07:00",
+    "payload": {
+     "autore": "figlio",
+     "confronto": "orario da 22:00-07:00 a 23:00-07:00",
+     "direzione": "allenta",
+     "proposta_id": 4,
+     "regola_id": 3
+    },
+    "tipo": "nuova_proposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 25,
+    "messaggio": "Luca propone: +20 min al giorno rispetto ad ora",
+    "payload": {
+     "autore": "figlio",
+     "confronto": "+20 min al giorno rispetto ad ora",
+     "direzione": "allenta",
+     "proposta_id": 6,
+     "regola_id": 2
+    },
+    "tipo": "nuova_proposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 30,
+    "messaggio": "Luca chiede di approvare la sessione «Musica»",
+    "payload": {
+     "cambio": false,
+     "nome": "Musica",
+     "sessione_id": 3
+    },
+    "tipo": "sessione_da_approvare",
+    "ts_server": "2026-09-26T10:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 31,
+    "messaggio": "Luca chiede di cambiare la sessione «Studio»",
+    "payload": {
+     "cambio": true,
+     "nome": "Studio",
+     "sessione_id": 1
+    },
+    "tipo": "sessione_da_approvare",
+    "ts_server": "2026-09-26T13:30:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 3,
+    "figlio_id": 2,
+    "id": 33,
+    "messaggio": "Evento sforamento registrato",
+    "payload": {
+     "dettagli": {
+      "giorno": "2026-09-29",
+      "limite_efficace": 45,
+      "minuti_oltre": 5,
+      "regola_id": 6
+     },
+     "evento_id": "sfora-sara-0929"
+    },
+    "tipo": "sforamento",
+    "ts_server": "2026-09-26T13:30:00+00:00"
+   }
+  ]
+ },
+ "notifiche_sara": {
+  "notifiche": [
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 2,
+    "id": 32,
+    "messaggio": "Ho visto la settimana. Bene così.",
+    "payload": {},
+    "tipo": "segno",
+    "ts_server": "2026-09-26T13:30:00+00:00"
+   }
+  ]
+ },
+ "notifiche_telefono": {
+  "notifiche": [
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 14,
+    "messaggio": "Nuova proposta del genitore: −15 min al giorno rispetto ad ora",
+    "payload": {
+     "autore": "genitore",
+     "confronto": "−15 min al giorno rispetto ad ora",
+     "direzione": "stringe",
+     "proposta_id": 1,
+     "regola_id": 1
+    },
+    "tipo": "nuova_proposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 17,
+    "messaggio": "Nuova proposta del genitore: −30 min al giorno rispetto ad ora",
+    "payload": {
+     "autore": "genitore",
+     "confronto": "−30 min al giorno rispetto ad ora",
+     "direzione": "stringe",
+     "proposta_id": 2,
+     "regola_id": 2
+    },
+    "tipo": "nuova_proposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 20,
+    "messaggio": "Il genitore ha accettato la tua proposta: +30 min al giorno rispetto ad ora",
+    "payload": {
+     "autore": "figlio",
+     "esito": "accetta",
+     "proposta_id": 3,
+     "regola_id": 5
+    },
+    "tipo": "proposta_risposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 22,
+    "messaggio": "Il genitore ha rifiutato la tua proposta: orario da 22:00-07:00 a 23:00-07:00",
+    "payload": {
+     "autore": "figlio",
+     "esito": "rifiuta",
+     "proposta_id": 4,
+     "regola_id": 3
+    },
+    "tipo": "proposta_risposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 23,
+    "messaggio": "Nuova proposta del genitore: descrizione: \"Leggere 20 minuti\" -> \"Leggere 30 minuti\"",
+    "payload": {
+     "autore": "genitore",
+     "confronto": "descrizione: \"Leggere 20 minuti\" -> \"Leggere 30 minuti\"",
+     "direzione": "allenta",
+     "proposta_id": 5,
+     "regola_id": 4
+    },
+    "tipo": "nuova_proposta",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 24,
+    "messaggio": "Il genitore ha ritirato la sua proposta",
+    "payload": {
+     "autore": "genitore",
+     "proposta_id": 5,
+     "regola_id": 4
+    },
+    "tipo": "proposta_ritirata",
+    "ts_server": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 27,
+    "messaggio": "Il genitore ha approvato la sessione «Studio»",
+    "payload": {
+     "cambio": false,
+     "esito": "approva",
+     "nome": "Studio",
+     "sessione_id": 1
+    },
+    "tipo": "sessione_risposta",
+    "ts_server": "2026-09-26T10:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 29,
+    "messaggio": "Il genitore non ha approvato la sessione «Giochi»",
+    "payload": {
+     "cambio": false,
+     "esito": "rifiuta",
+     "nome": "Giochi",
+     "sessione_id": 2
+    },
+    "tipo": "sessione_risposta",
+    "ts_server": "2026-09-26T10:00:00+00:00"
+   }
+  ]
+ },
+ "patto_computer": {
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_oggi_per_regola": {},
+  "dichiarazioni_in_attesa": [],
+  "dispositivi": [
+   {
+    "id": 1,
+    "nome": "Telefono",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "telefono"
+   },
+   {
+    "id": 2,
+    "nome": "Computer",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "computer"
+   }
+  ],
+  "dispositivo": {
+   "id": 2,
+   "nome": "Computer",
+   "tipo": "computer"
+  },
+  "figlio": {
+   "id": 1,
+   "nome": "Luca"
+  },
+  "fuso": "Europe/Rome",
+  "proposte_inviate": [
+   {
+    "autore": "figlio",
+    "confronto": "+20 min al giorno rispetto ad ora",
+    "direzione": "allenta",
+    "id": 6,
+    "motivazione": "per i compiti",
+    "parametri_proposti": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 200
+    },
+    "regola_id": 2,
+    "risposta": null,
+    "stato": "pendente",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   }
+  ],
+  "proposte_pendenti": [],
+  "regole": [
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": null,
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 4,
+    "parametri": {
+     "arbitro_nome": "Nonna",
+     "descrizione": "Leggere 20 minuti",
+     "frequenza": "ogni giorno"
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "vita_reale",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "allentabile_dal": "2026-09-29T10:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 2,
+     "nome": "Computer",
+     "tipo": "computer"
+    },
+    "dispositivo_id": 2,
+    "figlio_id": 1,
+    "id": 5,
+    "parametri": {
+     "app_o_categoria": "exe:minecraft.exe",
+     "minuti_al_giorno": 90
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-09-25T10:00:00+00:00"
+   }
+  ],
+  "riepilogo": {
+   "giorni_fuori_regola": 1,
+   "interruzioni": 0
+  },
+  "sessione_in_corso": null,
+  "sessioni": [],
+  "sessioni_svolte": [],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": "2026-09-24T18:00:00+00:00",
+    "dns_cifrato": false,
+    "domini": [
+     {
+      "dominio": "youtube.com",
+      "minuti": 30,
+      "visite": 4
+     }
+    ],
+    "giorno": "2026-09-24",
+    "totale_domini": 1
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-25",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-26",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-27",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-28",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   }
+  ],
+  "striscia": [
+   {
+    "data": "2026-09-24",
+    "stato": "rosso"
+   },
+   {
+    "data": "2026-09-25",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-26",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-27",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-28",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-29",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   }
+  ],
+  "striscia_dispositivo": [
+   {
+    "data": "2026-09-24",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-25",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-26",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-27",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-28",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-29",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   }
+  ]
+ },
+ "patto_sara": {
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_oggi_per_regola": {},
+  "dichiarazioni_in_attesa": [],
+  "dispositivi": [
+   {
+    "id": 3,
+    "nome": "Telefono di Sara",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "telefono"
+   }
+  ],
+  "dispositivo": {
+   "id": 3,
+   "nome": "Telefono di Sara",
+   "tipo": "telefono"
+  },
+  "figlio": {
+   "id": 2,
+   "nome": "Sara"
+  },
+  "fuso": "Europe/Rome",
+  "proposte_inviate": [],
+  "proposte_pendenti": [],
+  "regole": [
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 3,
+     "nome": "Telefono di Sara",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 3,
+    "figlio_id": 2,
+    "id": 6,
+    "parametri": {
+     "app_o_categoria": "com.instagram.android",
+     "minuti_al_giorno": 45
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   }
+  ],
+  "riepilogo": {
+   "giorni_fuori_regola": 1,
+   "interruzioni": 1
+  },
+  "sessione_in_corso": null,
+  "sessioni": [],
+  "sessioni_svolte": [],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-24",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-25",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-26",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-27",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-28",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   }
+  ],
+  "striscia": [
+   {
+    "data": "2026-09-24",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-25",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-26",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-27",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-28",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-29",
+    "stato": "rosso"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   }
+  ],
+  "striscia_dispositivo": [
+   {
+    "data": "2026-09-24",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-25",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-26",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-27",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-28",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-29",
+    "stato": "rosso"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   }
+  ]
+ },
+ "patto_telefono": {
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_oggi_per_regola": {},
+  "dichiarazioni_in_attesa": [],
+  "dispositivi": [
+   {
+    "id": 1,
+    "nome": "Telefono",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "telefono"
+   },
+   {
+    "id": 2,
+    "nome": "Computer",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "computer"
+   }
+  ],
+  "dispositivo": {
+   "id": 1,
+   "nome": "Telefono",
+   "tipo": "telefono"
+  },
+  "figlio": {
+   "id": 1,
+   "nome": "Luca"
+  },
+  "fuso": "Europe/Rome",
+  "proposte_inviate": [
+   {
+    "autore": "figlio",
+    "confronto": "+20 min al giorno rispetto ad ora",
+    "direzione": "allenta",
+    "id": 6,
+    "motivazione": "per i compiti",
+    "parametri_proposti": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 200
+    },
+    "regola_id": 2,
+    "risposta": null,
+    "stato": "pendente",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   }
+  ],
+  "proposte_pendenti": [],
+  "regole": [
+   {
+    "allentabile_dal": "2026-09-29T10:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 1,
+    "parametri": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 45
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "rosso"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-09-25T10:00:00+00:00"
+   },
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 2,
+    "parametri": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 180
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 3,
+    "parametri": {
+     "alle": "07:00",
+     "dalle": "22:00",
+     "giorni": [
+      "lun",
+      "mar",
+      "mer",
+      "gio",
+      "ven",
+      "sab",
+      "dom"
+     ]
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "fascia_oraria",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   },
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": null,
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 4,
+    "parametri": {
+     "arbitro_nome": "Nonna",
+     "descrizione": "Leggere 20 minuti",
+     "frequenza": "ogni giorno"
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-24",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-09-25",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-26",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-27",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-28",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "vita_reale",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   }
+  ],
+  "riepilogo": {
+   "giorni_fuori_regola": 1,
+   "interruzioni": 0
+  },
+  "sessione_in_corso": null,
+  "sessioni": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "approvata_ts": "2026-09-26T10:00:00+00:00",
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 1,
+    "modifica_in_attesa": {
+     "app": [
+      "eu.spaggiari.classevivafamiglia",
+      "com.google.android.apps.classroom",
+      "com.duolingo"
+     ],
+     "nome": "Studio",
+     "nomi": {
+      "com.google.android.apps.classroom": "Classroom",
+      "eu.spaggiari.classevivafamiglia": "ClasseViva"
+     },
+     "richiesta_ts": "2026-09-26T13:30:00+00:00"
+    },
+    "motivazione": null,
+    "nome": "Studio",
+    "nomi": {
+     "com.google.android.apps.classroom": "Classroom",
+     "eu.spaggiari.classevivafamiglia": "ClasseViva"
+    },
+    "stato": "approvata",
+    "versione": 3
+   },
+   {
+    "app": [
+     "com.supercell.clashroyale"
+    ],
+    "approvata_ts": null,
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 2,
+    "modifica_in_attesa": null,
+    "motivazione": "non e' studio",
+    "nome": "Giochi",
+    "nomi": {
+     "com.supercell.clashroyale": "Clash Royale"
+    },
+    "stato": "rifiutata",
+    "versione": 2
+   },
+   {
+    "app": [
+     "com.spotify.music"
+    ],
+    "approvata_ts": null,
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 3,
+    "modifica_in_attesa": null,
+    "motivazione": null,
+    "nome": "Musica",
+    "nomi": {
+     "com.spotify.music": "Spotify"
+    },
+    "stato": "in_attesa",
+    "versione": 1
+   }
+  ],
+  "sessioni_svolte": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "chiusura": "scaduta",
+    "dispositivo_id": 1,
+    "durata_minuti": 30,
+    "fine_prevista_ts": "2026-09-26T13:00:00+00:00",
+    "fine_ts": "2026-09-26T13:00:00+00:00",
+    "id": 2,
+    "in_corso": false,
+    "inizio_ts": "2026-09-26T12:30:00+00:00",
+    "nome": "Studio",
+    "nomi": {
+     "com.google.android.apps.classroom": "Classroom",
+     "eu.spaggiari.classevivafamiglia": "ClasseViva"
+    },
+    "sessione_id": 1
+   },
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "chiusura": "terminata",
+    "dispositivo_id": 1,
+    "durata_minuti": 60,
+    "fine_prevista_ts": "2026-09-26T11:00:00+00:00",
+    "fine_ts": "2026-09-26T10:30:00+00:00",
+    "id": 1,
+    "in_corso": false,
+    "inizio_ts": "2026-09-26T10:00:00+00:00",
+    "nome": "Studio",
+    "nomi": {
+     "com.google.android.apps.classroom": "Classroom",
+     "eu.spaggiari.classevivafamiglia": "ClasseViva"
+    },
+    "sessione_id": 1
+   }
+  ],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-24",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-25",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-26",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-27",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-28",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   }
+  ],
+  "striscia": [
+   {
+    "data": "2026-09-24",
+    "stato": "rosso"
+   },
+   {
+    "data": "2026-09-25",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-26",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-27",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-28",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-29",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   }
+  ],
+  "striscia_dispositivo": [
+   {
+    "data": "2026-09-24",
+    "stato": "rosso"
+   },
+   {
+    "data": "2026-09-25",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-26",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-27",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-28",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-29",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   }
+  ]
+ },
+ "proposte_genitore": {
+  "proposte": [
+   {
+    "autore": "figlio",
+    "confronto": "+20 min al giorno rispetto ad ora",
+    "direzione": "allenta",
+    "id": 6,
+    "motivazione": "per i compiti",
+    "parametri_proposti": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 200
+    },
+    "regola_id": 2,
+    "risposta": null,
+    "stato": "pendente",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "genitore",
+    "confronto": "descrizione: \"Leggere 20 minuti\" -> \"Leggere 30 minuti\"",
+    "direzione": "allenta",
+    "id": 5,
+    "motivazione": null,
+    "parametri_proposti": {
+     "arbitro_nome": "Nonna",
+     "descrizione": "Leggere 30 minuti",
+     "frequenza": "ogni giorno"
+    },
+    "regola_id": 4,
+    "risposta": null,
+    "stato": "ritirata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "figlio",
+    "confronto": "orario da 22:00-07:00 a 23:00-07:00",
+    "direzione": "allenta",
+    "id": 4,
+    "motivazione": null,
+    "parametri_proposti": {
+     "alle": "07:00",
+     "dalle": "23:00",
+     "giorni": [
+      "lun",
+      "mar",
+      "mer",
+      "gio",
+      "ven",
+      "sab",
+      "dom"
+     ]
+    },
+    "regola_id": 3,
+    "risposta": {
+     "esito": "rifiuta",
+     "motivazione": "no",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "rifiutata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "figlio",
+    "confronto": "+30 min al giorno rispetto ad ora",
+    "direzione": "allenta",
+    "id": 3,
+    "motivazione": "nel weekend",
+    "parametri_proposti": {
+     "app_o_categoria": "exe:minecraft.exe",
+     "minuti_al_giorno": 90
+    },
+    "regola_id": 5,
+    "risposta": {
+     "esito": "accetta",
+     "motivazione": "solo sabato",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "accettata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": true
+   },
+   {
+    "autore": "genitore",
+    "confronto": "−30 min al giorno rispetto ad ora",
+    "direzione": "stringe",
+    "id": 2,
+    "motivazione": null,
+    "parametri_proposti": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 150
+    },
+    "regola_id": 2,
+    "risposta": {
+     "esito": "rifiuta",
+     "motivazione": "troppo poco",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "rifiutata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "genitore",
+    "confronto": "−15 min al giorno rispetto ad ora",
+    "direzione": "stringe",
+    "id": 1,
+    "motivazione": "meno TikTok",
+    "parametri_proposti": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 45
+    },
+    "regola_id": 1,
+    "risposta": {
+     "esito": "accetta",
+     "motivazione": "va bene",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "accettata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": true
+   }
+  ]
+ },
+ "proposte_genitore_012": {
+  "proposte": [
+   {
+    "autore": "genitore",
+    "confronto": "descrizione: \"Leggere 20 minuti\" -> \"Leggere 30 minuti\"",
+    "direzione": "allenta",
+    "id": 5,
+    "motivazione": null,
+    "parametri_proposti": {
+     "arbitro_nome": "Nonna",
+     "descrizione": "Leggere 30 minuti",
+     "frequenza": "ogni giorno"
+    },
+    "regola_id": 4,
+    "risposta": null,
+    "stato": "ritirata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "genitore",
+    "confronto": "−30 min al giorno rispetto ad ora",
+    "direzione": "stringe",
+    "id": 2,
+    "motivazione": null,
+    "parametri_proposti": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 150
+    },
+    "regola_id": 2,
+    "risposta": {
+     "esito": "rifiuta",
+     "motivazione": "troppo poco",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "rifiutata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "genitore",
+    "confronto": "−15 min al giorno rispetto ad ora",
+    "direzione": "stringe",
+    "id": 1,
+    "motivazione": "meno TikTok",
+    "parametri_proposti": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 45
+    },
+    "regola_id": 1,
+    "risposta": {
+     "esito": "accetta",
+     "motivazione": "va bene",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "accettata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": true
+   }
+  ]
+ },
+ "proposte_telefono": {
+  "proposte": [
+   {
+    "autore": "figlio",
+    "confronto": "+20 min al giorno rispetto ad ora",
+    "direzione": "allenta",
+    "id": 6,
+    "motivazione": "per i compiti",
+    "parametri_proposti": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 200
+    },
+    "regola_id": 2,
+    "risposta": null,
+    "stato": "pendente",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "genitore",
+    "confronto": "descrizione: \"Leggere 20 minuti\" -> \"Leggere 30 minuti\"",
+    "direzione": "allenta",
+    "id": 5,
+    "motivazione": null,
+    "parametri_proposti": {
+     "arbitro_nome": "Nonna",
+     "descrizione": "Leggere 30 minuti",
+     "frequenza": "ogni giorno"
+    },
+    "regola_id": 4,
+    "risposta": null,
+    "stato": "ritirata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "figlio",
+    "confronto": "orario da 22:00-07:00 a 23:00-07:00",
+    "direzione": "allenta",
+    "id": 4,
+    "motivazione": null,
+    "parametri_proposti": {
+     "alle": "07:00",
+     "dalle": "23:00",
+     "giorni": [
+      "lun",
+      "mar",
+      "mer",
+      "gio",
+      "ven",
+      "sab",
+      "dom"
+     ]
+    },
+    "regola_id": 3,
+    "risposta": {
+     "esito": "rifiuta",
+     "motivazione": "no",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "rifiutata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "figlio",
+    "confronto": "+30 min al giorno rispetto ad ora",
+    "direzione": "allenta",
+    "id": 3,
+    "motivazione": "nel weekend",
+    "parametri_proposti": {
+     "app_o_categoria": "exe:minecraft.exe",
+     "minuti_al_giorno": 90
+    },
+    "regola_id": 5,
+    "risposta": {
+     "esito": "accetta",
+     "motivazione": "solo sabato",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "accettata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": true
+   },
+   {
+    "autore": "genitore",
+    "confronto": "−30 min al giorno rispetto ad ora",
+    "direzione": "stringe",
+    "id": 2,
+    "motivazione": null,
+    "parametri_proposti": {
+     "app_o_categoria": "totale",
+     "minuti_al_giorno": 150
+    },
+    "regola_id": 2,
+    "risposta": {
+     "esito": "rifiuta",
+     "motivazione": "troppo poco",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "rifiutata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": false
+   },
+   {
+    "autore": "genitore",
+    "confronto": "−15 min al giorno rispetto ad ora",
+    "direzione": "stringe",
+    "id": 1,
+    "motivazione": "meno TikTok",
+    "parametri_proposti": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 45
+    },
+    "regola_id": 1,
+    "risposta": {
+     "esito": "accetta",
+     "motivazione": "va bene",
+     "ts_server": "2026-09-25T10:00:00+00:00"
+    },
+    "stato": "accettata",
+    "ts_server": "2026-09-25T10:00:00+00:00",
+    "usata": true
+   }
+  ]
+ },
+ "regole_sara": {
+  "regole": [
+   {
+    "allentabile_dal": "2026-09-28T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-09-24T08:00:00+00:00",
+    "dispositivo": {
+     "id": 3,
+     "nome": "Telefono di Sara",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 3,
+    "figlio_id": 2,
+    "id": 6,
+    "parametri": {
+     "app_o_categoria": "com.instagram.android",
+     "minuti_al_giorno": 45
+    },
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-09-24T08:00:00+00:00"
+   }
+  ]
+ },
+ "sessioni_genitore": {
+  "sessioni": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "approvata_ts": "2026-09-26T10:00:00+00:00",
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 1,
+    "modifica_in_attesa": {
+     "app": [
+      "eu.spaggiari.classevivafamiglia",
+      "com.google.android.apps.classroom",
+      "com.duolingo"
+     ],
+     "nome": "Studio",
+     "nomi": {
+      "com.google.android.apps.classroom": "Classroom",
+      "eu.spaggiari.classevivafamiglia": "ClasseViva"
+     },
+     "richiesta_ts": "2026-09-26T13:30:00+00:00"
+    },
+    "motivazione": null,
+    "nome": "Studio",
+    "nomi": {
+     "com.google.android.apps.classroom": "Classroom",
+     "eu.spaggiari.classevivafamiglia": "ClasseViva"
+    },
+    "stato": "approvata",
+    "versione": 3
+   },
+   {
+    "app": [
+     "com.supercell.clashroyale"
+    ],
+    "approvata_ts": null,
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 2,
+    "modifica_in_attesa": null,
+    "motivazione": "non e' studio",
+    "nome": "Giochi",
+    "nomi": {
+     "com.supercell.clashroyale": "Clash Royale"
+    },
+    "stato": "rifiutata",
+    "versione": 2
+   },
+   {
+    "app": [
+     "com.spotify.music"
+    ],
+    "approvata_ts": null,
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 3,
+    "modifica_in_attesa": null,
+    "motivazione": null,
+    "nome": "Musica",
+    "nomi": {
+     "com.spotify.music": "Spotify"
+    },
+    "stato": "in_attesa",
+    "versione": 1
+   }
+  ]
+ },
+ "sessioni_telefono": {
+  "sessioni": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "approvata_ts": "2026-09-26T10:00:00+00:00",
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 1,
+    "modifica_in_attesa": {
+     "app": [
+      "eu.spaggiari.classevivafamiglia",
+      "com.google.android.apps.classroom",
+      "com.duolingo"
+     ],
+     "nome": "Studio",
+     "nomi": {
+      "com.google.android.apps.classroom": "Classroom",
+      "eu.spaggiari.classevivafamiglia": "ClasseViva"
+     },
+     "richiesta_ts": "2026-09-26T13:30:00+00:00"
+    },
+    "motivazione": null,
+    "nome": "Studio",
+    "nomi": {
+     "com.google.android.apps.classroom": "Classroom",
+     "eu.spaggiari.classevivafamiglia": "ClasseViva"
+    },
+    "stato": "approvata",
+    "versione": 3
+   },
+   {
+    "app": [
+     "com.supercell.clashroyale"
+    ],
+    "approvata_ts": null,
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 2,
+    "modifica_in_attesa": null,
+    "motivazione": "non e' studio",
+    "nome": "Giochi",
+    "nomi": {
+     "com.supercell.clashroyale": "Clash Royale"
+    },
+    "stato": "rifiutata",
+    "versione": 2
+   },
+   {
+    "app": [
+     "com.spotify.music"
+    ],
+    "approvata_ts": null,
+    "creata_ts": "2026-09-26T10:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 3,
+    "modifica_in_attesa": null,
+    "motivazione": null,
+    "nome": "Musica",
+    "nomi": {
+     "com.spotify.music": "Spotify"
+    },
+    "stato": "in_attesa",
+    "versione": 1
+   }
+  ]
+ }
+}

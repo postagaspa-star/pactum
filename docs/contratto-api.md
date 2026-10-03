@@ -686,8 +686,211 @@ Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
 - Ogni corpo JSON di una richiesta sotto `/api/` si controlla **prima di qualsiasi endpoint**: `NaN`, `Infinity`, `-Infinity` (e un numero come `1e400`, che diventa infinito), un **surrogato da solo** in un testo (per esempio `"\ud800"`, con l'escape o coi byte grezzi; una coppia di surrogati, cioè un'emoji, va bene) in una chiave o in un valore, e un **intero oltre i 64 bit** → `422 {"detail": [{"loc": ["body"], "msg": "…"}]}` e non si scrive niente. Python li legge come JSON, ma una volta nel registro (i dettagli di uno sforamento, le etichette di una fotografia, il nome di una sessione) farebbero cadere ogni lettura che li ripresenta, comprese le notifiche del genitore. Un corpo vuoto o che non è JSON resta com'era (lo giudica FastAPI).
 - Un intero oltre i 64 bit in un percorso o in una query (`/api/regole/99999999999999999999`, `?figlio_id=…`) → `422 {"detail": "numero fuori misura"}`, mai un `500`; sulle sessioni → `404 {"detail": "sessione non trovata"}`.
 
+## v3.6 — la famiglia con più genitori e le faccende (02/10/2026, decisioni di Andrea)
+
+Due novità.
+
+1. **Più genitori.** Più figli c'erano già (v3); adesso anche più genitori, ognuno col suo nome e il suo token. Tutti i genitori sono uguali: vedono tutto, ricevono gli avvisi, propongono, approvano, danno faccende.
+2. **Le faccende.** Un genitore dà al figlio delle faccende di casa. Da quando lo decide il genitore (subito o da un'ora scelta), e finché il figlio non le ha fatte **tutte**, mandando **una foto per ognuna**, i suoi dispositivi sono **bloccati**: il telefono tranne poche app fondamentali, il computer del tutto. Si sblocca **appena arriva l'ultima foto**; un genitore può **bocciare** una foto (entro 24 ore): quella faccenda si riapre e il blocco torna subito.
+
+È la prima cosa di Pactum che il **genitore impone**. Va contro il "niente blocchi" del progetto e Andrea lo sa: è una regola decisa da lui con la sua famiglia, per fare le faccende subito. Il blocco si appoggia sugli stessi strumenti della barriera delle sessioni e non diventa un'app spia: chi lo rompe (disinstallare, togliere un permesso, chiudere il programma del computer) lo può fare, ma resta nel registro e i genitori lo vedono, come sempre.
+
+Tutto il resto del contratto resta valido. Questa sezione dice solo cosa cambia.
+
+### I genitori
+
+- Ogni genitore ha un **`id`**, un **`nome`** (1–40 caratteri, stesse regole del nome di un figlio) e il proprio token (salvato come hash, come quelli dei dispositivi).
+- **Il genitore 1** è quello del token d'ambiente `PACTUM_TOKEN_GENITORE`: le app del genitore già installate continuano a funzionare senza far niente. Al primo avvio della v3.6 nasce col nome `"Genitore"` (si può cambiare). Tutte le credenziali `genitore` che ci sono già diventano sue.
+- `GET /api/genitori` (genitore) → `200 { "io": { "id", "nome" }, "genitori": [ { "id", "nome", "abbinato": true, "revocato": false, "creato_ts": "…" } ] }`, in ordine di `id`, revocati compresi.
+- `POST /api/genitori` (genitore) `{ "nome": "Mamma" }` → `201 { "genitore": { … }, "codice": "483920", "scade_ts": "…" }`. Il genitore nasce **non abbinato**; il codice ha le stesse regole di quello dei dispositivi (6 cifre, 15 minuti, una volta sola, un codice nuovo annulla il vecchio, salvato come hash). Al massimo 10 genitori non revocati → `409 {"errore": "troppi_genitori"}`.
+- `POST /api/genitori/{id}/codice` (genitore): nuovo codice per un genitore già creato (telefono cambiato o reinstallato). Come per i dispositivi, al momento dell'abbinamento nasce un token nuovo e il vecchio smette di funzionare.
+- `PATCH /api/genitori/{id}` `{ "nome" }`: rinomina (anche un altro genitore: sono tutti uguali).
+- `DELETE /api/genitori/{id}`: **revoca** (il suo token risponde `401`). Non sé stessi → `409 {"errore": "non_te_stesso"}`; non l'ultimo genitore non revocato → `409 {"errore": "ultimo_genitore"}`. Niente si cancella: le sue proposte, decisioni e faccende restano col suo nome. La revoca del genitore 1 resta anche dopo un riavvio del server (il token d'ambiente non lo resuscita).
+- Un genitore che non c'è → `404 {"detail": "genitore non trovato"}`.
+- **Abbinamento**: `POST /api/abbina` accetta anche `"tipo": "genitore"`: `{ "codice", "tipo": "genitore", "versione_app" }` → `200 { "token": "…", "genitore": { "id", "nome" } }`. Codici di genitori e di dispositivi sono dello stesso tipo e hanno lo stesso conteggio dei tentativi sbagliati. Un codice da genitore usato con `tipo: "telefono"` o `"computer"` (o viceversa) → `409 { "errore": "tipo_non_corrispondente", "tipo_atteso": "genitore" }` (o `"telefono"`/`"computer"`) e il codice non si consuma.
+- `GET /api/famiglia` in più: `"io": { "id", "nome" }` e `"genitori": [ { "id", "nome", "revocato" } ]`.
+
+### Chi ha fatto cosa
+
+Dove decide o scrive un genitore, le risposte dicono quale: `{ "id", "nome" }` (il nome di adesso, non quello di allora).
+
+- proposte del genitore: `"genitore": { … }` (e `null` sulle proposte del figlio); nel `payload` di `nuova_proposta` al figlio, `genitore`;
+- risposta del genitore a una proposta del figlio: `"risposta_di": { … }`;
+- sessioni: `"decisa_da": { … }` (l'ultima decisione) e, nel `payload` di `sessione_risposta`, `genitore`;
+- verdetti sulle dichiarazioni e `segno`: `"da": { … }`;
+- faccende: v. sotto.
+
+Le righe scritte prima della v3.6 valgono come fatte dal genitore 1. Nei `messaggio` delle notifiche per il figlio, dove prima c'era "Il genitore", adesso c'è il nome del genitore ("Mamma ha approvato la sessione «Studio»").
+
+### Le notifiche del genitore: lette da ciascuno
+
+- Prima (v3.1) una notifica per il genitore, marcata come letta, era letta per tutti. **Adesso ogni genitore le legge per conto suo**, come i dispositivi: `GET /api/notifiche` dà le non lette **da quel genitore**, `POST /api/notifiche/{id}/letta` le marca **solo per lui**, `?dopo_id` e il conteggio `notifiche_non_lette` di `GET /api/famiglia` sono **di chi chiama**.
+- Un genitore appena abbinato non riceve le notifiche nate prima che fosse creato: valgono come già lette per lui.
+- Le notifiche già lette prima della v3.6 restano lette per il genitore 1.
+
+### La faccenda
+
+```json
+{ "id": 5, "figlio_id": 1, "titolo": "Svuota la lavastoviglie", "nota": "anche le pentole",
+  "stato": "da_fare", "blocco_da": "2026-10-03T14:00:00+00:00", "creata_ts": "…",
+  "creata_da": { "id": 2, "nome": "Mamma" },
+  "foto_ts": null, "foto": false,
+  "bocciature": 0, "ultima_bocciatura": null,
+  "chiusa_ts": null, "annullata_da": null,
+  "storia": [ { "tipo": "data", "ts": "…", "genitore": { "id": 2, "nome": "Mamma" } } ] }
+```
+
+- `titolo`: 1–80 caratteri, in forma NFC, senza caratteri invisibili o di controllo (stesse regole del nome di una sessione) → altrimenti `422`. `nota`: facoltativa, fino a 300 caratteri, stesse regole; a capo ammessi.
+- `stato` ∈ `da_fare · fatta · annullata`.
+- `blocco_da`: da quando questa faccenda blocca. Mai `null` nelle risposte.
+- `foto_ts`: quando è arrivata la foto (ora del server); `foto`: `true` se il file c'è ancora (le foto si tengono 30 giorni, poi si cancellano e `foto` torna `false`; `foto_ts` resta).
+- `ultima_bocciatura`: `null` oppure `{ "ts", "nota", "da": { "id", "nome" } }`.
+- `chiusa_ts`: quando è diventata `fatta` o `annullata`; `annullata_da`: il genitore che l'ha annullata.
+- `storia` (precisazione del 03/10): tutto quello che è successo alla faccenda, dalla più vecchia, e non si perde niente (una bocciatura non cancella la foto di prima dalla storia, la seconda bocciatura non cancella la prima). Ogni voce è `{ "tipo", "ts" }`, più `"genitore": { "id", "nome" }` dove ha fatto qualcosa un genitore e `"nota"` sulle bocciature: `{ "tipo": "data", "ts", "genitore" }`, `{ "tipo": "foto", "ts" }` (la foto arrivata), `{ "tipo": "bocciata", "ts", "genitore", "nota" }` (`nota` anche `null`), `{ "tipo": "annullata", "ts", "genitore" }`. C'è ovunque compare la faccenda (non nelle voci di `blocco.da_fare`). Nel server è una tabella in sola aggiunta.
+- Una faccenda che non c'è, o di un altro figlio → `404 {"detail": "faccenda non trovata"}`.
+
+### Endpoint del genitore
+
+- `POST /api/faccende` `{ "figlio_id": 1, "faccende": [ { "titolo": "…", "nota": "…"? } ], "blocco_da": "…"? }` → `201 { "faccende": [ … ] }`, nell'ordine mandato.
+  - Da 1 a 10 faccende per volta; tutte hanno lo stesso `blocco_da`.
+  - `blocco_da` assente o `null` = **subito** (l'ora del server). Una data passata vale subito. Più di 7 giorni avanti → `422`. Un testo che non è una data con fuso → `422`.
+  - Al massimo **20 faccende `da_fare`** per figlio → altrimenti `409 {"errore": "troppe_faccende"}` e non si crea niente.
+  - `figlio_id` obbligatorio (qui non vale "il primo figlio": dare faccende al figlio sbagliato blocca il telefono sbagliato) → `422` se manca, `404` se non c'è.
+  - Notifica al figlio `nuove_faccende` (`dispositivo_id: null`, quindi a tutti i suoi dispositivi), `messaggio: "<nome del genitore> ti ha dato 3 faccende"` (una: `"<nome del genitore> ti ha dato una faccenda: «<titolo>»"`), `payload: { "faccenda_ids": [ … ], "blocco_da": "…", "genitore": { "id", "nome" } }`.
+- `GET /api/faccende?figlio_id=…` → `{ "faccende": [ … ] }`: tutte le `da_fare`, più le `fatta` e `annullata` chiuse negli ultimi 30 giorni; dalla più recente (`creata_ts`, poi `id`). Senza `figlio_id` il primo figlio, come gli altri `GET`.
+- `GET /api/faccende/{id}/foto` → `200` col file (`Content-Type: image/jpeg`); `404 {"detail": "foto non trovata"}` se non c'è (mai arrivata, bocciata o già cancellata). Mai compressa con gzip.
+- `POST /api/faccende/{id}/boccia` `{ "nota": "…"? }` (nota fino a 300 caratteri):
+  - solo una faccenda `fatta` con la foto arrivata da **meno di 24 ore** → altrimenti `409 {"errore": "non_bocciabile"}`;
+  - la faccenda torna `da_fare` con `blocco_da` = adesso (il blocco torna subito), `bocciature` + 1, `ultima_bocciatura` riempita, `foto_ts: null`, `chiusa_ts: null`; il file della foto si cancella;
+  - notifica al figlio `faccenda_bocciata`, `messaggio: "<nome del genitore> ha bocciato «<titolo>»: <nota>"` (senza nota, senza i due punti), `payload: { "faccenda_id", "titolo", "nota", "genitore" }`;
+  - risposta `200` con la faccenda. Atomica come le altre decisioni: due bocciature insieme, la seconda riceve `non_bocciabile`.
+- `POST /api/faccende/{id}/annulla` → solo una `da_fare` (altrimenti `409 {"errore": "non_annullabile"}`) → `annullata`, `annullata_da`, `chiusa_ts`; notifica al figlio `faccenda_annullata` (`payload: { "faccenda_id", "titolo", "genitore" }`); risposta `200` con la faccenda. Se era l'ultima che bloccava, il blocco finisce.
+
+### Endpoint del dispositivo
+
+- `GET /api/faccende` → come per il genitore, del figlio del token.
+- `PUT /api/faccende/{id}/foto` con il corpo = la foto, `Content-Type: image/jpeg` (non JSON):
+  - solo da un dispositivo di tipo `telefono` del figlio della faccenda → da un computer `422 {"errore": "solo_dal_telefono"}`;
+  - solo su una faccenda `da_fare` → altrimenti `409 {"errore": "non_da_fare"}`. Si può mandare anche prima di `blocco_da`: fare le faccende in anticipo va benissimo, e allora il blocco non parte;
+  - al massimo **4 MB**; il file deve essere un JPEG (comincia con `FF D8 FF`) → altrimenti `413` / `422 {"errore": "foto_non_valida"}`;
+  - **il server toglie dal file i dati nascosti** (i segmenti APP1–APP15 e i commenti: EXIF con la posizione, XMP, IPTC) prima di salvarlo; se il file non si riesce a leggere come JPEG → `422 {"errore": "foto_non_valida"}`. (Precisazione del 03/10: il server tiene solo i pezzi che servono a mostrare l'immagine e butta tutto il resto, anche quello che sta tra le scansioni o dopo la fine dell'immagine: v. Precisazioni, "La foto");
+  - (precisazione del 03/10) facoltativo **`?bocciature=N`**: quante bocciature della faccenda il telefono conosceva quando ha scattato la foto (il `bocciature` della faccenda in quel momento). Se intanto la faccenda ne ha avute di più, la foto è quella vecchia, arrivata dopo una bocciatura → `409 {"errore": "bocciata_nel_frattempo"}` e non sblocca niente; l'app la toglie dalla coda e ne chiede una nuova. Le app 0.13 lo mandano sempre; senza (app 0.12) tutto come prima;
+  - la faccenda diventa `fatta` (`foto_ts`, `chiusa_ts` = adesso). Notifica ai genitori `faccenda_fatta`, `messaggio: "<nome del figlio> ha fatto «<titolo>»"`, `payload: { "faccenda_id", "titolo" }`. Se era l'ultima `da_fare` del figlio, in più `faccende_finite`, `messaggio: "<nome del figlio> ha finito le faccende: telefono e computer sbloccati"` (se nessuna bloccava ancora: "<nome del figlio> ha finito le faccende"), `payload: { "faccenda_ids": [ … ] }` (quelle chiuse con la foto da quando è iniziato il giro);
+  - risposta `200` con la faccenda. La stessa foto mandata due volte (la seconda trova la faccenda già `fatta` con la stessa foto, byte per byte) → `200` con la faccenda, senza nuove notifiche: una consegna ripetuta dopo una rete che cade non è un errore.
+- `GET /api/faccende/{id}/foto` → anche dal dispositivo dello stesso figlio.
+- `GET /api/faccende/blocco` → la risposta piccola che i dispositivi chiedono spesso:
+  ```json
+  { "attivo": true, "dal": "…", "prossimo": null,
+    "da_fare": [ { "id", "titolo", "nota", "blocco_da", "creata_da": { "id", "nome" }, "bocciature", "ultima_bocciatura" } ] }
+  ```
+  - `attivo`: c'è almeno una faccenda `da_fare` con `blocco_da` già passato. `dal`: il più vecchio di quei `blocco_da` (o `null`).
+  - `prossimo`: se non è attivo, il `blocco_da` più vicino nel futuro di una faccenda `da_fare` (o `null`): il dispositivo lo usa per partire da solo all'ora giusta, anche senza rete.
+  - `da_fare`: tutte le `da_fare` del figlio, dalla più vecchia.
+
+### Dove si vedono
+
+- `GET /api/patto` (dispositivo), in più: `faccende` (come `GET /api/faccende`) e `blocco` (come `GET /api/faccende/blocco`).
+- `GET /api/finestra` (genitore), in più: `faccende` e `blocco`, del figlio.
+- `GET /api/famiglia`: per ogni figlio in più `faccende_da_fare` (quante) e `blocco_attivo`.
+- Il registro delle faccende è la tabella stessa: chi le ha date, quando, quando è arrivata ogni foto, le bocciature, gli annullamenti. Nessun evento nuovo nel registro degli eventi.
+
+### Sessioni e faccende
+
+- Con il blocco attivo una sessione non si avvia: `POST /api/sessioni/{id}/avvia` → `409 {"errore": "blocco_faccende"}`. (Precisazione del 03/10: solo sui telefoni con `versione_app` dalla 0.13 in su; su quelli più vecchi, o che non hanno mai detto la loro versione, il blocco non c'è e la sessione parte come prima.)
+- Se il blocco parte durante una sessione, la sessione continua sul server (finisce da sola o la chiude il figlio), ma sul telefono vale la barriera del blocco, che è più stretta.
+
+### Il blocco sul telefono (comportamento dell'app del figlio)
+
+- Quando `blocco.attivo` (o quando arriva l'ora di `prossimo`, anche senza rete), ogni app che non è nell'elenco qui sotto si copre entro pochi secondi con la **barriera delle faccende**: "Prima le faccende", l'elenco di quelle da fare con chi le ha date, e un solo pulsante, **Apri Pactum**, che porta alla pagina delle faccende. Se si torna nell'app, ricompare.
+- **Sempre usabili durante il blocco** (decisione di Andrea): Pactum, la schermata Home, la tastiera, l'interfaccia di sistema, **Telefono** e la sua schermata di chiamata, e le emergenze (solo se sono app **di sistema**; 03/10, decisione di Andrea: una chiamata **non** spegne la barriera — tutto il resto si copre anche durante una chiamata, comprese WhatsApp e le altre app con una chiamata via internet in corso, che continua in sottofondo e si chiude dalla notifica), **Contatti**, **Messaggi = solo l'app degli SMS** (quella predefinita del telefono; WhatsApp, Telegram e le altre app di messaggi sono **bloccate**), **Wallet** (Google Wallet), **eWeLink**, **Fotocamera** (quella di sistema), **Foto** (Google Foto e la galleria del telefono), **Tinaba**, e le **Impostazioni** (decisione di Andrea: aperte, come nelle sessioni). In più le stesse eccezioni tecniche della barriera delle sessioni (finestre dei permessi, scelta di file e foto, schede del browser aperte da un'app permessa, installazione degli aggiornamenti di Pactum).
+- Le faccende si fanno dalla pagina di Pactum: per ognuna **Scatta la foto** apre la fotocamera (solo una foto scattata in quel momento, mai una presa dalla galleria), il telefono la rimpicciolisce (lato lungo al massimo 2048 pixel, JPEG), la salva **senza dati nascosti** e la manda. Se la rete manca, la foto resta in coda e parte da sola appena può; il blocco resta finché il server non l'ha ricevuta.
+- **Senza rete il blocco resta com'era**: un telefono bloccato resta bloccato finché il server non dice il contrario; un blocco programmato parte all'ora di `prossimo` anche offline. (03/10) Un `404`/`405` non toglie il blocco; un `401` su `GET /api/faccende/blocco` o su `GET /api/patto` (questo telefono non è più collegato) lo toglie, e l'app lo dice, come sul computer.
+- Il telefono chiede `GET /api/faccende/blocco` almeno ogni minuto a schermo acceso, e subito quando arriva una notifica di faccende o si sblocca lo schermo.
+- Avvisi sul telefono: alla notifica `nuove_faccende` ("Mamma ti ha dato 3 faccende · blocco dalle 16:00"), quando il blocco parte ("Prima le faccende: il telefono è bloccato"), a ogni bocciatura e annullamento.
+- Se durante il blocco Pactum perde "Mostra sopra le altre app" o l'accesso all'uso, il telefono manda un evento `manomissione` con `sotto_tipo: "permesso_revocato"` e il permesso nei dettagli, come per gli altri permessi. (03/10) Il permesso sta in `"permesso": "accesso_uso"` oppure `"mostra_sopra"`; l'evento nasce una volta sola, al passaggio da concesso a tolto (l'accesso all'uso sempre, come dalla tappa 6; "Mostra sopra le altre app" solo durante il blocco).
+- (03/10) **Forza arresto.** Le Impostazioni restano libere durante il blocco, e da lì si può fermare Pactum: la barriera sparisce e il server vede solo silenzio. Quando Pactum riparte, se era stato fermato a mano mentre il telefono era bloccato (da Android 11, `ApplicationExitInfo` con `REASON_USER_REQUESTED` o `REASON_USER_STOPPED`), il telefono manda un evento `manomissione` con `sotto_tipo: "fermato_durante_blocco"` e `{ "dal": ms, "al": ms, "minuti": n }` (da quando era fermo a quando è ripartito). Mai dopo un riavvio del telefono (contano solo le uscite di questa accensione) né per un aggiornamento di Pactum. Per il server è una `manomissione` come le altre.
+- (03/10) **Limiti** (scritti, non corretti: chiuderli vorrebbe dire leggere tutte le notifiche del telefono, e Pactum non lo fa): durante il blocco si può ancora rispondere a un messaggio (anche di WhatsApp) dalla tendina delle notifiche, comandare la musica dalla sua notifica e usare l'assistente vocale. La barriera copre le app, non le notifiche. Una finestrella (picture-in-picture) o metà di uno schermo diviso di un'app bloccata si copre con una finestra sopra le altre app; per chiuderla il ragazzo ha qualche secondo ("Chiudi la finestrella").
+
+### Il blocco sul computer (comportamento del programma)
+
+- Quando `blocco.attivo` (o all'ora di `prossimo`, anche senza rete), il programma copre **tutti gli schermi** con una finestra sempre in primo piano: "Prima le faccende", l'elenco, e la frase "Si sblocca da solo quando dal telefono hai mandato la foto di ogni faccenda". **Nessuna app resta usabile** (decisione di Andrea): la finestra non si chiude, non si sposta, torna davanti se un'altra la scavalca. Il programma non chiude e non tocca le altre app (niente lavoro perso): le copre e basta.
+- Vale solo sull'account Windows del figlio, dove gira il programma.
+- Chiede `GET /api/faccende/blocco` ogni 30 secondi mentre è bloccato e almeno ogni minuto altrimenti. Senza rete il blocco resta com'era.
+- Se il programma viene chiuso durante un blocco (per esempio dal Task Manager), al riavvio manda un evento `manomissione` con `sotto_tipo: "chiuso_durante_blocco"`; nel frattempo il server vede il silenzio, come sempre.
+  - Vale sia se Windows è rimasto acceso, sia se è stato poi riavviato o spento **pulito** mentre Pactum era già morto (il programma lo riconosce dall'ora dell'ultimo spegnimento pulito di Windows). Non vale dopo uno spegnimento/disconnessione/sospensione normali, né dopo uno spegnimento **non** pulito (corrente, schermata blu), né per un crash del programma. Il server non deve fare niente di diverso: è una `manomissione` come le altre.
+- Se all'avvio il programma ha perso il suo stato del blocco salvato ma sa di essere stato bloccato, resta coperto con un elenco generico finché il server non risponde, e manda una `manomissione` con `sotto_tipo: "stato_blocco_perso"` (anche questa una `manomissione` come le altre per il server).
+- Un `GET /api/faccende/blocco` che risponde `403`, o un `404`/`405` che **non** è il "Not Found"/"Method Not Allowed" di FastAPI, non toglie il blocco (potrebbe essere un errore di un proxy): il programma lo toglie solo su un `404`/`405` di un server che non ha mai mandato il `blocco`, o su un `401` (dispositivo revocato).
+
+### Minecraft Java sul computer
+
+- Minecraft nell'edizione Java gira come `javaw.exe` (o `java.exe`), cioè "Java", e finiva in `altro`. Dalla 0.13, quando il programma in primo piano è `javaw.exe` o `java.exe` e il titolo della sua finestra comincia con `Minecraft`, il computer lo conta come il programma **`exe:minecraft-java`**, nome leggibile `"Minecraft (Java)"`, categoria `giochi`. Il titolo della finestra si legge solo per questo controllo e si butta: non esce dal programma.
+- Per il server `exe:minecraft-java` è una chiave `exe:` come le altre (anche per le regole: un limite su Minecraft Java è `exe:minecraft-java`).
+
+### L'app del genitore (comportamento)
+
+- **Famiglia**: l'elenco dei genitori e dei figli; "Aggiungi un genitore" (nome → codice di 6 cifre grande, con la scadenza); rinomina; togli. Un telefono nuovo si collega come genitore con indirizzo + codice di 6 cifre (resta anche il vecchio modo con indirizzo + codice d'accesso lungo, per il genitore 1).
+- **Faccende**, per figlio: "Dai faccende" (uno o più titoli, con i titoli usati di recente a portata di dito, nota facoltativa, "Blocco: subito / dalle …"), l'elenco con lo stato, la foto a tutto schermo, **Boccia** (con una nota) entro 24 ore, **Annulla**.
+- Se un dispositivo del figlio ha un'app più vecchia della 0.13 (`versione_app`), lo dice: lì il blocco non parte.
+- Chi ha fatto cosa: il nome del genitore accanto a proposte, decisioni e faccende.
+
+### Il server: foto e pulizia
+
+- Le foto stanno in una cartella `foto/` accanto al database (`<cartella del db>/foto/<id della faccenda>.jpg`), mai dentro il database; la copia notturna del database non le comprende.
+- Una volta al giorno (insieme alla copia notturna) e all'avvio si cancellano le foto arrivate da più di 30 giorni e i file senza una faccenda.
+- Le foto si servono solo con un token valido (genitore, o dispositivo dello stesso figlio).
+
+### Precisazioni (scritte costruendo il server 0.13, 02/10/2026)
+
+Dicono quello che le sezioni qui sopra lasciavano aperto. Quelle segnate **(03/10)** vengono dalla revisione del server del 03/10/2026: chiudono buchi trovati dopo (foto, revoche, corpi grandi) e, dove cambiano qualcosa, lo dicono anche nella sezione sopra.
+
+- **Genitori**
+  - Il codice di un genitore vuole `"tipo": "genitore"`. Senza `tipo` (come lo mandavano le app 0.7 del figlio) → `409 { "errore": "tipo_non_corrispondente", "tipo_atteso": "genitore" }`, come con un tipo sbagliato. In tutti questi casi il codice non si consuma e il tentativo conta tra quelli falliti (come dalla v3.1).
+  - `POST /api/genitori/{id}/codice` → `200 { "genitore": { … }, "codice", "scade_ts" }`, come per i dispositivi. Su un genitore revocato → `409 { "errore": "genitore_revocato" }`.
+  - `PATCH /api/genitori/{id}` → `200` col genitore nella forma di `GET /api/genitori`.
+  - `DELETE /api/genitori/{id}` → `200 { "id", "revocato": true }`; rifarlo su uno già revocato risponde ancora `200`. Annulla anche il suo codice aperto. I controlli, in quest'ordine: `404`, `non_te_stesso`, `ultimo_genitore`. Due genitori che si revocano a vicenda nello stesso momento: ne passa una sola, l'altra riceve `401` (chi la manda è appena stato revocato). Per questo, con un token valido, `ultimo_genitore` in pratica non capita più: resta come rete.
+  - Il token di un genitore revocato risponde `401`, come quello di un dispositivo revocato.
+  - (03/10) **Ogni scrittura di un genitore** (genitori, figli, dispositivi, proposte, risposte, sessioni, verdetti, segno, faccende) ricontrolla, nel momento in cui scrive, che chi la manda non sia stato revocato: una richiesta partita un attimo prima della revoca riceve `401 {"detail": "genitore revocato"}` e non scrive niente.
+- **Chi ha fatto cosa**
+  - Verdetto: `"da"` sta dentro l'oggetto `verdetto` della dichiarazione: `{ "verdetto", "nota", "registro", "ts_server", "da" }`. La frase `registro` resta quella della v2.1 ("confermato dal genitore per conto di …"): è congelata e le app la mostrano com'è.
+  - Segno: `"da"` sta nella risposta di `POST /api/segno` (`{ "mandato", "ts_server", "da" }`). Il testo resta fisso e resta **uno al giorno per figlio**, chiunque dei genitori lo mandi.
+  - `decisa_da` di una sessione è il genitore dell'ultima decisione (sulla sessione o su un suo cambio). Resta anche quando dopo il figlio la cambia; `null` se nessuno l'ha mai decisa. Una sessione di prima della v3.6 già `approvata` o `rifiutata` vale come decisa dal genitore 1.
+  - `risposta_di` è `null` anche quando risponde il figlio (alle proposte del genitore) e finché nessuno ha risposto.
+  - Tutti i genitori sono uguali anche nel ritirare: un genitore può ritirare la proposta di un altro genitore. Il figlio legge il nome di chi l'ha ritirata.
+  - Nel `payload` di **ogni** notifica per il figlio nata da un gesto di un genitore c'è `"genitore": { "id", "nome" }`: `nuova_proposta`, `proposta_risposta`, `proposta_ritirata`, `verdetto`, `segno` (che quindi non ha più `payload: {}`), `sessione_risposta` e le notifiche delle faccende.
+  - I messaggi: "Nuova proposta del genitore: …" diventa "Nuova proposta di Mamma: …"; "Il genitore propone di eliminare la regola" diventa "Mamma propone di eliminare la regola"; così per accettato, rifiutato, ritirato e per le sessioni. Il genitore 1 si chiama "Genitore" finché nessuno lo rinomina: "Genitore ha approvato la sessione «Studio»".
+- **Letture del genitore**
+  - Le notifiche del genitore che il server chiude da solo (l'avviso `sessione_da_approvare` sostituito da uno nuovo, v3.5) si chiudono per tutti i genitori.
+  - `POST /api/notifiche/{id}/letta` su una notifica nata prima del genitore che chiama → `200` (per lui era già letta).
+- **Faccende**
+  - `blocco_da` va scritto in ISO 8601 col fuso (`+02:00` oppure `Z`). Nelle risposte è in UTC a secondi interi, come ogni `ts_server`. Una data passata, o adesso, diventa l'ora del server. "Più di 7 giorni avanti" vuol dire oltre adesso + 7 × 24 ore: 7 giorni esatti vanno bene.
+  - Titolo e nota: gli spazi e gli a capo ai bordi si tolgono (come per i nomi), quindi `"Letto\n"` è `"Letto"`. Nella nota `\r\n` e `\r` diventano `\n`; una nota vuota è `null`. La nota di `boccia` ha le stesse regole della nota di una faccenda, e il corpo di `boccia` si può anche omettere.
+  - `faccenda_annullata`: `messaggio: "<nome del genitore> ha annullato «<titolo>»"`. Le notifiche delle faccende hanno tutte `dispositivo_id: null`: quelle per il figlio arrivano a tutti i suoi dispositivi, quelle per i genitori (`faccenda_fatta`, `faccende_finite`) sono del figlio, non di un dispositivo.
+  - Il **giro** di `faccende_finite` comincia quando il figlio passa da nessuna faccenda `da_fare` ad almeno una (anche quando una bocciatura riapre una faccenda dopo che erano finite). `faccenda_ids` sono le faccende `fatta` di quel giro, in ordine di `id`. Il messaggio dice "telefono e computer sbloccati" se l'ultima faccenda bloccava già (`blocco_da` passato) quando è arrivata la sua foto.
+  - `PUT /api/faccende/{id}/foto`, i controlli in quest'ordine: `404 {"detail": "faccenda non trovata"}` (anche di un altro figlio), `422 solo_dal_telefono`, `413 {"errore": "foto_troppo_grande"}`, `422 foto_non_valida`, `409 bocciata_nel_frattempo` (solo con `?bocciature=N`, 03/10), `409 non_da_fare`. 4 MB = 4 × 1024 × 1024 byte, contati leggendo il corpo, anche senza `Content-Length`. Il server legge il corpo come JPEG qualunque sia il `Content-Type` (l'app manda `image/jpeg`). La "stessa foto" è quella che, ripulita dai dati nascosti, è uguale byte per byte a quella salvata; se il file nel frattempo è stato cancellato (dopo 30 giorni) → `409 non_da_fare`. Un telefono che perde la rete a metà invio non riceve niente e non si scrive niente.
+  - (03/10) **La foto, nel dettaglio.** Il server tiene **solo** questi pezzi del JPEG: l'inizio (FF D8), l'intestazione dell'immagine (SOF), le tabelle (DHT, DQT, DRI), le scansioni (SOS) coi loro dati compressi, APP0 solo se comincia con `JFIF\0`, APP2 solo se comincia con `ICC_PROFILE\0` (i colori), APP14 solo se comincia con `Adobe` (serve a decodificare), e la fine (FF D9). Tutto il resto si butta: gli altri APPn (EXIF, XMP, IPTC, MPF, la miniatura JFXX…), i commenti, i JPGn, anche quando stanno tra le scansioni di un JPEG progressivo. Al primo FF D9 il file finisce: quello che segue (una seconda immagine come in Ultra HDR o MPF, il video di una foto in movimento) si butta. Dentro i dati compressi FF 00 e FF D0–D7 sono dati. → `422 foto_non_valida` se: manca FF D9; l'intestazione SOF non torna (da 1 a 4 componenti, lunghezza 8 + 3 × componenti, altezza e larghezza maggiori di zero); una scansione SOS non torna o non ha dati; ci sono più di 64 segmenti prima della prima scansione (o più di 256 in tutto).
+  - `GET /api/faccende/{id}/foto` risponde con `Cache-Control: private, no-store`. Un `id` oltre i 64 bit → `404 {"detail": "faccenda non trovata"}`, come per le sessioni.
+  - `GET /api/faccende/blocco` funziona anche col token del genitore, con `figlio_id` (senza, il primo figlio): è la stessa `blocco` della finestra. `prossimo` è `null` quando `attivo` è `true`.
+  - `POST /api/sessioni/{id}/avvia`: `blocco_faccende` si controlla dopo i controlli della v3.5 (sessione, revoca, approvata, già in corso).
+  - La pulizia delle foto toglie un file senza faccenda solo se ha più di un'ora (uno più giovane può essere una foto che sta arrivando proprio adesso). Gira anche quando la copia notturna è spenta.
+  - (03/10) Il file della foto bocciata si toglie dopo che la bocciatura è scritta; se la bocciatura non si scrive, la foto resta al suo posto.
+- **I corpi delle richieste (03/10, tutto il server)**
+  - Un corpo di una richiesta sotto `/api/` oltre **8 MB** (8 × 1024 × 1024 byte) → `413 {"detail": {"errore": "corpo_troppo_grande"}}`, contato mentre arriva (un `Content-Length` più grande si ferma subito, il resto non si legge), con o senza token e qualunque `Content-Type` dichiari. Le foto delle faccende hanno il loro tetto di 4 MB. Il corpo legittimo più grande è il pacco di eventi del telefono, che manda tutta la coda in una volta: una fotografia d'uso e una dei siti per giorno, qualche KB ciascuna, cioè meno di 1 MB anche dopo tre mesi senza rete. Se comunque un'app riceve `413 corpo_troppo_grande` su `POST /api/eventi`, manda la coda in pacchi più piccoli (per esempio a metà) invece di riprovare lo stesso pacco.
+- **Database e ritorno indietro**
+  - Oltre a `genitori`, `faccende` e alla colonna `genitore_id` delle credenziali, nascono le tabelle dei codici dei genitori e delle loro letture, e le colonne di chi ha deciso su proposte, dichiarazioni e sessioni (vuote nelle righe di prima: valgono come del genitore 1). Le letture di prima non si spostano: una notifica del genitore già letta resta letta.
+  - Tornare al server v3.5 dopo la migrazione si fa solo **rimettendo la copia `.prima-v3.6-…`** (o con `PACTUM_RIPRISTINA` di una copia della notte prima): un server v3.5 non sa di quale genitore è un token, e a un riavvio (se il genitore 1 è stato revocato o riabbinato) darebbe il token d'ambiente alla credenziale di un altro genitore.
+  - (03/10) Se accanto al database c'è già una copia di quella migrazione (un avvio di prima ha copiato e poi non è riuscito a migrare), il server la riusa **solo se i dati del database sono ancora quelli della copia**. Dopo un ritorno alla v3.5 il server vecchio scrive dati nuovi: al secondo aggiornamento si fa una copia nuova, con un altro nome, e la vecchia resta. Vale per le copie di tutte le migrazioni (`.prima-v3-`, `.prima-v3.4-`, `.prima-v3.6-`).
+  - (03/10) In più nasce la tabella della storia delle faccende (sola aggiunta: il database rifiuta di cambiarla o cancellarla).
+
+### Compatibilità
+
+- Database: tabelle nuove `genitori` e `faccende`; colonna `genitore_id` sulle credenziali; le letture delle notifiche dei genitori diventano per genitore. È un cambio di tabelle esistenti: **prima della migrazione la copia completa** `<db>.prima-v3.6-<data>`, come per la v3 e la v3.4.
+- App 0.12 con server v3.6: funzionano come prima (l'app del genitore 0.12 è il genitore 1 e legge le sue notifiche); non conoscono le faccende, quindi **su un dispositivo 0.12 il blocco non parte**.
+- App 0.13 con server vecchio: `/api/faccende` e `/api/genitori` rispondono `404`/`405` → l'app dice che per le faccende e i genitori serve aggiornare il server di Pactum.
+- **Ordine sul NAS**: come sempre, prima gli APK e lo zip 0.13 in `server/apk`, poi la ricostruzione dell'immagine.
+
 ---
-**Versione: v3.5 — 01/10/2026** (decisioni di Andrea): le Sessioni — il figlio crea sessioni (nome + app del telefono, anche `gruppo:apk`), il genitore le approva una volta e approva ogni cambio della lista (`modifica_in_attesa`); il figlio le avvia quando vuole per 1–1440 minuti e le può chiudere prima; nelle app della sessione il tempo non conta, fuori lista conta come sempre; barriera "Esci" sulle app fuori lista; `sessioni`, `sessione_in_corso`, `sessioni_svolte` in `GET /api/patto`, `sessioni`, `sessioni_da_approvare`, `sessioni_svolte` in `GET /api/finestra`, `sessioni_da_approvare` in `GET /api/famiglia`; notifiche `sessione_da_approvare`, `sessione_risposta`, `sessione_eliminata`; `sessioni_minuti` nella fotografia e accanto a `totale_minuti` in `uso_recente`. Due tabelle nuove. In più, per tutto il server: i corpi JSON con `NaN`/`Infinity`, surrogati da soli o interi oltre i 64 bit → `422` prima di ogni endpoint; un intero oltre i 64 bit in un percorso o in una query → `422` (`404` sulle sessioni), mai un `500`; minuti del giorno oltre 1440 non validi.
+**Versione: v3.6 — 02/10/2026** (decisioni di Andrea): più genitori (tabella `genitori`, `GET/POST /api/genitori`, codice di 6 cifre, `POST /api/abbina` con `tipo: "genitore"`, revoca, `io` e `genitori` in `GET /api/famiglia`), chi ha fatto cosa nelle risposte, notifiche del genitore lette da ciascuno; le faccende (`/api/faccende`, foto JPEG fino a 4 MB senza dati nascosti tenute 30 giorni, boccia entro 24 ore, annulla, `GET /api/faccende/blocco`, `faccende` e `blocco` in patto e finestra, `faccende_da_fare` e `blocco_attivo` in famiglia, notifiche `nuove_faccende`, `faccenda_fatta`, `faccende_finite`, `faccenda_bocciata`, `faccenda_annullata`); blocco del telefono tranne le app fondamentali e del computer intero finché le faccende non sono fatte; niente sessioni durante il blocco. Copia del database prima della migrazione.
+**v3.5 — 01/10/2026** (decisioni di Andrea): le Sessioni — il figlio crea sessioni (nome + app del telefono, anche `gruppo:apk`), il genitore le approva una volta e approva ogni cambio della lista (`modifica_in_attesa`); il figlio le avvia quando vuole per 1–1440 minuti e le può chiudere prima; nelle app della sessione il tempo non conta, fuori lista conta come sempre; barriera "Esci" sulle app fuori lista; `sessioni`, `sessione_in_corso`, `sessioni_svolte` in `GET /api/patto`, `sessioni`, `sessioni_da_approvare`, `sessioni_svolte` in `GET /api/finestra`, `sessioni_da_approvare` in `GET /api/famiglia`; notifiche `sessione_da_approvare`, `sessione_risposta`, `sessione_eliminata`; `sessioni_minuti` nella fotografia e accanto a `totale_minuti` in `uso_recente`. Due tabelle nuove. In più, per tutto il server: i corpi JSON con `NaN`/`Infinity`, surrogati da soli o interi oltre i 64 bit → `422` prima di ogni endpoint; un intero oltre i 64 bit in un percorso o in una query → `422` (`404` sulle sessioni), mai un `500`; minuti del giorno oltre 1440 non validi.
 **v3.4 — 01/10/2026** (decisione di Andrea del 30/09): le proposte del figlio — `POST /api/proposte` anche col token del dispositivo (notifica `nuova_proposta` al genitore), `POST /api/proposte/{id}/risposta` anche col token del genitore sulle proposte del figlio (accetta = vale subito; notifica `proposta_risposta` a tutti i dispositivi del figlio; niente `modifica_regola` doppia al genitore), `POST /api/proposte/{id}/ritira` per chi ha proposto (stato `ritirata`, notifica `proposta_ritirata` all'altro); campo `autore` su ogni proposta; `proposte_inviate` in `GET /api/patto` (`proposte_pendenti` resta quelle a cui risponde il figlio), `proposte_pendenti` in `GET /api/finestra`, `proposte_da_decidere` in `GET /api/famiglia`; una sola pendente per regola di chiunque sia. Database: colonna `autore` e stato `ritirata`, con la copia prima della migrazione.
 **v3.3 — 30/09/2026** (decisione di Andrea): limite sul totale del dispositivo — `app_o_categoria = "totale"` accettato per telefoni e computer, valutato dalle app con lo `sforamento` di sempre (semaforo invariato); nella finestra la regola totale non ha `nome` e il suo limite sta accanto al `totale_minuti` del giorno in `uso_recente` (`limite`, `regola_id`, `bonus`); nel confronto delle proposte "tutto il telefono" / "tutto il computer"; `GET /api/notifiche?dopo_id=N` (solo le non lette arrivate dopo) e risposte `/api/` compresse gzip su richiesta, per l'app del genitore sempre attiva. Nessun cambio al database.
 **v3.2 — 25/09/2026**: copia notturna del registro fatta dal server stesso (sul NAS non c'è un programmatore di attività): una al giorno dopo le 03:00 del patto, controllata con `integrity_check`, ultime 30; campo `backup` in `GET /api/salute`; ripristino di una copia all'avvio con `PACTUM_RIPRISTINA`. Nessun cambio per le app.

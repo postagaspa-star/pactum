@@ -6,9 +6,9 @@ quello del dispositivo, e da qui non si vede ne' si tocca niente di un altro."""
 import json
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import clock, famiglia, semaforo, siti
+from .. import clock, faccende, famiglia, semaforo, siti
 from ..auth import Identita, richiede_dispositivo
 from ..config import MINUTI_IN_UN_GIORNO, nome_fuso
 from ..db import (
@@ -17,8 +17,10 @@ from ..db import (
     get_conn,
     stato_bonus,
 )
+from ..genitori import Firme
 from ..schemas import BattitoIn, BonusIn, EventiIn, EventoIn
 from .dichiarazioni import dichiarazioni_del_figlio, formatta_dichiarazione
+from .faccende import cartella
 from .proposte import formatta_proposta, proposte_del_figlio
 from .regole import _riga_regola
 from .sessioni import (
@@ -216,7 +218,9 @@ def concedi_bonus(
 
 @router.get("/patto")
 def patto(
-    chi: Identita = Depends(richiede_dispositivo), conn: sqlite3.Connection = Depends(get_conn)
+    request: Request,
+    chi: Identita = Depends(richiede_dispositivo),
+    conn: sqlite3.Connection = Depends(get_conn),
 ):
     """Lo stato completo del patto per il sync dell'app del figlio, in una risposta
     sola: regole attive (col semaforo, v2.4), residui bonus, bonus di oggi per regola
@@ -238,7 +242,10 @@ def patto(
 
     (v3.5) Le sessioni di QUESTO telefono, quella in corso e quelle svolte negli 8
     giorni della striscia: al telefono servono per sapere quali periodi non contano,
-    anche dopo un riavvio o una reinstallazione."""
+    anche dopo un riavvio o una reinstallazione.
+
+    (v3.6) Le faccende del figlio e il blocco, come GET /api/faccende e GET
+    /api/faccende/blocco: uguali a quelli della finestra del genitore."""
     ora = clock.now()
     figlio = famiglia.figlio_o_404(conn, chi.figlio_id)
     dispositivi = famiglia.dispositivi_del_figlio(conn, chi.figlio_id)
@@ -262,6 +269,7 @@ def patto(
     ]
     # (v3.5) Le etichette delle app delle sessioni: dalle fotografie dell'uso, lette una volta.
     note = etichette_note(conn, chi.figlio_id)
+    firme = Firme(conn)  # (v3.6) chi tra i genitori ha deciso cosa
     return {
         "regole": regole,
         "bonus": stato_bonus(conn, ora, chi.dispositivo_id),
@@ -269,16 +277,16 @@ def patto(
         # conn: confronto ricalcolato vs la regola attuale (v2.1). (v3.4) Solo quelle a
         # cui il figlio deve rispondere, cioe' del genitore: come le vedevano le app 0.9.
         "proposte_pendenti": [
-            formatta_proposta(r, conn)
+            formatta_proposta(r, conn, firme)
             for r in proposte_del_figlio(conn, chi.figlio_id, solo_pendenti=True, autore="genitore")
         ],
         # (v3.4) Le proposte del figlio che aspettano il genitore, di tutto il figlio.
         "proposte_inviate": [
-            formatta_proposta(r, conn)
+            formatta_proposta(r, conn, firme)
             for r in proposte_del_figlio(conn, chi.figlio_id, solo_pendenti=True, autore="figlio")
         ],
         "dichiarazioni_in_attesa": [
-            formatta_dichiarazione(r)
+            formatta_dichiarazione(r, firme)
             for r in dichiarazioni_del_figlio(conn, chi.figlio_id, solo_in_attesa=True)
         ],
         "siti_recenti": siti.siti_recenti(conn, ora, questo["id"], questo["tipo"]),
@@ -302,4 +310,7 @@ def patto(
         "sessioni": sessioni_del_dispositivo(conn, questo, note),
         "sessione_in_corso": sessione_in_corso(conn, questo["id"], ora, note),
         "sessioni_svolte": sessioni_svolte_del_dispositivo(conn, questo["id"], ora, note),
+        # (v3.6) Del figlio, non del dispositivo: il blocco vale su tutti i suoi.
+        "faccende": faccende.faccende_del_figlio(conn, chi.figlio_id, ora, firme, cartella(request)),
+        "blocco": faccende.blocco(conn, chi.figlio_id, ora, firme),
     }

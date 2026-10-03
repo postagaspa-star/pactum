@@ -11,14 +11,19 @@ reale, segno).
 notifiche_lette): marcarne una come letta la marca solo per il dispositivo che
 chiama, e ciascuno riceve quelle che LUI non ha ancora letto. Cosi' il segno
 arriva al telefono e al computer anche se il telefono l'ha gia' mostrato. Le
-notifiche del genitore restano condivise (colonna `letta`)."""
+notifiche del genitore restano condivise (colonna `letta`).
+
+(v3.6) Anche le notifiche del genitore si leggono per genitore (tabella
+notifiche_lette_genitori): ognuno riceve quelle che LUI non ha ancora letto, nate
+dopo di lui, e marcarne una come letta la marca solo per lui. `letta = 1` resta per
+quelle chiuse per tutti (lette prima della v3.6, o chiuse dal server)."""
 
 import json
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from .. import clock
+from .. import clock, genitori
 from ..auth import Identita, richiede_patto
 from ..db import get_conn
 
@@ -35,11 +40,11 @@ def _filtro(chi: Identita) -> tuple[str, tuple]:
     )
 
 
-def _non_letta(chi: Identita) -> tuple[str, tuple]:
-    """La condizione SQL "non ancora letta" per chi chiama: per il genitore la
-    colonna condivisa, (v3.1) per un dispositivo le SUE letture."""
+def _non_letta(conn: sqlite3.Connection, chi: Identita) -> tuple[str, tuple]:
+    """La condizione SQL "non ancora letta" per chi chiama: (v3.6) per un genitore le
+    SUE letture, (v3.1) per un dispositivo le SUE letture."""
     if chi.ruolo == "genitore":
-        return "letta = 0", ()
+        return genitori.non_letta(conn, chi.genitore_id)
     return (
         "NOT EXISTS (SELECT 1 FROM notifiche_lette l"
         " WHERE l.notifica_id = notifiche.id AND l.dispositivo_id = ?)",
@@ -56,7 +61,7 @@ def elenca_notifiche(
     """(v3.3) Con `dopo_id` solo le non lette con id maggiore: l'app del genitore
     0.9 guarda ogni minuto e le serve sapere solo cosa e' arrivato di nuovo."""
     condizione, parametri = _filtro(chi)
-    non_letta, parametri_non_letta = _non_letta(chi)
+    non_letta, parametri_non_letta = _non_letta(conn, chi)
     dopo, parametri_dopo = ("AND id > ?", (dopo_id,)) if dopo_id is not None else ("", ())
     righe = conn.execute(
         f"SELECT * FROM notifiche WHERE {condizione} AND {non_letta} {dopo} ORDER BY id",
@@ -89,21 +94,20 @@ def segna_letta(
     # comprese (v3) quelle di un altro figlio o di un altro dispositivo. Rimarcare
     # una notifica gia' letta risponde 200 (idempotente).
     condizione, parametri = _filtro(chi)
+    propria = conn.execute(
+        f"SELECT 1 FROM notifiche WHERE id = ? AND {condizione}", (notifica_id, *parametri)
+    ).fetchone()
+    if propria is None:
+        raise HTTPException(status_code=404, detail="notifica non trovata")
+    # (v3.1) Letta solo per QUESTO dispositivo, (v3.6) o per QUESTO genitore: gli altri
+    # la ricevono ancora. INSERT OR IGNORE: la seconda marcatura non cambia niente.
     if chi.ruolo == "genitore":
-        cursore = conn.execute(
-            f"UPDATE notifiche SET letta = 1 WHERE id = ? AND {condizione}",
-            (notifica_id, *parametri),
+        conn.execute(
+            "INSERT OR IGNORE INTO notifiche_lette_genitori (notifica_id, genitore_id, ts_server)"
+            " VALUES (?, ?, ?)",
+            (notifica_id, chi.genitore_id, clock.iso(clock.now())),
         )
-        if cursore.rowcount == 0:
-            raise HTTPException(status_code=404, detail="notifica non trovata")
     else:
-        # (v3.1) Letta solo per QUESTO dispositivo: gli altri del figlio la ricevono
-        # ancora. INSERT OR IGNORE: la seconda marcatura non cambia niente.
-        propria = conn.execute(
-            f"SELECT 1 FROM notifiche WHERE id = ? AND {condizione}", (notifica_id, *parametri)
-        ).fetchone()
-        if propria is None:
-            raise HTTPException(status_code=404, detail="notifica non trovata")
         conn.execute(
             "INSERT OR IGNORE INTO notifiche_lette (notifica_id, dispositivo_id, ts_server)"
             " VALUES (?, ?, ?)",

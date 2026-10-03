@@ -43,6 +43,8 @@ NOMI_SCUOLA = {
 DUOLINGO = "com.duolingo"
 TIKTOK = "com.zhiliaoapp.musically"
 ORA = "2026-07-14T10:00:00+00:00"
+# (v3.6) Il genitore del token d'ambiente, come lo citano le decisioni.
+GENITORE_1 = {"id": 1, "nome": "Genitore"}
 
 
 @pytest.fixture
@@ -219,6 +221,7 @@ def test_crea_una_sessione_in_attesa(client, famiglia):
         "versione": 1,
         "creata_ts": ORA,
         "approvata_ts": None,
+        "decisa_da": None,  # (v3.6) nessun genitore ha ancora deciso
     }
     assert _elenco(client) == [sessione]
     assert _sessione(client, nome="Senza nomi")["nomi"] == {}
@@ -476,8 +479,9 @@ def test_il_genitore_approva(client, famiglia):
     assert (approvata["stato"], approvata["approvata_ts"], approvata["motivazione"]) == ("approvata", ORA, None)
     assert approvata["dispositivo"] == {"id": 1, "nome": "Telefono", "tipo": "telefono"}
     (avviso,) = _notifiche(client, FIGLIO, "sessione_risposta")
-    assert avviso["messaggio"] == "Il genitore ha approvato la sessione «Studio»"
-    assert avviso["payload"] == {"sessione_id": s["id"], "nome": "Studio", "esito": "approva", "cambio": False}
+    assert avviso["messaggio"] == "Genitore ha approvato la sessione «Studio»"
+    assert avviso["payload"] == {"sessione_id": s["id"], "nome": "Studio", "esito": "approva", "cambio": False,
+                                 "genitore": GENITORE_1}
     assert (avviso["destinatario"], avviso["figlio_id"], avviso["dispositivo_id"]) == ("figlio", 1, 1)
     # solo il telefono della sessione la riceve
     for headers in (famiglia.tablet, famiglia.pc, famiglia.tel_marta, GENITORE):
@@ -491,8 +495,9 @@ def test_il_genitore_rifiuta(client, famiglia):
         "rifiutata", "parliamone a cena", None,
     )
     (avviso,) = _notifiche(client, FIGLIO, "sessione_risposta")
-    assert avviso["messaggio"] == "Il genitore non ha approvato la sessione «Studio»"
-    assert avviso["payload"] == {"sessione_id": s["id"], "nome": "Studio", "esito": "rifiuta", "cambio": False}
+    assert avviso["messaggio"] == "Genitore non ha approvato la sessione «Studio»"
+    assert avviso["payload"] == {"sessione_id": s["id"], "nome": "Studio", "esito": "rifiuta", "cambio": False,
+                                 "genitore": GENITORE_1}
     _errore(_avvia(client, s["id"]), 409, "sessione_non_approvata")
 
 
@@ -514,8 +519,9 @@ def test_il_genitore_approva_il_cambio(client, famiglia, orologio):
     assert dopo["approvata_ts"] == "2026-07-14T11:00:00+00:00"  # approvata adesso, cosi'
     (avviso,) = _nuove(client, FIGLIO, gia_viste)
     # col nome di dopo la decisione: quello che il figlio vede adesso nell'elenco
-    assert avviso["messaggio"] == "Il genitore ha approvato il cambio alla sessione «Compiti»"
-    assert avviso["payload"] == {"sessione_id": s["id"], "nome": "Compiti", "esito": "approva", "cambio": True}
+    assert avviso["messaggio"] == "Genitore ha approvato il cambio alla sessione «Compiti»"
+    assert avviso["payload"] == {"sessione_id": s["id"], "nome": "Compiti", "esito": "approva", "cambio": True,
+                                 "genitore": GENITORE_1}
 
 
 def test_il_genitore_rifiuta_il_cambio(client, famiglia):
@@ -528,8 +534,9 @@ def test_il_genitore_rifiuta_il_cambio(client, famiglia):
         "modifica_in_attesa": None, "motivazione": "Duolingo dopo cena", "approvata_ts": s["approvata_ts"],
     }
     (avviso,) = _nuove(client, FIGLIO, gia_viste)
-    assert avviso["messaggio"] == "Il genitore non ha approvato il cambio alla sessione «Studio»"
-    assert avviso["payload"] == {"sessione_id": s["id"], "nome": "Studio", "esito": "rifiuta", "cambio": True}
+    assert avviso["messaggio"] == "Genitore non ha approvato il cambio alla sessione «Studio»"
+    assert avviso["payload"] == {"sessione_id": s["id"], "nome": "Studio", "esito": "rifiuta", "cambio": True,
+                                 "genitore": GENITORE_1}
     # resta avviabile la versione di prima
     assert _avvia(client, s["id"]).json()["app"] == SCUOLA
 

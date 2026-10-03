@@ -5,20 +5,25 @@ Il silenzio si calcola in lettura: nessun job in background nella v1.
 storico ed eventi di tutti i suoi dispositivi, e in `dispositivi` tutto quello che
 e' per dispositivo. I campi di primo livello per dispositivo (tempi, siti, medie,
 bonus, silenzio) restano e valgono per il primo dispositivo del figlio: l'app del
-genitore 0.7 continua a leggere quelli."""
+genitore 0.7 continua a leggere quelli.
+
+(v3.6) Nella finestra anche le faccende del figlio e il suo blocco; il segno dice
+quale genitore l'ha mandato."""
 
 import json
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import clock, famiglia, semaforo, siti
-from ..auth import richiede_genitore
+from .. import clock, faccende, famiglia, semaforo, siti
+from ..auth import Identita, richiede_genitore
 from ..config import MINUTI_IN_UN_GIORNO, fuso_patto
 from ..db import accoda_notifica, get_conn, segno_mandato_oggi, stato_bonus
+from ..genitori import Firme, ancora_valido
 from ..schemas import CHIAVE_TOTALE, SegnoIn
+from .faccende import cartella
 from .proposte import formatta_proposta, proposte_del_figlio
 from .regole import _riga_regola
 from .sessioni import sessioni_da_approvare, sessioni_del_figlio, sessioni_svolte_del_figlio
@@ -257,9 +262,12 @@ def _misure(
 
 
 @router.get("/finestra")
-def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+def finestra(
+    request: Request, figlio_id: int | None = None, conn: sqlite3.Connection = Depends(get_conn)
+):
     ora = clock.now()
     figlio = famiglia.figlio_scelto(conn, figlio_id)
+    firme = Firme(conn)
     # Una sola definizione degli 8 giorni (siti.giorni_finestra) per semaforo,
     # bonus_giornalieri, uso_recente e siti_recenti: cosi' le sezioni della
     # finestra non possono raccontare finestre temporali diverse. I giorni sono
@@ -344,7 +352,7 @@ def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(ge
         # recente, col confronto ricalcolato: quelle con autore "figlio" aspettano il
         # genitore, quelle con autore "genitore" il figlio.
         "proposte_pendenti": [
-            formatta_proposta(r, conn)
+            formatta_proposta(r, conn, firme)
             for r in proposte_del_figlio(conn, figlio["id"], solo_pendenti=True)
         ],
         # (v3.5) Le sessioni di tutti i dispositivi del figlio, quante decisioni
@@ -354,15 +362,25 @@ def finestra(figlio_id: int | None = None, conn: sqlite3.Connection = Depends(ge
         "sessioni": sessioni_del_figlio(conn, figlio["id"], nomi, dispositivi),
         "sessioni_da_approvare": sessioni_da_approvare(conn, figlio["id"]),
         "sessioni_svolte": sessioni_svolte_del_figlio(conn, figlio["id"], ora, nomi),
+        # (v3.6) Le faccende del figlio (come GET /api/faccende) e il suo blocco (come
+        # GET /api/faccende/blocco): quello che vede il figlio, uguale.
+        "faccende": faccende.faccende_del_figlio(conn, figlio["id"], ora, firme, cartella(request)),
+        "blocco": faccende.blocco(conn, figlio["id"], ora, firme),
     }
 
 
 @router.post("/segno")
-def manda_segno(corpo: SegnoIn | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+def manda_segno(
+    corpo: SegnoIn | None = None,
+    chi: Identita = Depends(richiede_genitore),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
     """(v2.4) Il segno di riconoscimento al figlio: testo fisso, al massimo uno al
     giorno nel fuso del patto. Nessuna traccia nel registro eventi: e' un gesto del
     genitore, non un fatto del patto. (v3) Uno al giorno PER FIGLIO (`figlio_id`,
-    o il primo), notificato a tutti i suoi dispositivi."""
+    o il primo), notificato a tutti i suoi dispositivi. (v3.6) Uno al giorno per
+    figlio anche con piu' genitori (il primo che lo manda); dice chi l'ha mandato,
+    nella risposta (`da`) e nel payload (`genitore`). Il testo resta quello."""
     figlio = famiglia.figlio_scelto(conn, corpo.figlio_id if corpo is not None else None)
     # BEGIN IMMEDIATE: il controllo "gia' mandato oggi" e l'invio devono essere un
     # unico atto, altrimenti due tocchi simultanei leggono entrambi "non ancora" e
@@ -371,14 +389,16 @@ def manda_segno(corpo: SegnoIn | None = None, conn: sqlite3.Connection = Depends
     ts = clock.iso(ora)
     conn.execute("BEGIN IMMEDIATE")
     try:
+        ancora_valido(conn, chi)  # (v3.6) non revocato nel frattempo
         if segno_mandato_oggi(conn, ora, figlio["id"]):
             raise HTTPException(status_code=409, detail={"errore": "segno_gia_mandato"})
+        da = Firme(conn).di(chi.genitore_id)
         accoda_notifica(
-            conn, "segno", MESSAGGIO_SEGNO, {}, ts, destinatario="figlio",
+            conn, "segno", MESSAGGIO_SEGNO, {"genitore": da}, ts, destinatario="figlio",
             figlio_id=figlio["id"], dispositivo_id=None,
         )
         conn.commit()
     except BaseException:
         conn.rollback()
         raise
-    return {"mandato": True, "ts_server": ts}
+    return {"mandato": True, "ts_server": ts, "da": da}

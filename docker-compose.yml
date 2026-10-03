@@ -56,6 +56,9 @@ services:
       TS_HOSTNAME: pactum
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "true"
+      # (0.13) Il login con la chiave solo la prima volta: senza, il container lo rifà a
+      # ogni avvio, e quando la chiave scade o la si revoca il NAS resta fuori da internet.
+      TS_AUTH_ONCE: "true"
       TS_SERVE_CONFIG: /config/funnel.json   # espone pactum:8000 al pubblico
     volumes:
       - tailscale-state:/var/lib/tailscale   # l'identita' del nodo: va persistita

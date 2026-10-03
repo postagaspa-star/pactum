@@ -1,7 +1,9 @@
 """Dichiarazioni del figlio sulle regole di vita reale (tappa 5), modello arbitro.
 Fallimento = creduto sulla parola (va a registro). Successo = serve il verdetto del
 genitore/arbitro: conferma, conferma per conto dell'arbitro (fuori dall'app) o
-ribalta. Il registro conserva sempre chi ha garantito cosa."""
+ribalta. Il registro conserva sempre chi ha garantito cosa.
+
+(v3.6) Piu' genitori: il verdetto dice quale genitore l'ha dato (`verdetto.da`)."""
 
 import json
 import sqlite3
@@ -13,6 +15,7 @@ from .. import clock, famiglia
 from ..auth import Identita, richiede_dispositivo, richiede_genitore, richiede_patto
 from ..config import fuso_patto
 from ..db import accoda_notifica, get_conn
+from ..genitori import Firme, ancora_valido
 from ..schemas import DichiarazioneIn, VerdettoIn
 
 router = APIRouter()
@@ -27,7 +30,7 @@ STATO_DA_VERDETTO = {
 }
 
 
-def _verdetto(riga: sqlite3.Row) -> dict | None:
+def _verdetto(riga: sqlite3.Row, firme: Firme) -> dict | None:
     if riga["verdetto_verdetto"] is None:
         return None
     return {
@@ -35,10 +38,12 @@ def _verdetto(riga: sqlite3.Row) -> dict | None:
         "nota": riga["verdetto_nota"],
         "registro": riga["verdetto_registro"],
         "ts_server": riga["verdetto_ts"],
+        # (v3.6) Il genitore del verdetto (prima della v3.6: il genitore 1).
+        "da": firme.di_o_primo(riga["verdetto_genitore_id"]),
     }
 
 
-def formatta_dichiarazione(riga: sqlite3.Row) -> dict:
+def formatta_dichiarazione(riga: sqlite3.Row, firme: Firme) -> dict:
     return {
         "id": riga["id"],
         "regola_id": riga["regola_id"],
@@ -47,7 +52,7 @@ def formatta_dichiarazione(riga: sqlite3.Row) -> dict:
         "nota": riga["nota"],
         "stato": riga["stato"],
         "ts_server": riga["ts_server"],
-        "verdetto": _verdetto(riga),
+        "verdetto": _verdetto(riga, firme),
     }
 
 
@@ -141,7 +146,7 @@ def crea_dichiarazione(
         # POST simultanei superano entrambi la SELECT ma solo uno riesce a inserire.
         conn.rollback()
         raise HTTPException(status_code=409, detail={"errore": "gia_dichiarato"})
-    return formatta_dichiarazione(_dichiarazione_o_404(conn, dichiarazione_id))
+    return formatta_dichiarazione(_dichiarazione_o_404(conn, dichiarazione_id), Firme(conn))
 
 
 def dichiarazioni_del_figlio(
@@ -167,8 +172,11 @@ def elenca_dichiarazioni(
         figlio = chi.figlio_id
     else:
         figlio = famiglia.figlio_scelto(conn, figlio_id)["id"]
+    firme = Firme(conn)
     return {
-        "dichiarazioni": [formatta_dichiarazione(r) for r in dichiarazioni_del_figlio(conn, figlio)]
+        "dichiarazioni": [
+            formatta_dichiarazione(r, firme) for r in dichiarazioni_del_figlio(conn, figlio)
+        ]
     }
 
 
@@ -186,6 +194,7 @@ def emetti_verdetto(
     # un doppio tocco non scrive due verdetti (ne' due notifiche).
     conn.execute("BEGIN IMMEDIATE")
     try:
+        ancora_valido(conn, chi)  # (v3.6) non revocato nel frattempo
         dichiarazione = _dichiarazione_o_404(conn, dichiarazione_id)
         regola = conn.execute(
             "SELECT parametri, figlio_id, dispositivo_id FROM regole WHERE id = ?",
@@ -206,10 +215,10 @@ def emetti_verdetto(
 
         conn.execute(
             "UPDATE dichiarazioni SET stato = ?,"
-            " verdetto_verdetto = ?, verdetto_nota = ?, verdetto_registro = ?, verdetto_ts = ?"
-            " WHERE id = ?",
+            " verdetto_verdetto = ?, verdetto_nota = ?, verdetto_registro = ?, verdetto_ts = ?,"
+            " verdetto_genitore_id = ? WHERE id = ?",
             (STATO_DA_VERDETTO[corpo.verdetto], corpo.verdetto, corpo.nota, registro, ts,
-             dichiarazione_id),
+             chi.genitore_id, dichiarazione_id),
         )
         accoda_notifica(
             conn,
@@ -219,6 +228,7 @@ def emetti_verdetto(
                 "dichiarazione_id": dichiarazione_id,
                 "regola_id": dichiarazione["regola_id"],
                 "verdetto": corpo.verdetto,
+                "genitore": Firme(conn).di(chi.genitore_id),  # (v3.6)
             },
             ts,
             destinatario="figlio",
@@ -229,4 +239,4 @@ def emetti_verdetto(
     except BaseException:
         conn.rollback()
         raise
-    return formatta_dichiarazione(_dichiarazione_o_404(conn, dichiarazione_id))
+    return formatta_dichiarazione(_dichiarazione_o_404(conn, dichiarazione_id), Firme(conn))

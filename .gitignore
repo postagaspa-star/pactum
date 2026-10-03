@@ -36,6 +36,8 @@ keystore.properties
 
 # Backup del registro: artefatti, non nel repo
 server/backup/*.db
+# (v3.6) Le foto delle faccende, accanto al database: mai nel repo
+server/foto/
 # Il pacchetto del programma per il computer: si ricostruisce con pc/prove/crea-pacchetto.ps1
 server/apk/*.zip
 

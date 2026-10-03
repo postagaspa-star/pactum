@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
@@ -200,8 +201,9 @@ class AbbinaIn(BaseModel):
     versione_app: str | None = None
     # (v3.1) Il tipo di chi si abbina (le app 0.8 lo mandano sempre): se il codice e'
     # di un dispositivo di un altro tipo, 409 tipo_non_corrispondente e il codice
-    # resta valido. Facoltativo: senza, l'abbinamento va come prima.
-    tipo: Literal["telefono", "computer"] | None = None
+    # resta valido. Facoltativo: senza, l'abbinamento va come prima. (v3.6) Anche
+    # "genitore", per il codice di un genitore: li' e' obbligatorio.
+    tipo: Literal["telefono", "computer", "genitore"] | None = None
 
 
 # (v3.5) Le Sessioni (contratto-api.md, "v3.5 — le Sessioni"). Le app di una sessione
@@ -359,3 +361,88 @@ class RispostaSessioneIn(BaseModel):
     # Facoltativo, come nel verdetto: se c'e', deve esistere ed essere il figlio della
     # sessione (404 altrimenti).
     figlio_id: int | None = None
+
+
+# (v3.6) Le faccende (contratto-api.md, "La faccenda"). Il titolo segue le regole del
+# nome di una sessione (NFC, niente caratteri invisibili o di controllo, spazi ai bordi
+# tolti), fino a 80 caratteri; la nota le stesse fino a 300, ma con gli a capo.
+LUNGHEZZA_MASSIMA_TITOLO = 80
+LUNGHEZZA_MASSIMA_NOTA = 300
+FACCENDE_PER_VOLTA = 10
+
+
+def _titolo_faccenda(titolo: str) -> str:
+    titolo = unicodedata.normalize("NFC", titolo.strip())
+    if not all(_visibile(c) for c in titolo):
+        raise ValueError("il titolo non puo' avere caratteri invisibili o di controllo")
+    if not 1 <= len(titolo) <= LUNGHEZZA_MASSIMA_TITOLO:
+        raise ValueError(f"il titolo va da 1 a {LUNGHEZZA_MASSIMA_TITOLO} caratteri")
+    return titolo
+
+
+def nota_faccenda(nota: str | None) -> str | None:
+    """Una nota di una faccenda o di una bocciatura: come un titolo, ma gli a capo
+    sono ammessi (CR LF e CR da soli diventano LF). Una nota vuota non c'e' (None)."""
+    if nota is None:
+        return None
+    nota = unicodedata.normalize("NFC", nota.replace("\r\n", "\n").replace("\r", "\n").strip())
+    if not all(c == "\n" or _visibile(c) for c in nota):
+        raise ValueError("la nota non puo' avere caratteri invisibili o di controllo")
+    if len(nota) > LUNGHEZZA_MASSIMA_NOTA:
+        raise ValueError(f"la nota arriva a {LUNGHEZZA_MASSIMA_NOTA} caratteri")
+    return nota or None
+
+
+def _istante(testo: str) -> str:
+    """Un istante con il fuso (ISO 8601, come i ts_server), portato in UTC a secondi
+    interi. Un testo che non e' una data, o una data senza fuso, non va: "alle 16"
+    senza fuso non dice quando."""
+    try:
+        quando = datetime.fromisoformat(testo)
+    except ValueError:
+        raise ValueError("non e' una data ISO 8601")
+    if quando.tzinfo is None or quando.utcoffset() is None:
+        raise ValueError("manca il fuso (per esempio +02:00 o Z)")
+    try:
+        return quando.astimezone(timezone.utc).isoformat(timespec="seconds")
+    except (OverflowError, ValueError):
+        raise ValueError("data fuori misura")
+
+
+class FaccendaIn(BaseModel):
+    titolo: str
+    nota: str | None = None
+
+    @field_validator("titolo")
+    @classmethod
+    def _titolo(cls, titolo: str) -> str:
+        return _titolo_faccenda(titolo)
+
+    @field_validator("nota")
+    @classmethod
+    def _nota(cls, nota: str | None) -> str | None:
+        return nota_faccenda(nota)
+
+
+class FaccendeIn(BaseModel):
+    # Obbligatorio: qui non vale "il primo figlio" (dare faccende al figlio sbagliato
+    # blocca il telefono sbagliato). StrictInt: true non e' il figlio 1.
+    figlio_id: StrictInt
+    faccende: list[FaccendaIn] = Field(min_length=1, max_length=FACCENDE_PER_VOLTA)
+    # Da quando bloccano: assente o null = subito. Il controllo dei 7 giorni lo fa la
+    # route, che conosce l'ora del server.
+    blocco_da: str | None = None
+
+    @field_validator("blocco_da")
+    @classmethod
+    def _blocco_da(cls, blocco_da: str | None) -> str | None:
+        return None if blocco_da is None else _istante(blocco_da)
+
+
+class BocciaIn(BaseModel):
+    nota: str | None = None
+
+    @field_validator("nota")
+    @classmethod
+    def _nota(cls, nota: str | None) -> str | None:
+        return nota_faccenda(nota)

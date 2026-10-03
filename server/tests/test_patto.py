@@ -27,6 +27,9 @@ CHIAVI_ATTESE = {
     "sessioni",
     "sessione_in_corso",
     "sessioni_svolte",
+    # (v3.6)
+    "faccende",
+    "blocco",
 }
 
 

@@ -8,6 +8,7 @@ import logging
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import Request
 
@@ -73,6 +74,10 @@ CREATE TABLE IF NOT EXISTS siti_giornalieri (
 # della v3.4 proponeva solo il genitore. 'ritirata': chi l'aveva fatta l'ha ritirata
 # prima della risposta. La stessa definizione serve allo SCHEMA e alla migrazione
 # (_migra_v34): un database nuovo e uno migrato hanno la stessa tabella.
+# (v3.6) genitore_id: QUALE genitore ha proposto (sulle proposte del genitore);
+# risposta_genitore_id: quale genitore ha risposto a una proposta del figlio. NULL
+# sulle righe di prima della v3.6, che valgono come fatte dal genitore 1 (lo decide
+# chi le legge, genitori.Firme).
 TABELLA_PROPOSTE = """
 CREATE TABLE IF NOT EXISTS proposte (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,7 +93,9 @@ CREATE TABLE IF NOT EXISTS proposte (
     risposta_motivazione TEXT,
     risposta_ts TEXT,
     ts_server TEXT NOT NULL,
-    autore TEXT NOT NULL DEFAULT 'genitore' CHECK (autore IN ('genitore', 'figlio'))
+    autore TEXT NOT NULL DEFAULT 'genitore' CHECK (autore IN ('genitore', 'figlio')),
+    genitore_id INTEGER REFERENCES genitori(id),
+    risposta_genitore_id INTEGER REFERENCES genitori(id)
 );
 """
 
@@ -114,6 +121,8 @@ CREATE TABLE IF NOT EXISTS proposte (
 #
 # Sono due tabelle nuove e basta: nessuna tabella che c'e' gia' cambia, quindi un
 # database della v3.4 non va copiato prima (contratto, "v3.5 — Compatibilita'").
+# (v3.6) decisa_genitore_id: il genitore dell'ultima decisione (approva o rifiuta, la
+# sessione o un cambio). Resta anche quando il figlio poi la cambia: e' la storia.
 TABELLE_SESSIONI = """
 CREATE TABLE IF NOT EXISTS sessioni (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,7 +138,8 @@ CREATE TABLE IF NOT EXISTS sessioni (
     versione INTEGER NOT NULL DEFAULT 1,
     creata_ts TEXT NOT NULL,
     approvata_ts TEXT,
-    eliminata_ts TEXT
+    eliminata_ts TEXT,
+    decisa_genitore_id INTEGER REFERENCES genitori(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessioni_dispositivo ON sessioni (dispositivo_id);
@@ -156,12 +166,113 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_sessioni_svolte_una_aperta
     ON sessioni_svolte (dispositivo_id) WHERE fine_ts IS NULL;
 """
 
+# (v3.6) I genitori (contratto-api.md, "v3.6 — la famiglia con piu' genitori"). Tutti
+# uguali; il genitore 1 e' quello del token d'ambiente PACTUM_TOKEN_GENITORE (le app
+# del genitore gia' installate). Un genitore nasce NON abbinato e si abbina con un
+# codice, come un dispositivo; revocato_ts: revocato da un altro genitore, il suo
+# token non vale piu' ma niente si cancella (le sue decisioni restano col suo nome).
+# notifiche_dopo_id: le notifiche del genitore nate prima di lui (id fino a questo)
+# valgono come gia' lette per lui.
+#
+# codici_genitori sono i codici di abbinamento dei genitori: stesse regole e stesso
+# conteggio dei tentativi falliti di quelli dei dispositivi (abbinamento.py), in una
+# tabella loro perche' codici_abbinamento vuole un dispositivo.
+#
+# notifiche_lette_genitori: chi ha letto una notifica del genitore, ogni genitore per
+# conto suo (come notifiche_lette per i dispositivi). `notifiche.letta = 1` su una
+# notifica del genitore resta "chiusa per tutti": letta prima della v3.6, quando il
+# genitore era uno solo (quindi letta dal genitore 1), oppure chiusa dal server (un
+# avviso di sessione superato da uno nuovo, sessioni._chiudi_avvisi_aperti).
+TABELLE_GENITORI = """
+CREATE TABLE IF NOT EXISTS genitori (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    creato_ts TEXT NOT NULL,
+    abbinato_ts TEXT,
+    revocato_ts TEXT,
+    notifiche_dopo_id INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS codici_genitori (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    genitore_id INTEGER NOT NULL REFERENCES genitori(id),
+    codice_hash TEXT NOT NULL,
+    creato_ts TEXT NOT NULL,
+    scade_ts TEXT NOT NULL,
+    usato_ts TEXT,
+    annullato_ts TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_codici_genitori_hash ON codici_genitori (codice_hash);
+
+CREATE TABLE IF NOT EXISTS notifiche_lette_genitori (
+    notifica_id INTEGER NOT NULL REFERENCES notifiche(id),
+    genitore_id INTEGER NOT NULL REFERENCES genitori(id),
+    ts_server TEXT NOT NULL,
+    PRIMARY KEY (notifica_id, genitore_id)
+);
+"""
+
+# (v3.6) Le faccende (contratto-api.md, "La faccenda"): un genitore le da' al figlio e,
+# da blocco_da e finche' non le ha fatte tutte (una foto per ognuna), i suoi dispositivi
+# sono bloccati. blocco_da e' sempre pieno (UTC, come ogni ts_server). La foto sta in un
+# file accanto al database (faccende.py), mai qui: foto_ts dice quando e' arrivata e
+# resta anche quando il file, dopo 30 giorni, si cancella. bocciata_*: l'ultima
+# bocciatura (ts, nota, chi). `giro`: le faccende da fare di un figlio sono sempre di uno
+# stesso giro, che comincia quando il figlio passa da nessuna faccenda da fare ad
+# almeno una; faccende_finite elenca quelle fatte nel giro che si chiude. Il registro
+# delle faccende e' questa tabella: le righe non si cancellano.
+TABELLA_FACCENDE = """
+CREATE TABLE IF NOT EXISTS faccende (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    figlio_id INTEGER NOT NULL REFERENCES figli(id),
+    titolo TEXT NOT NULL,
+    nota TEXT,
+    stato TEXT NOT NULL DEFAULT 'da_fare' CHECK (stato IN ('da_fare', 'fatta', 'annullata')),
+    blocco_da TEXT NOT NULL,
+    creata_ts TEXT NOT NULL,
+    creata_genitore_id INTEGER NOT NULL REFERENCES genitori(id),
+    giro INTEGER NOT NULL,
+    foto_ts TEXT,
+    bocciature INTEGER NOT NULL DEFAULT 0,
+    bocciata_ts TEXT,
+    bocciata_nota TEXT,
+    bocciata_genitore_id INTEGER REFERENCES genitori(id),
+    chiusa_ts TEXT,
+    annullata_genitore_id INTEGER REFERENCES genitori(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_faccende_figlio ON faccende (figlio_id, stato);
+
+-- La storia di ogni faccenda, in sola aggiunta: 'data' (dal genitore), 'foto' (arrivata),
+-- 'bocciata' (dal genitore, con la nota), 'annullata' (dal genitore). La riga della
+-- faccenda dice com'e' adesso; qui resta tutto quello che e' successo, anche le foto
+-- bocciate e le bocciature di prima. I trigger impediscono di cambiarla o cancellarla.
+CREATE TABLE IF NOT EXISTS faccende_storia (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    faccenda_id INTEGER NOT NULL REFERENCES faccende(id),
+    tipo TEXT NOT NULL CHECK (tipo IN ('data', 'foto', 'bocciata', 'annullata')),
+    ts TEXT NOT NULL,
+    genitore_id INTEGER REFERENCES genitori(id),
+    nota TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_faccende_storia ON faccende_storia (faccenda_id, id);
+
+CREATE TRIGGER IF NOT EXISTS faccende_storia_non_si_cambia BEFORE UPDATE ON faccende_storia
+BEGIN SELECT RAISE(ABORT, 'la storia delle faccende non si cambia'); END;
+
+CREATE TRIGGER IF NOT EXISTS faccende_storia_non_si_cancella BEFORE DELETE ON faccende_storia
+BEGIN SELECT RAISE(ABORT, 'la storia delle faccende non si cancella'); END;
+"""
+
 # (v3.4) Le colonne di TABELLA_PROPOSTE, nell'ordine: la migrazione copia quelle che
-# la tabella vecchia ha gia', le altre (autore) prendono il default.
+# la tabella vecchia ha gia', le altre (autore) prendono il default. (v3.6) Anche chi
+# ha proposto e chi ha risposto: NULL nelle righe di prima.
 COLONNE_PROPOSTE = [
     "id", "regola_id", "parametri_proposti", "motivazione", "confronto", "direzione",
     "stato", "usata", "risposta_esito", "risposta_motivazione", "risposta_ts", "ts_server",
-    "autore",
+    "autore", "genitore_id", "risposta_genitore_id",
 ]
 
 SCHEMA = """
@@ -197,7 +308,8 @@ CREATE TABLE IF NOT EXISTS dispositivi (
 -- 'genitore' (dispositivo_id NULL) o 'dispositivo'. origine 'ambiente' = il
 -- token e' PACTUM_TOKEN_GENITORE o PACTUM_TOKEN_FIGLIO (le app 0.7 installate) e
 -- segue la variabile a ogni avvio; 'abbinamento' = nato da un codice.
--- revocata_ts: non vale piu' (dispositivo revocato o riabbinato).
+-- revocata_ts: non vale piu' (dispositivo revocato o riabbinato). (v3.6)
+-- genitore_id: di quale genitore e' una credenziale 'genitore'.
 CREATE TABLE IF NOT EXISTS credenziali (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ruolo TEXT NOT NULL CHECK (ruolo IN ('genitore', 'dispositivo')),
@@ -205,7 +317,8 @@ CREATE TABLE IF NOT EXISTS credenziali (
     token_hash TEXT NOT NULL,
     origine TEXT NOT NULL CHECK (origine IN ('ambiente', 'abbinamento')),
     creata_ts TEXT NOT NULL,
-    revocata_ts TEXT
+    revocata_ts TEXT,
+    genitore_id INTEGER REFERENCES genitori(id)
 );
 
 -- (v3) I codici di abbinamento: 6 cifre, 15 minuti, una volta sola; un codice
@@ -263,7 +376,8 @@ CREATE TABLE IF NOT EXISTS storico_modifiche (
 -- l'arbitro di allora, anche se la regola cambia arbitro dopo. Max una
 -- dichiarazione per regola per giorno (fuso del patto), garantita anche sotto
 -- richieste concorrenti dall'indice UNIQUE (regola_id, giorno) qui sotto,
--- non dalla sola SELECT di controllo.
+-- non dalla sola SELECT di controllo. (v3.6) verdetto_genitore_id: il genitore del
+-- verdetto (NULL prima della v3.6: vale il genitore 1).
 CREATE TABLE IF NOT EXISTS dichiarazioni (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     regola_id INTEGER NOT NULL REFERENCES regole(id),
@@ -276,7 +390,8 @@ CREATE TABLE IF NOT EXISTS dichiarazioni (
     verdetto_nota TEXT,
     verdetto_registro TEXT,
     verdetto_ts TEXT,
-    ts_server TEXT NOT NULL
+    ts_server TEXT NOT NULL,
+    verdetto_genitore_id INTEGER REFERENCES genitori(id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dichiarazioni_regola_giorno
@@ -322,6 +437,8 @@ CREATE TABLE IF NOT EXISTS bonus (
 -- figlio (vita reale, segno). 'figlio' vuol dire i dispositivi di quel figlio:
 -- ciascuno legge quelle col suo dispositivo_id o NULL. (v3.1) `letta` vale per
 -- quelle del genitore; quelle del figlio si leggono per dispositivo (notifiche_lette).
+-- (v3.6) Anche quelle del genitore si leggono per genitore (notifiche_lette_genitori):
+-- per loro `letta = 1` vuol dire chiusa per tutti i genitori (TABELLE_GENITORI).
 CREATE TABLE IF NOT EXISTS notifiche (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     destinatario TEXT NOT NULL DEFAULT 'genitore' CHECK (destinatario IN ('figlio', 'genitore')),
@@ -333,7 +450,7 @@ CREATE TABLE IF NOT EXISTS notifiche (
     figlio_id INTEGER REFERENCES figli(id),
     dispositivo_id INTEGER REFERENCES dispositivi(id)
 );
-""" + TABELLE_SESSIONI
+""" + TABELLE_SESSIONI + TABELLE_GENITORI + TABELLA_FACCENDE
 
 # (v3.1) Chi ha letto una notifica del figlio: ogni dispositivo per conto suo, cosi'
 # una notifica per tutto il figlio (il segno) arriva al telefono E al computer anche
@@ -355,6 +472,22 @@ CREATE TABLE notifiche_lette (
 SUFFISSO_COPIA_V3 = ".prima-v3-"
 # (v3.4) E quella prima della migrazione delle proposte: <db>.prima-v3.4-<data>.
 SUFFISSO_COPIA_V34 = ".prima-v3.4-"
+# (v3.6) E quella prima della migrazione dei genitori: <db>.prima-v3.6-<data>.
+SUFFISSO_COPIA_V36 = ".prima-v3.6-"
+
+# (v3.6) Le colonne che i database di prima della v3.6 non hanno: di quale genitore e'
+# una credenziale, e chi ha deciso cosa. ALTER TABLE ADD COLUMN, come per la v3: le
+# righe che ci sono restano com'erano (NULL = di prima della v3.6, cioe' del genitore 1).
+COLONNE_V36 = [
+    ("credenziali", "genitore_id", "INTEGER REFERENCES genitori(id)"),
+    ("proposte", "genitore_id", "INTEGER REFERENCES genitori(id)"),
+    ("proposte", "risposta_genitore_id", "INTEGER REFERENCES genitori(id)"),
+    ("dichiarazioni", "verdetto_genitore_id", "INTEGER REFERENCES genitori(id)"),
+    ("sessioni", "decisa_genitore_id", "INTEGER REFERENCES genitori(id)"),
+]
+
+# (v3.6) Il nome del genitore 1 al primo avvio: si cambia dall'app.
+NOME_GENITORE_INIZIALE = "Genitore"
 
 # Le tabelle che dicono se un database ha gia' una storia (_ci_sono_dati).
 TABELLE_STORIA = ("regole", "eventi", "battiti", "bonus", "notifiche")
@@ -432,7 +565,9 @@ def _tabelle(conn: sqlite3.Connection) -> set[str]:
     return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 
 
-def _migra(conn: sqlite3.Connection, crea_famiglia: bool = False) -> None:
+def _migra(
+    conn: sqlite3.Connection, crea_famiglia: bool = False, crea_genitore: bool = False
+) -> None:
     """Micro-migrazioni per database creati con schemi precedenti. SCHEMA
     (CREATE TABLE IF NOT EXISTS) gira prima: le tabelle nuove (dichiarazioni)
     nascono gia' bene, qui si aggiornano solo quelle preesistenti."""
@@ -566,6 +701,8 @@ def _migra(conn: sqlite3.Connection, crea_famiglia: bool = False) -> None:
     # (v3.4) autore e 'ritirata': dopo i rami v1 e v2.1 qui sopra, che lasciano la
     # tabella nella forma v2.1, anche un database vecchissimo arriva alla v3.4.
     _migra_v34(conn, contatore_proposte)
+    # (v3.6) I genitori: dopo la v3 (le credenziali) e la v3.4 (le proposte).
+    _migra_v36(conn, crea_genitore)
 
 
 def _ci_sono_dati(conn: sqlite3.Connection) -> bool:
@@ -623,23 +760,69 @@ def _percorso_copia(db_path: str, ora: datetime, suffisso: str = SUFFISSO_COPIA_
     return percorso
 
 
-def _copia_gia_fatta(db_path: str, suffisso: str) -> str | None:
+def _righe(conn: sqlite3.Connection, tabella: str) -> list:
+    return [tuple(r) for r in conn.execute(f'SELECT * FROM "{tabella}" ORDER BY rowid')]
+
+
+def _stessi_dati(conn: sqlite3.Connection, copia: str) -> bool:
+    """(v3.6) Il database ha ancora i dati della copia: ogni tabella della copia c'e',
+    con le stesse colonne e le stesse righe. Le tabelle nate dopo (lo SCHEMA di un avvio
+    che poi non e' riuscito a migrare) non contano: sono vuote e la copia non le ha.
+    Non solleva: una copia che non si legge non e' uguale a niente."""
+    try:
+        altra = sqlite3.connect(Path(copia).resolve().as_uri() + "?mode=ro", uri=True)
+        try:
+            tabelle = [
+                r[0]
+                for r in altra.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name != 'sqlite_stat1'"
+                )
+            ]
+            esistenti = _tabelle(conn)
+            for tabella in tabelle:
+                if tabella not in esistenti:
+                    return False
+                colonne = [r[1] for r in altra.execute(f'PRAGMA table_info("{tabella}")')]
+                if colonne != [r[1] for r in conn.execute(f'PRAGMA table_info("{tabella}")')]:
+                    return False
+                if _righe(altra, tabella) != _righe(conn, tabella):
+                    return False
+            return True
+        finally:
+            altra.close()
+    except sqlite3.Error:
+        return False
+
+
+def _copia_gia_fatta(conn: sqlite3.Connection, db_path: str, suffisso: str) -> str | None:
     """(v3.4) La copia di sicurezza di quella migrazione, se accanto al database ce
     n'e' gia' una; il `.parziale` di una copia interrotta non conta, non e' una copia
-    buona. None se non c'e'."""
+    buona. None se non c'e'.
+
+    (v3.6) E solo se il database ha ancora i dati di quella copia (_stessi_dati): e'
+    il caso di un avvio di prima che ha copiato e poi non e' riuscito a migrare. Dopo un
+    ritorno alla versione di prima (rimettendo la copia) il server vecchio ha scritto
+    dati nuovi: quella copia non li ha, e se ne fa una nuova."""
     cartella = os.path.dirname(os.path.abspath(db_path))
     prefisso = os.path.basename(db_path) + suffisso
     try:
         nomi = sorted(
-            nome
-            for nome in os.listdir(cartella)
-            if nome.startswith(prefisso)
-            and not nome.endswith(".parziale")
-            and os.path.isfile(os.path.join(cartella, nome))
+            (
+                nome
+                for nome in os.listdir(cartella)
+                if nome.startswith(prefisso)
+                and not nome.endswith(".parziale")
+                and os.path.isfile(os.path.join(cartella, nome))
+            ),
+            reverse=True,  # dalla piu' recente: e' quella che di solito torna
         )
     except OSError:
         return None
-    return os.path.join(cartella, nomi[0]) if nomi else None
+    for nome in nomi:
+        percorso = os.path.join(cartella, nome)
+        if _stessi_dati(conn, percorso):
+            return percorso
+    return None
 
 
 def _copia_prima_della_migrazione(
@@ -666,8 +849,9 @@ def _copia_prima_della_migrazione(
     prima l'ha fatta e poi non e' riuscito a migrare) non se ne fa un'altra. La
     migrazione non riuscita non ha toccato i dati (e' una transazione sola), quindi
     quella copia vale ancora; e un server che in Docker riparte da solo in un giro
-    di errori non riempie il disco del NAS di copie uguali."""
-    gia_fatta = _copia_gia_fatta(db_path, suffisso)
+    di errori non riempie il disco del NAS di copie uguali. (v3.6) Ma solo se i dati
+    sono ancora quelli della copia: altrimenti una copia nuova, con un altro nome."""
+    gia_fatta = _copia_gia_fatta(conn, db_path, suffisso)
     if gia_fatta is not None:
         log.info(
             "Copia di sicurezza prima della migrazione %s: c'e' gia' (%s), non ne faccio"
@@ -971,6 +1155,91 @@ def _migra_v34(conn: sqlite3.Connection, contatore_minimo: int | None = None) ->
         conn.execute("PRAGMA foreign_keys=ON")
 
 
+def _mancanze_v36(conn: sqlite3.Connection) -> list:
+    """(v3.6) Le colonne di COLONNE_V36 che mancano alle tabelle che ci sono. Una
+    tabella che non c'e' ancora nasce gia' giusta dallo SCHEMA."""
+    esistenti = _tabelle(conn)
+    return [
+        (tabella, colonna, definizione)
+        for tabella, colonna, definizione in COLONNE_V36
+        if tabella in esistenti and colonna not in _colonne(conn, tabella)
+    ]
+
+
+def _va_migrato_a_v36(conn: sqlite3.Connection) -> bool:
+    """(v3.6) Un database con una storia le cui tabelle prendono le colonne dei
+    genitori: prima si copia (contratto, "v3.6 — Compatibilita'"). Un database nuovo o
+    gia' v3.6 no."""
+    return _ci_sono_dati(conn) and bool(_mancanze_v36(conn))
+
+
+def _senza_genitori(conn: sqlite3.Connection) -> bool:
+    return conn.execute("SELECT 1 FROM genitori LIMIT 1").fetchone() is None
+
+
+def _credenziali_genitore_orfane(conn: sqlite3.Connection) -> bool:
+    """Credenziali del genitore che non sanno ancora di quale genitore sono: quelle di
+    prima della v3.6 (c'era un genitore solo)."""
+    senza_genitore = " AND genitore_id IS NULL" if "genitore_id" in _colonne(conn, "credenziali") else ""
+    return conn.execute(
+        f"SELECT 1 FROM credenziali WHERE ruolo = 'genitore'{senza_genitore} LIMIT 1"
+    ).fetchone() is not None
+
+
+def _migra_v36(conn: sqlite3.Connection, crea_genitore: bool) -> None:
+    """(v3.6) Piu' genitori (contratto-api.md, "v3.6 — I genitori"): le colonne nuove
+    (di quale genitore e' una credenziale, chi ha deciso cosa), il genitore 1 e le
+    credenziali del genitore di prima attaccate a lui. Una volta sola e tutta dentro UNA
+    transazione, come la v3: se qualcosa va storto a meta' il database resta com'era e
+    il prossimo avvio riprova da capo.
+
+    Il genitore 1 nasce quando non c'e' ancora nessun genitore e c'e' qualcosa a cui
+    darlo: le credenziali del genitore di prima o il token d'ambiente (sempre presente
+    quando il server parte). Si chiama "Genitore" e le notifiche del genitore gia'
+    lette prima della v3.6 (`letta = 1`) restano lette per lui: per i genitori `letta`
+    vuol dire chiusa per tutti, e quando sono state lette il genitore era uno solo.
+    Le decisioni di prima (proposte, verdetti, sessioni) restano NULL: valgono come sue
+    quando si leggono (genitori.Firme)."""
+    colonne_mancanti = _mancanze_v36(conn)
+    orfane = _credenziali_genitore_orfane(conn)
+    nasce_genitore = _senza_genitori(conn) and (crea_genitore or orfane)
+    if not (colonne_mancanti or nasce_genitore or orfane):
+        return
+    # PRAGMA foreign_keys si cambia solo fuori da una transazione, come nella v3.
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for tabella, colonna, definizione in _mancanze_v36(conn):  # riletto dentro il lock
+                conn.execute(f"ALTER TABLE {tabella} ADD COLUMN {colonna} {definizione}")
+            if _senza_genitori(conn) and (crea_genitore or _credenziali_genitore_orfane(conn)):
+                # Il genitore 1 esiste da quando esiste il suo token: dalla prima
+                # credenziale del genitore, se c'e'. E' gia' abbinato (le app installate).
+                prima = conn.execute(
+                    "SELECT MIN(creata_ts) FROM credenziali WHERE ruolo = 'genitore'"
+                ).fetchone()[0]
+                ts = prima or clock.iso(clock.now())
+                conn.execute(
+                    "INSERT INTO genitori (nome, creato_ts, abbinato_ts, notifiche_dopo_id)"
+                    " VALUES (?, ?, ?, 0)",
+                    (NOME_GENITORE_INIZIALE, ts, ts),
+                )
+            primo = conn.execute("SELECT MIN(id) FROM genitori").fetchone()[0]
+            if primo is not None:
+                conn.execute(
+                    "UPDATE credenziali SET genitore_id = ?"
+                    " WHERE ruolo = 'genitore' AND genitore_id IS NULL",
+                    (primo,),
+                )
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
 def _sincronizza_credenziali(
     conn: sqlite3.Connection, token_figlio: str | None, token_genitore: str | None
 ) -> None:
@@ -980,51 +1249,70 @@ def _sincronizza_credenziali(
 
     Il dispositivo 1 pero' smette di seguirla quando esce dalla compatibilita': se
     e' stato revocato, o riabbinato con un codice (il token nuovo ha invalidato il
-    vecchio), il token d'ambiente non deve tornare a valere a un riavvio."""
+    vecchio), il token d'ambiente non deve tornare a valere a un riavvio.
+
+    (v3.6) Lo stesso per il genitore 1, che ora e' una riga di `genitori` (quella con
+    l'id piu' basso): revocato da un altro genitore, o riabbinato con un codice, il
+    token d'ambiente non lo resuscita."""
     ts = clock.iso(clock.now())
     if token_genitore:
-        genitore = conn.execute(
-            "SELECT id, token_hash FROM credenziali WHERE ruolo = 'genitore'"
-            " AND revocata_ts IS NULL ORDER BY id LIMIT 1"
-        ).fetchone()
-        if genitore is None:
-            conn.execute(
-                "INSERT INTO credenziali (ruolo, token_hash, origine, creata_ts)"
-                " VALUES ('genitore', ?, 'ambiente', ?)",
-                (hash_segreto(token_genitore), ts),
-            )
-        elif genitore["token_hash"] != hash_segreto(token_genitore):
-            conn.execute(
-                "UPDATE credenziali SET token_hash = ? WHERE id = ?",
-                (hash_segreto(token_genitore), genitore["id"]),
-            )
+        _segui_il_token(
+            conn,
+            conn.execute("SELECT * FROM genitori ORDER BY id LIMIT 1").fetchone(),
+            "genitore_id",
+            "genitore",
+            token_genitore,
+            ts,
+        )
 
     if token_figlio:
-        primo = conn.execute("SELECT * FROM dispositivi ORDER BY id LIMIT 1").fetchone()
-        if primo is None or primo["revocato_ts"] is not None:
+        _segui_il_token(
+            conn,
+            conn.execute("SELECT * FROM dispositivi ORDER BY id LIMIT 1").fetchone(),
+            "dispositivo_id",
+            "dispositivo",
+            token_figlio,
+            ts,
+        )
+
+
+def _segui_il_token(
+    conn: sqlite3.Connection,
+    titolare: sqlite3.Row | None,
+    colonna: str,
+    ruolo: str,
+    token: str,
+    ts: str,
+) -> None:
+    """Il genitore 1 o il dispositivo 1 seguono il loro token d'ambiente finche' sono
+    nella compatibilita': non revocati, e con l'ultima credenziale nata dall'ambiente.
+    Senza credenziali ne nasce una; con quella d'ambiente ancora valida, l'hash segue
+    la variabile; con un abbinamento in mezzo, niente."""
+    if titolare is None or titolare["revocato_ts"] is not None:
+        return
+    ultima = conn.execute(
+        f"SELECT * FROM credenziali WHERE {colonna} = ? ORDER BY id DESC LIMIT 1",
+        (titolare["id"],),
+    ).fetchone()
+    if ultima is None:
+        # Solo chi e' nato abbinato dalla migrazione (il telefono delle app 0.7, il
+        # genitore 1) riceve il token d'ambiente: chi e' creato da un genitore si
+        # abbina col codice.
+        if titolare["abbinato_ts"] is None:
             return
-        ultima = conn.execute(
-            "SELECT * FROM credenziali WHERE dispositivo_id = ? ORDER BY id DESC LIMIT 1",
-            (primo["id"],),
-        ).fetchone()
-        if ultima is None:
-            # Solo il telefono nato abbinato dalla migrazione riceve il token
-            # d'ambiente: un dispositivo creato dal genitore si abbina col codice.
-            if primo["abbinato_ts"] is not None:
-                conn.execute(
-                    "INSERT INTO credenziali (ruolo, dispositivo_id, token_hash, origine, creata_ts)"
-                    " VALUES ('dispositivo', ?, ?, 'ambiente', ?)",
-                    (primo["id"], hash_segreto(token_figlio), ts),
-                )
-        elif (
-            ultima["origine"] == "ambiente"
-            and ultima["revocata_ts"] is None
-            and ultima["token_hash"] != hash_segreto(token_figlio)
-        ):
-            conn.execute(
-                "UPDATE credenziali SET token_hash = ? WHERE id = ?",
-                (hash_segreto(token_figlio), ultima["id"]),
-            )
+        conn.execute(
+            f"INSERT INTO credenziali (ruolo, {colonna}, token_hash, origine, creata_ts)"
+            " VALUES (?, ?, ?, 'ambiente', ?)",
+            (ruolo, titolare["id"], hash_segreto(token), ts),
+        )
+    elif (
+        ultima["origine"] == "ambiente"
+        and ultima["revocata_ts"] is None
+        and ultima["token_hash"] != hash_segreto(token)
+    ):
+        conn.execute(
+            "UPDATE credenziali SET token_hash = ? WHERE id = ?", (hash_segreto(token), ultima["id"])
+        )
 
 
 def init_db(
@@ -1046,12 +1334,19 @@ def init_db(
             _copia_prima_della_migrazione(conn, db_path)
         if _va_migrato_a_v34(conn):
             _copia_prima_della_migrazione(conn, db_path, SUFFISSO_COPIA_V34, "v3.4")
+        # (v3.6) E per i genitori, che cambiano tabelle che ci sono (credenziali,
+        # proposte, dichiarazioni, sessioni): la sua copia, anche lei di prima.
+        if _va_migrato_a_v36(conn):
+            _copia_prima_della_migrazione(conn, db_path, SUFFISSO_COPIA_V36, "v3.6")
         # Tutto lo schema in una transazione: una scrittura sola su disco invece di
         # una per tabella (su Windows ogni transazione e' un file di journal in piu').
         # (v3.5) Le sessioni sono solo tabelle nuove, che nascono qui (CREATE TABLE IF
         # NOT EXISTS) senza toccare quelle che ci sono: niente migrazione, niente copia.
+        # (v3.6) Cosi' anche genitori, codici dei genitori, letture e faccende.
         conn.executescript("BEGIN;" + SCHEMA + "COMMIT;")
-        _migra(conn, crea_famiglia=token_figlio is not None)
+        _migra(
+            conn, crea_famiglia=token_figlio is not None, crea_genitore=token_genitore is not None
+        )
         conn.execute(
             "INSERT OR IGNORE INTO patto (chiave, valore) VALUES ('tetto_bonus_giorno', ?)",
             (str(tetto_giorno),),

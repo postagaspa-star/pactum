@@ -13,10 +13,23 @@ figlio farebbe tacere gli avvisi del genitore. Si fermano qui, con un 422, prima
 una route li tocchi. Lo stesso per gli interi oltre i 64 bit, che SQLite non sa tenere
 (un 500 a meta' scrittura).
 
-Un corpo vuoto, o che non e' JSON, passa com'e': ci pensa FastAPI, come prima."""
+Un corpo vuoto, o che non e' JSON, passa com'e': ci pensa FastAPI, come prima.
+
+(v3.6) Un tetto alla misura: un corpo oltre CORPO_MASSIMO_BYTE (8 MB) -> 413
+{"detail": {"errore": "corpo_troppo_grande"}}, contando i byte mentre arrivano e senza
+leggere il resto (un Content-Length piu' grande si ferma subito). Senza, un POST anonimo
+da un giga (su /api/abbina, che non vuole token) finirebbe tutto in memoria. Il corpo
+legittimo piu' grande e' il pacco di eventi del telefono, che manda tutta la sua coda
+in una volta: una fotografia d'uso e una dei siti per giorno, qualche KB ciascuna, cioe'
+meno di 1 MB anche dopo tre mesi senza rete. 8 MB lasciano un margine ampio.
+
+Le foto delle faccende (le consegne a /api/faccende/<id>/foto) non passano di qui: la
+route le legge a pezzi col suo tetto di 4 MB. Le altre route le controlla tutte, anche
+quando il corpo si dichiara image/jpeg."""
 
 import json
 import math
+import re
 
 from starlette.responses import JSONResponse
 
@@ -80,6 +93,30 @@ def problema_nel_corpo(corpo: bytes) -> str | None:
     return None
 
 
+# (v3.6) Le foto delle faccende: /api/faccende/<id>/foto. Anche la compressione gzip
+# (main.py) le lascia stare.
+PERCORSO_FOTO = re.compile(r"/api/faccende/[^/]+/foto")
+
+# (v3.6) Il tetto ai corpi delle richieste sotto /api/ (tranne le foto: 4 MB loro).
+CORPO_MASSIMO_BYTE = 8 * 1024 * 1024
+
+
+def _e_una_foto(scope) -> bool:
+    """(v3.6) La consegna (o la lettura) di una foto: la route la legge a pezzi col suo
+    tetto, qui non deve finire in memoria. Conta solo il percorso, mai il Content-Type
+    che il client dichiara: su un'altra route un corpo "image/jpeg" e' un corpo come gli
+    altri, e il tetto vale anche per lui."""
+    return PERCORSO_FOTO.fullmatch(scope["path"]) is not None
+
+
+def _dichiarata(scope) -> int | None:
+    for nome, valore in scope.get("headers", []):
+        if nome.lower() == b"content-length":
+            testo = valore.strip()
+            return int(testo) if testo.isdigit() else None
+    return None
+
+
 class CorpoJsonSano:
     """Il middleware ASGI: legge tutto il corpo di una richiesta sotto /api/, lo
     controlla e, se va bene, lo ripassa uguale alla route; se no risponde 422 subito,
@@ -89,15 +126,25 @@ class CorpoJsonSano:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not scope["path"].startswith("/api/"):
+        if scope["type"] != "http" or not scope["path"].startswith("/api/") or _e_una_foto(scope):
             await self.app(scope, receive, send)
             return
-        pezzi = []
+        troppo = JSONResponse({"detail": {"errore": "corpo_troppo_grande"}}, status_code=413)
+        dichiarata = _dichiarata(scope)
+        if dichiarata is not None and dichiarata > CORPO_MASSIMO_BYTE:
+            await troppo(scope, receive, send)
+            return
+        pezzi, letti = [], 0
         while True:
             messaggio = await receive()
             if messaggio["type"] != "http.request":
                 return  # il client se n'e' andato prima di finire di mandare: niente da dire
-            pezzi.append(messaggio.get("body", b""))
+            pezzo = messaggio.get("body", b"")
+            letti += len(pezzo)
+            if letti > CORPO_MASSIMO_BYTE:  # (v3.6) il resto non si legge
+                await troppo(scope, receive, send)
+                return
+            pezzi.append(pezzo)
             if not messaggio.get("more_body", False):
                 break
         corpo = b"".join(pezzi)

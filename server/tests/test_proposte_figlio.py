@@ -33,6 +33,8 @@ VITA = {"descrizione": "Un'ora di cammino", "arbitro_nome": "Mamma", "frequenza"
 MINECRAFT = {"app_o_categoria": "exe:minecraft.exe", "minuti_al_giorno": 60}
 TIKTOK = "com.zhiliaoapp.musically"
 INSTAGRAM = "com.instagram.android"
+# (v3.6) Il genitore del token d'ambiente, come lo citano proposte e notifiche.
+GENITORE_1 = {"id": 1, "nome": "Genitore"}
 
 
 def _limite(minuti, app="TikTok"):
@@ -191,7 +193,7 @@ def test_la_proposta_del_genitore_dice_l_autore(client, famiglia):
     p = _proposta(client, GENITORE, tiktok["id"], _limite(30))
     assert p["autore"] == "genitore"
     (avviso,) = _notifiche(client, FIGLIO, "nuova_proposta")
-    assert avviso["messaggio"] == f"Nuova proposta del genitore: {MENO}30 min al giorno rispetto ad ora"
+    assert avviso["messaggio"] == f"Nuova proposta di Genitore: {MENO}30 min al giorno rispetto ad ora"
     assert avviso["payload"]["autore"] == "genitore"
     assert _notifiche(client, GENITORE, "nuova_proposta") == []
 
@@ -224,7 +226,7 @@ def test_i_bersagli_si_scrivono_coi_nomi(client, famiglia):
     del_genitore = _proposta(client, GENITORE, social["id"], _limite(60, app=TIKTOK))
     assert del_genitore["confronto"] == "da Social (120 min) a TikTok (60 min) al giorno"
     (al_figlio,) = _notifiche(client, FIGLIO, "nuova_proposta")
-    assert al_figlio["messaggio"] == "Nuova proposta del genitore: da Social (120 min) a TikTok (60 min) al giorno"
+    assert al_figlio["messaggio"] == "Nuova proposta di Genitore: da Social (120 min) a TikTok (60 min) al giorno"
     assert _regola_in_finestra(client, tiktok["id"])["nome"] == "TikTok"  # la stessa etichetta
 
 
@@ -267,7 +269,7 @@ def test_i_nomi_si_aggiornano_finche_e_pendente_poi_si_fermano(client, famiglia,
     assert [x["confronto"] for x in _finestra(client)["proposte_pendenti"]] == [coi_nomi]
     assert _rispondi(client, GENITORE, p["id"], "rifiuta").status_code == 200
     (avviso,) = _notifiche(client, FIGLIO, "proposta_risposta")
-    assert avviso["messaggio"] == f"Il genitore ha rifiutato la tua proposta: {coi_nomi}"
+    assert avviso["messaggio"] == f"Genitore ha rifiutato la tua proposta: {coi_nomi}"
     # chiusa, resta il testo del momento della risposta anche se l'etichetta cambia
     orologio.avanza(minutes=5)
     _foto(client, FIGLIO, {TIKTOK: "TikTok Lite", INSTAGRAM: "Instagram"}, totale=60)
@@ -405,9 +407,10 @@ def test_la_risposta_del_genitore_arriva_a_tutti_i_dispositivi(client, famiglia)
     (sul_telefono,) = _notifiche(client, FIGLIO, "proposta_risposta")
     (sul_pc,) = _notifiche(client, famiglia.pc_andrea, "proposta_risposta")
     assert sul_telefono == sul_pc
-    assert sul_telefono["messaggio"] == "Il genitore ha accettato la tua proposta: +30 min al giorno rispetto ad ora"
+    assert sul_telefono["messaggio"] == "Genitore ha accettato la tua proposta: +30 min al giorno rispetto ad ora"
     assert sul_telefono["payload"] == {
         "proposta_id": p["id"], "regola_id": del_pc["id"], "esito": "accetta", "autore": "figlio",
+        "genitore": GENITORE_1,  # (v3.6) chi ha risposto
     }
     assert (sul_telefono["destinatario"], sul_telefono["figlio_id"], sul_telefono["dispositivo_id"]) == (
         "figlio", 1, None,
@@ -460,7 +463,7 @@ def test_il_genitore_rifiuta(client, famiglia):
     assert [s["azione"] for s in _storico(client, tiktok["id"])] == ["creazione"]
     for headers in (FIGLIO, famiglia.pc_andrea):
         (avviso,) = _notifiche(client, headers, "proposta_risposta")
-        assert avviso["messaggio"] == "Il genitore ha rifiutato la tua proposta: +60 min al giorno rispetto ad ora"
+        assert avviso["messaggio"] == "Genitore ha rifiutato la tua proposta: +60 min al giorno rispetto ad ora"
         assert avviso["payload"]["esito"] == "rifiuta"
     r = _rispondi(client, GENITORE, p["id"], "accetta")
     assert r.status_code == 409 and r.json()["detail"] == {"errore": "proposta_non_pendente"}
@@ -480,7 +483,7 @@ def test_il_genitore_accetta_un_eliminazione(client, famiglia):
     assert (ultima["azione"], ultima["concordata"]) == ("eliminazione", True)
     assert _ids_notifiche(client, GENITORE) == gia_viste  # niente modifica_regola doppia
     (avviso,) = _notifiche(client, FIGLIO, "proposta_risposta")
-    assert avviso["messaggio"] == "Il genitore ha accettato la tua proposta di eliminare la regola"
+    assert avviso["messaggio"] == "Genitore ha accettato la tua proposta di eliminare la regola"
 
 
 def test_eliminare_l_ultima_regola_resta_vietato(client, famiglia):
@@ -572,8 +575,9 @@ def test_il_genitore_ritira_la_sua_proposta(client, famiglia):
     assert _regola_in_finestra(client, del_pc["id"])["parametri"] == MINECRAFT
     # all'altro, col dispositivo della regola, come la nuova_proposta che l'aveva annunciata
     (avviso,) = _notifiche(client, famiglia.pc_andrea, "proposta_ritirata")
-    assert avviso["messaggio"] == "Il genitore ha ritirato la sua proposta"
-    assert avviso["payload"] == {"proposta_id": p["id"], "regola_id": del_pc["id"], "autore": "genitore"}
+    assert avviso["messaggio"] == "Genitore ha ritirato la sua proposta"
+    assert avviso["payload"] == {"proposta_id": p["id"], "regola_id": del_pc["id"], "autore": "genitore",
+                                 "genitore": GENITORE_1}
     assert (avviso["destinatario"], avviso["dispositivo_id"]) == ("figlio", famiglia.pc_andrea_id)
     assert _notifiche(client, FIGLIO, "proposta_ritirata") == []
     assert _notifiche(client, GENITORE, "proposta_ritirata") == []
@@ -666,7 +670,7 @@ def test_i_messaggi_di_un_eliminazione_non_ripetono_il_verbo(client, famiglia):
     assert ultimo(GENITORE, "nuova_proposta")["payload"]["confronto"] == "propone di eliminare la regola"
     assert _rispondi(client, GENITORE, p["id"], "rifiuta").status_code == 200
     assert ultimo(FIGLIO, "proposta_risposta")["messaggio"] == (
-        "Il genitore ha rifiutato la tua proposta di eliminare la regola"
+        "Genitore ha rifiutato la tua proposta di eliminare la regola"
     )
     # il figlio propone e ritira
     p = _proposta(client, FIGLIO, youtube["id"], {"azione": "elimina"})
@@ -676,16 +680,16 @@ def test_i_messaggi_di_un_eliminazione_non_ripetono_il_verbo(client, famiglia):
     )
     # il genitore propone e ritira
     p = _proposta(client, GENITORE, instagram["id"], {"azione": "elimina"})
-    assert ultimo(FIGLIO, "nuova_proposta")["messaggio"] == "Il genitore propone di eliminare la regola"
+    assert ultimo(FIGLIO, "nuova_proposta")["messaggio"] == "Genitore propone di eliminare la regola"
     assert _ritira(client, GENITORE, p["id"]).status_code == 200
     assert ultimo(FIGLIO, "proposta_ritirata")["messaggio"] == (
-        "Il genitore ha ritirato la sua proposta di eliminare la regola"
+        "Genitore ha ritirato la sua proposta di eliminare la regola"
     )
     # il figlio propone, il genitore accetta
     p = _proposta(client, FIGLIO, instagram["id"], {"azione": "elimina"})
     assert _rispondi(client, GENITORE, p["id"], "accetta").status_code == 200
     assert ultimo(FIGLIO, "proposta_risposta")["messaggio"] == (
-        "Il genitore ha accettato la tua proposta di eliminare la regola"
+        "Genitore ha accettato la tua proposta di eliminare la regola"
     )
     # il confronto delle proposte resta quello di sempre
     assert {x["confronto"] for x in _proposte(client)} == {"propone di eliminare la regola"}
@@ -891,7 +895,7 @@ def test_le_notifiche_per_un_dispositivo_revocato_vanno_a_tutto_il_figlio(client
     (avviso,) = _notifiche(client, FIGLIO, "proposta_ritirata")
     assert (avviso["destinatario"], avviso["dispositivo_id"]) == ("figlio", None)
     assert avviso["payload"] == {"proposta_id": da_ritirare["id"], "regola_id": minecraft["id"],
-                                 "autore": "genitore"}
+                                 "autore": "genitore", "genitore": GENITORE_1}
     assert _rispondi(client, FIGLIO, da_rifiutare["id"], "rifiuta").status_code == 200
     (al_genitore,) = _notifiche(client, GENITORE, "proposta_risposta")
     assert al_genitore["dispositivo_id"] == famiglia.pc_andrea_id
@@ -957,7 +961,10 @@ def _copie(db_path, suffisso) -> list[Path]:
 
 
 def _senza_autore(righe) -> list:
-    return [{k: v for k, v in r.items() if k != "autore"} for r in righe]
+    """Le proposte senza le colonne nate dopo la v3.3: autore (v3.4), chi tra i genitori
+    ha proposto e chi ha risposto (v3.6, NULL sulle righe di prima)."""
+    nuove = {"autore", "genitore_id", "risposta_genitore_id"}
+    return [{k: v for k, v in r.items() if k not in nuove} for r in righe]
 
 
 def _storia_v33(client, orologio) -> dict:

@@ -1,14 +1,16 @@
 # Pactum
 
 Parental control turned around: **the teenager writes their own rules and the
-parent verifies them**. Apart from one exception the teenager switches on
-themselves, it never blocks anything, which makes it a witness rather than a
-jailer, and the whole design follows from that one constraint.
+parent verifies them**. It started from one constraint: never block anything,
+be a witness rather than a jailer. Two exceptions have since been let in, both
+named and both visible in the log: a session the teenager switches on
+themselves, and household chores the parents can set, which lock the devices
+until they're done.
 
 Four parts: an Android app on the teenager's phone that measures usage and
 records what happens, a Windows program that does the same on their computer, an
-Android app for the parent that can read and propose but never impose, and a
-server that holds the rules and the log. The apps are sideloaded APKs and the
+Android app for each parent that can read and propose changes to the rules but
+never impose them, and a server that holds the rules and the log. The apps are sideloaded APKs and the
 Windows program is a zip, both downloaded from the server's own page rather than
 from a store.
 
@@ -84,6 +86,20 @@ Pactum. The parent sees the start, the end and any early close, never the
 attempts in between. It got in under one rule: a limit the teenager sets on
 themselves is not a limit the parent imposes.
 
+**Chores: the exception my family asked for.** Since 0.13 a parent can set
+household chores, from "now" or from a time they choose. Until every chore has
+a photo of the finished job, taken there and then with the camera, the phone is
+locked except for a short list (calls, contacts, SMS, wallet, camera, photos, a
+couple of payment and home apps, Settings, Pactum), and the computer is covered
+completely. The last photo unlocks both at once; a parent can reject a photo
+within 24 hours, which reopens that chore and the lock with it. This one runs
+against the premise and I know it: it's a rule my family and I agreed on,
+because it's the way I actually get chores done straight away. It uses the
+same means as the session barrier, so it isn't spyware and it can be broken
+(uninstalling, force-stopping, killing the program on the computer), but every
+break lands in the log the parents see. Photos travel without location data and
+are deleted from the server after 30 days.
+
 ## Day to day
 
 - Rules of three kinds: a daily time limit (on one app, on a category such as
@@ -97,22 +113,23 @@ themselves is not a limit the parent imposes.
   within daily and weekly caps; the parent sees what's left.
 - A short animated page at the start and end of each session, its theme picked
   from the session's name.
-- One family can have several children, each with a phone and a computer. Every
-  device keeps its own rules, bonus and log, and joins with a six-digit code
-  shown in the parent's app.
+- One family can have several parents and several children, each child with a
+  phone and a computer. Every device keeps its own rules, bonus and log. Devices
+  and parents join with a six-digit code shown in a parent's app, and the log
+  says which parent proposed, approved or set what.
 
 ## What it deliberately doesn't do
 
-Outside a session the teenager started, it never blocks an app, a site or a
-feature. It doesn't let the parent read messages or content. It doesn't let the
-parent edit or impose a rule or start a session: the parent proposes changes and
-approves the teenager's. And it doesn't run hidden: the teenager always knows
+Outside a session the teenager started and the chores lock, it never blocks an
+app, a site or a feature. It doesn't let the parents read messages or content.
+It doesn't let them edit or impose a rule or start a session: they propose
+changes and approve the teenager's. And it doesn't run hidden: the teenager always knows
 it's there. That last one is less a feature than the precondition for any of the
 rest to mean anything.
 
 ## Status — work in progress
 
-Where it honestly stands at version 0.12, in October 2026:
+Where it honestly stands at version 0.13, in October 2026:
 
 - **It's deployed in one family, mine.** Since September the server has run on a
   NAS at home, in Docker, reachable from outside through Tailscale Funnel, with a
@@ -121,12 +138,12 @@ Where it honestly stands at version 0.12, in October 2026:
   days, not months.
 - **The Windows program runs on the home computer but is two versions behind**
   the phone apps.
-- **Sessions and their animated pages have been built and tested, not yet tried
-  live** on a real phone.
-- **The app categories are being redone.** The first version trusted the
+- **Sessions, the chores lock and several parents have been built, tested and
+  adversarially reviewed, not yet tried live** on a real phone.
+- **The app categories were redone in 0.13.** The first version trusted the
   category each Android app declares about itself, which is how Firefox ended up
-  under social. Curated lists are replacing it; that change isn't released yet.
-- **Tests aren't use.** There are nearly 2,000 automated tests across the four
+  under social. Curated lists replaced it.
+- **Tests aren't use.** There are more than 2,000 automated tests across the four
   parts and every milestone went through an adversarial review, but the
   behaviour that matters most only shows up on a real phone over a real day. The
   visual design is where the work is now.

@@ -150,10 +150,23 @@ class LogicaFamigliaTest {
     }
 
     @Test
-    fun `un telefono non e mai spento, decide silente`() {
+    fun `dalla 0,14 anche un telefono spento e SPENTO, non un silenzio`() {
+        // Contratto v3.7: il telefono manda la `sospensione` quando si spegne, e il
+        // server lo dice spento come il computer. Mai un avviso di silenzio.
         val telefonoSpento = telefono.copy(statoSilenzio = silenzio(silente = true, spento = true))
-        assertEquals(StatoCanale.SILENTE, statoCanale(vista(telefonoSpento)))
+        assertEquals(StatoCanale.SPENTO, statoCanale(vista(telefonoSpento)))
         assertEquals(StatoCanale.IN_CONTATTO, statoCanale(vista(telefono)))
+        val d = vista(telefonoSpento)
+        val attuale = silenzioDaSorvegliare(d.tipo, d.abbinato, d.revocato, d.statoSilenzio)!!
+        assertEquals(false, attuale.allarme)
+        assertEquals(true, attuale.spento)
+        // Un avviso di silenzio era già partito: ora si dice che era spento.
+        assertEquals(
+            CambioSilenzio.SPENTO_DOPO_SILENZIO,
+            cambioSilenzio(SilenzioNoto(silente = true, ultimoBattito = "2026-09-24T10:00:00+00:00"), attuale),
+        )
+        // Un telefono acceso che tace resta un silenzio vero.
+        assertEquals(StatoCanale.SILENTE, statoCanale(vista(telefono.copy(statoSilenzio = silenzio(silente = true)))))
     }
 
     @Test

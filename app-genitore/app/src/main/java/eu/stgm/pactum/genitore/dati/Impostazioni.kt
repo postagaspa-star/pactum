@@ -26,8 +26,9 @@ data class ConfigurazionePostino(val serverUrl: String, val token: String) {
 
 /**
  * L'ultimo stato di silenzio osservato dalla vedetta per UN dispositivo e il
- * battito su cui si basava. [silente] = "allarme" (un computer spento non lo è);
- * [spento] = computer spento (v3), per non riavvisare lo stesso spegnimento.
+ * battito su cui si basava. [silente] = "allarme" (un dispositivo spento non lo è);
+ * [spento] = dispositivo spento (v3 il computer, dalla 0.14 anche il telefono),
+ * per non riavvisare lo stesso spegnimento.
  */
 @Serializable
 data class SilenzioNoto(

@@ -1027,8 +1027,9 @@ private fun RigaStato(statoSilenzio: StatoSilenzio, ricevutaAlle: Instant?) {
 
 /**
  * (v3) La card del silenzio per UN dispositivo che tace: "Computer di camera:
- * nessun aggiornamento dalle 15:10". Un computer spento non arriva mai qui:
- * spento non è silente.
+ * nessun aggiornamento dalle 15:10". Un dispositivo spento (computer, o dalla
+ * 0.14 telefono) non arriva mai qui: spento non è silente. La spiegazione non
+ * accusa (contratto v3.7).
  */
 @Composable
 private fun CardSilenzioDispositivo(dispositivo: VistaDispositivo) {
@@ -1130,7 +1131,7 @@ private fun BloccoDispositivi(dispositivi: List<VistaDispositivo>) {
                                 .background(colorePallino(stato), CircleShape),
                         )
                         Text(
-                            text = testoStatoCanale(p, stato, dispositivo.statoSilenzio),
+                            text = testoStatoCanale(p, stato, dispositivo.statoSilenzio, computer = dispositivo.computer),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = Spazi.s),

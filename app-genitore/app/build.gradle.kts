@@ -40,8 +40,11 @@ android {
         // collega con un codice di 6 cifre, la famiglia ha i suoi genitori, e si
         // danno faccende al figlio (con la foto da guardare e, entro 24 ore, da
         // bocciare).
-        versionCode = 13
-        versionName = "0.13.0"
+        // v0.14.0 (contratto v3.7): anche il telefono può risultare spento (niente
+        // avviso di silenzio), il silenzio non accusa, e nei testi "lavori di casa"
+        // al posto di "faccende".
+        versionCode = 14
+        versionName = "0.14.0"
     }
 
     signingConfigs {

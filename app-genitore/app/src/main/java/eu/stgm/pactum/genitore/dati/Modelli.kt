@@ -629,9 +629,10 @@ data class BonusGiorno(val giorno: String, val minuti: Int)
 data class StatoSilenzio(
     @SerialName("ultimo_battito") val ultimoBattito: String? = null,
     val silente: Boolean,
-    // (v3) Solo i computer: dopo una `sospensione` (spegnimento, sospensione,
-    // uscita dall'account) il silenzio NON è un'interruzione. Il server manda
-    // silente=false, spento=true e da quando. Sui telefoni resta false.
+    // (v3) Dopo una `sospensione` (spegnimento, sospensione, uscita
+    // dall'account) il silenzio NON è un'interruzione. Il server manda
+    // silente=false, spento=true e da quando. (0.14, contratto v3.7) Non più
+    // solo i computer: anche il telefono manda la `sospensione` quando si spegne.
     val spento: Boolean = false,
     @SerialName("spento_dal") val spentoDal: String? = null,
 )

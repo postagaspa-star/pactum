@@ -520,10 +520,10 @@ fun nomeDelDispositivo(dispositivo: VistaDispositivo): String =
  * aggiornamento dalle 15:10"… Un orario che non si legge non si inventa: si
  * dice la frase senza orario.
  *
- * Un computer "spento" da più di 24 ore ([spentoALungo]) non si dice spento:
+ * Un dispositivo "spento" da più di 24 ore ([spentoALungo]) non si dice spento:
  * "Nessun dato dal computer dal 23/09 alle 22:10: spento, oppure Pactum non è
- * partito". Da quando: dallo spegnimento, o, se il server non lo dice,
- * dall'ultimo battito.
+ * partito" ([computer]; (0.14, contratto v3.7) per un telefono "dal telefono").
+ * Da quando: dallo spegnimento, o, se il server non lo dice, dall'ultimo battito.
  */
 fun testoStatoCanale(
     parole: Parole,
@@ -532,6 +532,7 @@ fun testoStatoCanale(
     zona: ZoneId = ZoneId.systemDefault(),
     oggi: LocalDate = LocalDate.now(zona),
     adesso: Instant = Instant.now(),
+    computer: Boolean = false,
 ): String {
     val battito = istanteServer(silenzio?.ultimoBattito)
     return when (stato) {
@@ -542,8 +543,10 @@ fun testoStatoCanale(
             val dal = istanteServer(silenzio?.spentoDal)
             val ultimoSegno = dal ?: battito
             when {
-                ultimoSegno != null && spentoALungo(ultimoSegno, adesso) ->
-                    parole.testo(R.string.dispositivo_spento_a_lungo, dalleQuando(parole, ultimoSegno, zona, oggi))
+                ultimoSegno != null && spentoALungo(ultimoSegno, adesso) -> parole.testo(
+                    if (computer) R.string.dispositivo_spento_a_lungo else R.string.dispositivo_spento_a_lungo_telefono,
+                    dalleQuando(parole, ultimoSegno, zona, oggi),
+                )
                 dal != null -> parole.testo(R.string.dispositivo_spento, dalleQuando(parole, dal, zona, oggi))
                 else -> parole.testo(R.string.dispositivo_spento_senza_ora)
             }
@@ -562,8 +565,13 @@ fun testoStatoCanale(
  * L'avviso di sistema della vedetta per UN dispositivo (v3). Di chi è lo dice la
  * riga sopra il titolo ([etichettaDi]); qui il fatto, detto per il tipo di
  * dispositivo. null = niente da avvisare ([CambioSilenzio.BASE], [CambioSilenzio.NESSUNO]).
- * Un computer che risulta spento da più di 24 ore ([spentoALungo]) non si dice
+ * Un dispositivo che risulta spento da più di 24 ore ([spentoALungo]) non si dice
  * spento, né "non è un'interruzione": non lo si sa.
+ *
+ * (0.14, contratto v3.7) Il silenzio non accusa ("…può essere senza rete o
+ * scarico, oppure Pactum è stato fermato"), e anche un telefono può risultare
+ * spento dopo un avviso di silenzio: "Il telefono era spento dalle 15:10: non è
+ * un'interruzione".
  */
 fun testoAvvisoSilenzio(
     parole: Parole,
@@ -598,16 +606,25 @@ fun testoAvvisoSilenzio(
         CambioSilenzio.SPENTO_DOPO_SILENZIO -> {
             val dal = istanteServer(silenzio?.spentoDal)
             val ultimoSegno = dal ?: battito
-            if (ultimoSegno != null && spentoALungo(ultimoSegno, adesso)) {
-                TestoNotifica(
-                    parole.testo(R.string.notifica_spento_a_lungo_titolo),
-                    parole.testo(R.string.notifica_spento_a_lungo, dalleQuando(parole, ultimoSegno, zona, oggi)),
+            when {
+                ultimoSegno != null && spentoALungo(ultimoSegno, adesso) -> TestoNotifica(
+                    parole.testo(
+                        if (computer) R.string.notifica_spento_a_lungo_titolo else R.string.notifica_spento_a_lungo_titolo_telefono,
+                    ),
+                    parole.testo(
+                        if (computer) R.string.notifica_spento_a_lungo else R.string.notifica_spento_a_lungo_telefono,
+                        dalleQuando(parole, ultimoSegno, zona, oggi),
+                    ),
                 )
-            } else {
-                TestoNotifica(
+                computer -> TestoNotifica(
                     parole.testo(R.string.tipo_computer_spento),
                     dal?.let { parole.testo(R.string.notifica_spento_dopo_silenzio, dalleQuando(parole, it, zona, oggi)) }
                         ?: parole.testo(R.string.notifica_spento_dopo_silenzio_senza_ora),
+                )
+                else -> TestoNotifica(
+                    parole.testo(R.string.tipo_telefono_spento),
+                    dal?.let { parole.testo(R.string.notifica_telefono_era_spento, dalleQuando(parole, it, zona, oggi)) }
+                        ?: parole.testo(R.string.notifica_telefono_era_spento_senza_ora),
                 )
             }
         }
@@ -1681,8 +1698,9 @@ private fun fraseNotifica(
         }
 
         // (v3) Il computer spento o riacceso: una cosa normale, detta come tale.
-        "sospensione" -> fraseSospensione(parole, motivoEvento(payload))
-        "ripresa" -> fraseRipresa(parole, motivoEvento(payload))
+        // (0.14, contratto v3.7) Anche un telefono si spegne e si riaccende: le parole dal tipo.
+        "sospensione" -> fraseSospensione(parole, motivoEvento(payload), telefonoDi(notifica, figli))
+        "ripresa" -> fraseRipresa(parole, motivoEvento(payload), telefonoDi(notifica, figli))
 
         "bonus" -> {
             val minuti = campo(payload, "minuti")?.toLongOrNull() ?: return null
@@ -1893,11 +1911,24 @@ private fun fraseSessioneDaApprovare(
 private fun motivoEvento(payload: JsonObject): String? =
     (payload["dettagli"] as? JsonObject)?.let { campo(it, "motivo") } ?: campo(payload, "motivo")
 
+/** (0.14) true = il dispositivo della notifica è un telefono (la famiglia lo sa); se no, il computer di sempre. */
+private fun telefonoDi(notifica: Notifica, figli: List<Figlio>): Boolean =
+    figli.flatMap { it.dispositivi }.firstOrNull { it.id == notifica.dispositivoId }?.tipo == TipiDispositivo.TELEFONO
+
 /**
  * `sospensione` (v3): il computer si spegne, va in sospensione o il figlio esce
- * dall'account. Non è un'interruzione nella registrazione, e la frase lo dice.
+ * dall'account; (0.14, contratto v3.7) anche il telefono si spegne. Non è
+ * un'interruzione nella registrazione, e la frase lo dice.
  */
-private fun fraseSospensione(parole: Parole, motivo: String?): TestoNotifica = when (motivo) {
+private fun fraseSospensione(parole: Parole, motivo: String?, telefono: Boolean = false): TestoNotifica = when {
+    telefono -> TestoNotifica(
+        parole.testo(R.string.tipo_telefono_spento),
+        parole.testo(R.string.notifica_telefono_spento),
+    )
+    else -> fraseSospensioneComputer(parole, motivo)
+}
+
+private fun fraseSospensioneComputer(parole: Parole, motivo: String?): TestoNotifica = when (motivo) {
     "sospensione" -> TestoNotifica(
         parole.testo(R.string.tipo_computer_in_sospensione),
         parole.testo(R.string.notifica_computer_in_sospensione),
@@ -1913,7 +1944,15 @@ private fun fraseSospensione(parole: Parole, motivo: String?): TestoNotifica = w
 }
 
 /** `ripresa` (v3): il computer riparte e Pactum riprende a registrare. */
-private fun fraseRipresa(parole: Parole, motivo: String?): TestoNotifica = when (motivo) {
+private fun fraseRipresa(parole: Parole, motivo: String?, telefono: Boolean = false): TestoNotifica = when {
+    telefono -> TestoNotifica(
+        parole.testo(R.string.tipo_telefono_acceso),
+        parole.testo(R.string.notifica_telefono_acceso),
+    )
+    else -> fraseRipresaComputer(parole, motivo)
+}
+
+private fun fraseRipresaComputer(parole: Parole, motivo: String?): TestoNotifica = when (motivo) {
     "riattivazione" -> TestoNotifica(
         parole.testo(R.string.tipo_computer_riattivato),
         parole.testo(R.string.notifica_computer_riattivato),

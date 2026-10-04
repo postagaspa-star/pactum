@@ -730,23 +730,23 @@ class TestiTest {
         val daIeri = StatoSilenzio(ultimoBattito = ts(23, 14, 55), silente = false, spento = true, spentoDal = ts(23, 15, 0))
         assertEquals(
             "Nessun dato dal computer dal 23/09 alle 15:00: spento, oppure Pactum non è partito",
-            testoStatoCanale(p, StatoCanale.SPENTO, daIeri, roma, oggi24, adesso24),
+            testoStatoCanale(p, StatoCanale.SPENTO, daIeri, roma, oggi24, adesso24, computer = true),
         )
         // 23 ore: è ancora un computer spento.
         val daIeriSera = daIeri.copy(spentoDal = ts(23, 17, 0))
-        assertEquals("Spento dal 23/09 alle 17:00", testoStatoCanale(p, StatoCanale.SPENTO, daIeriSera, roma, oggi24, adesso24))
+        assertEquals("Spento dal 23/09 alle 17:00", testoStatoCanale(p, StatoCanale.SPENTO, daIeriSera, roma, oggi24, adesso24, computer = true))
         // Esattamente 24 ore: ancora spento; un minuto dopo, no.
         val esatte = daIeri.copy(spentoDal = ts(23, 16, 0))
-        assertEquals("Spento dal 23/09 alle 16:00", testoStatoCanale(p, StatoCanale.SPENTO, esatte, roma, oggi24, adesso24))
+        assertEquals("Spento dal 23/09 alle 16:00", testoStatoCanale(p, StatoCanale.SPENTO, esatte, roma, oggi24, adesso24, computer = true))
         assertEquals(
             "Nessun dato dal computer dal 23/09 alle 16:00: spento, oppure Pactum non è partito",
-            testoStatoCanale(p, StatoCanale.SPENTO, esatte, roma, oggi24, adesso24.plusSeconds(60)),
+            testoStatoCanale(p, StatoCanale.SPENTO, esatte, roma, oggi24, adesso24.plusSeconds(60), computer = true),
         )
         // Senza l'ora dello spegnimento conta l'ultimo battito.
         val senzaOra = daIeri.copy(spentoDal = null, ultimoBattito = ts(21, 22, 10))
         assertEquals(
             "Nessun dato dal computer dal 21/09 alle 22:10: spento, oppure Pactum non è partito",
-            testoStatoCanale(p, StatoCanale.SPENTO, senzaOra, roma, oggi24, adesso24),
+            testoStatoCanale(p, StatoCanale.SPENTO, senzaOra, roma, oggi24, adesso24, computer = true),
         )
     }
 
@@ -774,11 +774,11 @@ class TestiTest {
     fun `l'avviso di silenzio per dispositivo dice il tipo e da quando`() {
         val muto = StatoSilenzio(ultimoBattito = ts(24, 15, 10), silente = true)
         assertEquals(
-            TestoNotifica("Nessun aggiornamento", "Il computer non invia aggiornamenti dalle 15:10."),
+            TestoNotifica("Nessun aggiornamento", "Il computer non manda aggiornamenti dalle 15:10: può essere senza rete o senza corrente, oppure Pactum è stato fermato."),
             testoAvvisoSilenzio(p, CambioSilenzio.NUOVO_SILENZIO, computer = true, silenzio = muto, zona = roma, oggi = oggi24),
         )
         assertEquals(
-            "Il telefono non invia aggiornamenti dal 23/09 alle 15:10.",
+            "Il telefono non manda aggiornamenti dal 23/09 alle 15:10: può essere senza rete o scarico, oppure Pactum è stato fermato.",
             testoAvvisoSilenzio(
                 p,
                 CambioSilenzio.NUOVO_SILENZIO,
@@ -810,6 +810,99 @@ class TestiTest {
         )
         assertNull(testoAvvisoSilenzio(p, CambioSilenzio.BASE, computer = true, silenzio = muto))
         assertNull(testoAvvisoSilenzio(p, CambioSilenzio.NESSUNO, computer = false, silenzio = muto))
+    }
+
+    // --- (0.14, contratto v3.7) il telefono spento, come il computer ---------------------
+
+    @Test
+    fun `un telefono spento si dice spento, e oltre 24 ore non si sa`() {
+        val spento = StatoSilenzio(ultimoBattito = ts(24, 7, 50), silente = false, spento = true, spentoDal = ts(24, 8, 0))
+        assertEquals("Spento dalle 08:00", testoStatoCanale(p, StatoCanale.SPENTO, spento, roma, oggi24, adesso24))
+        val daIeri = spento.copy(spentoDal = ts(23, 15, 0))
+        assertEquals(
+            "Nessun dato dal telefono dal 23/09 alle 15:00: spento, oppure Pactum non è partito",
+            testoStatoCanale(p, StatoCanale.SPENTO, daIeri, roma, oggi24, adesso24, computer = false),
+        )
+    }
+
+    @Test
+    fun `un avviso di silenzio e poi il telefono risulta spento - non era un'interruzione`() {
+        val spento = StatoSilenzio(ultimoBattito = ts(24, 15, 0), silente = false, spento = true, spentoDal = ts(24, 15, 10))
+        assertEquals(
+            TestoNotifica("Telefono spento", "Il telefono era spento dalle 15:10: non è un'interruzione."),
+            testoAvvisoSilenzio(
+                p,
+                CambioSilenzio.SPENTO_DOPO_SILENZIO,
+                computer = false,
+                silenzio = spento,
+                zona = roma,
+                oggi = oggi24,
+                adesso = adesso24,
+            ),
+        )
+        assertEquals(
+            TestoNotifica("Telefono spento", "Il telefono era spento: non è un'interruzione."),
+            testoAvvisoSilenzio(
+                p,
+                CambioSilenzio.SPENTO_DOPO_SILENZIO,
+                computer = false,
+                silenzio = spento.copy(spentoDal = null, ultimoBattito = null),
+                zona = roma,
+                oggi = oggi24,
+                adesso = adesso24,
+            ),
+        )
+        val daTreGiorni = spento.copy(spentoDal = ts(21, 22, 10))
+        assertEquals(
+            TestoNotifica(
+                "Nessun dato dal telefono",
+                "Il telefono non manda dati dal 21/09 alle 22:10: è spento, oppure Pactum non è partito.",
+            ),
+            testoAvvisoSilenzio(
+                p,
+                CambioSilenzio.SPENTO_DOPO_SILENZIO,
+                computer = false,
+                silenzio = daTreGiorni,
+                zona = roma,
+                oggi = oggi24,
+                adesso = adesso24,
+            ),
+        )
+    }
+
+    @Test
+    fun `lo spegnimento e la riaccensione di un telefono si dicono del telefono`() {
+        val figli = listOf(
+            Figlio(
+                id = 1,
+                nome = "Luca",
+                dispositivi = listOf(
+                    Dispositivo(id = 1, nome = "Telefono", tipo = "telefono"),
+                    Dispositivo(id = 2, nome = "Computer", tipo = "computer"),
+                ),
+            ),
+        )
+        fun evento(tipo: String, dispositivoId: Long, motivo: String) = Notifica(
+            id = 70,
+            tipo = tipo,
+            messaggio = "x",
+            payload = buildJsonObject { putJsonObject("dettagli") { put("motivo", motivo) } },
+            tsServer = "2026-10-04T08:00:00+00:00",
+            figlioId = 1,
+            dispositivoId = dispositivoId,
+        )
+        assertEquals(
+            TestoNotifica("Telefono spento", "Il telefono è stato spento. Non è un'interruzione nella registrazione."),
+            testoNotifica(p, evento("sospensione", 1, "spegnimento"), emptyMap(), figli),
+        )
+        assertEquals(
+            TestoNotifica("Telefono acceso", "Il telefono è stato acceso e Pactum ha ripreso a registrare."),
+            testoNotifica(p, evento("ripresa", 1, "avvio"), emptyMap(), figli),
+        )
+        // Il computer resta com'era.
+        assertEquals("Computer spento", testoNotifica(p, evento("sospensione", 2, "spegnimento"), emptyMap(), figli).titolo)
+        // Senza famiglia non si sa che è un telefono: il computer di sempre.
+        assertEquals("Computer spento", testoNotifica(p, evento("sospensione", 1, "spegnimento"), emptyMap()).titolo)
     }
 
     @Test
@@ -1827,6 +1920,18 @@ class TestiTest {
         val intro = p.testo(R.string.intro_testo)
         assertTrue(intro, intro.contains("Anche lui può chiederti di cambiare una sua regola: decidi tu."))
         assertTrue(intro, intro.contains("rispondere alle sue proposte"))
+        // (0.14) Niente promesse false: Pactum blocca nelle sessioni e coi lavori di casa, e lo dice.
+        assertTrue(
+            intro,
+            intro.contains(
+                "Pactum non blocca niente, con due eccezioni: le sessioni, che tuo figlio si sceglie da solo, " +
+                    "e i lavori di casa, che gli date voi genitori: finché non sono fatti, telefono e computer restano bloccati.",
+            ),
+        )
+        // Nessuna frase dell'app promette ancora che non blocca mai niente (i siti, quelli sì: mai bloccati).
+        val tutte = File("src/main/res/values/strings.xml").readText()
+        assertFalse(tutte.contains("non blocca niente:"))
+        assertFalse(tutte.contains("non blocca mai"))
         assertEquals(
             "Questa regola è di un dispositivo scollegato e non si cambia più: puoi solo rifiutare la proposta.",
             p.testo(R.string.proposta_dispositivo_scollegato),

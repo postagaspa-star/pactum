@@ -150,7 +150,10 @@ enum class StatoCanale {
     /** Manda dati: l'ultimo battito è recente. */
     IN_CONTATTO,
 
-    /** Solo computer: spento, in sospensione o fuori dall'account. Non è un'interruzione. */
+    /**
+     * Spento: un computer spento, in sospensione o fuori dall'account; (0.14,
+     * contratto v3.7) anche un telefono spento o riavviato. Non è un'interruzione.
+     */
     SPENTO,
 
     /** Non manda dati da un po': un'interruzione nella registrazione. */
@@ -170,10 +173,13 @@ enum class StatoCanale {
 }
 
 /**
- * Lo stato del canale deciso dai flag del SERVER. Per un computer `spento` vince
- * su tutto: un computer spento la sera è normale, non un silenzio. Per un
- * telefono `spento` non esiste (contratto v3) e decide `silente`.
+ * Lo stato del canale deciso dai flag del SERVER. `spento` vince su tutto: un
+ * computer spento la sera è normale, non un silenzio. (0.14, contratto v3.7) Lo
+ * stesso per un telefono: dalla v3.7 anche il telefono manda la `sospensione`
+ * quando si spegne, e il server lo dice `spento` come il computer. [tipo] resta
+ * per chi chiama (le parole cambiano col tipo, lo stato no).
  */
+@Suppress("UNUSED_PARAMETER")
 fun statoCanale(
     tipo: String,
     abbinato: Boolean,
@@ -183,7 +189,7 @@ fun statoCanale(
     revocato -> StatoCanale.SCOLLEGATO
     !abbinato -> StatoCanale.DA_COLLEGARE
     silenzio == null -> StatoCanale.SCONOSCIUTO
-    tipo == TipiDispositivo.COMPUTER && silenzio.spento -> StatoCanale.SPENTO
+    silenzio.spento -> StatoCanale.SPENTO
     silenzio.silente && silenzio.ultimoBattito == null -> StatoCanale.MAI_SENTITO
     silenzio.silente -> StatoCanale.SILENTE
     else -> StatoCanale.IN_CONTATTO
@@ -199,7 +205,7 @@ fun statoCanale(dispositivo: Dispositivo): StatoCanale =
 
 /** Quello che la vedetta vede di un dispositivo a questo giro. */
 data class SilenzioAttuale(
-    /** Un silenzio che è un'interruzione (mai un computer spento). */
+    /** Un silenzio che è un'interruzione (mai un dispositivo spento). */
     val allarme: Boolean,
     val spento: Boolean,
     val ultimoBattito: String?,
@@ -236,7 +242,7 @@ enum class CambioSilenzio {
     /** Il contatto è tornato: avviso tranquillo. */
     CONTATTO_TORNATO,
 
-    /** Era in silenzio, ora risulta spento (computer): non era un'interruzione. */
+    /** Era in silenzio, ora risulta spento (computer, o dalla 0.14 telefono): non era un'interruzione. */
     SPENTO_DOPO_SILENZIO,
 }
 
@@ -260,13 +266,14 @@ fun cambioSilenzio(noto: SilenzioNoto?, attuale: SilenzioAttuale): CambioSilenzi
     else -> CambioSilenzio.NESSUNO
 }
 
-// --- Un computer "spento" da troppo tempo ----------------------------------------------
+// --- Un dispositivo "spento" da troppo tempo ----------------------------------------------
 
-/** Oltre questa durata un computer non si racconta più come "spento". */
+/** Oltre questa durata un dispositivo non si racconta più come "spento" (computer e, dalla 0.14, telefono). */
 val SOGLIA_SPENTO_A_LUNGO: Duration = Duration.ofHours(24)
 
 /**
- * true = il computer risulta spento da PIÙ di 24 ore. Il server lo segna spento
+ * true = il dispositivo risulta spento da PIÙ di 24 ore (vale anche per il
+ * telefono, dalla 0.14: contratto v3.7). Il server lo segna spento
  * dopo una sospensione e non gli dà scadenza: se Pactum non riparte (tolto
  * dall'avvio automatico, per esempio) il computer sembra spento per giorni.
  * Oltre le 24 ore l'app non scrive "Spento dal…": dice che dal computer non

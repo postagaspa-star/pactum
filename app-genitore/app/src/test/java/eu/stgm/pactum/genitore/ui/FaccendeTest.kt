@@ -84,6 +84,27 @@ class FaccendeTest {
         annullataDa = annullataDa,
     )
 
+    // --- (0.14, contratto v3.7) "lavori di casa", mai "faccende" ------------------------
+
+    @Test
+    fun `nessuna frase che il genitore legge dice faccenda o faccende`() {
+        val documento = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            .newDocumentBuilder()
+            .parse(java.io.File("src/main/res/values/strings.xml"))
+        val nodi = documento.getElementsByTagName("string")
+        val conFaccende = (0 until nodi.length)
+            .map { nodi.item(it) as org.w3c.dom.Element }
+            .filter { it.textContent.contains("faccend", ignoreCase = true) }
+            .map { it.getAttribute("name") }
+        assertTrue("Dicono ancora «faccende»: $conFaccende", conFaccende.isEmpty())
+        // E al singolare "lavoro", maschile.
+        assertEquals("Lavoro fatto", p.testo(eu.stgm.pactum.genitore.R.string.tipo_faccenda_fatta))
+        assertEquals("Lavori di casa", p.testo(eu.stgm.pactum.genitore.R.string.faccende_titolo))
+        assertEquals("Dai lavori di casa", p.testo(eu.stgm.pactum.genitore.R.string.faccende_dai))
+        assertEquals("Lavoro annullato.", p.testo(eu.stgm.pactum.genitore.R.string.annulla_faccenda_fatto))
+        assertEquals("Bocciato: il lavoro è di nuovo da fare.", p.testo(eu.stgm.pactum.genitore.R.string.boccia_fatto))
+    }
+
     // --- l'ora del blocco: oggi o domani ---------------------------------------------
 
     @Test
@@ -99,7 +120,7 @@ class FaccendeTest {
         assertTrue(inizio.domani)
         assertEquals("2026-10-03T07:30:00+02:00", testoBloccoDa(inizio.quando))
         assertEquals(
-            "Le 07:30 di oggi sono già passate: il blocco parte domani, sabato 03/10, alle 07:30, se a quell'ora non le ha ancora fatte tutte.",
+            "Le 07:30 di oggi sono già passate: il blocco parte domani, sabato 03/10, alle 07:30, se a quell'ora non li ha ancora fatti tutti.",
             testoInizioBlocco(p, inizio, "Luca"),
         )
     }
@@ -126,7 +147,7 @@ class FaccendeTest {
         assertTrue(inizio.domani)
         assertEquals("2026-10-25T08:00:00+01:00", testoBloccoDa(inizio.quando))
         assertEquals(
-            "Le 08:00 di oggi sono già passate: il blocco parte domani, domenica 25/10, alle 08:00, se a quell'ora non le ha ancora fatte tutte.",
+            "Le 08:00 di oggi sono già passate: il blocco parte domani, domenica 25/10, alle 08:00, se a quell'ora non li ha ancora fatti tutti.",
             testoInizioBlocco(p, inizio, "Luca"),
         )
     }
@@ -163,7 +184,7 @@ class FaccendeTest {
         assertFalse(inizio.domani)
         assertEquals("2027-03-28T03:30:00+02:00", testoBloccoDa(inizio.quando))
         assertEquals(
-            "Il blocco parte oggi, domenica 28/03, alle 03:30, se a quell'ora non le ha ancora fatte tutte. Può farle anche prima.",
+            "Il blocco parte oggi, domenica 28/03, alle 03:30, se a quell'ora non li ha ancora fatti tutti. Può farli anche prima.",
             testoInizioBlocco(p, inizio, "Luca"),
         )
     }
@@ -197,7 +218,7 @@ class FaccendeTest {
         val nuovo = (controllo as ControlloInvio.Cambiato).nuovo
         assertEquals("2026-10-25T23:59:00+01:00", testoBloccoDa(nuovo.quando))
         assertEquals(
-            "Il blocco parte oggi, domenica 25/10, alle 23:59, se a quell'ora non le ha ancora fatte tutte. Può farle anche prima.",
+            "Il blocco parte oggi, domenica 25/10, alle 23:59, se a quell'ora non li ha ancora fatti tutti. Può farli anche prima.",
             testoInizioBlocco(p, nuovo, "Luca"),
         )
         // Senza niente di mostrato (non dovrebbe succedere) non si manda alla cieca.
@@ -215,7 +236,7 @@ class FaccendeTest {
         val nuovo = (controllo as ControlloInvio.Cambiato).nuovo
         assertTrue(nuovo.domani)
         assertEquals(
-            "Le 07:30 di oggi sono già passate: il blocco parte domani, domenica 04/10, alle 07:30, se a quell'ora non le ha ancora fatte tutte.",
+            "Le 07:30 di oggi sono già passate: il blocco parte domani, domenica 04/10, alle 07:30, se a quell'ora non li ha ancora fatti tutti.",
             testoInizioBlocco(p, nuovo, "Luca"),
         )
     }
@@ -229,16 +250,16 @@ class FaccendeTest {
     @Test
     fun `che cosa succede col blocco, prima di mandare`() {
         assertEquals(
-            "Il blocco parte appena le dai: telefono e computer di Luca restano bloccati finché non manda la foto di ogni faccenda.",
+            "Il blocco parte appena li dai: telefono e computer di Luca restano bloccati finché non manda la foto di ogni lavoro.",
             testoInizioBlocco(p, null, "Luca"),
         )
         assertEquals(
-            "Il blocco parte appena le dai: telefono e computer di tuo figlio restano bloccati finché non manda la foto di ogni faccenda.",
+            "Il blocco parte appena li dai: telefono e computer di tuo figlio restano bloccati finché non manda la foto di ogni lavoro.",
             testoInizioBlocco(p, null, " "),
         )
         val oggiAlle16 = inizioBlocco(LocalTime.of(16, 0), ZonedDateTime.ofInstant(adesso, roma))
         assertEquals(
-            "Il blocco parte oggi, venerdì 02/10, alle 16:00, se a quell'ora non le ha ancora fatte tutte. Può farle anche prima.",
+            "Il blocco parte oggi, venerdì 02/10, alle 16:00, se a quell'ora non li ha ancora fatti tutti. Può farli anche prima.",
             testoInizioBlocco(p, oggiAlle16, "Luca"),
         )
         assertEquals("Dalle 07:30", testoDalle(p, LocalTime.of(7, 30)))
@@ -287,8 +308,8 @@ class FaccendeTest {
         assertEquals(0, stato.daFare)
         assertEquals("Niente da fare: nessun blocco.", testoStatoBlocco(p, stato, roma, oggi))
         assertNull(testoQuanteDaFare(p, 0))
-        assertEquals("Una faccenda da fare", testoQuanteDaFare(p, 1))
-        assertEquals("3 faccende da fare", testoQuanteDaFare(p, 3))
+        assertEquals("Un lavoro di casa da fare", testoQuanteDaFare(p, 1))
+        assertEquals("3 lavori di casa da fare", testoQuanteDaFare(p, 3))
     }
 
     @Test
@@ -326,16 +347,16 @@ class FaccendeTest {
     fun `si boccia entro 24 ore dalla foto, e si dice quanto manca (per difetto)`() {
         val stato = bocciabile(fatta("2026-10-02T10:00:00+00:00"), adesso)
         assertEquals(Bocciabile.Si(Duration.ofHours(20).plusMinutes(50)), stato)
-        assertEquals("Puoi bocciarla ancora per 20 h 50 min.", testoBocciabile(p, stato))
+        assertEquals("Puoi bocciarlo ancora per 20 h 50 min.", testoBocciabile(p, stato))
         val quasi = bocciabile(fatta("2026-10-02T10:00:00+00:00"), Instant.parse("2026-10-03T09:39:30Z"))
-        assertEquals("Puoi bocciarla ancora per 20 min.", testoBocciabile(p, quasi))
+        assertEquals("Puoi bocciarlo ancora per 20 min.", testoBocciabile(p, quasi))
     }
 
     @Test
     fun `nell'ultimo minuto si dice meno di un minuto, mai zero`() {
         val stato = bocciabile(fatta("2026-10-02T10:00:00+00:00"), Instant.parse("2026-10-03T09:59:30Z"))
         assertTrue(stato is Bocciabile.Si)
-        assertEquals("Puoi bocciarla ancora per meno di un minuto.", testoBocciabile(p, stato))
+        assertEquals("Puoi bocciarlo ancora per meno di un minuto.", testoBocciabile(p, stato))
     }
 
     @Test
@@ -444,11 +465,11 @@ class FaccendeTest {
 
     @Test
     fun `data da, bocciata da, annullata da`() {
-        assertEquals("data da Mamma", testoDataDa(p, faccenda(creataDa = mamma), papa))
-        assertEquals("data da te", testoDataDa(p, faccenda(creataDa = mamma), mamma))
+        assertEquals("dato da Mamma", testoDataDa(p, faccenda(creataDa = mamma), papa))
+        assertEquals("dato da te", testoDataDa(p, faccenda(creataDa = mamma), mamma))
         assertNull(testoDataDa(p, faccenda(creataDa = null), mamma))
         assertEquals(
-            listOf("Bocciata 2 volte", "L'ultima volta da Papà: «manca il cestello»"),
+            listOf("Bocciato 2 volte", "L'ultima volta da Papà: «manca il cestello»"),
             righeBocciature(
                 p,
                 faccenda(bocciature = 2, ultimaBocciatura = Bocciatura(ts = "…", nota = "manca il cestello", da = papa)),
@@ -456,13 +477,13 @@ class FaccendeTest {
             ),
         )
         assertEquals(
-            listOf("Bocciata una volta", "L'ultima volta da te"),
+            listOf("Bocciato una volta", "L'ultima volta da te"),
             righeBocciature(p, faccenda(bocciature = 1, ultimaBocciatura = Bocciatura(da = mamma)), mamma),
         )
         assertTrue(righeBocciature(p, faccenda(), mamma).isEmpty())
-        assertEquals("Annullata da Papà", testoAnnullata(p, faccenda(annullataDa = papa), mamma))
-        assertEquals("Annullata da te", testoAnnullata(p, faccenda(annullataDa = papa), papa))
-        assertEquals("Annullata", testoAnnullata(p, faccenda(), papa))
+        assertEquals("Annullato da Papà", testoAnnullata(p, faccenda(annullataDa = papa), mamma))
+        assertEquals("Annullato da te", testoAnnullata(p, faccenda(annullataDa = papa), papa))
+        assertEquals("Annullato", testoAnnullata(p, faccenda(), papa))
     }
 
     @Test
@@ -573,7 +594,7 @@ class FaccendeTest {
         assertEquals(ProblemaTesto.CARATTERI_INVISIBILI, problemaTitolo("Rifai\nil letto"))
         assertEquals(ProblemaTesto.CARATTERI_INVISIBILI, problemaTitolo("Rifai​il letto"))
         assertEquals("Al massimo 80 caratteri.", testoProblemaTitolo(p, ProblemaTesto.TROPPO_LUNGO))
-        assertEquals("Scrivi la faccenda, o togli la riga.", testoProblemaTitolo(p, ProblemaTesto.VUOTO))
+        assertEquals("Scrivi il lavoro, o togli la riga.", testoProblemaTitolo(p, ProblemaTesto.VUOTO))
     }
 
     @Test
@@ -640,19 +661,19 @@ class FaccendeTest {
     @Test
     fun `ogni rifiuto delle faccende col suo motivo`() {
         assertEquals(
-            "Luca ha già 20 faccende da fare: non se ne possono dare altre finché non ne fa qualcuna, o finché non ne annulli.",
+            "Luca ha già 20 lavori di casa da fare: non se ne possono dare altri finché non ne fa qualcuno, o finché non ne annulli.",
             messaggioRifiutoFaccende(p, CodiciErrore.TROPPE_FACCENDE, GestoFaccende.DAI, "Luca"),
         )
         assertEquals(
-            "Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l'ha già bocciata o annullata. Ho riletto l'elenco.",
+            "Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l'ha già bocciato o annullato. Ho riletto l'elenco.",
             messaggioRifiutoFaccende(p, CodiciErrore.NON_BOCCIABILE, GestoFaccende.BOCCIA, "Luca"),
         )
         assertEquals(
-            "Non si può annullare: non è più da fare (la foto è arrivata, o qualcuno l'ha già annullata). Ho riletto l'elenco.",
+            "Non si può annullare: non è più da fare (la foto è arrivata, o qualcuno l'ha già annullato). Ho riletto l'elenco.",
             messaggioRifiutoFaccende(p, CodiciErrore.NON_ANNULLABILE, GestoFaccende.ANNULLA, "Luca"),
         )
         assertEquals(
-            "Non trovo più questa faccenda: ho riletto l'elenco.",
+            "Non trovo più questo lavoro: ho riletto l'elenco.",
             messaggioRifiutoFaccende(p, CodiciErrore.NON_TROVATO, GestoFaccende.BOCCIA, "Luca"),
         )
         assertEquals(
@@ -660,7 +681,7 @@ class FaccendeTest {
             messaggioRifiutoFaccende(p, CodiciErrore.NON_TROVATO, GestoFaccende.DAI, "Luca"),
         )
         assertEquals(
-            "Per le faccende serve aggiornare il server di Pactum.",
+            "Per i lavori di casa serve aggiornare il server di Pactum.",
             messaggioRifiutoFaccende(p, CodiciErrore.SERVER_DA_AGGIORNARE, GestoFaccende.DAI, "Luca"),
         )
         assertEquals(
@@ -672,11 +693,11 @@ class FaccendeTest {
             messaggioRifiutoFaccende(p, "codice_del_futuro", GestoFaccende.DAI, "Luca"),
         )
         assertEquals(
-            "Qualcosa non va: ogni faccenda da 1 a 80 caratteri, la nota fino a 300. Controlla e riprova.",
+            "Qualcosa non va: ogni lavoro da 1 a 80 caratteri, la nota fino a 300. Controlla e riprova.",
             messaggioRifiutoFaccende(p, PostinoClient.PARAMETRI_NON_VALIDI, GestoFaccende.DAI, "Luca"),
         )
-        assertEquals("Faccenda data.", testoFaccendeDate(p, 1))
-        assertEquals("Faccende date: 3.", testoFaccendeDate(p, 3))
+        assertEquals("Lavoro di casa dato.", testoFaccendeDate(p, 1))
+        assertEquals("Lavori di casa dati: 3.", testoFaccendeDate(p, 3))
     }
 
     @Test
@@ -837,11 +858,11 @@ class FaccendeTest {
             },
         )
         assertEquals(
-            TestoNotifica("Faccenda fatta", "Luca ha fatto «Svuota la lavastoviglie»: tocca per vedere la foto."),
+            TestoNotifica("Lavoro fatto", "Luca ha fatto «Svuota la lavastoviglie»: tocca per vedere la foto."),
             testoNotifica(p, n, emptyMap(), figli),
         )
         assertEquals(
-            TestoNotifica("Faccenda fatta", "Tuo figlio ha fatto «Svuota la lavastoviglie»: tocca per vedere la foto."),
+            TestoNotifica("Lavoro fatto", "Tuo figlio ha fatto «Svuota la lavastoviglie»: tocca per vedere la foto."),
             testoNotifica(p, n, emptyMap()),
         )
         assertEquals(5L, faccendaDellaNotifica(n))
@@ -857,20 +878,20 @@ class FaccendeTest {
             },
         )
         assertEquals(
-            TestoNotifica("Faccenda fatta", "Luca ha fatto «Svuota la lavastoviglie»."),
+            TestoNotifica("Lavoro fatto", "Luca ha fatto «Svuota la lavastoviglie»."),
             testoNotifica(p, fatta, emptyMap(), figli, nellaTendina = false),
         )
         assertEquals(
-            TestoNotifica("Faccenda fatta", "Tuo figlio ha fatto «Svuota la lavastoviglie»."),
+            TestoNotifica("Lavoro fatto", "Tuo figlio ha fatto «Svuota la lavastoviglie»."),
             testoNotifica(p, fatta, emptyMap(), nellaTendina = false),
         )
         val finite = notifica(
             "faccende_finite",
             buildJsonObject { putJsonArray("faccenda_ids") { add(5) } },
-            messaggio = "Luca ha finito le faccende: telefono e computer sbloccati",
+            messaggio = "Luca ha finito i lavori di casa: telefono e computer sbloccati",
         )
         assertEquals(
-            TestoNotifica("Faccende finite", "Luca ha finito le faccende: telefono e computer sbloccati"),
+            TestoNotifica("Lavori di casa finiti", "Luca ha finito i lavori di casa: telefono e computer sbloccati"),
             testoNotifica(p, finite, emptyMap(), figli, nellaTendina = false),
         )
     }
@@ -878,7 +899,7 @@ class FaccendeTest {
     @Test
     fun `faccenda fatta senza titolo, il messaggio del server, col titolo del tipo`() {
         val n = notifica("faccenda_fatta", buildJsonObject { put("faccenda_id", 5) })
-        assertEquals(TestoNotifica("Faccenda fatta", "messaggio del server"), testoNotifica(p, n, emptyMap(), figli))
+        assertEquals(TestoNotifica("Lavoro fatto", "messaggio del server"), testoNotifica(p, n, emptyMap(), figli))
     }
 
     @Test
@@ -886,10 +907,10 @@ class FaccendeTest {
         val n = notifica(
             "faccende_finite",
             buildJsonObject { putJsonArray("faccenda_ids") { add(5); add(6) } },
-            messaggio = "Luca ha finito le faccende: telefono e computer sbloccati",
+            messaggio = "Luca ha finito i lavori di casa: telefono e computer sbloccati",
         )
         assertEquals(
-            TestoNotifica("Faccende finite", "Luca ha finito le faccende: telefono e computer sbloccati\nTocca per vedere le foto."),
+            TestoNotifica("Lavori di casa finiti", "Luca ha finito i lavori di casa: telefono e computer sbloccati\nTocca per vedere le foto."),
             testoNotifica(p, n, emptyMap(), figli),
         )
         assertNull(faccendaDellaNotifica(n))
@@ -921,7 +942,7 @@ class FaccendeTest {
     fun `il programma chiuso durante il blocco, e i permessi tolti`() {
         val chiuso = notifica("manomissione", buildJsonObject { putJsonObject("dettagli") { put("sotto_tipo", "chiuso_durante_blocco") } })
         assertEquals(
-            TestoNotifica("Anomalia", "Pactum è stato chiuso sul computer durante il blocco delle faccende"),
+            TestoNotifica("Anomalia", "Pactum è stato chiuso sul computer durante il blocco dei lavori di casa"),
             testoNotifica(p, chiuso, emptyMap()),
         )
         fun permesso(valore: String?) = testoNotifica(

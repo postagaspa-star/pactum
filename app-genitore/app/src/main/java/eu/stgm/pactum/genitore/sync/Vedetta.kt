@@ -85,7 +85,8 @@ import java.time.LocalTime
  * - COMPLETO, circa ogni 15 minuti: la lista INTERA delle non lette (così il
  *   ricordo dimentica le lette), il silenzio dei dispositivi (avvisa quando un
  *   dispositivo smette di mandare dati e, con tono tranquillo, quando il
- *   contatto torna; un computer spento non è un silenzio) e il digest della
+ *   contatto torna; un dispositivo spento, computer o (0.14) telefono, non è
+ *   un silenzio) e il digest della
  *   sera. Su un server 0.7 il silenzio si guarda sulla finestra, come prima.
  *
  * L'aggiornamento dell'app NON passa di qui: lo scarica solo il worker

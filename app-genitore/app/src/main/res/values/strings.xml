@@ -41,7 +41,8 @@
 
     <!-- Cornice: cos\'è Pactum e ruolo del genitore (card in cima alla Panoramica) -->
     <string name="intro_titolo">Come funziona Pactum</string>
-    <string name="intro_testo">In Pactum è tuo figlio a darsi le regole. Tu le vedi e puoi proporre modifiche, ma non le imponi. Anche lui può chiederti di cambiare una sua regola: decidi tu. L\'app non blocca niente: è un testimone, non un controllore. Il tuo ruolo è verificare, proporre e rispondere alle sue proposte, con fiducia.</string>
+    <!-- (0.14) Dalla 0.11 (sessioni) e dalla 0.13 (lavori di casa) "non blocca niente" non era più vero: si dicono le due eccezioni -->
+    <string name="intro_testo">In Pactum è tuo figlio a darsi le regole. Tu le vedi e puoi proporre modifiche, ma non le imponi. Anche lui può chiederti di cambiare una sua regola: decidi tu. Pactum non blocca niente, con due eccezioni: le sessioni, che tuo figlio si sceglie da solo, e i lavori di casa, che gli date voi genitori: finché non sono fatti, telefono e computer restano bloccati. Per il resto è un testimone, non un controllore. Il tuo ruolo è verificare, proporre e rispondere alle sue proposte, con fiducia.</string>
     <string name="intro_chiudi">Ho capito</string>
 
     <!-- Finestra (Panoramica) -->
@@ -54,8 +55,9 @@
     <string name="silenzio_in_contatto">In contatto — ultimo aggiornamento alle %1$s</string>
     <string name="silenzio_allarme">Nessun aggiornamento dalle %1$s — l\'app del figlio non sta inviando dati</string>
     <string name="silenzio_mai">Nessun aggiornamento — l\'app del figlio non ha ancora inviato dati</string>
-    <string name="silenzio_spiega">Può essere la batteria, la rete o l\'app chiusa. C\'è un\'interruzione nella registrazione.</string>
-    <string name="silenzio_spiega_computer">Può essere la rete, la corrente staccata o Pactum chiuso sul computer. C\'è un\'interruzione nella registrazione.</string>
+    <!-- (0.14, contratto v3.7) Il silenzio non accusa: si dice che cosa può essere, senza dare la colpa -->
+    <string name="silenzio_spiega">Può essere senza rete o scarico, oppure Pactum è stato fermato.</string>
+    <string name="silenzio_spiega_computer">Può essere senza rete o senza corrente, oppure Pactum è stato fermato.</string>
     <string name="finestra_aggiornata_alle">Aggiornato alle %1$s</string>
 
     <!-- v3: la famiglia. In cima a Panoramica, Tempo e "Proposte e conferme" la
@@ -79,6 +81,8 @@
     <!-- Oltre 24 ore "spento" può non essere vero (Pactum tolto dall\'avvio automatico):
          si dice quello che si sa. Non è un allarme. -->
     <string name="dispositivo_spento_a_lungo">Nessun dato dal computer %1$s: spento, oppure Pactum non è partito</string>
+    <!-- (0.14, contratto v3.7) Anche il telefono può essere spento, come il computer -->
+    <string name="dispositivo_spento_a_lungo_telefono">Nessun dato dal telefono %1$s: spento, oppure Pactum non è partito</string>
     <string name="dispositivo_silente">Nessun aggiornamento %1$s</string>
     <string name="dispositivo_mai_sentito">Collegato, ma non ha ancora mandato dati</string>
     <string name="dispositivo_da_collegare">Da collegare: il codice si crea nelle Impostazioni, sezione Famiglia</string>
@@ -277,6 +281,11 @@
     <string name="notifica_computer_in_sospensione">Il computer è andato in sospensione. Non è un\'interruzione nella registrazione.</string>
     <string name="notifica_uscita_account">Il figlio è uscito dal suo account sul computer. Non è un\'interruzione nella registrazione.</string>
     <string name="notifica_computer_acceso">Il computer è stato acceso e Pactum ha ripreso a registrare.</string>
+    <!-- (0.14, contratto v3.7) Lo spegnimento e la riaccensione del telefono: nemmeno questi sono interruzioni -->
+    <string name="tipo_telefono_spento">Telefono spento</string>
+    <string name="tipo_telefono_acceso">Telefono acceso</string>
+    <string name="notifica_telefono_spento">Il telefono è stato spento. Non è un\'interruzione nella registrazione.</string>
+    <string name="notifica_telefono_acceso">Il telefono è stato acceso e Pactum ha ripreso a registrare.</string>
     <string name="notifica_computer_riattivato">Il computer è uscito dalla sospensione e Pactum ha ripreso a registrare.</string>
     <string name="notifica_accesso_account">Il figlio è entrato nel suo account sul computer e Pactum ha ripreso a registrare.</string>
 
@@ -322,8 +331,9 @@
     <string name="notifica_contatto_titolo">Aggiornamenti ripresi</string>
     <string name="notifica_contatto_testo">L\'app del figlio ha ripreso a inviare aggiornamenti alle %1$s. Tutto a posto.</string>
     <!-- v3: gli stessi avvisi per UN dispositivo (di chi è lo dice la riga sopra il titolo) -->
-    <string name="notifica_silenzio_telefono">Il telefono non invia aggiornamenti %1$s.</string>
-    <string name="notifica_silenzio_computer">Il computer non invia aggiornamenti %1$s.</string>
+    <!-- (0.14, contratto v3.7) Senza accuse: "dalle 15:10: può essere senza rete o scarico…" -->
+    <string name="notifica_silenzio_telefono">Il telefono non manda aggiornamenti %1$s: può essere senza rete o scarico, oppure Pactum è stato fermato.</string>
+    <string name="notifica_silenzio_computer">Il computer non manda aggiornamenti %1$s: può essere senza rete o senza corrente, oppure Pactum è stato fermato.</string>
     <string name="notifica_silenzio_mai_dispositivo">Non ha ancora inviato aggiornamenti.</string>
     <string name="notifica_contatto_telefono">Il telefono ha ripreso a inviare aggiornamenti %1$s. Tutto a posto.</string>
     <string name="notifica_contatto_computer">Il computer ha ripreso a inviare aggiornamenti %1$s. Tutto a posto.</string>
@@ -331,6 +341,11 @@
     <string name="notifica_spento_dopo_silenzio_senza_ora">Il computer risulta spento: non è un\'interruzione nella registrazione.</string>
     <string name="notifica_spento_a_lungo_titolo">Nessun dato dal computer</string>
     <string name="notifica_spento_a_lungo">Il computer non manda dati %1$s: è spento, oppure Pactum non è partito.</string>
+    <!-- (0.14, contratto v3.7) Gli stessi avvisi per il telefono spento -->
+    <string name="notifica_telefono_era_spento">Il telefono era spento %1$s: non è un\'interruzione.</string>
+    <string name="notifica_telefono_era_spento_senza_ora">Il telefono era spento: non è un\'interruzione.</string>
+    <string name="notifica_spento_a_lungo_titolo_telefono">Nessun dato dal telefono</string>
+    <string name="notifica_spento_a_lungo_telefono">Il telefono non manda dati %1$s: è spento, oppure Pactum non è partito.</string>
 
     <!-- Impostazioni: tre blocchi (connessione, digest, aggiornamenti) -->
     <string name="impostazioni_titolo">Impostazioni</string>
@@ -859,7 +874,7 @@
     <string name="famiglia_nome_genitore">Nome del genitore</string>
     <string name="famiglia_nome_genitore_esempio">Per esempio: Mamma, Papà</string>
     <string name="togli_genitore_titolo">Togliere «%1$s»?</string>
-    <string name="togli_genitore_testo">Il suo telefono smette di vedere il patto. Niente si cancella: le sue proposte, decisioni e faccende restano col suo nome.</string>
+    <string name="togli_genitore_testo">Il suo telefono smette di vedere il patto. Niente si cancella: le sue proposte, le sue decisioni e i lavori di casa che ha dato restano col suo nome.</string>
     <string name="famiglia_genitore_tolto">Genitore tolto.</string>
     <string name="famiglia_genitore_aggiunto_senza_codice">Il genitore è stato aggiunto, ma il codice non è arrivato: tocca «Nuovo codice» sulla sua riga.</string>
     <string name="famiglia_errore_non_te_stesso">Non puoi togliere te stesso: lo può fare un altro genitore dal suo telefono.</string>
@@ -872,39 +887,41 @@
     <string name="codice_dove_genitore">L\'app del genitore si scarica da %1$s</string>
     <string name="codice_ricollegamento_genitore">Quando il codice viene usato, il suo telefono di prima smette di vedere il patto.</string>
 
-    <!-- (0.13) Le faccende (contratto v3.6). Un genitore dà al figlio delle faccende di casa:
-         finché non ha mandato la foto di ognuna, telefono e computer restano bloccati (sul
-         telefono tranne poche app fondamentali). Una foto si può bocciare entro 24 ore. -->
-    <string name="faccende_titolo">Faccende</string>
-    <string name="faccende_caricamento">Sto leggendo le faccende…</string>
+    <!-- (0.13) I lavori di casa (contratto v3.6; le chiavi dicono ancora "faccende", come i
+         nomi tecnici). Un genitore dà al figlio dei lavori di casa: finché non ha mandato la
+         foto di ognuno, telefono e computer restano bloccati (sul telefono tranne poche app
+         fondamentali). Una foto si può bocciare entro 24 ore. (0.14, contratto v3.7) Nei testi
+         "lavori di casa", al singolare "lavoro" (maschile: fatto, bocciato, annullato). -->
+    <string name="faccende_titolo">Lavori di casa</string>
+    <string name="faccende_caricamento">Sto leggendo i lavori di casa…</string>
     <string name="faccende_errore">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
     <string name="faccende_dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
     <string name="faccende_server_vecchio_titolo">Serve aggiornare il server</string>
-    <string name="faccende_server_vecchio">Per le faccende serve aggiornare il server di Pactum.</string>
-    <string name="faccende_spiega">Finché %1$s non ha mandato la foto di ogni faccenda, telefono e computer restano bloccati, tranne poche app fondamentali sul telefono.</string>
-    <string name="faccende_spiega_senza_nome">Finché tuo figlio non ha mandato la foto di ogni faccenda, telefono e computer restano bloccati, tranne poche app fondamentali sul telefono.</string>
-    <string name="faccende_dai">Dai faccende</string>
-    <string name="faccende_apri">Apri le faccende</string>
+    <string name="faccende_server_vecchio">Per i lavori di casa serve aggiornare il server di Pactum.</string>
+    <string name="faccende_spiega">Finché %1$s non ha mandato la foto di ogni lavoro, telefono e computer restano bloccati, tranne poche app fondamentali sul telefono.</string>
+    <string name="faccende_spiega_senza_nome">Finché tuo figlio non ha mandato la foto di ogni lavoro, telefono e computer restano bloccati, tranne poche app fondamentali sul telefono.</string>
+    <string name="faccende_dai">Dai lavori di casa</string>
+    <string name="faccende_apri">Apri i lavori di casa</string>
     <string name="faccende_da_fare">DA FARE</string>
-    <string name="faccende_fatte">FATTE</string>
-    <string name="faccende_annullate">ANNULLATE</string>
-    <string name="faccende_nessuna">Nessuna faccenda negli ultimi 30 giorni.</string>
+    <string name="faccende_fatte">FATTI</string>
+    <string name="faccende_annullate">ANNULLATI</string>
+    <string name="faccende_nessuna">Nessun lavoro di casa negli ultimi 30 giorni.</string>
     <string name="faccende_foto_30_giorni">Le foto restano 30 giorni, poi si cancellano. Si vedono solo qui: non vanno nella galleria.</string>
     <!-- Lo stato del blocco: "Blocco attivo dalle 16:00", "Il blocco parte alle 16:00" -->
     <string name="blocco_attivo_dal">Blocco attivo %1$s</string>
     <string name="blocco_attivo">Blocco attivo</string>
     <string name="blocco_parte">Il blocco parte %1$s</string>
     <string name="blocco_nessuno">Niente da fare: nessun blocco.</string>
-    <string name="faccende_una_da_fare">Una faccenda da fare</string>
-    <string name="faccende_quante_da_fare">%1$d faccende da fare</string>
+    <string name="faccende_una_da_fare">Un lavoro di casa da fare</string>
+    <string name="faccende_quante_da_fare">%1$d lavori di casa da fare</string>
     <string name="faccende_foto_da_guardare_una">Una foto arrivata da meno di 24 ore: si può ancora bocciare.</string>
     <string name="faccende_foto_da_guardare">%1$d foto arrivate da meno di 24 ore: si possono ancora bocciare.</string>
-    <!-- Una faccenda: chi l\'ha data, da quando blocca, le bocciature, la foto -->
-    <string name="faccenda_data_da">data da %1$s</string>
-    <string name="faccenda_data_da_te">data da te</string>
+    <!-- Un lavoro: chi l\'ha dato, da quando blocca, le bocciature, la foto -->
+    <string name="faccenda_data_da">dato da %1$s</string>
+    <string name="faccenda_data_da_te">dato da te</string>
     <string name="faccenda_blocca">blocca %1$s</string>
-    <string name="faccenda_bocciata_una_volta">Bocciata una volta</string>
-    <string name="faccenda_bocciata_volte">Bocciata %1$d volte</string>
+    <string name="faccenda_bocciata_una_volta">Bocciato una volta</string>
+    <string name="faccenda_bocciata_volte">Bocciato %1$d volte</string>
     <string name="faccenda_ultima_bocciatura">L\'ultima volta da %1$s: «%2$s»</string>
     <string name="faccenda_ultima_bocciatura_senza_nota">L\'ultima volta da %1$s</string>
     <string name="faccenda_ultima_bocciatura_tua">L\'ultima volta da te: «%1$s»</string>
@@ -913,75 +930,75 @@
     <string name="faccenda_foto_arrivata">Foto %1$s</string>
     <string name="faccenda_guarda_foto">Guarda la foto</string>
     <string name="faccenda_foto_cancellata">La foto non c\'è più: le foto restano 30 giorni.</string>
-    <string name="faccenda_annullata_da">Annullata da %1$s</string>
-    <string name="faccenda_annullata_da_te">Annullata da te</string>
-    <string name="faccenda_annullata">Annullata</string>
+    <string name="faccenda_annullata_da">Annullato da %1$s</string>
+    <string name="faccenda_annullata_da_te">Annullato da te</string>
+    <string name="faccenda_annullata">Annullato</string>
     <string name="faccenda_annulla">Annulla</string>
     <string name="faccenda_boccia">Boccia</string>
-    <string name="faccenda_boccia_resta">Puoi bocciarla ancora per %1$s.</string>
-    <string name="faccenda_boccia_resta_poco">Puoi bocciarla ancora per meno di un minuto.</string>
+    <string name="faccenda_boccia_resta">Puoi bocciarlo ancora per %1$s.</string>
+    <string name="faccenda_boccia_resta_poco">Puoi bocciarlo ancora per meno di un minuto.</string>
     <string name="faccenda_boccia_scaduta">Sono passate 24 ore dalla foto: non si può più bocciare.</string>
     <!-- Bocciare e annullare passano da una domanda -->
     <string name="boccia_titolo">Bocciare «%1$s»?</string>
-    <string name="boccia_testo">La faccenda torna da fare e il blocco riparte subito. %1$s legge il perché, se lo scrivi.</string>
-    <string name="boccia_testo_senza_nome">La faccenda torna da fare e il blocco riparte subito. Tuo figlio legge il perché, se lo scrivi.</string>
-    <string name="boccia_fatto">Bocciata: la faccenda è di nuovo da fare.</string>
+    <string name="boccia_testo">Il lavoro torna da fare e il blocco riparte subito. %1$s legge il perché, se lo scrivi.</string>
+    <string name="boccia_testo_senza_nome">Il lavoro torna da fare e il blocco riparte subito. Tuo figlio legge il perché, se lo scrivi.</string>
+    <string name="boccia_fatto">Bocciato: il lavoro è di nuovo da fare.</string>
     <string name="annulla_faccenda_titolo">Annullare «%1$s»?</string>
-    <string name="annulla_faccenda_testo">Non sarà più da fare. Se era l\'ultima che bloccava, il blocco finisce.</string>
-    <string name="annulla_faccenda_conferma">Annulla la faccenda</string>
-    <string name="annulla_faccenda_lascia">Lasciala</string>
-    <string name="annulla_faccenda_fatto">Faccenda annullata.</string>
-    <!-- "Dai faccende": uno o più titoli, i titoli usati di recente, la nota, da quando blocca -->
-    <string name="dai_titolo">Faccende per %1$s</string>
-    <string name="dai_titolo_senza_nome">Dai faccende</string>
-    <string name="dai_campo_faccenda">Faccenda %1$d</string>
+    <string name="annulla_faccenda_testo">Non sarà più da fare. Se era l\'ultimo che bloccava, il blocco finisce.</string>
+    <string name="annulla_faccenda_conferma">Annulla il lavoro</string>
+    <string name="annulla_faccenda_lascia">Lascialo</string>
+    <string name="annulla_faccenda_fatto">Lavoro annullato.</string>
+    <!-- "Dai lavori di casa": uno o più titoli, i titoli usati di recente, la nota, da quando blocca -->
+    <string name="dai_titolo">Lavori di casa per %1$s</string>
+    <string name="dai_titolo_senza_nome">Dai lavori di casa</string>
+    <string name="dai_campo_faccenda">Lavoro %1$d</string>
     <string name="dai_faccenda_esempio">Per esempio: Svuota la lavastoviglie</string>
-    <string name="dai_aggiungi">Aggiungi un\'altra faccenda</string>
-    <string name="dai_togli_riga">Togli questa faccenda</string>
-    <string name="dai_massimo">Al massimo %1$d faccende per volta.</string>
-    <string name="dai_recenti">USATE DI RECENTE</string>
+    <string name="dai_aggiungi">Aggiungi un altro lavoro</string>
+    <string name="dai_togli_riga">Togli questo lavoro</string>
+    <string name="dai_massimo">Al massimo %1$d lavori per volta.</string>
+    <string name="dai_recenti">USATI DI RECENTE</string>
     <string name="dai_nota">Nota (facoltativa)</string>
-    <string name="dai_nota_spiega">Vale per tutte le faccende di questa volta.</string>
+    <string name="dai_nota_spiega">Vale per tutti i lavori di questa volta.</string>
     <string name="dai_blocco">BLOCCO</string>
     <string name="dai_subito">Subito</string>
     <string name="dai_dalle">Dalle %1$s</string>
     <string name="dai_scegli_ora">Da che ora</string>
-    <string name="dai_succede_subito">Il blocco parte appena le dai: telefono e computer di %1$s restano bloccati finché non manda la foto di ogni faccenda.</string>
-    <string name="dai_succede_subito_senza_nome">Il blocco parte appena le dai: telefono e computer di tuo figlio restano bloccati finché non manda la foto di ogni faccenda.</string>
+    <string name="dai_succede_subito">Il blocco parte appena li dai: telefono e computer di %1$s restano bloccati finché non manda la foto di ogni lavoro.</string>
+    <string name="dai_succede_subito_senza_nome">Il blocco parte appena li dai: telefono e computer di tuo figlio restano bloccati finché non manda la foto di ogni lavoro.</string>
     <!-- %1$s = l\'ora, %2$s = il giorno scritto per intero ("domenica 25/10"): "domani"
          da solo, con il dialogo aperto a cavallo di mezzanotte, direbbe il giorno sbagliato -->
-    <string name="dai_succede_oggi">Il blocco parte oggi, %2$s, alle %1$s, se a quell\'ora non le ha ancora fatte tutte. Può farle anche prima.</string>
-    <string name="dai_succede_domani">Le %1$s di oggi sono già passate: il blocco parte domani, %2$s, alle %1$s, se a quell\'ora non le ha ancora fatte tutte.</string>
-    <string name="dai_manda">Dai le faccende</string>
-    <string name="dai_errore_vuoto">Scrivi la faccenda, o togli la riga.</string>
+    <string name="dai_succede_oggi">Il blocco parte oggi, %2$s, alle %1$s, se a quell\'ora non li ha ancora fatti tutti. Può farli anche prima.</string>
+    <string name="dai_succede_domani">Le %1$s di oggi sono già passate: il blocco parte domani, %2$s, alle %1$s, se a quell\'ora non li ha ancora fatti tutti.</string>
+    <string name="dai_manda">Dai i lavori di casa</string>
+    <string name="dai_errore_vuoto">Scrivi il lavoro, o togli la riga.</string>
     <string name="dai_errore_lungo">Al massimo %1$d caratteri.</string>
     <string name="dai_errore_invisibili">Ci sono caratteri che non si possono usare (a capo, tab o segni invisibili).</string>
-    <string name="dai_fatto_una">Faccenda data.</string>
-    <string name="dai_fatto">Faccende date: %1$d.</string>
+    <string name="dai_fatto_una">Lavoro di casa dato.</string>
+    <string name="dai_fatto">Lavori di casa dati: %1$d.</string>
     <!-- Le app troppo vecchie per il blocco (versione_app di GET /api/famiglia) -->
     <string name="faccende_versione_vecchia">Su «%1$s» c\'è Pactum %2$s: lì il blocco non parte. Serve la 0.13 o più nuova.</string>
     <string name="faccende_versione_sconosciuta">Su «%1$s» non so che versione di Pactum c\'è: se è più vecchia della 0.13, lì il blocco non parte.</string>
-    <!-- I rifiuti del server sulle faccende, ciascuno col suo motivo -->
-    <string name="faccende_errore_troppe">%1$s ha già 20 faccende da fare: non se ne possono dare altre finché non ne fa qualcuna, o finché non ne annulli.</string>
-    <string name="faccende_errore_troppe_senza_nome">Ci sono già 20 faccende da fare: non se ne possono dare altre finché non ne fa qualcuna, o finché non ne annulli.</string>
-    <string name="faccende_errore_parametri">Qualcosa non va: ogni faccenda da 1 a 80 caratteri, la nota fino a 300. Controlla e riprova.</string>
-    <string name="faccende_errore_non_bocciabile">Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l\'ha già bocciata o annullata. Ho riletto l\'elenco.</string>
-    <string name="faccende_errore_non_annullabile">Non si può annullare: non è più da fare (la foto è arrivata, o qualcuno l\'ha già annullata). Ho riletto l\'elenco.</string>
-    <string name="faccende_errore_non_trovata">Non trovo più questa faccenda: ho riletto l\'elenco.</string>
+    <!-- I rifiuti del server sui lavori di casa, ciascuno col suo motivo -->
+    <string name="faccende_errore_troppe">%1$s ha già 20 lavori di casa da fare: non se ne possono dare altri finché non ne fa qualcuno, o finché non ne annulli.</string>
+    <string name="faccende_errore_troppe_senza_nome">Ci sono già 20 lavori di casa da fare: non se ne possono dare altri finché non ne fa qualcuno, o finché non ne annulli.</string>
+    <string name="faccende_errore_parametri">Qualcosa non va: ogni lavoro da 1 a 80 caratteri, la nota fino a 300. Controlla e riprova.</string>
+    <string name="faccende_errore_non_bocciabile">Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l\'ha già bocciato o annullato. Ho riletto l\'elenco.</string>
+    <string name="faccende_errore_non_annullabile">Non si può annullare: non è più da fare (la foto è arrivata, o qualcuno l\'ha già annullato). Ho riletto l\'elenco.</string>
+    <string name="faccende_errore_non_trovata">Non trovo più questo lavoro: ho riletto l\'elenco.</string>
     <string name="faccende_errore_figlio_non_trovato">Non trovo più questo figlio: ho riletto la famiglia.</string>
     <string name="faccende_errore_rete">Non riesco a raggiungere il server: riprova.</string>
-    <string name="faccende_errore_esito_incerto">Il server non ha risposto e non so se le faccende sono arrivate: guarda l\'elenco prima di riprovare.</string>
+    <string name="faccende_errore_esito_incerto">Il server non ha risposto e non so se i lavori di casa sono arrivati: guarda l\'elenco prima di riprovare.</string>
     <string name="faccende_errore_rifiutato">Il server non ha accettato la richiesta: aggiorna e riprova.</string>
     <!-- La foto a tutto schermo: si scarica col collegamento del genitore e resta in memoria -->
     <string name="foto_caricamento">Sto scaricando la foto…</string>
-    <string name="foto_non_trovata">La foto non c\'è più: è stata bocciata, oppure sono passati 30 giorni.</string>
+    <string name="foto_non_trovata">La foto non c\'è più: il lavoro è stato bocciato, oppure sono passati 30 giorni.</string>
     <string name="foto_errore">Non riesco a scaricare la foto.</string>
     <string name="foto_riprova">Riprova</string>
     <string name="foto_chiudi">Chiudi</string>
-    <string name="foto_descrizione">Foto della faccenda «%1$s»</string>
-    <!-- Le notifiche delle faccende (al genitore: faccenda_fatta, faccende_finite) -->
-    <string name="tipo_faccenda_fatta">Faccenda fatta</string>
-    <string name="tipo_faccende_finite">Faccende finite</string>
+    <string name="foto_descrizione">Foto del lavoro «%1$s»</string>
+    <!-- Le notifiche dei lavori di casa (al genitore: faccenda_fatta, faccende_finite) -->
+    <string name="tipo_faccenda_fatta">Lavoro fatto</string>
+    <string name="tipo_faccende_finite">Lavori di casa finiti</string>
     <string name="notifica_faccenda_fatta">%1$s ha fatto «%2$s»: tocca per vedere la foto.</string>
     <string name="notifica_faccenda_fatta_senza_nome">Tuo figlio ha fatto «%1$s»: tocca per vedere la foto.</string>
     <!-- Nella lista in app la riga non si tocca (c\'è il pulsante «Guarda la foto») -->
@@ -989,7 +1006,7 @@
     <string name="notifica_faccenda_fatta_lista_senza_nome">Tuo figlio ha fatto «%1$s».</string>
     <string name="notifica_faccende_finite_tocca">Tocca per vedere le foto.</string>
     <!-- Un permesso tolto durante il blocco, e il programma del computer chiuso durante il blocco -->
-    <string name="manomissione_chiuso_durante_blocco">Pactum è stato chiuso sul computer durante il blocco delle faccende</string>
+    <string name="manomissione_chiuso_durante_blocco">Pactum è stato chiuso sul computer durante il blocco dei lavori di casa</string>
     <string name="manomissione_permesso_sovrapposizione">Tolto a Pactum il permesso «Mostra sopra le altre app» sul telefono del figlio</string>
     <string name="manomissione_permesso_generico">Tolto un permesso di Pactum sul telefono del figlio</string>
     <!-- (0.13) Chi ha fatto cosa: proposte e sessioni di un altro genitore -->

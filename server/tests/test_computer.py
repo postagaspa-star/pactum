@@ -1,8 +1,8 @@
 """(v3) Il computer (contratto-api.md, "Computer: cosa cambia nel registro" e
 "Sul computer"): chiavi exe:/sito:/categoria: (422 quelle che non vanno per il tipo
 del dispositivo), `minuti` nei siti e ordinamento per minuti, `sospensione` e
-`ripresa` (spento non e' silente, solo per i computer), nuovi sotto_tipo di
-manomissione, pactum-computer.zip."""
+`ripresa` (spento non e' silente; dalla v3.7 anche per i telefoni, provati in
+test_telefono_spento.py), nuovi sotto_tipo di manomissione, pactum-computer.zip."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -226,13 +226,15 @@ def test_basta_la_ripresa_anche_nello_stesso_pacco(client, pc, orologio):
     assert stato["spento"] is False and stato["spento_dal"] is None
 
 
-def test_il_telefono_non_si_spegne_mai(client, orologio):
+def test_anche_il_telefono_si_spegne(client, orologio):
+    """(v3.7) Fino alla v3.6 il telefono non si spegneva mai (silente); ora fa come il
+    computer: dopo una sospensione e' spento, non silente."""
     client.post("/api/battito", json={}, headers=FIGLIO)
     eventi(client, FIGLIO, {"id": "s-tel", "tipo": "sospensione", "dettagli": {"motivo": "spegnimento"}})
     orologio.avanza(hours=2)
     stato = client.get("/api/finestra", headers=GENITORE).json()["stato_silenzio"]
-    assert stato == {"ultimo_battito": "2026-07-14T10:00:00+00:00", "silente": True,
-                     "spento": False, "spento_dal": None}
+    assert stato == {"ultimo_battito": "2026-07-14T10:00:00+00:00", "silente": False,
+                     "spento": True, "spento_dal": "2026-07-14T10:00:00+00:00"}
 
 
 def test_spento_anche_nella_famiglia(client, pc):
@@ -299,4 +301,4 @@ def test_scarica_il_programma_per_il_computer(client_zip):
     assert r.content == b"PK\x03\x04 finto zip"
     pagina = c.get("/scarica").text
     assert "/scarica/pactum-computer.zip" in pagina and "SmartScreen" in pagina
-    assert c.get("/api/versione").json()["computer"]["versione_nome"] == "0.13.0"
+    assert c.get("/api/versione").json()["computer"]["versione_nome"] == "0.14.0"

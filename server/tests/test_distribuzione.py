@@ -42,14 +42,14 @@ def test_versione_shape_e_default(client):
     # (v3) c'e' anche il programma per il computer, con la sua numerazione.
     # (v3.5) Le Sessioni sono solo dei telefoni: il programma del computer resta 0.10.
     assert set(dati) == {"figlio", "genitore", "computer"}
-    assert dati["computer"]["versione_code"] == 13
-    assert dati["computer"]["versione_nome"] == "0.13.0"
+    assert dati["computer"]["versione_code"] == 14
+    assert dati["computer"]["versione_nome"] == "0.14.0"
     assert dati["computer"]["url"] == "/scarica/pactum-computer.zip"
     for ruolo in ("figlio", "genitore"):
         blocco = dati[ruolo]
         assert set(blocco) >= {"versione_code", "versione_nome", "url"}
-        assert blocco["versione_code"] == 13
-        assert blocco["versione_nome"] == "0.13.0"
+        assert blocco["versione_code"] == 14
+        assert blocco["versione_nome"] == "0.14.0"
         assert blocco["url"] == f"/scarica/pactum-{ruolo}.apk"
     # Le due app viaggiano SEMPRE alla stessa versione: si rilasciano insieme e
     # la finestra del genitore deve mostrare quello che l'app del figlio manda.

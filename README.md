@@ -129,7 +129,7 @@ rest to mean anything.
 
 ## Status — work in progress
 
-Where it honestly stands at version 0.13, in October 2026:
+Where it honestly stands at version 0.14, in October 2026:
 
 - **It's deployed in one family, mine.** Since September the server has run on a
   NAS at home, in Docker, reachable from outside through Tailscale Funnel, with a

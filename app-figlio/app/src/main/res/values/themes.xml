@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tema piattaforma senza AppCompat: la UI vera è tutta Compose/Material 3. -->
-    <style name="Theme.PactumFiglio" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Tema piattaforma senza AppCompat: la UI vera è tutta Compose/Material 3.
+         (0.15) Il fondo della finestra è il fondo dell'app (background del tema
+         Compose): all'avvio niente lampo di un altro colore prima della prima
+         schermata. -->
+    <style name="Theme.PactumFiglio" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/fondo_app</item>
+    </style>
 </resources>

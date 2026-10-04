@@ -83,50 +83,6 @@ class FotoNotificheTest : Fotografo() {
     }
 
     @Test
-    fun avvisiDelTempo() {
-        avvisa(
-            AvvisiLocali.idPreavviso(1),
-            app.getString(R.string.preavviso_titolo),
-            app.resources.getQuantityString(R.plurals.preavviso_testo, 5, "Instagram", 5),
-            AvvisiLocali.CANALE_PREAVVISI,
-        )
-        avvisa(
-            AvvisiLocali.idSforamento(2),
-            app.getString(R.string.notifica_sforamento_limite_titolo),
-            app.getString(R.string.notifica_sforamento_limite_testo, "TikTok", 7, 45),
-            AvvisiLocali.CANALE_SFORAMENTI,
-        )
-        avvisa(
-            AvvisiLocali.idSforamento(4),
-            app.getString(R.string.notifica_sforamento_fascia_titolo),
-            app.getString(R.string.notifica_sforamento_fascia_testo, 12, "22:30", "07:00"),
-            AvvisiLocali.CANALE_SFORAMENTI,
-        )
-        val parole = ParoleSerale(
-            dentro = app.getString(R.string.serale_dentro),
-            finoraDentro = app.getString(R.string.serale_finora_dentro),
-            giornoInParole = app.getString(R.string.serale_giorno_in_parole),
-            ordinali = app.resources.getStringArray(R.array.serale_ordinali).toList(),
-            giornoInCifre = app.getString(R.string.serale_giorno_in_cifre),
-            oltre = app.getString(R.string.serale_oltre),
-            fascia = app.getString(R.string.serale_fascia),
-            fuori = app.getString(R.string.serale_fuori),
-            unAltraRegola = app.getString(R.string.serale_un_altra_regola),
-            altreRegole = app.getString(R.string.serale_altre_regole),
-            domani = app.getString(R.string.serale_domani),
-            durata = { testoDurata(app, it.toLong()) },
-        )
-        avvisa(
-            AvvisiLocali.ID_CHIUSURA_SERALE,
-            app.getString(R.string.serale_titolo),
-            TestoSerale.testo(Chiusura.OltreLimite("TikTok", 7, 1), parole),
-        )
-        scatta("18-notifiche-tempo", "Notifiche: preavviso (5 min), oltre il limite, nella fascia, chiusura della sera", pagine = false) {
-            tendina(AvvisiLocali.idPreavviso(1), AvvisiLocali.idSforamento(2), AvvisiLocali.idSforamento(4), AvvisiLocali.ID_CHIUSURA_SERALE)
-        }
-    }
-
-    @Test
     fun avvisiLavoriDiCasa() {
         val parole = NovitaDalPatto.paroleFaccende(app)
         val nuove = TestoFaccende.avvisoNuove(
@@ -180,32 +136,4 @@ class FotoNotificheTest : Fotografo() {
         }
     }
 
-    @Test
-    fun notificaFissa() {
-        // La notifica fissa del testimone la costruisce il servizio (codice privato):
-        // qui è rifatta con le stesse parole e lo stesso stile.
-        val svolta = DatiFinti.svoltaStudio()
-        val quando = TestoSessioni.quandoFinisce(svolta.fine, System.currentTimeMillis(), ZoneId.systemDefault())
-        AvvisiLocali.creaCanale(app)
-        val conSessione = NotificationCompat.Builder(app, AvvisiLocali.CANALE_PATTO)
-            .setSmallIcon(R.drawable.ic_notifica_testimone)
-            .setContentTitle(app.getString(R.string.notifica_testimone_titolo))
-            .setContentText(app.getString(R.string.notifica_testimone_sessione, nomeSessioneTraVirgolette(app, svolta.nome), quando.ora))
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .addAction(0, app.getString(R.string.sessione_termina), AvvisiLocali.apriScheda(app, MainActivity.DEST_TERMINA_SESSIONE))
-            .build()
-        val semplice = NotificationCompat.Builder(app, AvvisiLocali.CANALE_PATTO)
-            .setSmallIcon(R.drawable.ic_notifica_testimone)
-            .setContentTitle(app.getString(R.string.notifica_testimone_titolo))
-            .setContentText(app.getString(R.string.notifica_testimone_testo))
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .build()
-        app.getSystemService(NotificationManager::class.java).notify(1, semplice)
-        app.getSystemService(NotificationManager::class.java).notify(2, conSessione)
-        scatta("18-notifiche-fissa", "Notifica fissa del testimone, normale e con una sessione in corso (\"Termina la sessione\")", pagine = false) {
-            tendina(1, 2)
-        }
-    }
 }

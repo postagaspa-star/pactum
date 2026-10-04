@@ -34,10 +34,11 @@ android {
         // sessioni (nessun cambio al server). 0.13: le faccende e il loro
         // blocco (contratto v3.6). 0.14: la sospensione allo spegnimento e il
         // battito anche in stand-by, "lavori di casa" nei testi (contratto
-        // v3.7). Nuova funzione = nuovo versionCode, altrimenti
-        // l'auto-aggiornamento non la propone.
-        versionCode = 14
-        versionName = "0.14.0"
+        // v3.7). 0.15: il riordino dell'interfaccia (4 schede fisse, componenti
+        // comuni), comportamento invariato. Nuova funzione = nuovo versionCode,
+        // altrimenti l'auto-aggiornamento non la propone.
+        versionCode = 15
+        versionName = "0.15.0"
     }
 
     signingConfigs {
@@ -118,7 +119,8 @@ dependencies {
 // Il fotografo (src/test/.../fotografo) NON gira con la suite normale: è lento
 // e scarica Android per Robolectric. Si lancia a parte con -Pfotografo
 // (oppure -Pfotografo=<cartella dei PNG>; senza cartella: build/fotografo).
-// Con -Pfotografo girano SOLO i suoi test.
+// Con -Pfotografo girano SOLO i suoi test; -Pfotografo.solo=<pezzo di nome>
+// rifà solo le foto il cui nome lo contiene (un'espressione regolare).
 val fotografo: String? = providers.gradleProperty("fotografo").orNull
 tasks.withType<Test>().configureEach {
     if (fotografo != null) {
@@ -126,6 +128,8 @@ tasks.withType<Test>().configureEach {
         val cartella = fotografo.takeIf { it.isNotBlank() && it != "true" }
             ?: layout.buildDirectory.dir("fotografo").get().asFile.absolutePath
         systemProperty("fotografo.cartella", cartella)
+        // (0.15) -Pfotografo.solo=<pezzo di nome>: rifà solo una parte delle foto.
+        providers.gradleProperty("fotografo.solo").orNull?.let { systemProperty("fotografo.solo", it) }
         systemProperty("roborazzi.test.record", "true")
         maxHeapSize = "4g"
         outputs.upToDateWhen { false }

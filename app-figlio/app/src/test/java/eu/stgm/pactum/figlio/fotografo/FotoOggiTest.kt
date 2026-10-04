@@ -1,13 +1,15 @@
 package eu.stgm.pactum.figlio.fotografo
 
+import android.content.Intent
 import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.faccende.ArchivioBlocco
 import eu.stgm.pactum.figlio.faccende.ArchivioCodaFoto
 import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
 import eu.stgm.pactum.figlio.sessione.MemoriaSessioni
+import eu.stgm.pactum.figlio.ui.OggiViewModel
 import org.junit.Test
 
-/** 05 — La scheda Oggi, nei suoi stati. */
+/** 05 — La scheda Oggi, nei suoi stati (0.15: una card in cima al massimo, righe di stato, il patto, le regole, il tempo). */
 class FotoOggiTest : Fotografo() {
 
     private fun sessioneInCorso() {
@@ -17,7 +19,7 @@ class FotoOggiTest : Fotografo() {
     @Test
     fun normale() {
         Mondo.collegato(app)
-        scatta("05-oggi-normale", "Oggi, stato normale: serie, striscia, 7 regole (una oltre il limite), bonus, tempo per app, telefono + computer") {
+        scatta("05-oggi-normale", "Oggi, stato normale: card del patto, 7 regole (una oltre il limite) col \"+\", le prime 3 app, telefono + computer", Variante.SCHEDE, pagine = true) {
             apriPactum(StatiFinti()).comeAperta()
         }
     }
@@ -25,7 +27,7 @@ class FotoOggiTest : Fotografo() {
     @Test
     fun primoGiorno() {
         Mondo.collegato(app)
-        scatta("05-oggi-primo-giorno", "Oggi, primo giorno (stato vuoto): niente serie, striscia senza dati, una regola, nessun uso") {
+        scatta("05-oggi-primo-giorno", "Oggi, primo giorno: \"Si comincia da oggi\", striscia senza dati, una regola, nessun uso", pagine = false) {
             apriPactum(StatiFinti(oggi = DatiFinti.oggiInizio())).comeAperta()
         }
     }
@@ -33,8 +35,8 @@ class FotoOggiTest : Fotografo() {
     @Test
     fun caricamento() {
         Mondo.collegato(app)
-        scatta("05-oggi-caricamento", "Oggi mentre legge la prima volta (rotella)", pagine = false) {
-            apriPactum(StatiFinti(oggi = eu.stgm.pactum.figlio.ui.OggiViewModel.StatoOggi())).comeAperta()
+        scatta("05-oggi-caricamento", "Oggi alla prima lettura: solo la rotella, niente numeri finti", pagine = false) {
+            apriPactum(StatiFinti(oggi = OggiViewModel.StatoOggi())).comeAperta()
         }
     }
 
@@ -42,7 +44,7 @@ class FotoOggiTest : Fotografo() {
     fun senzaRete() {
         Mondo.collegato(app)
         val stato = DatiFinti.oggiNormale().copy(datiFermi = true, datiFermiAlle = DatiFinti.adesso() - 26 * DatiFinti.ORA)
-        scatta("05-oggi-senza-rete", "Oggi senza rete: l'ultima copia con \"Dati non aggiornati\"") {
+        scatta("05-oggi-senza-rete", "Oggi senza rete: la riga \"Dati non aggiornati\"", pagine = false) {
             apriPactum(StatiFinti(oggi = stato)).comeAperta()
         }
     }
@@ -51,7 +53,7 @@ class FotoOggiTest : Fotografo() {
     fun scollegato() {
         Mondo.collegato(app)
         val stato = DatiFinti.oggiNormale().copy(datiFermi = true, scollegato = true)
-        scatta("05-oggi-scollegato", "Oggi con il telefono scollegato dal patto (401)", pagine = false) {
+        scatta("05-oggi-scollegato", "Oggi con il telefono non più collegato (401): una riga con \"Collega\"", pagine = false) {
             apriPactum(StatiFinti(oggi = stato)).comeAperta()
         }
     }
@@ -61,16 +63,27 @@ class FotoOggiTest : Fotografo() {
         Mondo.collegato(app)
         sessioneInCorso()
         val stato = DatiFinti.oggiNormale().copy(minutiInSessione = 25)
-        scatta("05-oggi-sessione-in-corso", "Oggi con la sessione \"Studio\" in corso (scheda in cima, minuti in sessione)") {
+        scatta("05-oggi-sessione-in-corso", "Oggi con la sessione \"Studio\" in corso: la sua card in cima, \"Termina\"") {
             apriPactum(StatiFinti(oggi = stato)).comeAperta()
         }
     }
 
     @Test
-    fun avvioIncerto() {
+    fun bloccatoConSessione() {
         Mondo.collegato(app)
-        ArchivioSessioni.modifica(app) { MemoriaSessioni(avvioIncerto = DatiFinti.avvioIncerto()) }
-        scatta("05-oggi-avvio-incerto", "Oggi con un \"Inizia\" rimasto senza risposta (riga neutra in cima)", pagine = false) {
+        sessioneInCorso()
+        ArchivioBlocco.modifica(app) { DatiFinti.bloccoAttivo() }
+        scatta("05-oggi-bloccato", "Oggi col telefono bloccato dai lavori di casa e una sessione in corso: il blocco ha la card, la sessione una riga", pagine = false) {
+            apriPactum(StatiFinti()).comeAperta()
+        }
+    }
+
+    @Test
+    fun conLavoriDiCasa() {
+        Mondo.collegato(app)
+        ArchivioBlocco.modifica(app) { DatiFinti.bloccoProgrammato() }
+        ArchivioCodaFoto.modifica(app) { DatiFinti.codaFoto() to emptyList() }
+        scatta("05-oggi-con-lavori", "Oggi con lavori di casa e il blocco programmato: una riga, e il numero sulla scheda Lavori", pagine = false) {
             apriPactum(StatiFinti()).comeAperta()
         }
     }
@@ -79,8 +92,42 @@ class FotoOggiTest : Fotografo() {
     fun terminaSessione() {
         Mondo.collegato(app)
         sessioneInCorso()
-        scatta("05-oggi-dialogo-termina-sessione", "Oggi, dialogo \"Termina la sessione?\" (da notifica fissa)", pagine = false) {
+        scatta("05-oggi-dialogo-termina-sessione", "Oggi, dialogo \"Terminare la sessione?\" (dalla notifica fissa)", pagine = false) {
             apriPactum(StatiFinti(), MainActivity.DEST_TERMINA_SESSIONE).comeAperta()
+        }
+    }
+
+    /** Pactum già aperto su Sessioni, poi "Termina la sessione" dalla notifica fissa. */
+    private fun terminaDallaNotificaSuSessioni(dopo: () -> Unit = {}): Aperta {
+        val controller = apriPactum(StatiFinti(), MainActivity.DEST_SESSIONI)
+        aspetta("Nuova sessione")
+        controller.newIntent(
+            Intent(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_DESTINAZIONE, MainActivity.DEST_TERMINA_SESSIONE),
+        )
+        aspetta("Terminare la sessione?")
+        dopo()
+        return controller.comeAperta()
+    }
+
+    @Test
+    fun terminaSessioneDaSessioni() {
+        Mondo.collegato(app)
+        sessioneInCorso()
+        scatta("05-oggi-dialogo-termina-da-sessioni", "Pactum aperto su Sessioni, \"Termina la sessione\" dalla notifica: Oggi con la conferma aperta") {
+            terminaDallaNotificaSuSessioni()
+        }
+    }
+
+    @Test
+    fun sessioniDopoTerminaAnnullato() {
+        Mondo.collegato(app)
+        sessioneInCorso()
+        scatta("08-sessioni-dopo-termina-annullato", "Dopo \"Annulla\" sulla conferma in Oggi, di nuovo Sessioni: la conferma non ricompare") {
+            terminaDallaNotificaSuSessioni {
+                toccaNelDialogo("Annulla")
+                tocca("Sessioni")
+                aspetta("Nuova sessione")
+            }
         }
     }
 
@@ -88,17 +135,16 @@ class FotoOggiTest : Fotografo() {
     fun mostraSopraMancante() {
         Mondo.collegato(app)
         Mondo.permessi(app, sopra = false)
-        scatta("05-oggi-manca-mostra-sopra", "Oggi senza \"Mostra sopra le altre app\": scheda che chiede il permesso") {
+        scatta("05-oggi-manca-mostra-sopra", "Oggi senza \"Mostra sopra le altre app\": la riga \"Da sistemare\" con \"Risolvi\"", pagine = false) {
             apriPactum(StatiFinti()).comeAperta()
         }
     }
 
     @Test
-    fun aiutoRestrizioniAperto() {
+    fun foglioBonus() {
         Mondo.collegato(app)
-        Mondo.permessi(app, sopra = false)
-        scatta("05-oggi-manca-mostra-sopra-aiuto", "Oggi, scheda del permesso con \"Se Android ti blocca…\" aperto") {
-            apriPactum(StatiFinti()).also { tocca("Se Android ti blocca…") }.comeAperta()
+        scatta("05-oggi-foglio-bonus", "Oggi, il \"+\" di Instagram: il foglio del bonus (+5 / +15 / +30 e quanto ne resta)", pagine = false) {
+            apriPactum(StatiFinti()).also { toccaIcona("Più tempo su Instagram") }.comeAperta()
         }
     }
 
@@ -106,7 +152,7 @@ class FotoOggiTest : Fotografo() {
     fun bonusInPartenza() {
         Mondo.collegato(app)
         val stato = DatiFinti.oggiNormale().copy(bonusInSospeso = DatiFinti.bonusInSospeso(false), finestraBonus = true)
-        scatta("05-oggi-bonus-snackbar", "Oggi, appena toccato +15 min su Instagram: snackbar \"Aggiungi perché\" e riga \"in partenza\"", pagine = false) {
+        scatta("05-oggi-bonus-snackbar", "Oggi, appena dato +15 min su Instagram: snackbar \"Aggiungi perché\" e \"in partenza\"", pagine = false) {
             apriPactum(StatiFinti(oggi = stato)).comeAperta()
         }
     }
@@ -121,12 +167,18 @@ class FotoOggiTest : Fotografo() {
     }
 
     @Test
-    fun conLavoriDiCasa() {
+    fun segna() {
         Mondo.collegato(app)
-        ArchivioBlocco.modifica(app) { DatiFinti.bloccoProgrammato() }
-        ArchivioCodaFoto.modifica(app) { DatiFinti.codaFoto() to emptyList() }
-        scatta("05-oggi-con-lavori", "Oggi quando ci sono lavori di casa: sei schede in basso, numero sulla scheda Lavori", pagine = false) {
-            apriPactum(StatiFinti()).comeAperta()
+        scatta("05-oggi-dialogo-segna", "Oggi, \"Segna\" su una regola di vita reale: la dichiarazione (com'è andata, giorno, nota)", pagine = false) {
+            apriPactum(StatiFinti()).also { tocca("Segna", 0) }.comeAperta()
+        }
+    }
+
+    @Test
+    fun tutteLeApp() {
+        Mondo.collegato(app)
+        scatta("05-oggi-tutte-le-app", "Oggi, \"Vedi tutte\": la pagina con tutte le app del giorno") {
+            apriPactum(StatiFinti()).also { tocca("Vedi tutte", sottostringa = true) }.comeAperta()
         }
     }
 }

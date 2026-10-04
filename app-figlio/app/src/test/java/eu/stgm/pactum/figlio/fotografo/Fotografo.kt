@@ -55,9 +55,13 @@ import java.util.concurrent.TimeUnit
  * telefono né emulatore (Robolectric con la grafica vera + Roborazzi), ogni
  * schermata in PNG. Solo test: si lancia a parte con -Pfotografo (v. app/build.gradle.kts).
  *
- * Ogni foto esce in 8 varianti: tema chiaro e scuro, larghezza 360 e 411 dp,
- * testo normale e grande (1,3). Le schermate lunghe hanno in più le pagine
- * successive ("_p2", "_p3"...) nel tema chiaro a 360 dp, normale e grande.
+ * (0.15) Meno varianti di prima (l'app è sempre chiara: niente tema scuro):
+ * ogni foto esce a 360 dp con testo normale e grande (1,3) — "chiaro_360" e
+ * "chiaro_360_grande" — e le quattro schede principali anche a 411 dp
+ * ([Variante.SCHEDE]). Le schermate lunghe hanno in più le pagine successive
+ * ("_p2", "_p3"...) solo a 360 dp col testo normale.
+ * -Pfotografo.solo=<pezzo di nome> (un'espressione regolare) rifà solo le
+ * foto il cui nome la contiene.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -103,13 +107,15 @@ abstract class Fotografo {
         fun qualificatori(): String =
             "it-rIT-w${larghezza}dp-h${altezza}dp-port-${if (scuro) "night" else "notnight"}-xhdpi"
 
-        /** Le pagine dopo la prima si fotografano solo qui: chiaro, 360 dp. */
-        val conPagine: Boolean get() = !scuro && larghezza == 360
+        /** Le pagine dopo la prima si fotografano solo qui: chiaro, 360 dp, testo normale. */
+        val conPagine: Boolean get() = !scuro && larghezza == 360 && !grande
 
         companion object {
-            val TUTTE: List<Variante> = listOf(false, true).flatMap { scuro ->
-                listOf(360, 411).flatMap { l -> listOf(false, true).map { g -> Variante(scuro, l, g) } }
-            }
+            /** Ogni stato: 360 dp, testo normale e grande. */
+            val BASE: List<Variante> = listOf(Variante(false, 360, false), Variante(false, 360, true))
+
+            /** Le quattro schede principali: in più 411 dp. */
+            val SCHEDE: List<Variante> = BASE + Variante(false, 411, false)
         }
     }
 
@@ -126,11 +132,14 @@ abstract class Fotografo {
     protected fun scatta(
         nome: String,
         descrizione: String,
-        varianti: List<Variante> = Variante.TUTTE,
-        pagine: Boolean = true,
+        varianti: List<Variante> = Variante.BASE,
+        pagine: Boolean = false,
         apri: (Variante) -> Aperta,
     ) {
+        // -Pfotografo.solo=<pezzo di nome>: rifà solo le foto che lo contengono.
+        val solo = System.getProperty("fotografo.solo")?.takeIf { it.isNotBlank() }?.let { Regex(it) }
         for (v in varianti) {
+            if (solo != null && !solo.containsMatchIn("$nome${v.suffisso}")) continue
             RuntimeEnvironment.setQualifiers(v.qualificatori())
             RuntimeEnvironment.setFontScale(if (v.grande) 1.3f else 1f)
             val aperta = apri(v)

@@ -1,5 +1,10 @@
 package eu.stgm.pactum.figlio.avviso
 
+import eu.stgm.pactum.design.CardNormale
+import eu.stgm.pactum.design.FilaPulsanti
+import eu.stgm.pactum.design.Pillola
+import eu.stgm.pactum.design.Tono
+import eu.stgm.pactum.design.attivaBordoPieno
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -29,7 +34,6 @@ import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
-import eu.stgm.pactum.figlio.ui.Etichetta
 import eu.stgm.pactum.figlio.ui.testoDurata
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
 
@@ -51,6 +55,9 @@ class AvvisoActivity : ComponentActivity() {
     private val avvisi = mutableStateOf<List<Avviso>>(emptyList())
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // (0.15) Bordo pieno con le icone scure della barra di stato (B11): lo
+        // Scaffold qui sotto tiene il contenuto fuori dalle barre di sistema.
+        attivaBordoPieno()
         super.onCreate(savedInstanceState)
         avvisi.value = Avviso.daJson(
             savedInstanceState?.getString(EXTRA_AVVISI) ?: intent?.getStringExtra(EXTRA_AVVISI),
@@ -159,17 +166,12 @@ private fun AvvisoScreen(avvisi: List<Avviso>, onHoCapito: () -> Unit, onApriPac
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spazi.xl, vertical = Spazi.l),
-                verticalArrangement = Arrangement.spacedBy(Spazi.s),
-            ) {
-                Button(onClick = onHoCapito, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.avviso_ho_capito))
+            FilaPulsanti(modifier = Modifier.fillMaxWidth().padding(horizontal = Spazi.xl, vertical = Spazi.l)) {
+                Button(onClick = onHoCapito) {
+                    Text(stringResource(R.string.avviso_ho_capito), maxLines = 1)
                 }
-                OutlinedButton(onClick = onApriPactum, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.avviso_apri_pactum))
+                OutlinedButton(onClick = onApriPactum) {
+                    Text(stringResource(R.string.avviso_apri_pactum), maxLines = 1)
                 }
             }
         }
@@ -178,14 +180,11 @@ private fun AvvisoScreen(avvisi: List<Avviso>, onHoCapito: () -> Unit, onApriPac
 
 @Composable
 private fun SchedaAvviso(avviso: Avviso) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.s),
-        ) {
+    CardNormale {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
             if (avviso.fascia) {
                 Text(
-                    text = stringResource(R.string.avviso_fascia_regola, avviso.dalle ?: "?", avviso.alle ?: "?"),
+                    text = stringResource(R.string.avviso_fascia_regola, avviso.dalle ?: stringResource(R.string.dato_mancante), avviso.alle ?: stringResource(R.string.dato_mancante)),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
@@ -197,7 +196,7 @@ private fun SchedaAvviso(avviso: Avviso) {
                 val limite = avviso.limiteEfficace ?: 0
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = avviso.nome ?: "?",
+                        text = avviso.nome ?: stringResource(R.string.dato_mancante),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
@@ -212,7 +211,7 @@ private fun SchedaAvviso(avviso: Avviso) {
                 }
                 // Come in Oggi: oltre il limite la barra resta piena, l'eccedenza si dice a parole.
                 BarraUso(minuti = usati, limite = limite, massimoDelGiorno = limite)
-                Etichetta(stringResource(R.string.oggi_oltre, testoDurata(avviso.minutiOltre.toLong())))
+                Pillola(stringResource(R.string.oggi_oltre, testoDurata(avviso.minutiOltre.toLong())), tono = Tono.Attenzione)
                 avviso.limite?.let { base ->
                     Text(
                         text = if (avviso.bonus > 0) {

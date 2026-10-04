@@ -42,17 +42,30 @@ fun istanteServer(tsServer: String?): Instant? {
 
 private val formatoDataOra: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM HH:mm")
 
+private val formatoOra: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
 fun dataOraLocale(istante: Instant): String =
     formatoDataOra.format(istante.atZone(ZoneId.systemDefault()))
 
 fun parametroTesto(parametri: JsonObject, nome: String): String? =
     (parametri[nome] as? JsonPrimitive)?.content
 
-fun giorniTesto(parametri: JsonObject): String =
-    (parametri["giorni"] as? JsonArray)
-        ?.mapNotNull { (it as? JsonPrimitive)?.content }
-        ?.joinToString(", ")
-        ?: ""
+/**
+ * I giorni di una fascia in parole (0.15): "ogni giorno", "dal lunedì al
+ * venerdì", oppure "lun, mer, ven". Vuoto se la regola non li dice.
+ */
+fun giorniTesto(context: Context, parametri: JsonObject): String =
+    FraseGiorni.di(
+        (parametri["giorni"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty(),
+        ParoleGiorniFascia(
+            ogniGiorno = context.getString(R.string.giorni_ogni_giorno),
+            feriali = context.getString(R.string.giorni_feriali),
+        ),
+    )
+
+/** "21:30" dai minuti dopo la mezzanotte. */
+fun oraDaMinuti(minuti: Int): String =
+    formatoOra.format(java.time.LocalTime.of((minuti / 60).coerceIn(0, 23), (minuti % 60).coerceIn(0, 59)))
 
 /**
  * La regola raccontata in italiano semplice, costruita da tipo+parametri
@@ -133,7 +146,7 @@ fun descrizioneRegola(
                 } else {
                     etichettaChiave(context, chiave, nomeServer, tipoDispositivo)
                 }
-            } ?: "?",
+            } ?: context.getString(R.string.dato_mancante),
         testoDurata(context, parametroTesto(parametri, "minuti_al_giorno")?.toLongOrNull() ?: 0),
     )
 
@@ -144,16 +157,16 @@ fun descrizioneRegola(
             breve -> R.string.regola_fascia_oraria_breve
             else -> R.string.regola_fascia_oraria
         },
-        parametroTesto(parametri, "dalle") ?: "?",
-        parametroTesto(parametri, "alle") ?: "?",
-        giorniTesto(parametri).ifBlank { "?" },
+        parametroTesto(parametri, "dalle") ?: context.getString(R.string.dato_mancante),
+        parametroTesto(parametri, "alle") ?: context.getString(R.string.dato_mancante),
+        giorniTesto(context, parametri).ifBlank { context.getString(R.string.dato_mancante) },
     )
 
     TipiRegola.VITA_REALE -> context.getString(
         R.string.regola_vita_reale,
-        parametroTesto(parametri, "descrizione") ?: "?",
-        parametroTesto(parametri, "arbitro_nome") ?: "?",
-        parametroTesto(parametri, "frequenza") ?: "?",
+        parametroTesto(parametri, "descrizione") ?: context.getString(R.string.dato_mancante),
+        parametroTesto(parametri, "arbitro_nome") ?: context.getString(R.string.dato_mancante),
+        parametroTesto(parametri, "frequenza") ?: context.getString(R.string.dato_mancante),
     )
 
     else -> tipo
@@ -240,6 +253,24 @@ fun paroleCambioDispositivo(context: Context) = ParoleCambioDispositivo(
     consiglioSenzaNome = context.getString(R.string.collega_altro_dispositivo_consiglio_senza_nome),
 )
 
+/**
+ * (0.15) Un nome scritto dentro un modello che verrà formattato dopo: i "%"
+ * del nome non devono diventare segnaposto.
+ */
+private fun perModello(nome: String): String = nome.replace("%", "%%")
+
+/**
+ * (0.15) "Mamma dice: %1$s" se si sa chi è il genitore, altrimenti "Il
+ * genitore dice: %1$s": un modello, da formattare col perché.
+ */
+fun modelloGenitoreDice(context: Context, genitore: String?): String =
+    genitore?.let { context.getString(R.string.proposta_motivazione_nome, perModello(it), "%1\$s") }
+        ?: context.getString(R.string.proposta_motivazione_genitore)
+
+/** (0.15) La frase col nome del genitore ([conNome], un %1$s) se c'è, altrimenti [senza]. */
+fun conNomeGenitore(context: Context, genitore: String?, senza: Int, conNome: Int): String =
+    genitore?.let { context.getString(conNome, it) } ?: context.getString(senza)
+
 /** Le frasi della proposta (TestoProposta), da strings.xml. */
 fun paroleProposta(context: Context) = ParoleProposta(
     senzaConfronto = context.getString(R.string.proposta_senza_confronto),
@@ -301,7 +332,7 @@ fun testoEsitoProposta(context: Context, esito: EsitoProposta): String = TestoPr
         dispositivoRevocato = context.getString(R.string.proposta_dispositivo_revocato),
         valoriNonValidi = context.getString(R.string.proposta_valori_non_validi),
         serverDaAggiornare = context.getString(R.string.proposta_server_da_aggiornare),
-        scollegato = context.getString(R.string.oggi_scollegato),
+        scollegato = context.getString(R.string.scollegato),
         senzaRete = context.getString(R.string.proposta_senza_rete),
         errore = context.getString(R.string.proposta_non_mandata),
     ),
@@ -316,21 +347,25 @@ fun testoRitiro(context: Context, esito: EsitoRitiro): String = TestoProposta.ri
         nonTrovata = context.getString(R.string.proposta_non_trovata),
         // Il ritiro ha la sua frase: "per mandare proposte" qui non c'entra.
         serverDaAggiornare = context.getString(R.string.proposta_ritiro_server_da_aggiornare),
-        scollegato = context.getString(R.string.oggi_scollegato),
+        scollegato = context.getString(R.string.scollegato),
         errore = context.getString(R.string.proposta_ritiro_errore),
     ),
 )
 
-/** (0.10) Le frasi della storia delle proposte (TestoProposta.righeChiusa). */
-fun paroleStoria(context: Context) = ParoleStoria(
+/**
+ * (0.10) Le frasi della storia delle proposte (TestoProposta.righeChiusa).
+ * (0.15) [genitore] = il nome del genitore di quella proposta (chi l'ha fatta,
+ * o chi ha risposto a una del figlio), se il server lo dice.
+ */
+fun paroleStoria(context: Context, genitore: String? = null) = ParoleStoria(
     haiAccettato = context.getString(R.string.proposta_tua_risposta_accettata),
     haiRifiutato = context.getString(R.string.proposta_tua_risposta_rifiutata),
-    genitoreHaAccettato = context.getString(R.string.proposta_genitore_ha_accettato),
-    genitoreHaRifiutato = context.getString(R.string.proposta_genitore_ha_rifiutato),
+    genitoreHaAccettato = conNomeGenitore(context, genitore, R.string.proposta_genitore_ha_accettato, R.string.proposta_nome_ha_accettato),
+    genitoreHaRifiutato = conNomeGenitore(context, genitore, R.string.proposta_genitore_ha_rifiutato, R.string.proposta_nome_ha_rifiutato),
     haiRitirato = context.getString(R.string.proposta_hai_ritirato),
     genitoreHaRitirato = context.getString(R.string.proposta_genitore_ha_ritirato),
     annullata = context.getString(R.string.proposta_annullata),
-    genitoreDice = context.getString(R.string.proposta_motivazione_genitore),
+    genitoreDice = modelloGenitoreDice(context, genitore),
     haiDetto = context.getString(R.string.proposta_tua_motivazione),
     tuoPerche = context.getString(R.string.proposta_tuo_perche),
 )
@@ -347,20 +382,22 @@ fun avvisoNovitaProposta(
     regola: Regola?,
     contesto: ContestoDispositivi,
     messaggio: String,
+    genitore: String? = null,
 ): Pair<String, String> = TestoProposta.avviso(
     novita = novita,
     proposta = proposta,
     regolaAdesso = regola?.let { descrizioneRegolaConDispositivo(context, it, contesto) },
     messaggio = messaggio,
     parole = ParoleNovita(
-        accettataTitolo = context.getString(R.string.notifica_proposta_accettata_titolo),
-        rifiutataTitolo = context.getString(R.string.notifica_proposta_rifiutata_titolo),
-        ritirataTitolo = context.getString(R.string.notifica_proposta_ritirata_titolo),
+        // (0.15) Col nome del genitore, se il server lo dice ("Mamma ha accettato…").
+        accettataTitolo = conNomeGenitore(context, genitore, R.string.notifica_proposta_accettata_titolo, R.string.notifica_proposta_accettata_titolo_nome),
+        rifiutataTitolo = conNomeGenitore(context, genitore, R.string.notifica_proposta_rifiutata_titolo, R.string.notifica_proposta_rifiutata_titolo_nome),
+        ritirataTitolo = conNomeGenitore(context, genitore, R.string.notifica_proposta_ritirata_titolo, R.string.notifica_proposta_ritirata_titolo_nome),
         ora = context.getString(R.string.proposta_regola_ora),
         resta = context.getString(R.string.notifica_proposta_regola_resta),
         tolta = context.getString(R.string.notifica_proposta_regola_eliminata),
         regola = context.getString(R.string.proposta_regola),
-        genitoreDice = context.getString(R.string.proposta_motivazione_genitore),
+        genitoreDice = modelloGenitoreDice(context, genitore),
         ritirataEliminazione = context.getString(R.string.notifica_proposta_ritirata_eliminare),
         ritirataEliminazioneSenzaRegola = context.getString(R.string.notifica_proposta_ritirata_eliminare_senza_regola),
     ),
@@ -387,8 +424,6 @@ fun testoDurata(context: Context, minuti: Long): String = when {
     minuti % 60 == 0L -> context.getString(R.string.formato_ore, minuti / 60)
     else -> context.getString(R.string.formato_ore_minuti, minuti / 60, minuti % 60)
 }
-
-private val formatoOra: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 fun oraLocale(istante: Instant): String = formatoOra.format(istante.atZone(ZoneId.systemDefault()))
 

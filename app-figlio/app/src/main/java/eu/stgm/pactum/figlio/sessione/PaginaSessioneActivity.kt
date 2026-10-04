@@ -12,9 +12,8 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import eu.stgm.pactum.design.attivaBordoPieno
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -27,6 +26,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -108,11 +112,9 @@ class PaginaSessioneActivity : ComponentActivity() {
             return
         }
         dati.value = letti
-        // Il fondo del tema anche sotto le barre di sistema, con le icone scure: il fondo è chiaro.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(TRASPARENTE, TRASPARENTE),
-            navigationBarStyle = SystemBarStyle.light(TRASPARENTE, TRASPARENTE),
-        )
+        // Il fondo del tema anche sotto le barre di sistema, con le icone scure:
+        // il fondo è chiaro. (0.15) Lo stesso bordo pieno di tutte le Activity.
+        attivaBordoPieno()
         val statiche = PagineSessione.statiche(scalaAnimazioni())
         val durata = PagineSessione.durataPagina(tempoRaccomandato())
         setContent {
@@ -227,7 +229,6 @@ private const val EXTRA_FINE = "fine"
 private const val EXTRA_PRIMA = "chiusa_prima"
 private const val TIPO_INIZIO = "inizio"
 private const val TIPO_FINE = "fine"
-private const val TRASPARENTE = android.graphics.Color.TRANSPARENT
 
 /** L'entrata degli adesivi; poi galleggiano finché la pagina resta. */
 private const val DURATA_ENTRATA_MS = 1_100
@@ -325,11 +326,21 @@ private fun PaginaSessione(dati: DatiPagina, statiche: Boolean, durata: Long, on
                 disegnaAdesivi(adesivi, lista, entrata.value, fase.value)
             }
         }
+        // (0.15) La scheda dentro i margini di sistema, e con i caratteri al
+        // massimo scorre invece di uscire dallo schermo.
+        BoxWithConstraints(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+            val altezza = maxHeight
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = altezza),
+                contentAlignment = Alignment.Center,
+            ) {
         SchedaPagina(
             dati = dati,
             tema = tema,
             modifier = Modifier
-                .align(Alignment.Center)
                 .graphicsLayer {
                     val t = entrata.value
                     val scala = AdesiviSessione.scalaScheda(t)
@@ -338,6 +349,8 @@ private fun PaginaSessione(dati: DatiPagina, statiche: Boolean, durata: Long, on
                     alpha = AdesiviSessione.alfaScheda(t)
                 },
         )
+            }
+        }
     }
 }
 

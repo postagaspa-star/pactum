@@ -50,10 +50,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.PactumFiglio">
 
+        <!-- (0.15) adjustResize: col bordo pieno la finestra passa a Compose lo
+             spazio della tastiera (imePadding), e i campi restano sopra di lei. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop">
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

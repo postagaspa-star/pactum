@@ -1,13 +1,36 @@
 package eu.stgm.pactum.figlio.ui
 
+import eu.stgm.pactum.design.RigaStato
+import eu.stgm.pactum.design.StatoVuoto
+import eu.stgm.pactum.design.Caricamento
+import eu.stgm.pactum.design.Pillola
+import eu.stgm.pactum.design.CardNormale
+import eu.stgm.pactum.design.VoceMenu
+import eu.stgm.pactum.design.MenuAzioni
+import eu.stgm.pactum.design.RigaToccabile
+import eu.stgm.pactum.design.FilaPulsanti
+import eu.stgm.pactum.design.Tono
+import eu.stgm.pactum.design.TitoloSezione
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import eu.stgm.pactum.figlio.dati.Dichiarazione
+import eu.stgm.pactum.figlio.dati.EsitiDichiarazione
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -98,24 +121,34 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
 
 /**
- * Le regole del patto: le scrive il figlio, il server le custodisce. (0.10) Su
- * ogni regola anche "Proponi al genitore" (contratto v3.4): se il genitore
- * accetta, il cambio vale subito, anche se allenta. [onApriProposte] porta
- * alla scheda Proposte.
+ * (0.15) La scheda Regole. In cima, solo se ci sono, le proposte del genitore
+ * da decidere ("Da decidere"); poi una card compatta per regola, col menu ⋯
+ * (Modifica · Proponi al genitore, o Ritira la proposta · Elimina) e, per la
+ * vita reale, "Ce l'ho fatta / Non ce l'ho fatta"; in fondo lo Storico. La
+ * logica è quella di sempre: RegoleViewModel per le regole, ProposteViewModel
+ * per le proposte, DichiarazioniViewModel per le dichiarazioni.
+ * [richiestaInCima] cresce quando si arriva da una notifica di proposta: la
+ * lista torna in cima, dove sta "Da decidere".
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegoleScreen(
-    onApriProposte: () -> Unit = {},
+    onApriImpostazioni: () -> Unit = {},
+    onApriStorico: () -> Unit = {},
+    richiestaInCima: Int = 0,
     vm: RegoleViewModel = viewModel(),
+    proposteVm: ProposteViewModel = viewModel(),
+    dichiarazioniVm: DichiarazioniViewModel = viewModel(),
 ) {
     val stato by vm.stato.collectAsStateWithLifecycle()
+    val statoProposte by proposteVm.stato.collectAsStateWithLifecycle()
+    val statoDiario by dichiarazioniVm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    // (0.10) Le snackbar delle proposte partono qui, fuori dall'effetto degli
-    // eventi: l'evento si consuma subito, così "Apri Proposte" può cambiare
-    // scheda senza che la snackbar ricompaia al ritorno.
+    // Le snackbar delle proposte partono qui, fuori dall'effetto degli eventi:
+    // l'evento si consuma subito.
     val ambito = rememberCoroutineScope()
+    val lista = rememberLazyListState()
 
     // I dialoghi aperti si ricordano per id della regola (e il blocco come
     // testo): una rotazione o la morte del processo non li chiudono, e non
@@ -127,13 +160,19 @@ fun RegoleScreen(
     var regolaDaProporreId by rememberSaveable { mutableStateOf<Long?>(null) }
     // (0.10) Il cambio fermato dal blocco dei 4 giorni (BloccoCambio.inTesto).
     var bloccoTesto by rememberSaveable { mutableStateOf<String?>(null) }
-    // L'ultima copia di ogni regola aperta in un dialogo: se intanto sparisce
-    // dal patto (eliminata, rilettura) il dialogo resta e dice perché.
+    // (0.15) La proposta del figlio da ritirare ("Ritira la proposta" nel ⋯).
+    var daRitirareId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // L'ultima copia di ogni regola (e proposta) aperta in un dialogo: se intanto
+    // sparisce dal patto (eliminata, rilettura) il dialogo resta e dice perché.
     val viste = remember { HashMap<Long, Regola>() }
+    val proposteViste = remember { HashMap<Long, Proposta>() }
     fun regolaAperta(id: Long?): Regola? =
         id?.let { cercata -> stato.regole.firstOrNull { it.id == cercata } ?: viste[cercata] }
     fun ricorda(regola: Regola) {
         viste[regola.id] = regola
+    }
+    val daRitirare = daRitirareId?.let { id ->
+        (statoProposte.inviate + stato.proposteInAttesa.values).firstOrNull { it.id == id } ?: proposteViste[id]
     }
 
     // (0.10) Chiuso il modulo della proposta (o il blocco), il suo esito non si dice più.
@@ -146,16 +185,31 @@ fun RegoleScreen(
         vm.dimenticaEsitoProposta()
     }
 
+    val conVitaReale = stato.regole.any { it.tipo == TipiRegola.VITA_REALE }
     LifecycleResumeEffect(Unit) {
         vm.aggiorna()
+        proposteVm.aggiorna()
         onPauseOrDispose { }
+    }
+    LifecycleResumeEffect(conVitaReale) {
+        if (conVitaReale) dichiarazioniVm.aggiorna()
+        onPauseOrDispose { }
+    }
+
+    // Da una notifica di proposta: in cima, dove sta "Da decidere". Una volta
+    // per richiesta, non a ogni ritorno sulla scheda.
+    var inCimaFatta by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(richiestaInCima) {
+        if (richiestaInCima != inCimaFatta) {
+            inCimaFatta = richiestaInCima
+            lista.scrollToItem(0)
+        }
     }
 
     val messaggioSalvata = stringResource(R.string.regola_salvata)
     val messaggioEliminata = stringResource(R.string.regola_eliminata_ok)
     val messaggioUltima = stringResource(R.string.regola_ultima_messaggio)
     val messaggioErrore = stringResource(R.string.regola_errore_generico)
-    val azioneApriProposte = stringResource(R.string.proposta_apri_proposte)
     LaunchedEffect(stato.evento) {
         when (val evento = stato.evento) {
             is RegoleViewModel.Evento.Salvata -> {
@@ -185,8 +239,6 @@ fun RegoleScreen(
             is RegoleViewModel.Evento.PropostaAlGenitore -> {
                 val esito = evento.esito
                 val moduloAperto = regolaDaProporreId != null || bloccoTesto != null
-                // Si consuma subito: "Apri Proposte" può cambiare scheda, e al
-                // ritorno la snackbar non deve ricomparire.
                 vm.consumaEvento()
                 if (ProposteDelFiglio.chiudeIlModulo(esito)) {
                     // Arrivata: si chiude tutto (anche la modifica sotto il blocco).
@@ -198,18 +250,10 @@ fun RegoleScreen(
                     // (stato.esitoProposta), non una snackbar sotto l'ombra.
                     return@LaunchedEffect
                 }
-                // Arrivata, oppure il modulo era già chiuso quando è arrivata la risposta.
+                // La proposta ora sta sulla card della regola: la si rilegge anche qui.
+                if (ProposteDelFiglio.serveRileggere(esito)) proposteVm.aggiorna()
                 val messaggio = testoEsitoProposta(context, esito)
-                val verso = esito == EsitoProposta.GiaPendente || esito == EsitoProposta.GiaTua
-                ambito.launch {
-                    val scelta = snackbarHostState.showSnackbar(
-                        message = messaggio,
-                        // Già una proposta su questa regola: si va a vederla.
-                        actionLabel = azioneApriProposte.takeIf { verso },
-                        duration = SnackbarDuration.Long,
-                    )
-                    if (scelta == SnackbarResult.ActionPerformed) onApriProposte()
-                }
+                ambito.launch { snackbarHostState.showSnackbar(messaggio, duration = SnackbarDuration.Long) }
                 return@LaunchedEffect
             }
             null -> Unit
@@ -217,59 +261,124 @@ fun RegoleScreen(
         if (stato.evento != null) vm.consumaEvento()
     }
 
+    // Gli esiti delle risposte alle proposte del genitore e dei ritiri (prima
+    // nella scheda Proposte): la regola può essere cambiata, si rilegge.
+    val messaggioAccettata = stringResource(R.string.proposta_accettata_ok)
+    val messaggioRifiutata = stringResource(R.string.proposta_rifiutata_ok)
+    val messaggioNonPendente = stringResource(R.string.proposta_non_pendente)
+    val messaggioErroreRisposta = stringResource(R.string.proposta_errore)
+    LaunchedEffect(statoProposte.evento) {
+        val evento = statoProposte.evento ?: return@LaunchedEffect
+        proposteVm.consumaEvento()
+        val messaggio = when (evento) {
+            is ProposteViewModel.Evento.Accettata -> {
+                vm.aggiorna()
+                // (v3) Accettata da qui una proposta su un altro dispositivo: si dice quale.
+                statoProposte.regole.firstOrNull { it.id == evento.regolaId }
+                    ?.let { TestoDispositivi.etichetta(it, statoProposte.contesto, paroleDispositivo(context)) }
+                    ?.let { context.getString(R.string.proposta_accettata_ok_su, it) }
+                    ?: messaggioAccettata
+            }
+            ProposteViewModel.Evento.Rifiutata -> messaggioRifiutata
+            ProposteViewModel.Evento.NonPiuPendente -> messaggioNonPendente
+            ProposteViewModel.Evento.Errore -> messaggioErroreRisposta
+            is ProposteViewModel.Evento.PropostaMandata -> testoEsitoProposta(context, evento.esito)
+            is ProposteViewModel.Evento.Ritiro -> {
+                daRitirareId = null
+                vm.aggiorna()
+                testoRitiro(context, evento.esito)
+            }
+        }
+        ambito.launch { snackbarHostState.showSnackbar(messaggio, duration = SnackbarDuration.Long) }
+    }
+
+    // (0.15) "Ce l'ho fatta / Non ce l'ho fatta" sulle regole di vita reale.
+    val dichiarare = rememberDichiarare(
+        vm = dichiarazioniVm,
+        regole = stato.regole.filter { it.tipo == TipiRegola.VITA_REALE },
+        snackbarHostState = snackbarHostState,
+    )
+    val oggiPatto = oggiDelPatto(statoDiario.fuso)
+
+    // Il pulsante "Nuova regola" non copre mai l'ultima card: lo spazio in
+    // fondo è la sua altezza misurata, più il margine.
+    val densita = LocalDensity.current
+    var altezzaPulsante by remember { mutableIntStateOf(0) }
+    val spazioInFondo = with(densita) { altezzaPulsante.toDp() } + Spazi.l * 2
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.regole_titolo)) },
                 actions = {
-                    IconButton(onClick = { vm.aggiorna() }) {
-                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
-                    }
+                    AzioniBarra(
+                        onAggiorna = {
+                            vm.aggiorna()
+                            proposteVm.aggiorna()
+                        },
+                        onApriImpostazioni = onApriImpostazioni,
+                    )
                 },
             )
         },
         floatingActionButton = {
             if (!stato.configurazioneMancante) {
-                FloatingActionButton(onClick = { dialogoRegolaId = NUOVA_REGOLA }) {
-                    Icon(Icons.Filled.Add, stringResource(R.string.regole_nuova))
-                }
+                ExtendedFloatingActionButton(
+                    onClick = { dialogoRegolaId = NUOVA_REGOLA },
+                    // La scritta del pulsante allungato non arriva a TalkBack (Material la
+                    // nasconde): la dice l'icona.
+                    icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.regole_nuova)) },
+                    text = { Text(stringResource(R.string.regole_nuova), maxLines = 1) },
+                    modifier = Modifier.onSizeChanged { altezzaPulsante = it.height },
+                )
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when {
-                stato.caricamento && stato.regole.isEmpty() -> Centro {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Text(
-                            text = stringResource(R.string.regole_caricamento),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = Spazi.s),
-                        )
-                    }
-                }
+                stato.caricamento && stato.regole.isEmpty() ->
+                    Caricamento(testo = stringResource(R.string.regole_caricamento))
 
-                stato.configurazioneMancante -> Centro {
-                    TestoCentrato(stringResource(R.string.regole_config_mancante))
-                }
+                stato.configurazioneMancante ->
+                    StatoVuoto(stringResource(R.string.regole_config_mancante), centrato = true, modifier = Modifier.padding(Spazi.xl))
 
                 else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    // Densità del figlio: 20 attorno, 16 tra i blocchi; in fondo
-                    // lo spazio del pulsante + perché non copra l'ultima regola.
+                    state = lista,
+                    // (0.15) La "motivazione" di una proposta da decidere resta sopra
+                    // la tastiera (la barra in basso è già tolta dallo Scaffold fuori).
+                    modifier = Modifier.fillMaxSize().imePadding(),
+                    // Densità del figlio: 20 attorno, 16 tra i blocchi; in fondo lo
+                    // spazio misurato del pulsante, perché non copra l'ultima regola.
                     contentPadding = PaddingValues(
                         start = Spazi.l + Spazi.xs,
                         end = Spazi.l + Spazi.xs,
                         top = Spazi.l + Spazi.xs,
-                        bottom = 88.dp,
+                        bottom = spazioInFondo,
                     ),
                     verticalArrangement = Arrangement.spacedBy(Spazi.l),
                 ) {
                     if (stato.errore) {
-                        item { BannerDatiVecchi(stato.datiFermiAlle) }
+                        item(key = "dati-fermi") { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
                     }
+
+                    // In cima, solo se ci sono: le proposte del genitore da decidere.
+                    val daDecidere = statoProposte.daDecidere
+                    if (daDecidere.isNotEmpty()) {
+                        item(key = "da-decidere") { TitoloSezione(stringResource(R.string.proposte_sezione_pendenti)) }
+                        items(daDecidere, key = { "pendente-${it.id}" }) { proposta ->
+                            CardPropostaPendente(
+                                proposta = proposta,
+                                regole = statoProposte.regole,
+                                contesto = statoProposte.contesto,
+                                invioInCorso = statoProposte.invioInCorso,
+                                onRispondi = { id, esito, motivazione -> proposteVm.rispondi(id, esito, motivazione) },
+                            )
+                        }
+                        item(key = "le-tue-regole") { TitoloSezione(stringResource(R.string.regole_sezione_tue)) }
+                    }
+
                     if (stato.regole.isEmpty()) {
                         // (v3) Il figlio può avere regole solo sul computer: il patto
                         // c'è, su questo telefono no.
@@ -278,20 +387,21 @@ fun RegoleScreen(
                         } else {
                             R.string.regole_vuoto
                         }
-                        item { RigaVuota(Icons.Outlined.Info, stringResource(vuoto)) }
+                        item(key = "vuoto") { StatoVuoto(stringResource(vuoto)) }
                     } else {
-                        // "L'ultima non si toglie" vale per il figlio, su tutti i
-                        // suoi dispositivi (contratto v3): conta anche il computer.
-                        if (stato.totaleFiglio == 1) {
-                            item {
-                                RigaVuota(Icons.Outlined.Info, stringResource(R.string.regole_unica_regola))
-                            }
-                        }
                         items(stato.regole, key = { it.id }) { regola ->
                             CardRegola(
                                 regola = regola,
                                 concordata = regola.id in stato.concordate,
                                 inAttesa = stato.proposteInAttesa[regola.id],
+                                // "L'ultima non si toglie" vale per il figlio, su tutti i
+                                // suoi dispositivi (contratto v3): conta anche il computer.
+                                eliminabile = stato.totaleFiglio > 1,
+                                diOggi = if (regola.tipo == TipiRegola.VITA_REALE) {
+                                    dichiarazioneDiOggi(regola, statoDiario.tutte, oggiPatto)
+                                } else {
+                                    null
+                                },
                                 onModifica = {
                                     ricorda(regola)
                                     dialogoRegolaId = regola.id
@@ -305,23 +415,46 @@ fun RegoleScreen(
                                     vm.dimenticaEsitoProposta()
                                     regolaDaProporreId = regola.id
                                 },
-                                onApriProposte = onApriProposte,
+                                onRitira = { proposta ->
+                                    proposteViste[proposta.id] = proposta
+                                    daRitirareId = proposta.id
+                                },
+                                onDichiara = { esito -> dichiarare.apri(regola, esito) },
                             )
                         }
                     }
+
+                    // Le proposte del figlio su regole che qui non ci sono (di un
+                    // altro dispositivo): restano visibili, e si possono ritirare.
+                    val qui = stato.regole.map { it.id }.toSet()
+                    val altrove = statoProposte.inviate.filter { it.regolaId !in qui }
+                    if (altrove.isNotEmpty()) {
+                        item(key = "tue-altrove") { TitoloSezione(stringResource(R.string.proposte_sezione_tue)) }
+                        items(altrove, key = { "tua-${it.id}" }) { proposta ->
+                            CardPropostaTua(proposta, statoProposte.regole, statoProposte.contesto, statoProposte.invioInCorso) {
+                                proposteViste[proposta.id] = proposta
+                                daRitirareId = proposta.id
+                            }
+                        }
+                    }
+
                     // (v3) Qui ci sono le regole di questo telefono e la vita reale;
                     // quelle degli altri dispositivi si vedono e si cambiano da lì.
                     if (stato.regoleAltrove > 0) {
-                        item {
-                            RigaVuota(
-                                Icons.Outlined.Info,
-                                pluralStringResource(
+                        item(key = "altrove") {
+                            Text(
+                                text = pluralStringResource(
                                     R.plurals.regole_altri_dispositivi,
                                     stato.regoleAltrove,
                                     stato.regoleAltrove,
                                 ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                    item(key = "storico") {
+                        RigaToccabile(titolo = stringResource(R.string.regole_storico), onClick = onApriStorico)
                     }
                 }
             }
@@ -383,10 +516,6 @@ fun RegoleScreen(
             esito = stato.esitoProposta,
             onAnnulla = { chiudiProposta() },
             onManda = { cambio, perche -> vm.proponi(cambio, perche) },
-            onApriProposte = {
-                chiudiProposta()
-                onApriProposte()
-            },
         )
     }
 
@@ -399,10 +528,22 @@ fun RegoleScreen(
             esito = stato.esitoProposta,
             onChiudi = { chiudiBlocco() },
             onChiedi = { perche -> vm.proponi(blocco.cambio, perche) },
-            onApriProposte = {
-                chiudiBlocco()
-                dialogoRegolaId = null
-                onApriProposte()
+        )
+    }
+
+    // (0.10) "Ritirare la proposta?": la regola resta com'è.
+    daRitirare?.let { proposta ->
+        AlertDialog(
+            onDismissRequest = { daRitirareId = null },
+            title = { Text(stringResource(R.string.proposta_ritira_titolo)) },
+            text = { Text(stringResource(R.string.proposta_ritira_testo)) },
+            confirmButton = {
+                Button(enabled = !statoProposte.invioInCorso, onClick = { proposteVm.ritira(proposta.id) }) {
+                    Text(stringResource(R.string.proposta_ritira))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { daRitirareId = null }) { Text(stringResource(R.string.azione_annulla)) }
             },
         )
     }
@@ -411,33 +552,56 @@ fun RegoleScreen(
 /** Il dialogo della modifica aperto su una regola nuova (creazione). */
 private const val NUOVA_REGOLA = -1L
 
+/**
+ * (0.15) Una regola, compatta: il tipo, la descrizione, "Allentabile dal …",
+ * la striscia piccola, la proposta che aspetta (in una pillola e una riga) e
+ * il menu ⋯ con Modifica · Proponi al genitore (o Ritira la proposta) ·
+ * Elimina (non sull'unica regola del patto). Le regole di vita reale hanno in
+ * più "Ce l'ho fatta / Non ce l'ho fatta", o com'è andata oggi.
+ */
 @Composable
 private fun CardRegola(
     regola: Regola,
     concordata: Boolean,
     inAttesa: Proposta?,
+    eliminabile: Boolean,
+    diOggi: Dichiarazione?,
     onModifica: () -> Unit,
     onElimina: () -> Unit,
     onProponi: () -> Unit,
-    onApriProposte: () -> Unit,
+    onRitira: (Proposta) -> Unit,
+    onDichiara: (String) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = etichettaTipoRegola(regola.tipo),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f),
-                )
-                if (concordata) Etichetta(stringResource(R.string.regola_concordata))
+    val voci = buildList {
+        add(VoceMenu(stringResource(R.string.azione_modifica), onModifica))
+        when {
+            // Su questa regola aspetta già una proposta: una seconda il server la rifiuterebbe.
+            inAttesa == null -> add(VoceMenu(stringResource(R.string.regola_proponi), onProponi))
+            inAttesa.delFiglio -> add(VoceMenu(stringResource(R.string.regola_ritira_proposta), { onRitira(inAttesa) }))
+        }
+        if (eliminabile) add(VoceMenu(stringResource(R.string.azione_elimina), onElimina, distruttiva = true))
+    }
+    CardNormale {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
+            // Il tipo e la regola a sinistra, il ⋯ a destra: la card resta bassa.
+            Row(verticalAlignment = Alignment.Top) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spazi.s)) {
+                        Text(
+                            text = etichettaTipoRegola(regola.tipo),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        if (concordata) Pillola(stringResource(R.string.regola_concordata), tono = Tono.Positivo)
+                    }
+                    Text(
+                        // (0.10) Mai il nome di un pacchetto, anche dopo un cambio di bersaglio.
+                        text = descrizioneRegola(regola.tipo, regola.parametri, leggibile = true),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+                MenuAzioni(voci = voci, descrizione = stringResource(R.string.regola_menu))
             }
-            Text(
-                // (0.10) Mai il nome di un pacchetto, anche dopo un cambio di bersaglio.
-                text = descrizioneRegola(regola.tipo, regola.parametri, leggibile = true),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = Spazi.xs),
-            )
             // Il lock asimmetrico, in chiaro: quando la regola tornerà allentabile.
             istanteServer(regola.allentabileDal)
                 ?.takeIf { it.isAfter(Instant.now()) }
@@ -446,14 +610,12 @@ private fun CardRegola(
                         text = stringResource(R.string.regola_allentabile_dal, dataOraLocale(it)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = Spazi.xs),
                     )
                 }
             // (v2.4) Gli 8 giorni di QUESTA regola, la stessa striscia piccola che
             // il genitore vede sulla sua scheda (D3). Server vecchio: niente.
             val giorni = remember(regola.semaforo) { regola.semaforo.inGiorniPatto() }
             if (giorni.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(Spazi.m))
                 StrisciaGiorni(
                     giorni = giorni,
                     lato = 20.dp,
@@ -461,38 +623,40 @@ private fun CardRegola(
                     descrizione = descrizioneStrisciaRegola(giorni),
                 )
             }
-            Row(modifier = Modifier.padding(top = Spazi.xs)) {
-                TextButton(onClick = onModifica) {
-                    Text(stringResource(R.string.azione_modifica))
-                }
-                Spacer(modifier = Modifier.width(Spazi.s))
-                TextButton(onClick = onElimina) {
-                    Text(stringResource(R.string.azione_elimina))
-                }
-            }
-            // (0.10) Proporre al genitore, ben visibile su ogni regola (Andrea,
-            // 30/09: il pulsante si deve vedere). Se su questa regola aspetta già
-            // una proposta, di chiunque sia, si dice quale e si porta a Proposte:
-            // una seconda il server la rifiuterebbe.
-            if (inAttesa == null) {
-                FilledTonalButton(onClick = onProponi, modifier = Modifier.fillMaxWidth()) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(Spazi.s))
-                    Text(stringResource(R.string.regola_proponi))
-                }
-            } else {
+            // (0.10) La proposta che aspetta su questa regola, di chiunque sia.
+            if (inAttesa != null) {
+                Pillola(
+                    if (inAttesa.delFiglio) {
+                        stringResource(R.string.regola_pillola_tua)
+                    } else {
+                        conNomeGenitore(LocalContext.current, inAttesa.nomeGenitore, R.string.regola_pillola_genitore, R.string.regola_pillola_genitore_nome)
+                    },
+                    tono = Tono.Attenzione,
+                )
                 Text(
                     text = testoPropostaInAttesa(inAttesa),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = Spazi.xs, bottom = Spazi.s),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                OutlinedButton(onClick = onApriProposte, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.regola_vedi_proposta))
+            }
+            // (0.15) Vita reale: si dichiara da qui, o si vede com'è andata oggi.
+            if (regola.tipo == TipiRegola.VITA_REALE) {
+                if (diOggi != null) {
+                    Text(
+                        text = descrizioneStato(diOggi, regola),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    FilaPulsanti {
+                        Button(onClick = { onDichiara(EsitiDichiarazione.SUCCESSO) }) {
+                            Text(stringResource(R.string.dichiara_successo), maxLines = 1)
+                        }
+                        OutlinedButton(onClick = { onDichiara(EsitiDichiarazione.FALLIMENTO) }) {
+                            Text(stringResource(R.string.dichiara_fallimento), maxLines = 1)
+                        }
+                    }
                 }
             }
         }
@@ -500,9 +664,9 @@ private fun CardRegola(
 }
 
 /**
- * (0.10) La proposta che aspetta su una regola, in una riga: la propria
- * aspetta il genitore, quella del genitore aspetta il figlio. Il confronto di
- * un'eliminazione è scritto per il genitore: qui si dice "eliminarla".
+ * (0.10) La proposta che aspetta su una regola, in una riga: il confronto del
+ * server ("−30 min al giorno rispetto ad ora"), o per un'eliminazione chi l'ha
+ * chiesta. Il confronto di un'eliminazione è scritto per il genitore.
  */
 @Composable
 private fun testoPropostaInAttesa(proposta: Proposta): String {
@@ -511,9 +675,8 @@ private fun testoPropostaInAttesa(proposta: Proposta): String {
         ?: stringResource(R.string.proposta_senza_confronto)
     return when {
         proposta.delFiglio && eliminazione -> stringResource(R.string.regola_proposta_tua_elimina)
-        proposta.delFiglio -> stringResource(R.string.regola_proposta_tua, confronto)
         eliminazione -> stringResource(R.string.regola_proposta_genitore_elimina)
-        else -> stringResource(R.string.regola_proposta_genitore, confronto)
+        else -> confronto
     }
 }
 
@@ -739,21 +902,19 @@ private fun DialogoRegola(
  * modifica, coi valori di adesso, più il perché facoltativo. Da qui si può
  * anche proporre di eliminarla ([eliminabile]: non l'unica regola del patto).
  * Se il genitore accetta, il server applica il cambio subito, anche se
- * allenta. La usano la scheda Regole e la "Nuova proposta" della scheda Proposte.
+ * allenta. (0.15) Si apre dal ⋯ di una regola, nella scheda Regole.
  *
  * [esito] = com'è andato l'ultimo invio, se non è arrivato: si dice qui
- * dentro. Il pulsante resta acceso solo quando rimandare ha senso; per una
- * proposta già in attesa, [onApriProposte] (se c'è) porta a vederla.
+ * dentro. Il pulsante resta acceso solo quando rimandare ha senso.
  */
 @Composable
-internal fun DialogoProposta(
+private fun DialogoProposta(
     regola: Regola,
     invioInCorso: Boolean,
     eliminabile: Boolean,
     esito: EsitoProposta?,
     onAnnulla: () -> Unit,
     onManda: (CambioRegola, String?) -> Unit,
-    onApriProposte: (() -> Unit)? = null,
 ) {
     val modulo = rememberSaveable(regola.id, saver = ModuloRegola.Salvataggio) { ModuloRegola.da(regola) }
     var perche by rememberSaveable(regola.id) { mutableStateOf("") }
@@ -809,7 +970,7 @@ internal fun DialogoProposta(
                         Text(stringResource(R.string.proponi_elimina))
                     }
                 }
-                esito?.let { RigaEsitoProposta(it, onApriProposte) }
+                esito?.let { RigaEsitoProposta(it) }
             }
         },
         confirmButton = {
@@ -843,7 +1004,6 @@ private fun DialogoBlocco(
     esito: EsitoProposta?,
     onChiudi: () -> Unit,
     onChiedi: (String?) -> Unit,
-    onApriProposte: () -> Unit,
 ) {
     val context = LocalContext.current
     val perEliminazione = blocco.cambio is CambioRegola.Eliminazione
@@ -885,7 +1045,7 @@ private fun DialogoBlocco(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 CampoPerche(perche) { perche = it }
-                esito?.let { RigaEsitoProposta(it, onApriProposte) }
+                esito?.let { RigaEsitoProposta(it) }
             }
         },
         confirmButton = {
@@ -908,19 +1068,14 @@ private fun DialogoBlocco(
 
 /**
  * (0.10) Com'è andata la proposta, dentro il modulo ancora aperto: una riga
- * neutra (§3.1: niente rosso per un esito del server), e per una proposta già
- * in attesa su quella regola la strada per vederla ([onApriProposte], se c'è).
+ * neutra (§3.1: niente rosso per un esito del server). (0.15) Una proposta
+ * già in attesa su quella regola si vede sulla sua card, in Regole.
  */
 @Composable
-private fun RigaEsitoProposta(esito: EsitoProposta, onApriProposte: (() -> Unit)?) {
+private fun RigaEsitoProposta(esito: EsitoProposta) {
     val context = LocalContext.current
     LocalConfiguration.current
-    RigaNeutra(testoEsitoProposta(context, esito))
-    if (onApriProposte != null && (esito == EsitoProposta.GiaPendente || esito == EsitoProposta.GiaTua)) {
-        TextButton(onClick = onApriProposte, contentPadding = PaddingValues(0.dp)) {
-            Text(stringResource(R.string.proposta_apri_proposte))
-        }
-    }
+    RigaStato(testoEsitoProposta(context, esito))
 }
 
 /** (0.10) Il perché di una proposta: facoltativo, arriva al genitore con la proposta. */
@@ -944,11 +1099,18 @@ private fun ChipGiorno(giorno: String, selezionato: Boolean, onClick: () -> Unit
     )
 }
 
+/** (0.15) Si tocca tutta la riga, non solo il tondino; alta almeno 48 dp. */
 @Composable
 private fun RigaRadio(selezionato: Boolean, testo: String, onClick: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = selezionato, onClick = onClick)
-        Text(text = testo, style = MaterialTheme.typography.bodyMedium)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .selectable(selected = selezionato, onClick = onClick, role = Role.RadioButton),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selezionato, onClick = null)
+        Text(text = testo, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = Spazi.m))
     }
 }
 
@@ -988,7 +1150,8 @@ private fun CampoTesto(
 @Composable
 private fun SelettoreAppOCategoria(valore: String, onScegli: (String) -> Unit) {
     val context = LocalContext.current
-    var apertoPicker by remember { mutableStateOf(false) }
+    // (0.15) Salvato: ruotando la scelta resta aperta.
+    var apertoPicker by rememberSaveable { mutableStateOf(false) }
     val etichetta = remember(valore) {
         if (valore.isBlank()) null else CatalogoApp.etichettaValore(context, valore)
     }
@@ -1029,10 +1192,7 @@ private fun DialogoSceltaApp(onScegli: (String) -> Unit, onAnnulla: () -> Unit) 
                 item { TitoloSezione(stringResource(R.string.regola_sezione_app)) }
                 when (val lista = app) {
                     null -> item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
-                            horizontalArrangement = Arrangement.Center,
-                        ) { CircularProgressIndicator() }
+                        Caricamento(modifier = Modifier.padding(vertical = Spazi.m), centrato = false)
                     }
                     else -> items(lista, key = { it.pacchetto }) { installata ->
                         RigaScelta(installata.etichetta) { onScegli(installata.pacchetto) }
@@ -1054,6 +1214,7 @@ private fun RigaScelta(testo: String, onClick: () -> Unit) {
         style = MaterialTheme.typography.bodyLarge,
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick)
             .padding(vertical = Spazi.m),
     )
@@ -1076,7 +1237,8 @@ private fun RigaScelta(testo: String, onClick: () -> Unit) {
 fun PrimaRegolaScreen(vm: RegoleViewModel) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    var dialogoAperto by remember { mutableStateOf(false) }
+    // (0.15) Salvato: ruotando il dialogo (e quello che c'è scritto) resta.
+    var dialogoAperto by rememberSaveable { mutableStateOf(false) }
 
     val messaggioErrore = stringResource(R.string.regola_errore_generico)
     LaunchedEffect(stato.evento) {
@@ -1094,9 +1256,11 @@ fun PrimaRegolaScreen(vm: RegoleViewModel) {
         Column(
             modifier = Modifier
                 .padding(padding)
+                .consumeWindowInsets(padding)
                 .fillMaxSize()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = Spazi.xl, vertical = Spazi.xxl),
+                .padding(horizontal = Spazi.l + Spazi.xs, vertical = Spazi.xl),
             verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
             Text(
@@ -1108,7 +1272,7 @@ fun PrimaRegolaScreen(vm: RegoleViewModel) {
                     text = stringResource(R.string.prima_regola_config_intro),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                ModuloCollegamento(onCollegato = { vm.aggiorna() })
+                ModuloCollegamento(origine = OriginiCollegamento.PRIMA_REGOLA, onCollegato = { vm.aggiorna() })
             } else {
                 // Appena collegato: il ragazzo vede con che nome lo vede il patto.
                 RigaCollegatoCome()
@@ -1140,108 +1304,4 @@ fun PrimaRegolaScreen(vm: RegoleViewModel) {
             onSalva = { tipo, parametri -> vm.crea(tipo, parametri) },
         )
     }
-}
-
-// --- Mattoni condivisi dalle schermate del patto -----------------------------
-
-/**
- * Dati vecchi: è un'ETÀ, non un fallimento ("Dati non aggiornati: ultimo
- * aggiornamento alle 14:32.", terminologia dell'audit).
- * Una riga su `surfaceVariant`, mai `errorContainer` — il rosso di sistema
- * resta alla validazione dei form. [aggiornatiIl] null = età sconosciuta.
- */
-@Composable
-internal fun BannerDatiVecchi(aggiornatiIl: Long?) {
-    Text(
-        text = aggiornatiIl?.let {
-            stringResource(R.string.dati_fermi_alle, quandoLocale(Instant.ofEpochMilli(it)))
-        } ?: stringResource(R.string.dati_fermi),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 40.dp)
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant,
-                MaterialTheme.shapes.small,
-            )
-            .padding(horizontal = Spazi.m, vertical = Spazi.s),
-    )
-}
-
-@Composable
-internal fun TitoloSezione(testo: String) {
-    Text(
-        text = testo,
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(top = Spazi.s),
-    )
-}
-
-/** Il sopra-titolo di una sezione: `labelMedium`, scritto MAIUSCOLO nella stringa. */
-@Composable
-internal fun Sopratitolo(testo: String, modifier: Modifier = Modifier) {
-    Text(
-        text = testo,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier,
-    )
-}
-
-/**
- * Lo stato vuoto (§3.4): una riga asciutta, icona 20.dp + testo, allineati a
- * sinistra dentro il flusso. Quando va bene si scrive; ma senza un banner
- * verde speculare al rosso.
- */
-@Composable
-internal fun RigaVuota(icona: ImageVector, testo: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Spazi.s),
-    ) {
-        Icon(
-            imageVector = icona,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp),
-        )
-        Text(
-            text = testo,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-internal fun Etichetta(testo: String) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-    ) {
-        Text(
-            text = testo,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = Spazi.s, vertical = 3.dp),
-        )
-    }
-}
-
-@Composable
-internal fun Centro(contenuto: @Composable () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        contenuto()
-    }
-}
-
-@Composable
-internal fun TestoCentrato(testo: String) {
-    Text(
-        text = testo,
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.padding(horizontal = Spazi.xxl),
-    )
 }

@@ -392,7 +392,19 @@ data class Proposta(
     // vecchio, proposte nate prima della v3.4) vuol dire del genitore, come sono
     // state tutte fino ad allora. Si legge con delFiglio / delGenitore.
     val autore: String? = null,
+    // (0.15, contratto v3.6 "Chi ha fatto cosa") Quale genitore: chi l'ha fatta
+    // (proposte del genitore) e chi ha risposto (proposte del figlio), come
+    // { "id", "nome" }. Letti come JSON libero: una forma inattesa non rompe la
+    // lettura della proposta, si torna a dire "il genitore".
+    val genitore: JsonElement? = null,
+    @SerialName("risposta_di") val rispostaDi: JsonElement? = null,
 ) {
+    /** (0.15) Il nome del genitore che l'ha fatta, se il server lo dice. */
+    val nomeGenitore: String? get() = LetturaFaccende.nomeGenitore(genitore)
+
+    /** (0.15) Il nome del genitore che ha risposto (a una proposta del figlio). */
+    val nomeRispostaDi: String? get() = LetturaFaccende.nomeGenitore(rispostaDi)
+
     /** (0.10) È una proposta del figlio: aspetta la risposta del genitore. */
     val delFiglio: Boolean get() = autore?.trim()?.lowercase() == AutoriProposta.FIGLIO
 

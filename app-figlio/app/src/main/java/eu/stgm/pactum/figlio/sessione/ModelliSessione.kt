@@ -65,6 +65,8 @@ data class SessioneDefinita(
     val motivazione: String?,
     val dispositivoId: Long? = null,
     val versione: Long? = null,
+    /** (0.15, contratto v3.6) Il nome del genitore dell'ultima decisione, se il server lo dice. */
+    val decisaDa: String? = null,
 ) {
     val approvata: Boolean get() = stato == StatiSessione.APPROVATA
     val inAttesa: Boolean get() = stato == StatiSessione.IN_ATTESA
@@ -200,6 +202,7 @@ object LetturaSessioni {
             motivazione = testo(o["motivazione"])?.takeIf { it.isNotBlank() },
             dispositivoId = intero(o["dispositivo_id"]) ?: (o["dispositivo"] as? JsonObject)?.let { intero(it["id"]) },
             versione = intero(o["versione"]),
+            decisaDa = eu.stgm.pactum.figlio.faccende.LetturaFaccende.nomeGenitore(o["decisa_da"]),
         )
     }
 

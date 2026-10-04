@@ -1,5 +1,14 @@
 package eu.stgm.pactum.figlio.ui
 
+import eu.stgm.pactum.design.RigaStato
+import eu.stgm.pactum.design.StatoVuoto
+import eu.stgm.pactum.design.Caricamento
+import eu.stgm.pactum.design.CardEvidenza
+import eu.stgm.pactum.design.CardNormale
+import eu.stgm.pactum.design.SezioneEspandibile
+import eu.stgm.pactum.design.Tono
+import eu.stgm.pactum.design.Pillola
+import eu.stgm.pactum.design.TitoloSezione
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -28,8 +37,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -120,7 +127,10 @@ private class ScattaConFotocamera : ActivityResultContracts.TakePicture() {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FaccendeScreen(vm: FaccendeViewModel = viewModel()) {
+fun FaccendeScreen(
+    onApriImpostazioni: (() -> Unit)? = null,
+    vm: FaccendeViewModel = viewModel(),
+) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     val memoria by StatoBlocco.memoria.collectAsStateWithLifecycle()
     val coda by ArchivioCodaFoto.stato.collectAsStateWithLifecycle()
@@ -216,31 +226,18 @@ fun FaccendeScreen(vm: FaccendeViewModel = viewModel()) {
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.faccende_titolo)) },
-                actions = {
-                    IconButton(onClick = { vm.aggiorna() }) {
-                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
-                    }
-                },
+                actions = { AzioniBarra(onAggiorna = { vm.aggiorna() }, onApriImpostazioni = onApriImpostazioni) },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when {
-                stato.caricamento && !stato.letto && daFare.isEmpty() && chiuse.isEmpty() -> Centro {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Text(
-                            text = stringResource(R.string.faccende_caricamento),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = Spazi.s),
-                        )
-                    }
-                }
+                stato.caricamento && !stato.letto && daFare.isEmpty() && chiuse.isEmpty() ->
+                    Caricamento(testo = stringResource(R.string.faccende_caricamento))
 
-                stato.configurazioneMancante -> Centro {
-                    TestoCentrato(stringResource(R.string.regole_config_mancante))
-                }
+                stato.configurazioneMancante ->
+                    StatoVuoto(stringResource(R.string.regole_config_mancante), centrato = true)
 
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -248,20 +245,30 @@ fun FaccendeScreen(vm: FaccendeViewModel = viewModel()) {
                     verticalArrangement = Arrangement.spacedBy(Spazi.l),
                 ) {
                     if (stato.scollegato || memoria.scollegato) {
-                        // Il blocco è tolto: questo telefono non è più collegato (401).
-                        item { RigaNeutra(stringResource(R.string.faccende_scollegato)) }
+                        // Questo telefono non è più collegato (401): il blocco è tolto.
+                        item { RigaStato(stringResource(R.string.scollegato)) }
                     } else if (stato.datiFermi) {
                         // Un'ora salvata nel futuro (l'orologio spostato) non si mostra.
-                        item { BannerDatiVecchi(listOfNotNull(memoria.sentitoIl, memoria.elencoIl).filter { it <= orologio }.maxOrNull()) }
+                        item { RigaStato(testoDatiVecchi(listOfNotNull(memoria.sentitoIl, memoria.elencoIl).filter { it <= orologio }.maxOrNull())) }
                     }
                     if (stato.serverDaAggiornare) {
                         // Mai "errore": il server va aggiornato, il resto dell'app funziona.
-                        item { RigaNeutra(stringResource(R.string.faccende_server_da_aggiornare)) }
+                        item { RigaStato(stringResource(R.string.faccende_server_da_aggiornare)) }
                     }
-                    item(key = "stato-blocco") { SchedaBlocco(bloccato, memoria, adesso, daFare.isNotEmpty()) }
+                    // (0.15) Lo stato del blocco, compatto: la card quando il telefono
+                    // è bloccato, una riga quando è programmato, niente se non c'è.
+                    if (bloccato || (memoria.prossimo != null && daFare.isNotEmpty())) {
+                        item(key = "stato-blocco") { SchedaBlocco(bloccato, memoria, adesso) }
+                    }
                     if (daFare.isEmpty()) {
                         if (!stato.serverDaAggiornare) {
-                            item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.faccende_vuoto)) }
+                            // La spiegazione solo qui, quando non c'è niente da fare.
+                            item {
+                                StatoVuoto(
+                                    titolo = stringResource(R.string.faccende_vuoto),
+                                    testo = stringResource(R.string.faccende_intro),
+                                )
+                            }
                         }
                     } else {
                         item { TitoloSezione(stringResource(R.string.faccende_sezione_da_fare)) }
@@ -270,19 +277,30 @@ fun FaccendeScreen(vm: FaccendeViewModel = viewModel()) {
                                 faccenda = faccenda,
                                 foto = VistaFaccende.foto(faccenda, coda),
                                 adesso = adesso,
+                                bloccato = bloccato,
                                 occupato = stato.preparazioneInCorso || scattoFaccenda != null,
                                 onScatta = { scatta(faccenda) },
                             )
                         }
                     }
+                    // (0.15) Fatti e annullati: chiusi, si aprono quando servono.
                     if (chiuse.isNotEmpty()) {
-                        item { TitoloSezione(stringResource(R.string.faccende_sezione_chiuse)) }
-                        items(chiuse, key = { "chiusa-${it.id}" }) { faccenda ->
-                            CardChiusa(
-                                faccenda = faccenda,
-                                scaricando = stato.scaricamentoInCorso == faccenda.id,
-                                onVediFoto = { vm.apriFoto(faccenda.id, faccenda.titolo) },
-                            )
+                        item(key = "chiuse") {
+                            SezioneEspandibile(
+                                titolo = stringResource(R.string.faccende_sezione_chiuse),
+                                conteggio = chiuse.size,
+                                chiave = "faccende-chiuse",
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(Spazi.m)) {
+                                    chiuse.forEach { faccenda ->
+                                        CardChiusa(
+                                            faccenda = faccenda,
+                                            scaricando = stato.scaricamentoInCorso == faccenda.id,
+                                            onVediFoto = { vm.apriFoto(faccenda.id, faccenda.titolo) },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -310,61 +328,23 @@ fun FaccendeScreen(vm: FaccendeViewModel = viewModel()) {
 }
 
 /**
- * In cima: il telefono è bloccato (e da quando si sblocca), oppure quando si
- * bloccherà se le faccende non sono fatte. Niente se non c'è niente da fare.
+ * (0.15) In cima: il telefono è bloccato (card, con le app che intanto si
+ * possono usare, scritte leggibili), oppure in una riga quando si bloccherà
+ * se i lavori non sono fatti.
  */
 @Composable
-private fun SchedaBlocco(bloccato: Boolean, memoria: MemoriaBlocco, adesso: Long, ciSonoDaFare: Boolean) {
+private fun SchedaBlocco(bloccato: Boolean, memoria: MemoriaBlocco, adesso: Long) {
     val context = LocalContext.current
-    when {
-        bloccato -> Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-        ) {
-            Column(
-                modifier = Modifier.padding(Spazi.l + Spazi.xs),
-                verticalArrangement = Arrangement.spacedBy(Spazi.s),
-            ) {
-                Text(
-                    text = stringResource(R.string.faccende_bloccato),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-                Text(
-                    text = stringResource(R.string.faccende_bloccato_spiega),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-                Text(
-                    text = stringResource(R.string.faccende_usabili),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
+    if (bloccato) {
+        CardEvidenza(tono = Tono.Attenzione) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
+                Text(text = stringResource(R.string.faccende_bloccato), style = MaterialTheme.typography.titleMedium)
+                Text(text = stringResource(R.string.faccende_bloccato_spiega), style = MaterialTheme.typography.bodyMedium)
+                Text(text = stringResource(R.string.faccende_usabili), style = MaterialTheme.typography.bodyMedium)
             }
         }
-
-        memoria.prossimo != null && ciSonoDaFare -> Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(Spazi.l + Spazi.xs),
-                verticalArrangement = Arrangement.spacedBy(Spazi.s),
-            ) {
-                Text(
-                    text = testoProssimoBlocco(context, memoria.prossimo, adesso),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = stringResource(R.string.faccende_anticipo),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        else -> Text(
-            text = stringResource(R.string.faccende_intro),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    } else {
+        memoria.prossimo?.let { RigaStato(testoProssimoBlocco(context, it, adesso)) }
     }
 }
 
@@ -374,15 +354,13 @@ private fun CardDaFare(
     faccenda: FaccendaLocale,
     foto: VistaFaccende.Foto,
     adesso: Long,
+    bloccato: Boolean,
     occupato: Boolean,
     onScatta: () -> Unit,
 ) {
     val context = LocalContext.current
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.s),
-        ) {
+    CardNormale {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
             Text(
                 text = faccenda.titolo.ifBlank { stringResource(R.string.faccenda_senza_titolo) },
                 style = MaterialTheme.typography.titleMedium,
@@ -391,10 +369,13 @@ private fun CardDaFare(
             faccenda.nota?.let {
                 Text(text = stringResource(R.string.faccenda_nota, it), style = MaterialTheme.typography.bodyMedium)
             }
-            Text(
-                text = testoBloccaDa(context, faccenda.bloccoDa, adesso),
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            // (0.15) Da quando blocca, solo se il telefono non è già bloccato.
+            if (!bloccato) {
+                Text(
+                    text = testoBloccaDa(context, faccenda.bloccoDa, adesso),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             faccenda.ultimaBocciatura?.let { b ->
                 val chi = b.da ?: stringResource(R.string.faccende_genitore_senza_nome)
                 Text(
@@ -407,19 +388,18 @@ private fun CardDaFare(
                 }
             }
             when (foto) {
-                VistaFaccende.Foto.IN_CODA -> Etichetta(stringResource(R.string.faccenda_foto_in_coda))
-                VistaFaccende.Foto.MANDATA -> Etichetta(stringResource(R.string.faccenda_foto_mandata))
+                VistaFaccende.Foto.IN_CODA -> Nota(stringResource(R.string.faccenda_foto_in_coda))
+                VistaFaccende.Foto.MANDATA -> Pillola(stringResource(R.string.faccenda_foto_mandata), tono = Tono.Positivo)
                 VistaFaccende.Foto.RIFIUTATA -> Nota(stringResource(R.string.faccenda_foto_rifiutata))
                 VistaFaccende.Foto.NESSUNA -> Unit
             }
+            // Un solo pulsante: "Scatta la foto", o "Scatta di nuovo".
             if (foto != VistaFaccende.Foto.MANDATA) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (foto == VistaFaccende.Foto.NESSUNA) {
-                        Button(enabled = !occupato, onClick = onScatta) { Text(stringResource(R.string.faccenda_scatta)) }
-                    } else {
-                        OutlinedButton(enabled = !occupato, onClick = onScatta) {
-                            Text(stringResource(R.string.faccenda_scatta_di_nuovo))
-                        }
+                if (foto == VistaFaccende.Foto.NESSUNA) {
+                    Button(enabled = !occupato, onClick = onScatta) { Text(stringResource(R.string.faccenda_scatta)) }
+                } else {
+                    OutlinedButton(enabled = !occupato, onClick = onScatta) {
+                        Text(stringResource(R.string.faccenda_scatta_di_nuovo))
                     }
                 }
             }
@@ -430,19 +410,17 @@ private fun CardDaFare(
 /** Una faccenda fatta (con la foto da guardare, finché il server la tiene) o annullata. */
 @Composable
 private fun CardChiusa(faccenda: FaccendaLocale, scaricando: Boolean, onVediFoto: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.s),
-        ) {
+    CardNormale {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = faccenda.titolo.ifBlank { stringResource(R.string.faccenda_senza_titolo) },
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                Etichetta(
+                Pillola(
                     stringResource(if (faccenda.fatta) R.string.faccenda_stato_fatta else R.string.faccenda_stato_annullata),
+                    tono = if (faccenda.fatta) Tono.Positivo else Tono.Neutro,
                 )
             }
             faccenda.genitore?.let { Nota(stringResource(R.string.faccenda_data_da, it)) }
@@ -462,14 +440,6 @@ private fun CardChiusa(faccenda: FaccendaLocale, scaricando: Boolean, onVediFoto
     }
 }
 
-@Composable
-private fun Nota(testo: String) {
-    Text(
-        text = testo,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
 
 /** "Blocca il telefono da subito", "…dalle 16:00", "…domani dalle 16:00", "…giovedì dalle 16:00". */
 private fun testoBloccaDa(context: Context, bloccoDa: Long?, adesso: Long): String =
@@ -492,11 +462,12 @@ private fun testoProssimoBlocco(context: Context, prossimo: Long, adesso: Long):
     }
 
 /**
- * (0.13) Prima delle schede (i permessi, "Cosa vede il genitore", la prima
- * regola): se [faccende] (un blocco, faccende da fare, o l'arrivo da "Apri
- * Pactum"), la pagina Faccende, e sotto un pulsante per il resto
- * ([etichettaResto]); dal resto, in alto, si torna alle faccende. Senza
- * faccende, il resto e basta.
+ * (0.13) Prima delle schede (Collega, i permessi, "Cosa vedono i tuoi
+ * genitori", la prima regola): se [faccende] (un blocco, faccende da fare, o
+ * l'arrivo da "Apri Pactum"), la pagina dei lavori di casa, e in fondo un
+ * pulsante per il resto ([etichettaResto]); dal resto, in fondo, si torna ai
+ * lavori. Senza faccende, il resto e basta. (0.15) I due pulsanti stanno in
+ * fondo: in cima al resto c'è al massimo una cosa (la sessione in corso).
  */
 @Composable
 fun ConFaccendePrima(faccende: Boolean, etichettaResto: Int, resto: @Composable () -> Unit) {
@@ -505,32 +476,31 @@ fun ConFaccendePrima(faccende: Boolean, etichettaResto: Int, resto: @Composable 
         return
     }
     var mostraResto by rememberSaveable(etichettaResto) { mutableStateOf(false) }
-    if (mostraResto) {
-        Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            TextButton(
-                onClick = { mostraResto = false },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(horizontal = Spazi.l),
-            ) {
-                Text(stringResource(R.string.faccende_torna))
-            }
-            Box(modifier = Modifier.weight(1f).consumeWindowInsets(WindowInsets.statusBars)) { resto() }
-        }
-        return
-    }
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Box(modifier = Modifier.weight(1f)) { FaccendeScreen() }
+        Box(modifier = Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
+            if (mostraResto) resto() else FaccendeScreen()
+        }
         OutlinedButton(
-            onClick = { mostraResto = true },
+            onClick = { mostraResto = !mostraResto },
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = Spazi.xl, vertical = Spazi.m),
+                .padding(horizontal = Spazi.l + Spazi.xs, vertical = Spazi.m),
         ) {
-            Text(stringResource(etichettaResto))
+            Text(stringResource(if (mostraResto) R.string.faccende_torna else etichettaResto))
         }
+    }
+}
+
+/**
+ * (0.15) Un passo del primo avvio: prima i lavori di casa se servono
+ * ([ConFaccendePrima]), e con una sessione in corso la sua riga in cima
+ * ([ConSessioneInCorso]).
+ */
+@Composable
+fun PassoPrimoAvvio(faccende: Boolean, etichettaResto: Int, passo: @Composable () -> Unit) {
+    ConFaccendePrima(faccende, etichettaResto) {
+        ConSessioneInCorso { passo() }
     }
 }
 

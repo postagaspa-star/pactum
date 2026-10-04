@@ -5,37 +5,37 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.BarraSchede
+import eu.stgm.pactum.design.Caricamento
+import eu.stgm.pactum.design.VoceBarra
+import eu.stgm.pactum.design.attivaBordoPieno
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.faccende.StatoBlocco
 import eu.stgm.pactum.figlio.faccende.VistaFaccende
@@ -45,37 +45,43 @@ import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
 import eu.stgm.pactum.figlio.sessione.PaginaSessioneActivity
 import eu.stgm.pactum.figlio.sessione.PagineSessione
 import eu.stgm.pactum.figlio.sessione.RichiestaTermine
-import eu.stgm.pactum.figlio.ui.ConSessioneInCorso
 import eu.stgm.pactum.figlio.ui.CosaVedeScreen
-import eu.stgm.pactum.figlio.ui.DichiarazioniScreen
-import eu.stgm.pactum.figlio.ui.ConFaccendePrima
 import eu.stgm.pactum.figlio.ui.FaccendeScreen
-import eu.stgm.pactum.figlio.ui.rememberBloccoFaccende
 import eu.stgm.pactum.figlio.ui.ImpostazioniScreen
+import eu.stgm.pactum.figlio.ui.Navigazione
 import eu.stgm.pactum.figlio.ui.OggiScreen
 import eu.stgm.pactum.figlio.ui.OnboardingScreen
+import eu.stgm.pactum.figlio.ui.Pagina
+import eu.stgm.pactum.figlio.ui.PassoCollegaScreen
+import eu.stgm.pactum.figlio.ui.PassoPrimoAvvio
 import eu.stgm.pactum.figlio.ui.PrimaRegolaScreen
-import eu.stgm.pactum.figlio.ui.ProposteScreen
 import eu.stgm.pactum.figlio.ui.ProposteViewModel
 import eu.stgm.pactum.figlio.ui.RegoleScreen
 import eu.stgm.pactum.figlio.ui.RegoleViewModel
+import eu.stgm.pactum.figlio.ui.Scheda
 import eu.stgm.pactum.figlio.ui.SessioniScreen
 import eu.stgm.pactum.figlio.ui.SitiScreen
+import eu.stgm.pactum.figlio.ui.StoricoScreen
+import eu.stgm.pactum.figlio.ui.TutteLeAppScreen
+import eu.stgm.pactum.figlio.ui.rememberBloccoFaccende
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
-    // La scheda su cui aprirsi quando si arriva da una notifica locale
-    // (sforamento, segno, chiusura della sera → oggi; proposta → proposte;
-    // verdetto → diario). Attività a singleTop: onNewIntent la aggiorna
-    // quando l'app è già viva.
+    // Dove aprirsi quando si arriva da una notifica locale o da "Apri Pactum"
+    // (il segnalibro: Navigazione.ingresso dice la scheda e la pagina).
+    // Attività a singleTop: onNewIntent la aggiorna quando l'app è già viva.
     private val destinazioneRichiesta = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // (0.15) Bordo pieno con le icone scure della barra di stato (B11): i
+        // margini delle barre di sistema li tengono gli Scaffold delle schermate.
+        attivaBordoPieno()
         super.onCreate(savedInstanceState)
         // Solo a un avvio vero. Dopo una rotazione (o la morte del processo)
         // savedInstanceState c'è e l'intent è ancora quello della notifica:
@@ -136,9 +142,9 @@ class MainActivity : ComponentActivity() {
     private fun prendiDestinazione(intent: Intent?): String? {
         val destinazione = intent?.getStringExtra(EXTRA_DESTINAZIONE)
         intent?.removeExtra(EXTRA_DESTINAZIONE)
-        // (0.11) "Termina la sessione" dalla notifica fissa: la scheda della
-        // sessione in corso apre la sua conferma (Oggi, o sopra le schermate
-        // iniziali). Terminare passa sempre da lì.
+        // (0.11) "Termina la sessione" dalla notifica fissa: la sessione in
+        // corso (in Oggi, o sopra le schermate iniziali) apre la sua conferma.
+        // Terminare passa sempre da lì.
         if (destinazione == DEST_TERMINA_SESSIONE) RichiestaTermine.chiedi()
         return destinazione
     }
@@ -152,10 +158,17 @@ class MainActivity : ComponentActivity() {
         var inPrimoPiano: Boolean = false
             private set
 
+        // I segnalibri delle notifiche: restano gli stessi valori di sempre (ce
+        // ne sono già nella tendina di chi aggiorna). Dove portano lo dice
+        // Navigazione.ingresso (0.15).
         const val EXTRA_DESTINAZIONE = "destinazione_iniziale"
         const val DEST_OGGI = "oggi"
         const val DEST_REGOLE = "regole"
+
+        /** (0.15) Le proposte stanno in cima a Regole, in "Da decidere". */
         const val DEST_PROPOSTE = "proposte"
+
+        /** (0.15) L'esito di una dichiarazione: lo Storico, sulle dichiarazioni. */
         const val DEST_DIARIO = "diario"
 
         /** (0.11) La risposta del genitore a una sessione apre le Sessioni. */
@@ -170,28 +183,13 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * Le schede (redesign C8). La scheda Bonus non c'è più: il bonus vive sulla
- * riga della regola, in Oggi, dove il contesto è già dato. Le icone sono
- * disegnate per Pactum (C4), sul modello del quadretto della striscia.
- * (0.11) In più le Sessioni (contratto v3.5), accanto alle regole. (0.13) E
- * le Faccende (contratto v3.6), subito dopo Oggi, ma solo quando ce ne sono
- * (da fare, o chiuse negli ultimi 30 giorni) o il telefono è bloccato: chi
- * non ha faccende non vede una scheda vuota.
- */
-private enum class Scheda(val icona: Int, val etichetta: Int, val destinazione: String) {
-    OGGI(R.drawable.ic_scheda_oggi, R.string.scheda_oggi, MainActivity.DEST_OGGI),
-    FACCENDE(R.drawable.ic_scheda_faccende, R.string.scheda_faccende, MainActivity.DEST_FACCENDE),
-    REGOLE(R.drawable.ic_scheda_regole, R.string.scheda_regole, MainActivity.DEST_REGOLE),
-    SESSIONI(R.drawable.ic_scheda_sessioni, R.string.scheda_sessioni, MainActivity.DEST_SESSIONI),
-    PROPOSTE(R.drawable.ic_scheda_proposte, R.string.scheda_proposte, MainActivity.DEST_PROPOSTE),
-    DIARIO(R.drawable.ic_scheda_diario, R.string.scheda_diario, MainActivity.DEST_DIARIO),
-}
-
-/**
- * Navigazione del figlio: onboarding finché manca l'accesso ai dati di
- * utilizzo (il permesso indispensabile), poi — una volta — "Cosa vede tuo
- * padre", poi il gate della prima regola, poi le schede. Le
- * Impostazioni sono un'icona nella barra in alto di Oggi.
+ * (0.15) La navigazione del figlio. Prima i passi del primo avvio, in ordine
+ * logico: Collega (solo se il telefono non ha mai salvato un collegamento) →
+ * Permessi (finché manca l'accesso ai dati di utilizzo) → "Cosa vedono i tuoi
+ * genitori" (una volta) → la prima regola. Poi la barra in basso con quattro
+ * schede fisse (Oggi · Regole · Sessioni · Lavori) e, sopra, le pagine che si
+ * aprono e si chiudono con Indietro (Impostazioni, Siti, Cosa vedono,
+ * Storico, tutte le app di oggi).
  */
 @Composable
 private fun PactumRoot(
@@ -211,9 +209,9 @@ private fun PactumRoot(
 
     // (0.13) Il blocco delle faccende, letto prima di tutto: con un blocco, con
     // faccende da fare, o arrivando da "Apri Pactum" o da una notifica di
-    // faccende, la pagina Faccende viene prima dei permessi e della prima
-    // regola. Le foto non hanno bisogno né di regole né dell'accesso all'uso:
-    // un telefono bloccato deve poter mandare le foto sempre.
+    // faccende, la pagina Faccende viene prima dei passi del primo avvio. Le
+    // foto non hanno bisogno né di regole né dell'accesso all'uso: un telefono
+    // bloccato deve poter mandare le foto sempre.
     val memoriaBlocco by StatoBlocco.memoria.collectAsStateWithLifecycle()
     val bloccato = rememberBloccoFaccende()
     var arrivoFaccende by rememberSaveable { mutableStateOf(false) }
@@ -222,60 +220,84 @@ private fun PactumRoot(
     }
     val faccendePrima = VistaFaccende.primaDelResto(bloccato, memoriaBlocco, arrivoFaccende)
 
+    // Pactum parte appena c'è l'accesso ai dati di utilizzo, come sempre: anche
+    // se il telefono non è ancora collegato (il passo Collega viene prima).
+    LaunchedEffect(statoPermessi.accessoUso) {
+        if (statoPermessi.accessoUso) PactumService.avvia(context)
+    }
+
+    // null = non ancora letto dal disco: niente lampi di schermate sbagliate.
+    val configurazione by impostazioni.configurazione.collectAsState(initial = null)
+    val cosaVedeVista by impostazioni.cosaVedeVista.collectAsState(initial = null)
+    val config = configurazione
+    val vista = cosaVedeVista
+    if (config == null || vista == null) {
+        AttesaAvvio()
+        return
+    }
+
+    // 1. Collega: solo se il telefono non ha mai salvato un collegamento. Uno
+    // già collegato, anche col collegamento non più valido, non torna qui.
+    if (!config.completa) {
+        PassoPrimoAvvio(faccendePrima, R.string.faccende_poi_collega) { PassoCollegaScreen() }
+        return
+    }
+
+    // 2. I permessi: finché manca l'accesso ai dati di utilizzo (gli altri tre
+    // non fermano: si ritrovano in Oggi e nelle Impostazioni).
     if (!statoPermessi.accessoUso) {
-        ConFaccendePrima(faccendePrima, R.string.faccende_poi_permessi) {
-            // (0.11) Anche qui, se c'è una sessione in corso, si può terminare.
-            ConSessioneInCorso {
-                OnboardingScreen(
-                    statoPermessi = statoPermessi,
-                    onAggiorna = { statoPermessi = StatoPermessi.leggi(context) },
-                )
-            }
+        PassoPrimoAvvio(faccendePrima, R.string.faccende_poi_permessi) {
+            OnboardingScreen(
+                statoPermessi = statoPermessi,
+                onAggiorna = { statoPermessi = StatoPermessi.leggi(context) },
+            )
         }
         return
     }
 
-    LaunchedEffect(Unit) { PactumService.avvia(context) }
-
-    // Subito dopo i permessi, una volta: cosa arriva al genitore e cosa no.
-    // null = non ancora letto dal disco: niente lampi di schermate sbagliate.
-    val cosaVedeVista by impostazioni.cosaVedeVista.collectAsState(initial = null)
-    when (cosaVedeVista) {
-        null -> {
-            Box(modifier = Modifier.fillMaxSize())
-            return
+    // 3. Una volta: cosa arriva ai genitori e cosa no, ora che si sa a chi.
+    if (!vista) {
+        PassoPrimoAvvio(faccendePrima, R.string.faccende_poi_cosa_vede) {
+            CosaVedeScreen(onHoCapito = { ambito.launch { impostazioni.registraCosaVedeVista() } })
         }
-        false -> {
-            ConFaccendePrima(faccendePrima, R.string.faccende_poi_cosa_vede) {
-                ConSessioneInCorso {
-                    CosaVedeScreen(onHoCapito = { ambito.launch { impostazioni.registraCosaVedeVista() } })
-                }
-            }
-            return
-        }
-        true -> Unit
+        return
     }
 
     // Il nome della scheda, non l'enum: uno stato salvato da una versione con
-    // cinque schede non deve far cadere l'app al ripristino.
+    // altre schede (PROPOSTE, DIARIO, FACCENDE) diventa la scheda giusta.
     var nomeScheda by rememberSaveable { mutableStateOf(Scheda.OGGI.name) }
-    val scheda = Scheda.entries.firstOrNull { it.name == nomeScheda } ?: Scheda.OGGI
-    var mostraImpostazioni by rememberSaveable { mutableStateOf(false) }
-    var mostraSiti by rememberSaveable { mutableStateOf(false) }
-    var mostraCosaVede by rememberSaveable { mutableStateOf(false) }
+    val scheda = Navigazione.schedaSalvata(nomeScheda)
+    // Le pagine aperte sopra le schede, come testo: sopravvivono a una rotazione.
+    var testoPila by rememberSaveable { mutableStateOf("") }
+    val pila = Navigazione.pilaDaTesto(testoPila)
+    // Ogni scheda e ogni pagina tiene il suo stato (scorrimento, sezioni aperte)
+    // anche quando si cambia scheda o si apre una pagina sopra.
+    val stati = rememberSaveableStateHolder()
+    // (0.15) "Da decidere" in cima: dalla notifica di una proposta.
+    var richiestaInCima by rememberSaveable { mutableIntStateOf(0) }
 
-    // Arrivo da una notifica: salta alla scheda giusta, una volta sola, anche
-    // se sopra c'è un'altra schermata (Impostazioni, Siti, Cosa vede): per
-    // questo sta PRIMA dei loro return, altrimenti non girerebbe finché non si
-    // chiudono. Una destinazione che non si conosce (versione vecchia) apre
-    // Oggi: un tocco su una notifica non finisce mai nel vuoto.
+    fun vaiA(nuova: Scheda) {
+        nomeScheda = nuova.name
+    }
+    fun apri(pagina: Pagina) {
+        testoPila = Navigazione.pilaInTesto(pila + pagina)
+    }
+    fun chiudi() {
+        val chiusa = pila.lastOrNull() ?: return
+        stati.removeState("pagina-${chiusa.name}")
+        testoPila = Navigazione.pilaInTesto(pila.dropLast(1))
+    }
+
+    // Arrivo da una notifica: la scheda (e la pagina) giusta, una volta sola,
+    // anche se sopra c'era un'altra pagina: per questo sta PRIMA dei return
+    // delle pagine. Un segnalibro che non si conosce apre Oggi.
     LaunchedEffect(destinazioneRichiesta) {
         if (destinazioneRichiesta != null) {
-            nomeScheda = (Scheda.entries.firstOrNull { it.destinazione == destinazioneRichiesta }
-                ?: Scheda.OGGI).name
-            mostraImpostazioni = false
-            mostraSiti = false
-            mostraCosaVede = false
+            val ingresso = Navigazione.ingresso(destinazioneRichiesta)
+            Navigazione.pilaDaTesto(testoPila).forEach { stati.removeState("pagina-${it.name}") }
+            nomeScheda = ingresso.scheda.name
+            testoPila = Navigazione.pilaInTesto(listOfNotNull(ingresso.pagina))
+            if (ingresso.inCima) richiestaInCima++
             onDestinazioneConsumata()
         }
     }
@@ -284,8 +306,8 @@ private fun PactumRoot(
     // stesso RegoleViewModel dell'Activity serve il gate e la scheda Regole.
     val regoleVm: RegoleViewModel = viewModel()
     val statoRegole by regoleVm.stato.collectAsStateWithLifecycle()
-    // Le proposte in attesa danno il badge sulla scheda: stesso ViewModel
-    // (dell'Activity) che usa la scheda Proposte. (0.10) Contano solo quelle a
+    // Le proposte del genitore in attesa danno il numero sulla scheda Regole:
+    // stesso ViewModel (dell'Activity) che usa la scheda. Contano solo quelle a
     // cui deve rispondere il figlio, non le sue che aspettano il genitore.
     val proposteVm: ProposteViewModel = viewModel()
     val statoProposte by proposteVm.stato.collectAsStateWithLifecycle()
@@ -305,114 +327,140 @@ private fun PactumRoot(
         }
     }
 
-    // "Cosa vede tuo padre" dalle Impostazioni: sopra a tutto, torna indietro
-    // alle Impostazioni.
-    if (mostraCosaVede) {
-        BackHandler { mostraCosaVede = false }
-        CosaVedeScreen(onChiudi = { mostraCosaVede = false })
-        return
+    // Indietro: chiude la pagina in cima; da una scheda diversa da Oggi torna a
+    // Oggi; da Oggi esce (BackHandler spento: decide Android). Davanti al gate
+    // della prima regola le schede non si vedono: lì Indietro esce, come prima.
+    val gatePrimaRegola = statoRegole.regole.isEmpty() && statoRegole.regoleAltrove == 0
+    BackHandler(enabled = pila.isNotEmpty() || (scheda != Scheda.OGGI && !gatePrimaRegola)) {
+        val dopo = Navigazione.indietro(scheda, pila) ?: return@BackHandler
+        if (dopo.second.size < pila.size) chiudi() else vaiA(dopo.first)
     }
 
-    // Le Impostazioni si valutano prima di tutto il resto: sopra alle schede
-    // e, se ci si arriva, anche sopra al gate.
-    if (mostraImpostazioni) {
-        BackHandler { mostraImpostazioni = false }
-        ImpostazioniScreen(
-            onChiudi = { mostraImpostazioni = false; regoleVm.aggiorna() },
-            onApriCosaVede = { mostraCosaVede = true },
-        )
-        return
-    }
-
-    // I siti visitati (v2.3): schermata piena, raggiunta dalla scheda Oggi.
-    // Fuori dalla barra in basso di proposito — è una sezione da leggere,
-    // non un posto dove si sta.
-    if (mostraSiti) {
-        BackHandler { mostraSiti = false }
-        SitiScreen(onChiudi = { mostraSiti = false })
-        return
-    }
-
-    // Finché il patto non ha nemmeno una regola, prima si crea quella: è il
-    // figlio a scrivere il patto. Creata la prima, il server vieta di togliere
-    // l'ultima, così il gate non torna; offline la copia locale già sincronizzata
-    // basta a superarlo. Il gate è anche il posto dove un telefono nuovo si
-    // collega col codice di 6 cifre. (v3) Il patto è del figlio: se ha già
-    // regole su un altro dispositivo (il computer), il gate non serve; senza
-    // rete vale l'ultimo numero saputo (RegoleViewModel), non uno zero finto.
-    //
-    // La rotella solo alla PRIMA lettura. Una rilettura (a ogni ritorno in primo
-    // piano) che sostituisse il gate con la rotella lo toglierebbe di mezzo: via
-    // l'indirizzo e il codice appena scritti, via la regola a metà nel dialogo.
-    if (statoRegole.regole.isEmpty() && statoRegole.regoleAltrove == 0) {
-        if (!statoRegole.letto) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            ConFaccendePrima(faccendePrima, R.string.faccende_poi_prima_regola) {
-                ConSessioneInCorso { PrimaRegolaScreen(vm = regoleVm) }
+    // Le pagine sopra a tutto: prima del gate della prima regola, così un
+    // collegamento cambiato dalle Impostazioni non le toglie di mezzo.
+    val paginaInCima = pila.lastOrNull()
+    if (paginaInCima != null) {
+        stati.SaveableStateProvider("pagina-${paginaInCima.name}") {
+            when (paginaInCima) {
+                Pagina.IMPOSTAZIONI, Pagina.IMPOSTAZIONI_PERMESSI -> ImpostazioniScreen(
+                    onChiudi = {
+                        chiudi()
+                        regoleVm.aggiorna()
+                    },
+                    onApriCosaVede = { apri(Pagina.COSA_VEDE) },
+                    onApriSiti = { apri(Pagina.SITI) },
+                    suiPermessi = paginaInCima == Pagina.IMPOSTAZIONI_PERMESSI,
+                )
+                Pagina.SITI -> SitiScreen(onChiudi = { chiudi() })
+                Pagina.COSA_VEDE -> CosaVedeScreen(onChiudi = { chiudi() })
+                Pagina.STORICO, Pagina.STORICO_DICHIARAZIONI -> StoricoScreen(
+                    onChiudi = { chiudi() },
+                    sulleDichiarazioni = paginaInCima == Pagina.STORICO_DICHIARAZIONI,
+                )
+                Pagina.TUTTE_LE_APP -> TutteLeAppScreen(onChiudi = { chiudi() })
             }
         }
         return
     }
 
-    // (0.13) La scheda Faccende c'è quando ci sono faccende, o quando ci si è
-    // arrivati (dalla barriera, da una notifica): non sparisce sotto il dito.
-    val conFaccende = memoriaBlocco.haFaccende || scheda == Scheda.FACCENDE
+    // 4. Finché il patto non ha nemmeno una regola, prima si crea quella: è il
+    // figlio a scrivere il patto. Creata la prima, il server vieta di togliere
+    // l'ultima, così il gate non torna; offline la copia locale già
+    // sincronizzata basta a superarlo. (v3) Se il figlio ha già regole su un
+    // altro dispositivo (il computer), il gate non serve; senza rete vale
+    // l'ultimo numero saputo (RegoleViewModel), non uno zero finto.
+    //
+    // L'attesa solo alla PRIMA lettura. Una rilettura (a ogni ritorno in primo
+    // piano) non deve togliere di mezzo il gate: via la regola a metà nel dialogo.
+    if (gatePrimaRegola) {
+        if (!statoRegole.letto) {
+            AttesaAvvio()
+        } else {
+            PassoPrimoAvvio(faccendePrima, R.string.faccende_poi_prima_regola) { PrimaRegolaScreen(vm = regoleVm) }
+        }
+        return
+    }
+
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                Scheda.entries.filter { it != Scheda.FACCENDE || conFaccende }.forEach { voce ->
-                    NavigationBarItem(
-                        selected = scheda == voce,
-                        onClick = { nomeScheda = voce.name },
-                        icon = {
-                            val inAttesa = when (voce) {
-                                Scheda.PROPOSTE -> statoProposte.pendenti
-                                // (0.13) Quante faccende ci sono da fare.
-                                Scheda.FACCENDE -> memoriaBlocco.daFare.size
-                                else -> 0
-                            }
-                            BadgedBox(
-                                badge = {
-                                    // Il Badge di default è `error`, rosso: fuori
-                                    // dalla striscia il rosso non esiste, ed
-                                    // `error` resta ai form (§3.1, le tre leggi).
-                                    if (inAttesa > 0) {
-                                        Badge(
-                                            containerColor = MaterialTheme.colorScheme.primary,
-                                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                                        ) { Text(inAttesa.toString()) }
-                                    }
-                                },
-                            ) {
-                                Icon(painterResource(voce.icona), contentDescription = null)
-                            }
+            // (0.15) Quattro schede fisse, etichette sempre su una riga (B1).
+            BarraSchede(
+                voci = Scheda.entries.map { voce ->
+                    val inAttesa = when (voce) {
+                        // Le proposte del genitore a cui rispondere.
+                        Scheda.REGOLE -> statoProposte.pendenti
+                        // (0.13) Quanti lavori di casa ci sono da fare.
+                        Scheda.LAVORI -> memoriaBlocco.daFare.size
+                        else -> 0
+                    }
+                    VoceBarra(
+                        etichetta = stringResource(etichettaScheda(voce)),
+                        icona = painterResource(iconaScheda(voce)),
+                        badge = inAttesa.takeIf { it > 0 },
+                        descrizioneBadge = when (voce) {
+                            Scheda.REGOLE -> pluralStringResource(R.plurals.badge_proposte, inAttesa, inAttesa)
+                            Scheda.LAVORI -> pluralStringResource(R.plurals.badge_lavori, inAttesa, inAttesa)
+                            else -> null
                         },
-                        label = { Text(stringResource(voce.etichetta)) },
                     )
-                }
-            }
+                },
+                selezionata = scheda.ordinal,
+                onSeleziona = { indice -> Scheda.entries.getOrNull(indice)?.let { vaiA(it) } },
+            )
         },
     ) { padding ->
         // consumeWindowInsets: il padding dello Scaffold esterno copre già le
         // barre di sistema; senza consumarlo, le TopAppBar degli Scaffold interni
         // riapplicherebbero l'inset della status bar (doppio spazio).
         Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
-            when (scheda) {
-                Scheda.OGGI -> OggiScreen(
-                    onApriImpostazioni = { mostraImpostazioni = true },
-                    onApriSiti = { mostraSiti = true },
-                    onApriDiario = { nomeScheda = Scheda.DIARIO.name },
-                )
-                // (0.10) Dalla regola si va alla proposta che aspetta su di lei.
-                Scheda.REGOLE -> RegoleScreen(onApriProposte = { nomeScheda = Scheda.PROPOSTE.name })
-                Scheda.FACCENDE -> FaccendeScreen()
-                Scheda.SESSIONI -> SessioniScreen()
-                Scheda.PROPOSTE -> ProposteScreen()
-                Scheda.DIARIO -> DichiarazioniScreen()
+            stati.SaveableStateProvider(scheda.name) {
+                when (scheda) {
+                    Scheda.OGGI -> OggiScreen(
+                        onApriImpostazioni = { apri(Pagina.IMPOSTAZIONI) },
+                        onApriPermessi = { apri(Pagina.IMPOSTAZIONI_PERMESSI) },
+                        onApriLavori = { vaiA(Scheda.LAVORI) },
+                        onApriTutteLeApp = { apri(Pagina.TUTTE_LE_APP) },
+                    )
+                    Scheda.REGOLE -> RegoleScreen(
+                        onApriImpostazioni = { apri(Pagina.IMPOSTAZIONI) },
+                        onApriStorico = { apri(Pagina.STORICO) },
+                        richiestaInCima = richiestaInCima,
+                    )
+                    Scheda.SESSIONI -> SessioniScreen(onApriImpostazioni = { apri(Pagina.IMPOSTAZIONI) })
+                    Scheda.LAVORI -> FaccendeScreen(onApriImpostazioni = { apri(Pagina.IMPOSTAZIONI) })
+                }
             }
         }
+    }
+}
+
+private fun iconaScheda(scheda: Scheda): Int = when (scheda) {
+    Scheda.OGGI -> R.drawable.ic_scheda_oggi
+    Scheda.REGOLE -> R.drawable.ic_scheda_regole
+    Scheda.SESSIONI -> R.drawable.ic_scheda_sessioni
+    Scheda.LAVORI -> R.drawable.ic_scheda_faccende
+}
+
+private fun etichettaScheda(scheda: Scheda): Int = when (scheda) {
+    Scheda.OGGI -> R.string.scheda_oggi
+    Scheda.REGOLE -> R.string.scheda_regole
+    Scheda.SESSIONI -> R.string.scheda_sessioni
+    Scheda.LAVORI -> R.string.scheda_faccende
+}
+
+/**
+ * (0.15) Mentre si legge dal disco (pochi millisecondi): il fondo dell'app e
+ * basta, niente lampo né rotella che compare e sparisce. Solo se l'attesa
+ * dura, la rotella.
+ */
+@Composable
+private fun AttesaAvvio() {
+    var lunga by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(600)
+        lunga = true
+    }
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        if (lunga) Caricamento()
     }
 }

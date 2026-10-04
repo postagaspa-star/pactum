@@ -32,14 +32,6 @@ class FotoSchermiInteriTest : Fotografo() {
         }
     }
 
-    @Test
-    fun barrieraUnLavoro() {
-        ArchivioBlocco.modifica(app) { DatiFinti.bloccoAttivo().let { it.copy(daFare = it.daFare.take(1)) } }
-        scatta("13-barriera-lavori-uno", "Barriera \"Prima i lavori di casa\" con un lavoro solo", pagine = false) {
-            apriActivity(BarrieraFaccendeActivity::class.java).comeAperta()
-        }
-    }
-
     // --- 14 Barriera della sessione -------------------------------------------------
 
     private fun barrieraSessione(): Aperta {
@@ -82,14 +74,6 @@ class FotoSchermiInteriTest : Fotografo() {
     fun avvisoLimite() {
         scatta("15-avviso-limite", "Avviso a tutto schermo: oltre il limite di Instagram (con 15 min di bonus)", pagine = false) {
             avviso(listOf(avvisoInstagram))
-        }
-    }
-
-    @Test
-    fun avvisoFascia() {
-        val fascia = Avviso(regolaId = 4, tipo = TipiRegola.FASCIA_ORARIA, minutiOltre = 12, dalle = "22:30", alle = "07:00")
-        scatta("15-avviso-fascia", "Avviso a tutto schermo: telefono usato nella fascia 22:30-07:00", pagine = false) {
-            avviso(listOf(fascia))
         }
     }
 
@@ -142,14 +126,6 @@ class FotoSchermiInteriTest : Fotografo() {
         val adesso = DatiFinti.adesso()
         scatta("16-pagina-sessione-fine-chiusa-prima", "Pagina animata della fine di \"Studio\", chiusa prima (fotogramma a 1,6 s)", pagine = false) {
             pagina(fine = true, nome = "Studio", inizio = adesso - 47 * DatiFinti.MINUTO, termine = adesso, chiusaPrima = true, id = 502)
-        }
-    }
-
-    @Test
-    fun paginaFineAllenamento() {
-        val adesso = DatiFinti.adesso()
-        scatta("16-pagina-sessione-fine-allenamento", "Pagina animata della fine di \"Allenamento\" (altro tema, 1 h 20 min)", pagine = false) {
-            pagina(fine = true, nome = "Allenamento", inizio = adesso - 80 * DatiFinti.MINUTO, termine = adesso, chiusaPrima = false, id = 503)
         }
     }
 

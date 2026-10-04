@@ -8,6 +8,7 @@ import eu.stgm.pactum.figlio.dati.Notifica
 import eu.stgm.pactum.figlio.dati.Patto
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.TipiNotifica
+import eu.stgm.pactum.figlio.faccende.LetturaFaccende
 import eu.stgm.pactum.figlio.faccende.ArchivioBlocco
 import eu.stgm.pactum.figlio.faccende.ControlloBlocco
 import eu.stgm.pactum.figlio.faccende.ParoleFaccende
@@ -97,6 +98,8 @@ object NovitaDalPatto {
                         regola = regole.firstOrNull { r -> r.id == it.regolaId },
                         contesto = patto?.contestoDispositivi() ?: ContestoDispositivi(),
                         messaggio = notifica.messaggio,
+                        // (0.15) Chi ha risposto o ritirato, col suo nome (contratto v3.6).
+                        genitore = LetturaFaccende.nomeGenitore(notifica.payload["genitore"]),
                     )
                 }
                 // (0.11) Il genitore ha deciso su una sessione o sul suo cambio.
@@ -104,7 +107,7 @@ object NovitaDalPatto {
                     ?.let { avvisoRispostaSessione(context, it.payload, it.messaggio, patto) }
                 // (0.13) Le faccende, col nome del genitore.
                 ?: avvisoFaccende(context, notifica, parole)
-                ?: (AvvisiLocali.titoloTipo(context, notifica.tipo) to testoNotifica(context, notifica, patto))
+                ?: (titoloConGenitore(context, notifica) to testoNotifica(context, notifica, patto))
             // (0.10) La proposta ritirata dal genitore non resta annunciata in
             // tendina come "Nuova proposta del genitore": quella si toglie.
             if (n is NovitaProposta.Ritiro) {
@@ -135,6 +138,22 @@ object NovitaDalPatto {
         // accumula le non lette all'infinito e, oltre il tetto locale di 500 id,
         // il figlio si ri-avviserebbe le vecchie. Il giro dopo riprova le fallite.
         notifiche.forEach { postino.marcaNotificaLetta(it.id) }
+    }
+
+    /**
+     * (0.15) Il titolo della notifica col nome del genitore, dove il payload
+     * lo dice (contratto v3.6): "Nuova proposta di Mamma", "Un segno da Papà".
+     * Senza nome, quello di sempre.
+     */
+    private fun titoloConGenitore(context: Context, notifica: Notifica): String {
+        val genitore = LetturaFaccende.nomeGenitore(notifica.payload["genitore"])
+        return when {
+            genitore != null && notifica.tipo == TipiNotifica.NUOVA_PROPOSTA ->
+                context.getString(R.string.tipo_nuova_proposta_nome, genitore)
+            genitore != null && notifica.tipo == TipiNotifica.SEGNO ->
+                context.getString(R.string.tipo_segno_nome, genitore)
+            else -> AvvisiLocali.titoloTipo(context, notifica.tipo)
+        }
     }
 
     /** (0.13) Le notifiche delle faccende con le parole del figlio; null per gli altri tipi o un payload che non basta. */

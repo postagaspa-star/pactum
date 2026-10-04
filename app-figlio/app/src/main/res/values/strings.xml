@@ -4,27 +4,19 @@
 
     <!-- Onboarding -->
     <string name="onboarding_titolo">Benvenuto in Pactum</string>
-    <string name="onboarding_intro">Pactum è un testimone, non un carceriere: misura l\'uso delle app e lo racconta al patto. Non blocca niente: l\'unica eccezione sono le sessioni, che decidi tu. Per funzionare servono tre permessi; il quarto è facoltativo.</string>
-    <string name="passo_uso_titolo">1. Accesso ai dati di utilizzo</string>
-    <string name="passo_uso_descrizione">Serve per misurare quanto tempo passi nelle app. Senza questo permesso Pactum non può fare da testimone.</string>
-    <string name="passo_batteria_titolo">2. Esenzione dalla batteria</string>
+    <string name="onboarding_intro">Pactum è un testimone, non un carceriere: misura l\'uso delle app e lo racconta al patto. Non blocca niente, con due eccezioni: le sessioni, che decidi tu, e i lavori di casa, che ti danno i tuoi genitori.</string>
+    <string name="passo_uso_descrizione">Serve per misurare quanto tempo passi nelle app.</string>
     <string name="passo_batteria_descrizione">Evita che Android sospenda Pactum e interrompa la registrazione dell\'uso.</string>
-    <string name="passo_notifiche_titolo">3. Notifiche</string>
-    <string name="passo_notifiche_descrizione">Per la notifica fissa del testimone e gli avvisi del patto.</string>
+    <string name="passo_notifiche_descrizione">Per la notifica fissa e gli avvisi del patto.</string>
     <!-- (0.9) Il permesso "Mostra sopra le altre app": da Android 11 si apre
          l'elenco delle app, non la pagina di Pactum. -->
-    <string name="passo_mostra_sopra_titolo">4. Mostra sopra le altre app (facoltativo)</string>
-    <string name="passo_mostra_sopra_descrizione">Serve per gli avvisi a tutto schermo e per la schermata delle sessioni. Senza, l\'avviso arriva in alto sullo schermo e le sessioni non si possono iniziare. Nell\'elenco che si apre cerca Pactum e attivalo.</string>
+    <string name="passo_mostra_sopra_descrizione">Per l\'avviso a tutto schermo quando vai oltre una regola, e per coprire le altre app durante una sessione.</string>
     <!-- La stessa guida di aiuto_restrizioni_testo, per "Mostra sopra le altre app". -->
-    <string name="aiuto_mostra_sopra_testo">Su Android 15 e 16, con l\'app installata a mano (dal browser o da un file), l\'interruttore “Mostra sopra le altre app” può partire bloccato dalle impostazioni con limitazioni. Se hai già sbloccato Pactum per l\'accesso ai dati di utilizzo, di solito non serve.\n\n1. Tocca “Apri impostazioni” e prova ad attivare Pactum: comparirà “Impostazione non disponibile”.\n2. Torna qui e tocca “Apri info app”.\n3. Nella pagina dell\'app tocca il menu ⋮ in alto a destra.\n4. Scegli “Consenti impostazioni con limitazioni” e conferma con PIN o impronta.\n5. Torna su “Mostra sopra le altre app” e attiva Pactum.</string>
-    <string name="passo_apri_impostazioni">Apri impostazioni</string>
-    <string name="passo_fatto">Fatto</string>
-    <string name="passo_da_fare">Da fare</string>
     <string name="aiuto_restrizioni_titolo">Se Android ti blocca…</string>
-    <string name="aiuto_restrizioni_testo">Su Android 15 e 16, con l\'app installata dal browser, l\'interruttore “Accesso ai dati di utilizzo” parte bloccato dalle impostazioni con limitazioni. Il primo tentativo che fallisce è necessario: senza, la voce per sbloccare non compare.\n\n1. Tocca “Apri impostazioni” e prova ad attivare Pactum: comparirà “Impostazione non disponibile”.\n2. Torna qui e tocca “Apri info app”.\n3. Nella pagina dell\'app tocca il menu ⋮ in alto a destra.\n4. Scegli “Consenti impostazioni con limitazioni” e conferma con PIN o impronta.\n5. Torna su “Accesso ai dati di utilizzo” e attiva Pactum.</string>
+    <string name="aiuto_restrizioni_testo">Su Android 15 e 16, con l\'app installata a mano (dal browser o da un file), «Accesso ai dati di utilizzo» e «Mostra sopra le altre app» possono partire bloccati dalle impostazioni con limitazioni.\n\n1. Tocca «Apri» e prova ad attivare Pactum: comparirà «Impostazione non disponibile».\n2. Torna qui e tocca «Apri info app».\n3. Nella pagina dell\'app tocca il menu ⋮ in alto a destra.\n4. Scegli «Consenti impostazioni con limitazioni» e conferma con PIN o impronta.\n5. Torna sul permesso e attiva Pactum.</string>
     <string name="aiuto_apri_info_app">Apri info app</string>
     <string name="onboarding_ricontrolla">Ho fatto, ricontrolla</string>
-    <string name="onboarding_nota_avvio">Appena l\'accesso ai dati di utilizzo è attivo, Pactum parte da solo.</string>
+    <string name="onboarding_nota_avvio">Appena l\'accesso ai dati di utilizzo è attivo, Pactum va avanti da solo.</string>
 
     <!-- Cosa vede tuo padre (redesign C6, aggiornato alla v3 del contratto).
          Ricavato dai campi del contratto: GET /api/famiglia (dispositivi,
@@ -34,8 +26,8 @@
          genitore, e la sezione "Sul computer" dei Siti visitati. Se la finestra
          cambia, questo elenco cambia con lei. -->
     <string name="cosa_vede_titolo">Cosa vedono i tuoi genitori</string>
-    <string name="cosa_vede_intro">Qui c\'è tutto quello che arriva nella sua app, detto per intero. Niente di più, niente di nascosto.</string>
-    <string name="cosa_vede_si_titolo">COSA VEDE</string>
+    <string name="cosa_vede_intro">Qui c\'è tutto quello che arriva nell\'app dei tuoi genitori, detto per intero. Niente di più, niente di nascosto.</string>
+    <string name="cosa_vede_si_titolo">Cosa vedono</string>
     <string-array name="cosa_vede_si">
         <item>Ogni tuo dispositivo per conto suo: questo telefono e, se usi Pactum anche lì, gli altri telefoni e il computer. Ognuno con le sue regole, i suoi tempi, i suoi bonus e i suoi siti.</item>
         <item>Quali dispositivi sono collegati al patto, come si chiamano e con quale versione di Pactum.</item>
@@ -44,36 +36,36 @@
         <item>I giorni fuori regola: su quale regola, di quanti minuti sei andato oltre e quando è stato registrato.</item>
         <item>Le interruzioni nella registrazione, e quando. Per esempio permessi tolti, notifiche spente, osservazione dei siti spenta, ora cambiata a mano, Pactum fermato dalle Impostazioni mentre il telefono era bloccato per i lavori di casa; sul computer anche il programma Pactum chiuso mentre il computer era acceso, e i siti che per un po\' non si riescono a leggere.</item>
         <item>I bonus che ti dai: quanti minuti, su quale regola e il perché, se lo scrivi. E quanti minuti di bonus ti sei dato in ciascuno degli ultimi 8 giorni, dispositivo per dispositivo.</item>
-        <item>Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.</item>
-        <item>Le proposte che gli mandi, con il tuo perché se lo scrivi, e le tue risposte alle sue proposte, con la tua motivazione se la scrivi.</item>
+        <item>Le tue dichiarazioni sulle regole di vita reale, con la tua nota, e se sono state confermate.</item>
+        <item>Le proposte che mandi loro, con il tuo perché se lo scrivi, e le tue risposte alle loro proposte, con la tua motivazione se la scrivi.</item>
         <item>Le tue sessioni: il nome, le app che hai scelto e i cambi che chiedi. E per ogni sessione fatta: quando l\'hai iniziata, per quanto, quando è finita e se l\'hai terminata prima. Per ogni giorno, quanti minuti hai passato in sessione.</item>
-        <item>Il tempo passato in TUTTE le app del telefono, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese. Il tempo nelle app di una sessione, mentre è in corso, non è nei tempi delle app: vede la sessione, quanto è durata e i minuti passati in sessione.</item>
+        <item>Il tempo passato in TUTTE le app del telefono, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese. Il tempo nelle app di una sessione, mentre è in corso, non è nei tempi delle app: vedono la sessione, quanto è durata e i minuti passati in sessione.</item>
         <item>I siti visitati sul telefono, se hai acceso l\'osservazione: solo il nome del sito e quante volte al giorno. E se per una parte della giornata il telefono ha tenuto nascosti i nomi dei siti.</item>
         <item>Sul computer: il tempo passato in ogni programma, giorno per giorno, anche per categoria, con la media della settimana e del mese; i siti, con quante volte e quanti minuti al giorno; se il computer è acceso o spento, e da quando è spento.</item>
-        <item>I lavori di casa che ti dà: quando sono fatti, la foto che scatti da Pactum per ognuno (la tiene 30 giorni), le bocciature e gli annullamenti. E se il telefono è bloccato per i lavori di casa.</item>
-        <item>Per ogni dispositivo, quando ha inviato l\'ultimo aggiornamento, e se non ne invia da più di tre quarti d\'ora. Quando spegni il telefono o il computer, vede che è spento e da quando: non conta come silenzio.</item>
-        <item>Un avviso quando crei, cambi o elimini una regola o una sessione, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, gli mandi o ritiri una proposta, rispondi a una sua proposta, mandi la foto di un lavoro di casa, finisci i lavori di casa, o quando c\'è un\'interruzione nella registrazione.</item>
+        <item>I lavori di casa che ti danno: quando sono fatti, la foto che scatti da Pactum per ognuno (resta 30 giorni), le bocciature e gli annullamenti. E se il telefono è bloccato per i lavori di casa.</item>
+        <item>Per ogni dispositivo, quando ha inviato l\'ultimo aggiornamento, e se non ne invia da più di tre quarti d\'ora. Quando spegni il telefono o il computer, vedono che è spento e da quando: non conta come silenzio.</item>
+        <item>Un avviso quando crei, cambi o elimini una regola o una sessione, ti dai un bonus, vai oltre una regola, dichiari com\'è andata una regola di vita reale, mandi o ritiri una proposta, rispondi a una loro proposta, mandi la foto di un lavoro di casa, finisci i lavori di casa, o quando c\'è un\'interruzione nella registrazione.</item>
     </string-array>
-    <string name="cosa_vede_no_titolo">COSA RESTA FUORI</string>
+    <string name="cosa_vede_no_titolo">Cosa resta fuori</string>
     <string-array name="cosa_vede_no">
         <item>I messaggi e le chat.</item>
         <item>Quello che guardi, leggi o ascolti dentro le app, i programmi e i siti.</item>
-        <item>Le foto, i video e i tuoi file. Vede solo le foto dei lavori di casa che scatti da Pactum, e senza dati nascosti (niente posizione).</item>
+        <item>Le foto, i video e i tuoi file. Vedono solo le foto dei lavori di casa che scatti da Pactum, e senza dati nascosti (niente posizione).</item>
         <item>Quello che scrivi o cerchi.</item>
-        <item>Gli indirizzi completi delle pagine: vede youtube.com, mai quale video.</item>
+        <item>Gli indirizzi completi delle pagine: vedono youtube.com, mai quale video.</item>
         <item>I titoli delle pagine e delle finestre: sul computer non vengono mai letti.</item>
         <item>Dove sei: la posizione non viene mai letta.</item>
         <item>Durante una sessione, quali app provi ad aprire e quante volte compare «Sei in sessione».</item>
     </string-array>
     <!-- Contratto v3, "Siti visitati · Sul computer": la promessa del computer
          è diversa da quella del telefono, e qui va detta chiara. -->
-    <string name="cosa_vede_computer_titolo">SUL COMPUTER</string>
+    <string name="cosa_vede_computer_titolo">Sul computer</string>
     <string-array name="cosa_vede_computer">
         <item>Il programma legge l\'indirizzo nella barra del browser e tiene solo il nome del sito: l\'indirizzo completo non viene mai salvato né mandato.</item>
         <item>È diverso dal telefono: sul telefono Pactum l\'indirizzo delle pagine non lo vede proprio. Sul computer il programma lo vede per un istante, ne tiene il nome del sito e butta il resto.</item>
         <item>In cambio sul computer si contano anche i minuti passati su ogni sito, non solo quante volte ci vai. Sempre per giorno, mai l\'ora.</item>
     </string-array>
-    <string name="cosa_vede_tuo_titolo">SOLO TUO</string>
+    <string name="cosa_vede_tuo_titolo">Solo tuo</string>
     <string-array name="cosa_vede_tuo">
         <item>La serie di giorni di fila e il tuo record: si calcolano sul tuo telefono (e sul computer, se usi Pactum anche lì) e non partono mai.</item>
     </string-array>
@@ -118,22 +110,17 @@
     <string name="oggi_dispositivo_scollegato">%1$s (non più collegato)</string>
     <!-- (v3) Il telefono non è più collegato (401): revocato dal genitore, o
          collegato di nuovo con un altro codice. -->
-    <string name="oggi_scollegato">Questo telefono non è più collegato al patto: chiedi al genitore un codice nuovo e inseriscilo nelle Impostazioni.</string>
-    <string name="oggi_sezione_regole">LE TUE REGOLE OGGI</string>
+    <string name="oggi_sezione_regole">Le tue regole oggi</string>
     <string name="oggi_minuti_su_limite">%1$s su %2$s</string>
     <string name="oggi_oltre">%1$s oltre</string>
     <string name="oggi_fascia_prima">mancano %1$s alle %2$s</string>
     <string name="oggi_fascia_in_corso">sei nella fascia fino alle %1$s</string>
     <string name="oggi_fascia_finita">per oggi la fascia è finita</string>
     <string name="oggi_fascia_non_oggi">oggi la fascia non c\'è</string>
-    <string name="oggi_vita_reale_diario">Segna nel Diario</string>
     <!-- (0.9) La scheda che resta in Oggi finché manca "Mostra sopra le altre app". -->
-    <string name="oggi_avviso_titolo">Avviso a tutto schermo</string>
-    <string name="oggi_avviso_testo">Quando vai oltre una regola, Pactum può dirtelo a tutto schermo, sopra l\'app che stai usando. Si chiude sempre: non blocca niente. Per farlo serve il permesso «Mostra sopra le altre app». Senza, l\'avviso arriva in alto sullo schermo.</string>
-    <string name="oggi_avviso_passi">1. Tocca «Apri impostazioni».\n2. Nell\'elenco che si apre cerca Pactum e attivalo.\n3. Torna qui: questa scheda sparisce da sola.</string>
-    <string name="oggi_sezione_tempo">DOVE È FINITO IL TEMPO</string>
+    <string name="oggi_sezione_tempo">Dove è finito il tempo</string>
     <!-- (v3) Con altri dispositivi: questo elenco è solo del telefono. -->
-    <string name="oggi_sezione_tempo_telefono">DOVE È FINITO IL TEMPO SUL TELEFONO</string>
+    <string name="oggi_sezione_tempo_telefono">Dove è finito il tempo sul telefono</string>
     <string name="oggi_vuoto">Nessun uso registrato finora. Oggi il registro è pulito.</string>
     <string name="oggi_caricamento">Sto leggendo l\'uso di oggi…</string>
     <string name="azione_aggiorna">Aggiorna</string>
@@ -144,13 +131,11 @@
 
     <!-- Bonus in due tocchi (redesign B5): sulla riga della regola, in Oggi -->
     <string name="bonus_piu_minuti">+%1$d min</string>
-    <string name="oggi_bonus_gia_dato">oggi ti sei già dato %1$d min · restano %2$d</string>
-    <string name="oggi_bonus_gia_dato_solo">oggi ti sei già dato %1$d min</string>
-    <string name="oggi_bonus_restano">bonus di oggi: restano %1$d min</string>
+    <string name="oggi_bonus_gia_dato_solo">Su questa regola oggi ti sei già dato %1$d min.</string>
     <string name="oggi_bonus_in_partenza">+%1$d min in partenza</string>
-    <string name="oggi_bonus_tetti">Bonus: oggi ancora %1$d min su %2$d · questa settimana %3$d su %4$d</string>
+    <string name="oggi_bonus_tetti">Bonus di oggi: ancora %1$d min su %2$d · questa settimana %3$d su %4$d.</string>
     <!-- (v3) I tetti dei bonus valgono per dispositivo: con altri dispositivi lo si dice. -->
-    <string name="oggi_bonus_tetti_telefono">Bonus su questo telefono: oggi ancora %1$d min su %2$d · questa settimana %3$d su %4$d</string>
+    <string name="oggi_bonus_tetti_telefono">Bonus su questo telefono: oggi ancora %1$d min su %2$d · questa settimana %3$d su %4$d.</string>
     <string name="oggi_bonus_dato">Ti sei dato %1$d minuti su %2$s</string>
     <string name="oggi_bonus_aggiungi_perche">Aggiungi perché</string>
     <string name="oggi_perche_titolo">Perché?</string>
@@ -173,8 +158,7 @@
 
     <!-- Impostazioni -->
     <string name="impostazioni_titolo">Impostazioni</string>
-    <string name="impostazioni_sezione_collegamento">Collegamento al patto</string>
-    <string name="impostazioni_descrizione">Per collegare questo telefono: indirizzo del server e codice di 6 cifre.</string>
+    <string name="impostazioni_sezione_collegamento">Collegamento</string>
     <string name="impostazioni_server_url">Indirizzo del server</string>
     <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
     <string name="impostazioni_token">Codice lungo</string>
@@ -182,10 +166,9 @@
     <string name="impostazioni_url_non_valido">Indirizzo del server non valido: controlla e riprova (es. https://pactum.esempio.it).</string>
     <string name="impostazioni_ultimo_battito">Ultimo aggiornamento inviato: %1$s</string>
     <string name="impostazioni_ultimo_battito_mai">mai</string>
-    <string name="impostazioni_prova_adesso">Prova adesso</string>
+    <string name="impostazioni_prova_adesso">Prova il collegamento</string>
     <string name="impostazioni_prova_ok">Aggiornamento inviato: il server risponde.</string>
     <string name="impostazioni_prova_fallita">Invio fallito: controlla l\'indirizzo del server e la connessione.</string>
-    <string name="impostazioni_prova_scollegato">Il server risponde, ma questo telefono non è più collegato al patto: chiedi al genitore un codice nuovo.</string>
     <string name="impostazioni_config_incompleta">Prima collega questo telefono: indirizzo del server e codice di 6 cifre.</string>
 
     <!-- Collegamento con il codice di 6 cifre (contratto v3, POST /api/abbina) -->
@@ -193,7 +176,7 @@
     <string name="collega_codice">Codice di 6 cifre</string>
     <string name="collega_azione">Collega</string>
     <string name="collega_nuovo_codice">Collega con un codice nuovo</string>
-    <string name="collegato_come">Collegato come: %1$s</string>
+    <string name="collegato_come">Collegato come «%1$s»</string>
     <!-- "Telefono di Andrea": nome del dispositivo e nome del figlio -->
     <string name="collegato_come_formato">%1$s di %2$s</string>
     <string name="collega_riuscito">Collegamento riuscito.</string>
@@ -222,14 +205,6 @@
     <string name="impostazioni_serale_ora">Ogni sera alle</string>
     <string name="impostazioni_serale_spiegazione">Una notifica sola: se la giornata è stata dentro le tue regole, o dove è andata oltre. Si calcola sul telefono.</string>
     <!-- (0.9) L'avviso a tutto schermo: il permesso di sistema è l'interruttore. -->
-    <string name="impostazioni_sezione_avviso">Quando vai oltre una regola</string>
-    <string name="impostazioni_avviso_riga">Avviso a tutto schermo</string>
-    <string name="impostazioni_avviso_attivo">Attivo</string>
-    <string name="impostazioni_avviso_spento">Spento</string>
-    <string name="impostazioni_avviso_spiegazione_attivo">Oltre alla notifica si apre un avviso sopra l\'app che stai usando. Si chiude sempre con «Ho capito»: non blocca niente.</string>
-    <string name="impostazioni_avviso_spiegazione_spento">Per ora arriva solo una notifica in alto sullo schermo. Per l\'avviso a tutto schermo Pactum ha bisogno di «Mostra sopra le altre app»: tocca «Apri impostazioni», cerca Pactum nell\'elenco e attivalo.</string>
-    <string name="impostazioni_cosa_vede_testo">Tutto quello che arriva nella sua app, e quello che resta fuori.</string>
-    <string name="impostazioni_cosa_vede_apri">Guarda l\'elenco</string>
     <string name="azione_salva">Salva</string>
     <string name="azione_indietro">Indietro</string>
 
@@ -241,9 +216,7 @@
 
     <!-- Navigazione (redesign C8): quattro schede -->
     <string name="scheda_oggi">Oggi</string>
-    <string name="scheda_regole">Le mie regole</string>
-    <string name="scheda_proposte">Proposte</string>
-    <string name="scheda_diario">Diario</string>
+    <string name="scheda_regole">Regole</string>
     <string name="azione_annulla">Annulla</string>
     <string name="azione_conferma">Conferma</string>
     <string name="dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
@@ -288,17 +261,16 @@
     <string name="durata_e">%1$s e %2$s</string>
 
     <!-- Regole -->
-    <string name="regole_titolo">Le mie regole</string>
+    <string name="regole_titolo">Regole</string>
     <string name="regole_caricamento">Sto leggendo il patto…</string>
-    <string name="regole_config_mancante">Prima collega questo telefono al patto: indirizzo del server e codice di 6 cifre, nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
-    <string name="regole_vuoto">Il patto vuole almeno una regola: creane una con il pulsante +.</string>
+    <string name="regole_config_mancante">Prima collega questo telefono al patto: dalle Impostazioni (⚙ in alto).</string>
+    <string name="regole_vuoto">Il patto vuole almeno una regola: creane una con «Nuova regola».</string>
     <!-- (v3) Il figlio ha regole su altri dispositivi, non su questo telefono. -->
-    <string name="regole_vuoto_questo_telefono">Su questo telefono non ci sono ancora regole: puoi crearne una con il pulsante +.</string>
+    <string name="regole_vuoto_questo_telefono">Su questo telefono non ci sono ancora regole: puoi crearne una con «Nuova regola».</string>
     <plurals name="regole_altri_dispositivi">
         <item quantity="one">Hai anche %1$d regola su un altro dispositivo: la vedi e la cambi da lì.</item>
         <item quantity="other">Hai anche %1$d regole su altri dispositivi: le vedi e le cambi da lì.</item>
     </plurals>
-    <string name="regole_unica_regola">Questa è l\'unica regola del patto: puoi modificarla, ma non eliminarla.</string>
     <string name="regole_nuova">Nuova regola</string>
     <string name="regola_concordata">concordata</string>
     <!-- Letta da TalkBack al posto dei quadretti della striscia piccola di una regola -->
@@ -325,11 +297,8 @@
     <!-- (0.10) Proporre al genitore un cambio a una regola (contratto v3.4): se
          il genitore accetta, vale subito, anche se allenta. -->
     <string name="regola_proponi">Proponi al genitore</string>
-    <string name="regola_proposta_tua">In attesa del genitore: %1$s</string>
-    <string name="regola_proposta_tua_elimina">In attesa del genitore: hai chiesto di eliminarla</string>
-    <string name="regola_proposta_genitore">Il genitore propone: %1$s</string>
-    <string name="regola_proposta_genitore_elimina">Il genitore propone di eliminarla</string>
-    <string name="regola_vedi_proposta">Vedi in Proposte</string>
+    <string name="regola_proposta_tua_elimina">Hai chiesto di eliminarla.</string>
+    <string name="regola_proposta_genitore_elimina">Propone di eliminarla.</string>
     <string name="proponi_titolo">Proponi al genitore</string>
     <string name="proponi_spiegazione">Cambia quello che vuoi chiedere. Se il genitore accetta, vale subito, anche se la allenti.</string>
     <string name="proponi_perche">Perché? (facoltativo)</string>
@@ -378,14 +347,9 @@
     <string name="prima_regola_config_intro">Per prima cosa collega questo telefono al patto.</string>
 
     <!-- Proposte -->
-    <string name="proposte_titolo">Proposte</string>
-    <string name="proposte_caricamento">Sto leggendo le proposte…</string>
-    <string name="proposte_errore_lettura">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
     <string name="proposte_sezione_pendenti">Da decidere</string>
-    <string name="proposte_pendenti_vuoto">Nessuna proposta in attesa della tua risposta.</string>
-    <string name="proposte_sezione_storia">Storia</string>
     <string name="proposte_storia_vuota">Nessuna proposta ancora.</string>
-    <string name="proposta_dal_genitore">PROPOSTA DEL GENITORE</string>
+    <string name="proposta_dal_genitore">Proposta del genitore</string>
     <string name="proposta_senza_confronto">Proposta di modifica</string>
     <!-- Su quale regola verte la proposta (il confronto del server non lo dice) -->
     <string name="proposta_regola_ora">Ora: %1$s</string>
@@ -416,13 +380,8 @@
     <string name="proposta_tua_motivazione">Hai detto: %1$s</string>
     <!-- (0.10) Le proposte del figlio al genitore (contratto v3.4) -->
     <string name="proposte_sezione_tue">Le tue proposte</string>
-    <string name="proposte_tue_vuoto">Nessuna tua proposta in attesa.</string>
     <!-- Solo quando il pulsante «Nuova proposta» si vede (c'è almeno una regola su cui proporre). -->
-    <string name="proposte_tue_come">Per chiedere al genitore di cambiare una regola tocca «Nuova proposta»: se accetta, vale subito.</string>
-    <string name="proposte_nuova">Nuova proposta</string>
-    <string name="proposte_scegli_regola_titolo">Quale regola vuoi cambiare?</string>
-    <string name="proposte_regola_occupata">C\'è già una proposta in attesa su questa regola</string>
-    <string name="proposta_tua">LA TUA PROPOSTA</string>
+    <string name="proposta_tua">La tua proposta</string>
     <string name="proposta_tua_in_attesa">%1$s · in attesa del genitore</string>
     <string name="proposta_tuo_perche">Il tuo perché: %1$s</string>
     <string name="proposta_tua_se_accetta">Se il genitore accetta: %1$s</string>
@@ -444,7 +403,6 @@
     <string name="proposta_gia_pendente">C\'è già una proposta in attesa su questa regola.</string>
     <!-- La proposta in attesa è la tua (di solito una risposta persa e un secondo invio). -->
     <string name="proposta_gia_tua">Hai già una proposta in attesa su questa regola.</string>
-    <string name="proposta_apri_proposte">Apri Proposte</string>
     <string name="proposta_regola_non_valida">Questa regola non è più attiva: non si può proporre di cambiarla.</string>
     <string name="proposta_dispositivo_revocato">Questa regola è di un dispositivo scollegato dal patto: non si può più cambiare, nemmeno con una proposta.</string>
     <string name="proposta_valori_non_validi">Qualche valore non va bene: controlla i campi e riprova.</string>
@@ -460,13 +418,7 @@
     <string name="proposta_annullata">Annullata: la regola è stata eliminata</string>
 
     <!-- Diario (dichiarazioni vita reale) -->
-    <string name="diario_titolo">Diario</string>
-    <string name="diario_caricamento">Sto leggendo le dichiarazioni…</string>
-    <string name="diario_sezione_regole">Le tue regole di vita reale</string>
-    <string name="diario_regole_vuoto">Nessuna regola di vita reale nel patto. Puoi crearne una nella scheda Le mie regole.</string>
-    <string name="diario_sezione_dichiarazioni">Le tue dichiarazioni</string>
     <string name="diario_dichiarazioni_vuoto">Nessuna dichiarazione ancora.</string>
-    <string name="diario_gia_dichiarato_oggi">Per oggi hai già dichiarato: si torna domani.</string>
     <string name="dichiara_successo">Ce l\'ho fatta</string>
     <string name="dichiara_fallimento">Non ce l\'ho fatta</string>
     <string name="dichiarazione_conferma_successo_titolo">Dichiari un successo?</string>
@@ -477,19 +429,19 @@
     <string name="dichiarazione_scegli_giorno">Per quale giorno?</string>
     <string name="dichiarazione_giorno_oggi">Oggi</string>
     <string name="dichiarazione_giorno_ieri">Ieri</string>
-    <string name="dichiarazione_inviata_successo">Segnato. Manca solo la firma di %1$s.</string>
+    <string name="dichiarazione_inviata_successo">Segnato. Manca solo la conferma dell\'arbitro (%1$s).</string>
     <string name="dichiarazione_inviata_fallimento">Registrato, creduto sulla parola.</string>
-    <string name="dichiarazione_gia_dichiarato">Per oggi hai già dichiarato su questa regola.</string>
+    <string name="dichiarazione_gia_dichiarato">Per quel giorno hai già dichiarato su questa regola.</string>
     <string name="dichiarazione_non_arrivata">Non sono riuscito a segnarlo: la dichiarazione non è arrivata. Riprova.</string>
     <string name="dichiarazione_errore">Non sono riuscito a inviare la dichiarazione: riprova.</string>
     <string name="dichiarazione_giorno">Giorno: %1$s</string>
     <!-- Un giorno dentro una frase: "Giorno: ieri", altrimenti "18/09" -->
     <string name="giorno_oggi">oggi</string>
     <string name="giorno_ieri">ieri</string>
-    <string name="dichiarazione_stato_in_attesa">L\'hai fatto. Manca la firma di %1$s.</string>
+    <string name="dichiarazione_stato_in_attesa">L\'hai fatto. Manca la conferma dell\'arbitro (%1$s).</string>
     <string name="dichiarazione_stato_registrata">Non riuscito — creduto sulla parola</string>
     <string name="dichiarazione_stato_confermata">Successo confermato</string>
-    <string name="dichiarazione_stato_confermata_per_conto">Confermato dal genitore per conto di %1$s</string>
+    <string name="dichiarazione_stato_confermata_per_conto">Confermato dal genitore per conto dell\'arbitro (%1$s)</string>
     <string name="dichiarazione_stato_ribaltata">Non confermata — conta come non riuscito</string>
     <string name="dichiarazione_tua_nota">La tua nota: %1$s</string>
     <string name="dichiarazione_verdetto_nota">Nota sull\'esito: %1$s</string>
@@ -572,11 +524,9 @@
 
     <!-- Siti visitati (v2.3) -->
     <string name="siti_titolo">Siti visitati</string>
-    <string name="siti_scorciatoia_titolo">Siti visitati</string>
-    <string name="siti_scorciatoia_testo">Solo i nomi dei siti di questo telefono, la stessa lista che vede il genitore.</string>
     <!-- (v3) Il genitore vede anche i siti degli altri dispositivi (il computer):
          questa è la lista di QUESTO telefono, e va detto così per restare vero. -->
-    <string name="siti_tavola_rotonda">Questa è esattamente la lista di questo telefono che vede il genitore: nella sua app non c\'è nessun sito di questo telefono che tu non veda qui. Solo i nomi dei siti, mai le pagine, i contenuti o le ricerche.</string>
+    <string name="siti_tavola_rotonda">La stessa lista di questo telefono che vedono i tuoi genitori: solo i nomi dei siti, mai le pagine, i contenuti o le ricerche.</string>
     <string name="siti_stato_attiva">Osservazione attiva</string>
     <string name="siti_stato_attiva_testo">Pactum annota il nome dei siti che il telefono chiede. Non blocca niente e non legge niente altro.</string>
     <string name="siti_stato_spenta">Osservazione spenta</string>
@@ -586,7 +536,7 @@
     <string name="siti_disattiva">Spegni l\'osservazione</string>
     <string name="siti_caricamento">Sto leggendo la lista dei siti…</string>
     <string name="siti_vuoto">Nessun dato sui siti è ancora arrivato al patto.</string>
-    <string name="siti_config_mancante">Prima collega questo telefono al patto: indirizzo del server e codice di 6 cifre, nelle Impostazioni (l\'ingranaggio nella schermata Oggi).</string>
+    <string name="siti_config_mancante">Prima collega questo telefono al patto: dalle Impostazioni (⚙ in alto).</string>
     <string name="siti_giorno_vuoto">Nessun dato ricevuto per questo giorno.</string>
     <string name="siti_giorno_totale">%1$d domini distinti</string>
     <string name="siti_giorno_tagliato">%1$d domini distinti (qui i primi %2$d)</string>
@@ -621,9 +571,8 @@
          non conta, e le altre app si coprono con «Sei in sessione». -->
     <string name="scheda_sessioni">Sessioni</string>
     <string name="sessioni_titolo">Sessioni</string>
-    <string name="sessioni_intro">Una sessione è un tempo in cui usi solo le app che scegli tu, per esempio «Studio». Il genitore la approva, e di nuovo a ogni cambio della lista; poi la inizi quando vuoi e per quanto vuoi. Il tempo nelle app della sessione non conta; le altre app si coprono finché la sessione non finisce.</string>
     <string name="sessioni_caricamento">Sto leggendo le sessioni…</string>
-    <string name="sessioni_vuoto">Nessuna sessione ancora. Creane una con «Nuova sessione».</string>
+    <string name="sessioni_vuoto">Una sessione è un tempo in cui usi solo le app che scegli tu, per esempio «Studio». Il genitore la approva, poi la inizi quando vuoi. Creane una con «Nuova sessione».</string>
     <string name="sessioni_nuova">Nuova sessione</string>
     <!-- Server di prima della v3.5: GET /api/sessioni risponde 404 o 405. Mai "errore". -->
     <string name="sessioni_server_da_aggiornare">Per le sessioni serve aggiornare il server di Pactum.</string>
@@ -631,19 +580,15 @@
     <string name="sessione_stato_approvata">Approvata</string>
     <string name="sessione_stato_rifiutata">Non approvata</string>
     <string name="sessione_in_corso_etichetta">In corso</string>
-    <string name="sessione_cambio_in_attesa">Cambio in attesa del genitore</string>
     <string name="sessione_app">App: %1$s</string>
     <!-- "ClasseViva, Calcolatrice e altre 3": la fine dell'elenco quando è lungo. -->
     <plurals name="sessione_altre_app">
         <item quantity="one">un\'altra</item>
         <item quantity="other">altre %1$d</item>
     </plurals>
-    <string name="sessione_in_attesa_spiegazione">La potrai iniziare quando il genitore la approva.</string>
     <string name="sessione_rifiutata_spiegazione">Puoi cambiarla e mandarla di nuovo al genitore.</string>
-    <string name="sessione_cambio_chiesto">Hai chiesto: %1$s</string>
-    <string name="sessione_cambio_chiesto_nome">Hai chiesto: %1$s, con %2$s</string>
-    <string name="sessione_cambio_spiegazione">Finché il genitore non decide, puoi usare la sessione approvata.</string>
-    <string name="sessione_cambio_rifiutato">Il cambio che avevi chiesto non è stato approvato: resta questa.</string>
+    <string name="sessione_cambio_chiesto">Cambio in attesa del genitore: %1$s</string>
+    <string name="sessione_cambio_chiesto_nome">Cambio in attesa del genitore: %1$s, con %2$s</string>
     <string name="sessione_inizia">Inizia</string>
     <string name="sessione_modifica">Modifica</string>
     <string name="sessione_una_gia_in_corso">C\'è già una sessione in corso: per iniziarne un\'altra, prima terminala.</string>
@@ -690,9 +635,6 @@
     <string name="sessione_durata_non_valida">Scrivi una durata da 1 minuto a 24 ore.</string>
     <string name="sessione_fino_alle">Fino alle %1$s</string>
     <string name="sessione_fino_a_domani">Fino a domani alle %1$s</string>
-    <string name="sessione_avvio_spiegazione">Durante la sessione puoi usare le app della sessione e, sempre, Pactum, la schermata Home, il Telefono e le Impostazioni. Le altre app si coprono con «Sei in sessione». Puoi terminarla prima da Pactum.</string>
-    <string name="sessione_avvio_manca_mostra_sopra">Per coprire le altre app Pactum ha bisogno di «Mostra sopra le altre app»: senza, la sessione non può iniziare. Tocca «Apri impostazioni», cerca Pactum nell\'elenco e attivalo.</string>
-    <string name="sessione_avvio_manca_uso">Per sapere quale app hai davanti Pactum ha bisogno dell\'accesso ai dati di utilizzo: senza, la sessione non può iniziare.</string>
     <string name="sessione_avvia">Inizia la sessione</string>
     <string name="sessione_iniziata">Sessione iniziata: fino alle %1$s.</string>
     <string name="sessione_iniziata_domani">Sessione iniziata: fino a domani alle %1$s.</string>
@@ -706,7 +648,6 @@
     <string name="sessione_in_corso_titolo_domani">In sessione %1$s fino a domani alle %2$s</string>
     <string name="sessione_mancano">Ancora %1$s</string>
     <string name="sessione_manca_poco">Manca meno di un minuto</string>
-    <string name="sessione_in_corso_app">Puoi usare: %1$s.</string>
     <string name="sessione_termina">Termina la sessione</string>
     <string name="sessione_termina_titolo">Terminare la sessione?</string>
     <string name="sessione_termina_testo">La sessione finisce adesso e le altre app tornano libere. Il genitore vede che l\'hai terminata prima.</string>
@@ -757,7 +698,6 @@
     <!-- Il nome di una sessione non può avere caratteri che non si vedono (a capo, tab…). -->
     <string name="sessione_nome_invisibili">Il nome ha caratteri che non si vedono: toglili</string>
     <!-- Nella finestra "Inizia": cosa resta usabile oltre alle app della sessione, e cosa no. -->
-    <string name="sessione_avvio_aperte">Le pagine web aperte dalle app della sessione, la fotocamera e la scelta dei file restano usabili; le altre app no: se ti servono, aggiungile alla sessione.</string>
     <!-- Sulla barriera, sotto la fine: sempre un solo pulsante, Esci. -->
     <string name="barriera_terminare">Per terminarla prima, apri Pactum.</string>
     <!-- In Oggi, sotto "Dove è finito il tempo": il tempo in sessione c'è, ma non conta. -->
@@ -790,19 +730,18 @@
     <string name="tema_stelline">Stelline</string>
     <!-- (0.13) Le faccende (contratto v3.6; nei testi "lavori di casa" dalla 0.14, v3.7): un genitore dà al figlio delle faccende di casa e,
          finché non arriva una foto per ognuna, il telefono è bloccato tranne poche app. -->
-    <string name="scheda_faccende">Lavori di casa</string>
+    <string name="scheda_faccende">Lavori</string>
     <string name="faccende_titolo">Lavori di casa</string>
     <string name="faccende_caricamento">Sto leggendo i lavori di casa…</string>
     <string name="faccende_server_da_aggiornare">Per i lavori di casa serve aggiornare il server di Pactum.</string>
     <string name="faccende_vuoto">Nessun lavoro di casa da fare.</string>
-    <string name="faccende_intro">I lavori di casa te li dà un genitore. Quando ne hai fatto uno, scatta la foto da qui: arriva al genitore e il lavoro è fatto.</string>
+    <string name="faccende_intro">I lavori di casa te li danno i tuoi genitori. Quando ne hai fatto uno, scatta la foto da qui: arriva a loro e il lavoro è fatto.</string>
     <string name="faccende_bloccato">Prima i lavori di casa: il telefono è bloccato</string>
     <string name="faccende_bloccato_spiega">Si sblocca da solo quando è arrivata la foto di ogni lavoro.</string>
     <string name="faccende_usabili">Intanto puoi usare Telefono, SMS, Contatti, Fotocamera, Foto, Wallet, eWeLink, Tinaba e Impostazioni.</string>
-    <string name="faccende_prossimo_alle">Se non li hai fatti, alle %1$s il telefono si blocca</string>
-    <string name="faccende_prossimo_domani">Se non li hai fatti, domani alle %1$s il telefono si blocca</string>
-    <string name="faccende_prossimo_giorno">Se non li hai fatti, %1$s alle %2$s il telefono si blocca</string>
-    <string name="faccende_anticipo">Puoi farli anche prima: se arrivano tutte le foto prima di allora, il blocco non parte.</string>
+    <string name="faccende_prossimo_alle">Alle %1$s il telefono si blocca, se i lavori non sono fatti</string>
+    <string name="faccende_prossimo_domani">Domani alle %1$s il telefono si blocca, se i lavori non sono fatti</string>
+    <string name="faccende_prossimo_giorno">%1$s alle %2$s il telefono si blocca, se i lavori non sono fatti</string>
     <string name="faccende_sezione_da_fare">Da fare</string>
     <string name="faccende_sezione_chiuse">Fatti e annullati</string>
     <string name="faccende_genitore_senza_nome">Il genitore</string>
@@ -847,11 +786,10 @@
     <string name="finestrella_aiuto">Se non vedi nessuna finestrella, spegni e riaccendi lo schermo.</string>
     <string name="finestrella_chiudi">Chiudi la finestrella</string>
     <!-- 401 sul blocco: questo telefono non è più collegato, e il blocco è tolto. -->
-    <string name="faccende_scollegato">Questo telefono non è più collegato a Pactum: il blocco dei lavori di casa è tolto. Chiedi al genitore un codice nuovo e inseriscilo nelle Impostazioni.</string>
     <!-- Prima delle schede, quando c'è un blocco o ci sono lavori di casa: per arrivare al resto. -->
     <string name="faccende_poi_prima_regola">Crea la prima regola</string>
     <string name="faccende_poi_permessi">Dai i permessi a Pactum</string>
-    <string name="faccende_poi_cosa_vede">Leggi cosa vede il genitore</string>
+    <string name="faccende_poi_cosa_vede">Leggi cosa vedono i tuoi genitori</string>
     <string name="faccende_torna">Torna ai lavori di casa da fare</string>
     <!-- Con il blocco dei lavori di casa le sessioni non si iniziano. -->
     <string name="sessione_blocco_faccende">Prima i lavori di casa: le sessioni si iniziano quando li hai fatti.</string>
@@ -875,4 +813,87 @@
     <string name="notifica_faccenda_bocciata_testo">Rifai il lavoro e scatta un\'altra foto da Pactum: fino ad allora il telefono resta bloccato.</string>
     <string name="notifica_faccenda_annullata">%1$s ha annullato «%2$s»</string>
     <string name="notifica_faccenda_annullata_testo">Questo lavoro non lo devi più fare.</string>
+    <plurals name="oggi_blocco_lavori">
+        <item quantity="one">Prima i lavori di casa · %1$d da fare</item>
+        <item quantity="other">Prima i lavori di casa · %1$d da fare</item>
+    </plurals>
+
+    <!-- (0.15) Il riordino: le parole nuove della struttura a quattro schede. -->
+    <string name="scollegato">Questo telefono non è più collegato al patto: chiedi a un genitore un codice nuovo.</string>
+    <string name="elenco_separatore">" · "</string>
+    <string name="dato_mancante">non indicato</string>
+    <string name="azione_collega">Collega</string>
+    <string name="azione_risolvi">Risolvi</string>
+    <string name="azione_apri">Apri</string>
+    <string name="faccende_poi_collega">Collega il telefono</string>
+    <string name="permessi_titolo">Permessi</string>
+    <string name="permessi_intro">Senza l\'accesso ai dati di utilizzo Pactum non può misurare niente. Gli altri tre aiutano: puoi darli anche dopo, dalle Impostazioni.</string>
+    <string name="permesso_uso">Accesso ai dati di utilizzo</string>
+    <string name="permesso_batteria">Esenzione dalla batteria</string>
+    <string name="permesso_notifiche">Notifiche</string>
+    <string name="permesso_mostra_sopra">Mostra sopra le altre app</string>
+    <string name="permesso_concesso">Attivo</string>
+    <string name="giorni_ogni_giorno">ogni giorno</string>
+    <string name="giorni_feriali">dal lunedì al venerdì</string>
+    <string name="oggi_vai_ai_lavori">Vai ai lavori</string>
+    <string name="oggi_vai_ai_lavori_breve">Vai</string>
+    <string name="oggi_manca_permesso">Da sistemare: manca il permesso «%1$s»</string>
+    <string name="oggi_mancano_permessi">Da sistemare: mancano %1$d permessi</string>
+    <string name="oggi_vedi_tutte_app">Vedi tutte (%1$d)</string>
+    <string name="oggi_segna">Segna</string>
+    <string name="oggi_bonus_apri">Più tempo su %1$s</string>
+    <string name="oggi_bonus_foglio_titolo">Più tempo su %1$s</string>
+    <string name="oggi_tempo_totale">In tutto: %1$s</string>
+    <string name="regole_sezione_tue">Le tue regole</string>
+    <string name="regole_storico">Storico: proposte e dichiarazioni</string>
+    <string name="regola_ritira_proposta">Ritira la proposta</string>
+    <string name="regola_menu">Altre azioni sulla regola</string>
+    <string name="regola_pillola_tua">In attesa del genitore</string>
+    <string name="regola_pillola_genitore">Il genitore propone</string>
+    <string name="storico_titolo">Storico</string>
+    <string name="storico_sezione_proposte">Proposte</string>
+    <string name="storico_sezione_dichiarazioni">Dichiarazioni</string>
+    <string name="dichiarazione_segna_titolo">Com\'è andata?</string>
+    <string name="dichiarazione_stato_in_attesa_senza_nome">L\'hai fatto. Manca la conferma dell\'arbitro.</string>
+    <string name="dichiarazione_stato_confermata_per_conto_senza_nome">Confermato dal genitore per conto dell\'arbitro</string>
+    <string name="dichiarazione_stato_altro">Stato non riconosciuto</string>
+    <string name="dichiarazione_inviata_successo_senza_nome">Segnato. Manca solo la conferma dell\'arbitro.</string>
+    <string name="sessioni_vuoto_titolo">Nessuna sessione ancora</string>
+    <string name="sessione_menu">Altre azioni sulla sessione</string>
+    <string name="sessione_cambio_rifiutato_perche">Cambio non approvato. Il genitore dice: %1$s</string>
+    <string name="sessione_avvio_breve">Le altre app si coprono fino alla fine. Puoi terminarla prima da Pactum.</string>
+    <string name="sessione_avvio_manca_permesso">Manca il permesso «%1$s»</string>
+    <string name="impostazioni_collegato">Collegato al patto</string>
+    <string name="impostazioni_cambia">Cambia</string>
+
+    <!-- (0.15) Il riordino: le parole nuove della struttura a quattro schede. -->
+    <!-- (0.15, contratto v3.6 "Chi ha fatto cosa") Le stesse frasi col nome del genitore, quando il server lo dice. -->
+    <string name="proposta_dal_genitore_nome">Proposta di %1$s</string>
+    <string name="proposta_motivazione_nome">%1$s dice: %2$s</string>
+    <string name="regola_pillola_genitore_nome">%1$s propone</string>
+    <string name="proposta_nome_ha_accettato">%1$s ha accettato</string>
+    <string name="proposta_nome_ha_rifiutato">%1$s ha rifiutato</string>
+    <string name="notifica_proposta_accettata_titolo_nome">%1$s ha accettato la tua proposta</string>
+    <string name="notifica_proposta_rifiutata_titolo_nome">%1$s ha rifiutato la tua proposta</string>
+    <string name="notifica_proposta_ritirata_titolo_nome">%1$s ha ritirato la sua proposta</string>
+    <string name="notifica_sessione_approvata_nome">%1$s ha approvato la sessione %2$s</string>
+    <string name="notifica_sessione_rifiutata_nome">%1$s non ha approvato la sessione %2$s</string>
+    <string name="notifica_sessione_cambio_approvato_nome">%1$s ha approvato il cambio alla sessione %2$s</string>
+    <string name="notifica_sessione_cambio_rifiutato_nome">%1$s non ha approvato il cambio alla sessione %2$s</string>
+    <string name="sessione_cambio_rifiutato_perche_nome">Cambio non approvato. %1$s dice: %2$s</string>
+    <string name="tipo_nuova_proposta_nome">Nuova proposta di %1$s</string>
+    <string name="tipo_segno_nome">Un segno da %1$s</string>
+    <plurals name="badge_proposte">
+        <item quantity="one">%1$d proposta da decidere</item>
+        <item quantity="other">%1$d proposte da decidere</item>
+    </plurals>
+    <plurals name="badge_lavori">
+        <item quantity="one">%1$d lavoro di casa da fare</item>
+        <item quantity="other">%1$d lavori di casa da fare</item>
+    </plurals>
+    <string name="elenco_punto">•</string>
+    <string name="legenda_mantenuta">Dentro le regole</string>
+    <string name="legenda_fuori_regola">Fuori regola</string>
+    <string name="legenda_senza_dati">Senza dati</string>
+    <string name="legenda_oggi">Oggi</string>
 </resources>

@@ -49,7 +49,7 @@ class TestiLavoriDiCasaTest {
 
     @Test
     fun `la scheda, la pagina e la barriera`() {
-        assertEquals("Lavori di casa", stringhe["scheda_faccende"])
+        assertEquals("Lavori", stringhe["scheda_faccende"])
         assertEquals("Lavori di casa", stringhe["faccende_titolo"])
         assertEquals("Prima i lavori di casa", stringhe["barriera_faccende_titolo"])
         assertEquals("Prima i lavori di casa: il telefono è bloccato", stringhe["notifica_blocco_partito"])

@@ -7,6 +7,7 @@ import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import eu.stgm.pactum.design.attivaBordoPieno
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,6 +49,9 @@ import kotlinx.coroutines.delay
 class BarrieraFaccendeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // (0.15) Bordo pieno con le icone scure della barra di stato (B11): lo
+        // Scaffold qui sotto tiene il contenuto fuori dalle barre di sistema.
+        attivaBordoPieno()
         super.onCreate(savedInstanceState)
         if (!StatoBlocco.attivoAdesso()) {
             finish()
@@ -197,8 +201,7 @@ private fun SchermataBarrieraFaccende(daFare: List<FaccendaDaFare>, onApri: () -
                 }
                 Text(
                     text = stringResource(R.string.faccende_usabili),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyLarge,
                 )
             }
             Column(

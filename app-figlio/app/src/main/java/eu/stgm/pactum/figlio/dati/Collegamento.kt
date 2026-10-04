@@ -57,6 +57,9 @@ object Collegamento {
     /** La schermata ha mostrato l'esito [finito]: non va detto un'altra volta. */
     fun consuma(finito: CorsaCollegamento.Stato.Finito) = corsa.consuma(finito)
 
+    /** (0.15) Il numero dell'ultimo collegamento fatto partire (CorsaCollegamento.ultimoAvviato). */
+    val ultimoAvviato: Long get() = corsa.ultimoAvviato
+
     /** Il codice di 6 cifre. */
     private suspend fun conCodice(app: Context, serverGrezzo: String, codice: String): EsitoCollegamento {
         val server = PostinoClient.normalizzaUrlServer(serverGrezzo)

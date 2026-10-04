@@ -21,8 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -50,7 +48,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.Caricamento
+import eu.stgm.pactum.design.CardNormale
+import eu.stgm.pactum.design.FilaPulsanti
+import eu.stgm.pactum.design.RigaStato
 import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.design.StatoVuoto
+import eu.stgm.pactum.design.TitoloSezione
+import eu.stgm.pactum.figlio.dati.DominioVisite
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.SitiGiorno
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
@@ -115,7 +120,6 @@ fun SitiScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.siti_titolo)) },
@@ -140,10 +144,11 @@ fun SitiScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
-            contentPadding = PaddingValues(Spazi.l),
-            verticalArrangement = Arrangement.spacedBy(Spazi.m),
+            // (0.15) La densità del figlio: 20 attorno, 16 tra i blocchi.
+            contentPadding = PaddingValues(Spazi.l + Spazi.xs),
+            verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
-            item {
+            item(key = "stato") {
                 SchedaStato(
                     attiva = stato.osservazioneAttiva,
                     dominiOggi = stato.dominiOggi,
@@ -152,48 +157,28 @@ fun SitiScreen(
                 )
             }
 
-            item {
-                Text(
-                    text = stringResource(R.string.siti_tavola_rotonda),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            item(key = "tavola-rotonda") {
+                Nota(stringResource(R.string.siti_tavola_rotonda))
             }
 
             if (stato.configurazioneMancante) {
-                item { Text(stringResource(R.string.siti_config_mancante)) }
+                item(key = "config") { RigaStato(stringResource(R.string.siti_config_mancante)) }
             } else if (stato.datiVecchi) {
-                item {
-                    Text(
-                        text = stringResource(R.string.dati_vecchi),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                item(key = "dati-vecchi") { RigaStato(stringResource(R.string.dati_vecchi)) }
             }
 
             if (stato.caricamento && stato.giorni.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Text(
-                                text = stringResource(R.string.siti_caricamento),
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(top = Spazi.s),
-                            )
-                        }
-                    }
-                }
+                item(key = "caricamento") { Caricamento(testo = stringResource(R.string.siti_caricamento), centrato = false) }
             } else if (stato.giorni.isEmpty()) {
-                item { Text(stringResource(R.string.siti_vuoto)) }
+                item(key = "vuoto") { StatoVuoto(stringResource(R.string.siti_vuoto)) }
             } else {
                 // Il server manda dal più vecchio a oggi; qui oggi sta in cima.
-                // Nessuna chiave: la lista è corta e fissa, e una chiave
-                // ricavata dal server (giorni doppi in una risposta storta)
-                // farebbe cadere la schermata invece di mostrarla storta.
-                items(stato.giorni.reversed()) { giorno ->
-                    SchedaGiorno(giorno)
+                // (0.15) Un elemento della lista per riga (anche 200 domini in un
+                // giorno scorrono leggeri), senza chiavi: la lista viene dal server
+                // e un giorno doppio farebbe cadere la schermata invece di mostrarla storta.
+                stato.giorni.reversed().forEach { giorno ->
+                    item { IntestazioneGiorno(giorno) }
+                    items(giorno.domini) { voce -> RigaDominio(voce) }
                 }
             }
         }
@@ -207,11 +192,8 @@ private fun SchedaStato(
     onAttiva: () -> Unit,
     onSpegni: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(Spazi.l),
-            verticalArrangement = Arrangement.spacedBy(Spazi.s),
-        ) {
+    CardNormale {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
             Text(
                 text = stringResource(
                     if (attiva) R.string.siti_stato_attiva else R.string.siti_stato_spenta,
@@ -244,68 +226,50 @@ private fun SchedaStato(
     }
 }
 
+/**
+ * (0.15) Il giorno: "Oggi", "Ieri", "Giovedì 2 ottobre" e quanti domini, e se
+ * per un po' il telefono ha tenuto nascosti i nomi. I domini seguono, uno per
+ * riga (RigaDominio), senza card.
+ */
 @Composable
-private fun SchedaGiorno(giorno: SitiGiorno) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(Spazi.l)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(etichettaGiorno(giorno.giorno), style = MaterialTheme.typography.titleSmall)
-                Text(
-                    text = testoTotale(giorno),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (giorno.dnsCifrato) {
-                Text(
-                    text = stringResource(R.string.siti_dns_cifrato),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.padding(top = Spazi.xs),
-                )
-            }
-
-            if (giorno.domini.isEmpty()) {
-                if (!giorno.dnsCifrato) {
-                    Text(
-                        text = stringResource(R.string.siti_giorno_vuoto),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = Spazi.xs),
-                    )
-                }
-            } else {
-                giorno.domini.forEach { voce ->
-                    HorizontalDivider(modifier = Modifier.padding(vertical = Spazi.s))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = voce.dominio,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            text = stringResource(R.string.siti_visite, voce.visite),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
+private fun IntestazioneGiorno(giorno: SitiGiorno) {
+    Column(modifier = Modifier.padding(top = Spazi.s), verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TitoloSezione(etichettaGiorno(giorno.giorno), modifier = Modifier.weight(1f))
+            Text(
+                text = testoTotale(giorno),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        if (giorno.dnsCifrato) {
+            Text(
+                text = stringResource(R.string.siti_dns_cifrato),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
+        if (giorno.domini.isEmpty() && !giorno.dnsCifrato) {
+            Nota(stringResource(R.string.siti_giorno_vuoto))
+        }
+    }
+}
+
+@Composable
+private fun RigaDominio(voce: DominioVisite) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = voce.dominio, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(
+                text = stringResource(R.string.siti_visite, voce.visite),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
@@ -358,7 +322,6 @@ fun AttivazioneSitiScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.siti_consenso_titolo)) },
@@ -376,9 +339,9 @@ fun AttivazioneSitiScreen(
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(Spazi.l)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Spazi.m),
+                .verticalScroll(rememberScrollState())
+                .padding(Spazi.l + Spazi.xs),
+            verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
             Text(
                 text = stringResource(R.string.siti_consenso_intro),
@@ -389,19 +352,20 @@ fun AttivazioneSitiScreen(
             BloccoConsenso(R.string.siti_consenso_come_titolo, R.string.siti_consenso_come)
             BloccoConsenso(R.string.siti_consenso_patto_titolo, R.string.siti_consenso_patto)
 
-            Button(
-                onClick = {
-                    // Se il consenso c'è già (riattivazione), Android non
-                    // chiede niente: si accende e basta.
-                    val intent = OsservazioneSiti.intentConsenso(context)
-                    if (intent == null) onConsensoDato() else richiestaConsenso.launch(intent)
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.siti_consenso_attiva))
-            }
-            OutlinedButton(onClick = onAnnulla, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.siti_consenso_rifiuta))
+            FilaPulsanti {
+                Button(
+                    onClick = {
+                        // Se il consenso c'è già (riattivazione), Android non
+                        // chiede niente: si accende e basta.
+                        val intent = OsservazioneSiti.intentConsenso(context)
+                        if (intent == null) onConsensoDato() else richiestaConsenso.launch(intent)
+                    },
+                ) {
+                    Text(stringResource(R.string.siti_consenso_attiva), maxLines = 1)
+                }
+                OutlinedButton(onClick = onAnnulla) {
+                    Text(stringResource(R.string.siti_consenso_rifiuta), maxLines = 1)
+                }
             }
         }
     }
@@ -409,11 +373,8 @@ fun AttivazioneSitiScreen(
 
 @Composable
 private fun BloccoConsenso(titolo: Int, testo: Int) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(Spazi.l),
-            verticalArrangement = Arrangement.spacedBy(Spazi.s),
-        ) {
+    CardNormale {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
             Text(stringResource(titolo), style = MaterialTheme.typography.titleSmall)
             Text(stringResource(testo), style = MaterialTheme.typography.bodyMedium)
         }

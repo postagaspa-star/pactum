@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,11 +22,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import eu.stgm.pactum.design.CardNormale
 import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.design.TitoloSezione
 import eu.stgm.pactum.figlio.R
 
 /**
- * "Cosa vede tuo padre" (redesign C6): l'elenco letterale di ciò che arriva
+ * "Cosa vedono i tuoi genitori" (redesign C6): l'elenco letterale di ciò che arriva
  * nella sua app e di ciò che resta fuori. Il primo giorno un sedicenne apre
  * l'app per un motivo solo, vedere cosa vedono di lui: la risposta arriva
  * subito dopo i permessi, e resta raggiungibile dalle Impostazioni.
@@ -48,7 +50,7 @@ fun CosaVedeScreen(onChiudi: (() -> Unit)? = null, onHoCapito: (() -> Unit)? = n
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.cosa_vede_titolo)) },
+                title = { Text(stringResource(R.string.cosa_vede_titolo), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     if (onChiudi != null) {
                         IconButton(onClick = onChiudi) {
@@ -101,22 +103,17 @@ fun CosaVedeScreen(onChiudi: (() -> Unit)? = null, onHoCapito: (() -> Unit)? = n
     }
 }
 
+/** (0.15) Un gruppo dell'elenco: il titolo di sezione e i punti, in una card normale. */
 @Composable
 private fun Blocco(titolo: String, voci: List<String>) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.s),
-        ) {
-            Text(
-                text = titolo,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+    CardNormale {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
+            TitoloSezione(titolo)
+            val punto = stringResource(R.string.elenco_punto)
             voci.forEach { voce ->
                 Row(horizontalArrangement = Arrangement.spacedBy(Spazi.s)) {
                     Text(
-                        text = "•",
+                        text = punto,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

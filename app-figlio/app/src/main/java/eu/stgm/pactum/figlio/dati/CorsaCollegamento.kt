@@ -75,6 +75,13 @@ class CorsaCollegamento(private val ambito: CoroutineScope) {
     }
 
     /**
+     * (0.15) Il numero dell'ultimo collegamento fatto partire (0 = nessuno). Chi
+     * l'ha avviato lo legge subito dopo [avvia] e riconosce poi il SUO esito
+     * ([Stato.Finito.numero]) da uno lasciato da un'altra schermata.
+     */
+    val ultimoAvviato: Long get() = synchronized(this) { ultimoNumero }
+
+    /**
      * La schermata ha mostrato l'esito [finito]: non va detto un'altra volta.
      * Un esito vecchio non tocca un collegamento partito dopo.
      */

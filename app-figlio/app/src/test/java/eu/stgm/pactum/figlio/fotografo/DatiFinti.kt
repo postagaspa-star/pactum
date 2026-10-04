@@ -244,6 +244,12 @@ object DatiFinti {
 
     // --- Proposte -----------------------------------------------------------------
 
+    /** Chi ha fatto cosa (contratto v3.6): { "id", "nome" }. */
+    private fun genitore(id: Long, nome: String) = buildJsonObject {
+        put("id", id)
+        put("nome", nome)
+    }
+
     val propostaMammaTiktok = Proposta(
         id = 101,
         regolaId = tiktok.id,
@@ -254,6 +260,7 @@ object DatiFinti {
         stato = StatiProposta.PENDENTE,
         tsServer = iso(adesso() - 2 * ORA),
         autore = "genitore",
+        genitore = genitore(2, "Mamma"),
     )
 
     val propostaPapaNotte = Proposta(
@@ -266,6 +273,7 @@ object DatiFinti {
         stato = StatiProposta.PENDENTE,
         tsServer = iso(adesso() - 26 * ORA),
         autore = "genitore",
+        genitore = genitore(3, "Papà"),
     )
 
     val propostaTuaInstagram = Proposta(
@@ -292,6 +300,7 @@ object DatiFinti {
             tsServer = iso(adesso() - 3 * GIORNO),
             risposta = RispostaProposta(EsitiRisposta.ACCETTA, "Va bene, è giusto", iso(adesso() - 3 * GIORNO + ORA)),
             autore = "genitore",
+            genitore = genitore(2, "Mamma"),
         ),
         Proposta(
             id = 88,
@@ -304,6 +313,7 @@ object DatiFinti {
             tsServer = iso(adesso() - 5 * GIORNO),
             risposta = RispostaProposta(EsitiRisposta.RIFIUTA, "Ne riparliamo dopo la pagella", iso(adesso() - 5 * GIORNO + 3 * ORA)),
             autore = "figlio",
+            rispostaDi = genitore(3, "Papà"),
         ),
         Proposta(
             id = 85,
@@ -412,6 +422,7 @@ object DatiFinti {
         stato = StatiSessione.RIFIUTATA,
         modificaInAttesa = null,
         motivazione = "Durante la settimana no, ne parliamo per il sabato",
+        decisaDa = "Papà",
     )
 
     val lettura2 = SessioneDefinita(
@@ -422,6 +433,7 @@ object DatiFinti {
         stato = StatiSessione.APPROVATA,
         modificaInAttesa = null,
         motivazione = "Chrome no: per leggere basta Drive",
+        decisaDa = "Mamma",
     )
 
     val sessioni = listOf(studio, musica, allenamento, videogiochi, lettura2)

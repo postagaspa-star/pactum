@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.ui
 
+import eu.stgm.pactum.design.RigaStato
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -64,7 +65,14 @@ import eu.stgm.pactum.figlio.dati.TipiDispositivo
  */
 @Composable
 fun ModuloCollegamento(
-    onCollegato: () -> Unit,
+    /**
+     * (0.15) Da quale schermata ([OriginiCollegamento]): il modulo prende solo
+     * gli esiti dei collegamenti partiti da lì (anche prima di una rotazione, o
+     * dalle stesse Impostazioni chiuse a metà), mai quello lasciato da un'altra.
+     */
+    origine: String,
+    /** Collegato: con l'esito da dire ancora, perché il modulo si può chiudere. */
+    onCollegato: (AvvisoCollegamento) -> Unit,
     modifier: Modifier = Modifier,
     /** Già collegato: il pulsante dice "Collega con un codice nuovo". */
     giaCollegato: Boolean = false,
@@ -92,43 +100,33 @@ fun ModuloCollegamento(
         }
     }
 
-    // L'esito di un collegamento finito, anche partito da un'altra schermata (la
-    // stessa prima di una rotazione, o le Impostazioni chiuse a metà). Il
-    // messaggio resta in rememberSaveable: sopravvive a una rotazione dopo.
+    // L'esito di un collegamento partito da QUESTA schermata (anche prima di
+    // una rotazione, o dalle stesse Impostazioni chiuse a metà). Quello lasciato
+    // da un'altra (il passo Collega del primo avvio, sparito appena salvato il
+    // collegamento) non si prende: non chiude il modulo e non dice cose vecchie.
+    // Il messaggio resta in rememberSaveable: sopravvive a una rotazione dopo.
     LaunchedEffect(stato) {
         val finito = stato as? CorsaCollegamento.Stato.Finito ?: return@LaunchedEffect
-        var collegato = false
-        when (val esito = finito.esito) {
-            EsitoCollegamento.IndirizzoNonValido -> urlNonValido = true
-            EsitoCollegamento.CodiceLungoSalvato -> {
-                server = impostazioni.leggiConfigurazione().serverUrl
-                messaggio = context.getString(R.string.impostazioni_salvate)
-                collegato = true
-            }
-            is EsitoCollegamento.ConCodice -> if (esito.esito is EsitoAbbinamento.Collegato) {
-                val attuale = impostazioni.leggiConfigurazione()
-                server = attuale.serverUrl
-                token = attuale.token
-                codice = ""
-                // Il "Collegato come: …" lo dice la riga in cima (RigaCollegatoCome):
-                // qui sotto basta l'esito, senza ripeterlo. Se però il telefono è
-                // passato a un ALTRO dispositivo, lo si dice chiaro.
-                messaggio = esito.cambio
-                    ?.let { testoCambioDispositivo(it, paroleCambioDispositivo(context)) }
-                    ?: context.getString(R.string.collega_riuscito)
-                collegato = true
-            } else {
-                messaggio = testoEsitoAbbinamento(context, esito.esito)
-            }
+        if (!OriginiCollegamento.eDi(finito.numero, origine)) return@LaunchedEffect
+        val letto = leggiEsitoCollegamento(context, finito.esito)
+        if (letto.indirizzoNonValido) urlNonValido = true
+        if (letto.collegato) {
+            val attuale = impostazioni.leggiConfigurazione()
+            server = attuale.serverUrl
+            token = attuale.token
+            codice = ""
         }
+        messaggio = letto.testo
         Collegamento.consuma(finito)
-        if (collegato) onCollegatoAttuale()
+        if (letto.collegato) onCollegatoAttuale(AvvisoCollegamento(letto.testo.orEmpty(), letto.cambioDispositivo))
     }
 
     val pronto = server.isNotBlank() && Abbinamento.codiceCompleto(codice) && !inCorso
     val collega: () -> Unit = {
         messaggio = null
-        Collegamento.avviaConCodice(context, server, codice)
+        if (Collegamento.avviaConCodice(context, server, codice)) {
+            OriginiCollegamento.segna(Collegamento.ultimoAvviato, origine)
+        }
     }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spazi.m)) {
@@ -182,7 +180,7 @@ fun ModuloCollegamento(
                 )
             }
         }
-        messaggio?.let { RigaNeutra(it) }
+        messaggio?.let { RigaStato(it) }
 
         // Il vecchio codice lungo: per chi era già collegato prima dei codici di 6 cifre.
         TextButton(
@@ -208,7 +206,9 @@ fun ModuloCollegamento(
                 enabled = server.isNotBlank() && token.isNotBlank() && !inCorso,
                 onClick = {
                     messaggio = null
-                    Collegamento.avviaConCodiceLungo(context, server, token)
+                    if (Collegamento.avviaConCodiceLungo(context, server, token)) {
+                        OriginiCollegamento.segna(Collegamento.ultimoAvviato, origine)
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -218,40 +218,22 @@ fun ModuloCollegamento(
     }
 }
 
-/** "Collegato come: Telefono di Andrea", finché si sa chi è questo telefono. */
+/**
+ * "Collegato come «Telefono di Luca»", finché si sa chi è questo telefono.
+ * [alternativa] = cosa dire quando non si sa (un collegamento col codice
+ * lungo): null = niente.
+ */
 @Composable
-fun RigaCollegatoCome(modifier: Modifier = Modifier) {
+fun RigaCollegatoCome(modifier: Modifier = Modifier, alternativa: String? = null) {
     val context = LocalContext.current
     val impostazioni = remember { Impostazioni(context.applicationContext) }
     val identita by impostazioni.identita.collectAsState(initial = null)
-    val testo = identita?.let { testoCollegatoCome(context, it) } ?: return
+    val testo = identita?.let { testoCollegatoCome(context, it) } ?: alternativa ?: return
     Text(
         text = testo,
         style = MaterialTheme.typography.bodyLarge,
         modifier = modifier,
     )
-}
-
-/**
- * Un esito in una riga neutra (§3.1: fuori dalla striscia niente rosso, e
- * `error` resta alla validazione dei campi). Stessa veste di "Dati non aggiornati".
- */
-@Composable
-internal fun RigaNeutra(testo: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 40.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
-            .padding(horizontal = Spazi.m, vertical = Spazi.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = testo,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
 }
 
 /** "Collegato come: Telefono di Andrea"; null se non si sa ancora chi è questo telefono. */
@@ -261,6 +243,39 @@ fun testoCollegatoCome(context: Context, identita: Identita): String? =
         nomeFiglio = identita.figlio?.nome,
         formato = context.getString(R.string.collegato_come_formato),
     )?.let { context.getString(R.string.collegato_come, it) }
+
+/** (0.15) L'esito di un collegamento riuscito, da dire ancora dopo che il modulo si chiude. */
+data class AvvisoCollegamento(val testo: String, val cambioDispositivo: Boolean)
+
+/** (0.15) Un esito letto per la schermata: la frase, e cosa cambia. */
+data class EsitoLetto(
+    val testo: String?,
+    val collegato: Boolean,
+    val cambioDispositivo: Boolean = false,
+    val indirizzoNonValido: Boolean = false,
+)
+
+/**
+ * (0.15) La frase di un esito, come la diceva il modulo nella 0.14: "Codice
+ * lungo salvato", "Collegamento riuscito.", l'avviso del dispositivo diverso,
+ * o perché non è riuscito. L'indirizzo scritto male lo dice il campo (testo null).
+ */
+fun leggiEsitoCollegamento(context: Context, esito: EsitoCollegamento): EsitoLetto = when (esito) {
+    EsitoCollegamento.IndirizzoNonValido -> EsitoLetto(testo = null, collegato = false, indirizzoNonValido = true)
+    EsitoCollegamento.CodiceLungoSalvato -> EsitoLetto(context.getString(R.string.impostazioni_salvate), collegato = true)
+    is EsitoCollegamento.ConCodice -> if (esito.esito is EsitoAbbinamento.Collegato) {
+        // Il "Collegato come «…»" lo dice la riga in cima: qui basta l'esito.
+        // Se però il telefono è passato a un ALTRO dispositivo, lo si dice chiaro.
+        EsitoLetto(
+            testo = esito.cambio?.let { testoCambioDispositivo(it, paroleCambioDispositivo(context)) }
+                ?: context.getString(R.string.collega_riuscito),
+            collegato = true,
+            cambioDispositivo = esito.cambio != null,
+        )
+    } else {
+        EsitoLetto(testoEsitoAbbinamento(context, esito.esito), collegato = false)
+    }
+}
 
 /** Gli esiti dell'abbinamento, in frasi chiare. */
 fun testoEsitoAbbinamento(context: Context, esito: EsitoAbbinamento): String = when (esito) {

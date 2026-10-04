@@ -1,6 +1,21 @@
 package eu.stgm.pactum.figlio.ui
 
+import eu.stgm.pactum.design.RigaStato
+import eu.stgm.pactum.design.StatoVuoto
+import eu.stgm.pactum.design.Caricamento
+import eu.stgm.pactum.design.Pillola
+import eu.stgm.pactum.design.CardNormale
+import eu.stgm.pactum.design.VoceMenu
+import eu.stgm.pactum.design.MenuAzioni
+import eu.stgm.pactum.design.Tono
+import eu.stgm.pactum.design.TitoloSezione
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,7 +107,10 @@ import kotlinx.coroutines.withContext
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
+fun SessioniScreen(
+    onApriImpostazioni: () -> Unit = {},
+    vm: SessioniViewModel = viewModel(),
+) {
     val stato by vm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -163,16 +181,18 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
         ambito.launch { snackbarHostState.showSnackbar(messaggio) }
     }
 
+    // "Nuova sessione" non copre mai l'ultima card: lo spazio in fondo è la sua
+    // altezza misurata, più il margine.
+    val densita = LocalDensity.current
+    var altezzaPulsante by remember { mutableIntStateOf(0) }
+    val spazioInFondo = with(densita) { altezzaPulsante.toDp() } + Spazi.l * 2
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.sessioni_titolo)) },
-                actions = {
-                    IconButton(onClick = { vm.aggiorna() }) {
-                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
-                    }
-                },
+                actions = { AzioniBarra(onAggiorna = { vm.aggiorna() }, onApriImpostazioni = onApriImpostazioni) },
             )
         },
         floatingActionButton = {
@@ -187,8 +207,11 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
                             moduloId = NUOVA_SESSIONE
                         }
                     },
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text(stringResource(R.string.sessioni_nuova)) },
+                    // La scritta del pulsante allungato non arriva a TalkBack (Material la
+                    // nasconde): la dice l'icona.
+                    icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sessioni_nuova)) },
+                    text = { Text(stringResource(R.string.sessioni_nuova), maxLines = 1) },
+                    modifier = Modifier.onSizeChanged { altezzaPulsante = it.height },
                 )
             }
         },
@@ -196,20 +219,11 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when {
-                stato.caricamento && !stato.letto -> Centro {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Text(
-                            text = stringResource(R.string.sessioni_caricamento),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = Spazi.s),
-                        )
-                    }
-                }
+                stato.caricamento && !stato.letto ->
+                    Caricamento(testo = stringResource(R.string.sessioni_caricamento))
 
-                stato.configurazioneMancante -> Centro {
-                    TestoCentrato(stringResource(R.string.regole_config_mancante))
-                }
+                stato.configurazioneMancante ->
+                    StatoVuoto(stringResource(R.string.regole_config_mancante), centrato = true, modifier = Modifier.padding(Spazi.xl))
 
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -218,20 +232,28 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
                         start = Spazi.l + Spazi.xs,
                         end = Spazi.l + Spazi.xs,
                         top = Spazi.l + Spazi.xs,
-                        bottom = 88.dp,
+                        bottom = spazioInFondo,
                     ),
                     verticalArrangement = Arrangement.spacedBy(Spazi.l),
                 ) {
                     if (stato.scollegato) {
-                        item { RigaNeutra(stringResource(R.string.oggi_scollegato)) }
+                        item {
+                            RigaStato(
+                                testo = stringResource(R.string.scollegato),
+                                azione = stringResource(R.string.azione_collega),
+                                onAzione = onApriImpostazioni,
+                            )
+                        }
                     } else if (stato.datiFermi) {
-                        item { BannerDatiVecchi(stato.datiFermiAlle) }
+                        item { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
                     }
                     inCorso.attiva?.let { attiva ->
                         item(key = "in-corso") {
                             SchedaSessioneInCorso(
                                 attiva = attiva,
                                 adesso = inCorso.adesso,
+                                // "Termina la sessione" della notifica porta a Oggi: qui non si ascolta.
+                                ascoltaNotifica = false,
                                 onTerminata = {
                                     ambito.launch {
                                         snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
@@ -244,17 +266,16 @@ fun SessioniScreen(vm: SessioniViewModel = viewModel()) {
                     avvioIncerto?.let { incerto -> item(key = "incerta") { RigaAvvioIncerto(incerto) } }
                     if (stato.serverDaAggiornare) {
                         // Mai "errore": il server va aggiornato, il resto dell'app funziona.
-                        item { RigaNeutra(stringResource(R.string.sessioni_server_da_aggiornare)) }
+                        item { RigaStato(stringResource(R.string.sessioni_server_da_aggiornare)) }
                     } else {
-                        item {
-                            Text(
-                                text = stringResource(R.string.sessioni_intro),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                         if (stato.sessioni.isEmpty()) {
-                            item { RigaVuota(Icons.Outlined.Info, stringResource(R.string.sessioni_vuoto)) }
+                            // Cos'è una sessione, detto una volta: qui, quando non ce n'è nessuna.
+                            item {
+                                StatoVuoto(
+                                    titolo = stringResource(R.string.sessioni_vuoto_titolo),
+                                    testo = stringResource(R.string.sessioni_vuoto),
+                                )
+                            }
                         } else {
                             items(stato.sessioni, key = { it.id }) { sessione ->
                                 CardSessione(
@@ -376,9 +397,12 @@ private const val SESSIONI_MASSIME = 20
 private const val DURATA_ALTRO = -1
 
 /**
- * Una sessione: il nome, com'è messa col genitore, le sue app (mai nomi di
- * pacchetti), e cosa si può fare. Si inizia solo una sessione approvata (con
- * o senza un cambio in attesa: vale quella approvata), una alla volta.
+ * (0.15) Una sessione, compatta: il nome con l'emoji e lo stato in una
+ * pillola, le app in una riga, una nota corta solo se serve (rifiutata col
+ * perché, cambio in attesa o non approvato), UN pulsante ("Inizia", se
+ * approvata e non in corso, col motivo in una riga quando è spento) e il ⋯
+ * con Modifica, Ritira il cambio, Elimina. Si inizia solo una sessione
+ * approvata (con o senza un cambio in attesa: vale quella approvata), una alla volta.
  */
 @Composable
 private fun CardSessione(
@@ -393,98 +417,86 @@ private fun CardSessione(
     onRitiraCambio: () -> Unit,
 ) {
     val context = LocalContext.current
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.s),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    // (0.12) Con l'emoji del suo tema, come nell'app del genitore: "📚 Studio".
-                    text = nomeSessioneConEmoji(context, sessione.nome),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                Etichetta(
-                    stringResource(
-                        when {
-                            inCorsoQuesta -> R.string.sessione_in_corso_etichetta
-                            sessione.approvata -> R.string.sessione_stato_approvata
-                            sessione.rifiutata -> R.string.sessione_stato_rifiutata
-                            else -> R.string.sessione_stato_in_attesa
+    val cambio = sessione.modificaInAttesa
+    val voci = buildList {
+        add(VoceMenu(stringResource(R.string.sessione_modifica), onModifica))
+        // Ci ha ripensato: torna la sessione approvata, il genitore non deve più decidere.
+        if (cambio != null) add(VoceMenu(stringResource(R.string.sessione_ritira_cambio), onRitiraCambio, abilitata = !invioInCorso))
+        // La sessione in corso non si elimina (il server direbbe di no): prima si termina.
+        if (!inCorsoQuesta) add(VoceMenu(stringResource(R.string.azione_elimina), onElimina, distruttiva = true))
+    }
+    CardNormale {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
+            // Il nome e lo stato a sinistra, il ⋯ a destra.
+            Row(verticalAlignment = Alignment.Top) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                    Text(
+                        // (0.12) Con l'emoji del suo tema, come nell'app del genitore: "📚 Studio".
+                        text = nomeSessioneConEmoji(context, sessione.nome),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Pillola(
+                        stringResource(
+                            when {
+                                inCorsoQuesta -> R.string.sessione_in_corso_etichetta
+                                sessione.approvata -> R.string.sessione_stato_approvata
+                                sessione.rifiutata -> R.string.sessione_stato_rifiutata
+                                else -> R.string.sessione_stato_in_attesa
+                            },
+                        ),
+                        tono = when {
+                            inCorsoQuesta || sessione.approvata -> Tono.Positivo
+                            sessione.rifiutata -> Tono.Negativo
+                            else -> Tono.Attenzione
                         },
-                    ),
-                )
+                    )
+                }
+                MenuAzioni(voci = voci, descrizione = stringResource(R.string.sessione_menu))
             }
             Text(
                 text = stringResource(R.string.sessione_app, elencoAppSessione(context, sessione.app, sessione.nomi)),
                 style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            when {
-                sessione.inAttesa -> Nota(stringResource(R.string.sessione_in_attesa_spiegazione))
-                sessione.rifiutata -> {
-                    sessione.motivazione?.let { Nota(stringResource(R.string.proposta_motivazione_genitore, it)) }
-                    Nota(stringResource(R.string.sessione_rifiutata_spiegazione))
-                }
-            }
-            val cambio = sessione.modificaInAttesa
-            if (cambio != null) {
-                Etichetta(stringResource(R.string.sessione_cambio_in_attesa))
-                val appChieste = cambio.app ?: sessione.app
-                val nomiChiesti = sessione.nomi + cambio.nomi
-                val elenco = elencoAppSessione(context, appChieste, nomiChiesti)
-                val nomeChiesto = cambio.nome?.trim()?.takeIf { it.isNotEmpty() && it != sessione.nome }
-                Text(
-                    text = if (nomeChiesto != null) {
+            // Una nota sola, e solo se serve.
+            val nota = when {
+                // (0.15) Col nome del genitore che ha deciso, se il server lo dice.
+                sessione.rifiutata -> sessione.motivazione
+                    ?.let { modelloGenitoreDice(context, sessione.decisaDa).format(it) }
+                    ?: stringResource(R.string.sessione_rifiutata_spiegazione)
+                cambio != null -> {
+                    val appChieste = cambio.app ?: sessione.app
+                    val elenco = elencoAppSessione(context, appChieste, sessione.nomi + cambio.nomi)
+                    val nomeChiesto = cambio.nome?.trim()?.takeIf { it.isNotEmpty() && it != sessione.nome }
+                    if (nomeChiesto != null) {
                         stringResource(R.string.sessione_cambio_chiesto_nome, nomeSessioneTraVirgolette(context, nomeChiesto), elenco)
                     } else {
                         stringResource(R.string.sessione_cambio_chiesto, elenco)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Nota(stringResource(R.string.sessione_cambio_spiegazione))
-                // Ci ha ripensato: torna la sessione approvata, il genitore non deve più decidere.
-                TextButton(onClick = onRitiraCambio, enabled = !invioInCorso, contentPadding = PaddingValues(0.dp)) {
-                    Text(stringResource(R.string.sessione_ritira_cambio))
-                }
-            } else if (sessione.approvata) {
-                // Un cambio chiesto e non approvato: resta la sessione di prima, e il perché.
-                sessione.motivazione?.let {
-                    Nota(stringResource(R.string.sessione_cambio_rifiutato))
-                    Nota(stringResource(R.string.proposta_motivazione_genitore, it))
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (sessione.approvata && !inCorsoQuesta) {
-                    Button(enabled = !unaInCorso && !invioInCorso && !bloccoFaccende, onClick = onInizia) {
-                        Text(stringResource(R.string.sessione_inizia))
                     }
-                    Spacer(modifier = Modifier.width(Spazi.s))
                 }
-                TextButton(onClick = onModifica) { Text(stringResource(R.string.sessione_modifica)) }
-                // La sessione in corso non si elimina (il server direbbe di no): prima si termina.
-                if (!inCorsoQuesta) {
-                    TextButton(onClick = onElimina) { Text(stringResource(R.string.azione_elimina)) }
-                }
+                // Un cambio chiesto e non approvato: resta la sessione di prima, e il perché.
+                sessione.approvata && sessione.motivazione != null -> sessione.decisaDa
+                    ?.let { stringResource(R.string.sessione_cambio_rifiutato_perche_nome, it, sessione.motivazione) }
+                    ?: stringResource(R.string.sessione_cambio_rifiutato_perche, sessione.motivazione)
+                else -> null
             }
-            if (sessione.approvata && unaInCorso && !inCorsoQuesta) {
-                Nota(stringResource(R.string.sessione_una_gia_in_corso))
-            } else if (sessione.approvata && bloccoFaccende && !inCorsoQuesta) {
-                // (0.13) Il pulsante spento, e il perché.
-                Nota(stringResource(R.string.sessione_blocco_faccende))
+            nota?.let { Nota(it) }
+            if (sessione.approvata && !inCorsoQuesta) {
+                Button(enabled = !unaInCorso && !invioInCorso && !bloccoFaccende, onClick = onInizia) {
+                    Text(stringResource(R.string.sessione_inizia))
+                }
+                // Il pulsante spento, e il perché in una riga.
+                if (unaInCorso) {
+                    Nota(stringResource(R.string.sessione_una_gia_in_corso))
+                } else if (bloccoFaccende) {
+                    Nota(stringResource(R.string.sessione_blocco_faccende))
+                }
             }
         }
     }
 }
 
-@Composable
-private fun Nota(testo: String) {
-    Text(
-        text = testo,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
 
 /** Le app scelte, come testo che sopravvive a una rotazione. */
 private val salvataggioLista = listSaver<List<String>, String>(save = { it }, restore = { it })
@@ -577,7 +589,7 @@ private fun DialogoSessione(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                esito?.let { RigaNeutra(testoEsitoSessione(context, it)) }
+                esito?.let { RigaStato(testoEsitoSessione(context, it)) }
             }
         },
         confirmButton = {
@@ -701,10 +713,7 @@ private fun DialogoSceltaAppSessione(
                     item { TitoloSezione(stringResource(R.string.regola_sezione_app)) }
                     if (lista == null) {
                         item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
-                                horizontalArrangement = Arrangement.Center,
-                            ) { CircularProgressIndicator() }
+                            Caricamento(modifier = Modifier.padding(vertical = Spazi.m), centrato = false)
                         }
                     } else {
                         val trovate = lista.filter { trovata(it.etichetta) }
@@ -752,8 +761,9 @@ private fun RigaSceltaApp(nome: String, spiegazione: String?, scelta: Boolean, o
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = Spazi.xs),
+            .heightIn(min = 48.dp)
+            .toggleable(value = scelta, onValueChange = { onClick() }, role = Role.Checkbox)
+            .padding(vertical = Spazi.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Il tocco è sulla riga intera: la casella mostra soltanto.
@@ -860,37 +870,28 @@ private fun DialogoAvvio(
                     )
                 }
                 Text(
-                    text = stringResource(R.string.sessione_avvio_spiegazione),
+                    text = stringResource(R.string.sessione_avvio_breve),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                // Cosa resta usabile oltre alle app scelte (una pagina web, la fotocamera, i file), e cosa no.
-                Text(
-                    text = stringResource(R.string.sessione_avvio_aperte),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // Senza questi due permessi la sessione non parte: una riga ciascuno, con "Risolvi".
                 if (!mostraSopra) {
-                    Text(
-                        text = stringResource(R.string.sessione_avvio_manca_mostra_sopra),
-                        style = MaterialTheme.typography.bodyMedium,
+                    RigaStato(
+                        testo = stringResource(R.string.sessione_avvio_manca_permesso, stringResource(R.string.permesso_mostra_sopra)),
+                        tono = Tono.Attenzione,
+                        azione = stringResource(R.string.azione_risolvi),
+                        onAzione = { PermessiHelper.apri(context, PermessiHelper.intentMostraSopra(context)) },
                     )
-                    OutlinedButton(onClick = { PermessiHelper.apri(context, PermessiHelper.intentMostraSopra(context)) }) {
-                        Text(stringResource(R.string.passo_apri_impostazioni))
-                    }
-                    AiutoRestrizioni(stringResource(R.string.aiuto_mostra_sopra_testo))
                 }
                 if (!accessoUso) {
-                    Text(
-                        text = stringResource(R.string.sessione_avvio_manca_uso),
-                        style = MaterialTheme.typography.bodyMedium,
+                    RigaStato(
+                        testo = stringResource(R.string.sessione_avvio_manca_permesso, stringResource(R.string.permesso_uso)),
+                        tono = Tono.Attenzione,
+                        azione = stringResource(R.string.azione_risolvi),
+                        onAzione = { PermessiHelper.apri(context, PermessiHelper.intentAccessoUso()) },
                     )
-                    OutlinedButton(onClick = { PermessiHelper.apri(context, PermessiHelper.intentAccessoUso()) }) {
-                        Text(stringResource(R.string.passo_apri_impostazioni))
-                    }
-                    AiutoRestrizioni(stringResource(R.string.aiuto_restrizioni_testo))
                 }
-                esito?.let { RigaNeutra(testoEsitoAvvio(context, it)) }
+                esito?.let { RigaStato(testoEsitoAvvio(context, it)) }
             }
         },
         confirmButton = {

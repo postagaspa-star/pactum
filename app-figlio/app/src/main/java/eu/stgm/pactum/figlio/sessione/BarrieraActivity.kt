@@ -7,6 +7,7 @@ import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import eu.stgm.pactum.design.attivaBordoPieno
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,6 +59,9 @@ class BarrieraActivity : ComponentActivity() {
     private var svoltaId = NESSUNA
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // (0.15) Bordo pieno con le icone scure della barra di stato (B11): lo
+        // Scaffold qui sotto tiene il contenuto fuori dalle barre di sistema.
+        attivaBordoPieno()
         super.onCreate(savedInstanceState)
         if (!leggi(intent)) {
             finish()

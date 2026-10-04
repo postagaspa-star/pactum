@@ -35,39 +35,3 @@ fun rememberMostraSopra(): Boolean {
     }
     return concesso
 }
-
-/**
- * (0.9) In Oggi, finché "Mostra sopra le altre app" manca: chi aggiorna da una
- * versione vecchia non ripassa dall'onboarding, e senza questa scheda il
- * permesso resterebbe sepolto nelle Impostazioni. Spiega a cosa serve, i
- * passi, e la strada per le impostazioni con limitazioni di Android 15/16.
- * Sparisce da sola appena il permesso c'è.
- */
-@Composable
-fun SchedaMostraSopra(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.s),
-        ) {
-            Text(
-                text = stringResource(R.string.oggi_avviso_titolo),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = stringResource(R.string.oggi_avviso_testo),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                text = stringResource(R.string.oggi_avviso_passi),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(onClick = { PermessiHelper.apri(context, PermessiHelper.intentMostraSopra(context)) }) {
-                Text(stringResource(R.string.passo_apri_impostazioni))
-            }
-            AiutoRestrizioni(stringResource(R.string.aiuto_mostra_sopra_testo))
-        }
-    }
-}

@@ -5,11 +5,13 @@ import eu.stgm.pactum.figlio.ui.SitiViewModel
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
-/** 11 — Siti visitati (dalla scheda in Oggi) · 12 — Impostazioni (dalla rotella in Oggi). */
+/** 11 — Siti visitati · 12 — Impostazioni (da ⚙ in ogni scheda; i Siti si aprono da lì). */
 class FotoSitiImpostazioniTest : Fotografo() {
 
     private fun siti(stato: SitiViewModel.StatoSiti, dopo: () -> Unit = {}): Aperta =
         apriPactum(StatiFinti(siti = stato)).also {
+            toccaIcona("Impostazioni")
+            aspetta("Siti visitati")
             tocca("Siti visitati")
             dopo()
         }.comeAperta()
@@ -26,7 +28,7 @@ class FotoSitiImpostazioniTest : Fotografo() {
     @Test
     fun sitiAttiva() {
         Mondo.collegato(app)
-        scatta("11-siti-attiva", "Siti visitati, osservazione accesa: 4 giorni (vuoto, zero, tagliato + DNS cifrato, oggi)") {
+        scatta("11-siti-attiva", "Siti visitati, osservazione accesa: 4 giorni (vuoto, zero, tagliato + DNS cifrato, oggi)", pagine = true) {
             siti(DatiFinti.sitiNormali())
         }
     }
@@ -40,26 +42,10 @@ class FotoSitiImpostazioniTest : Fotografo() {
     }
 
     @Test
-    fun sitiVuoti() {
-        Mondo.collegato(app)
-        scatta("11-siti-vuoti", "Siti visitati: osservazione spenta, nessun giorno (stato vuoto)", pagine = false) {
-            siti(SitiViewModel.StatoSiti(caricamento = false))
-        }
-    }
-
-    @Test
     fun sitiSenzaRete() {
         Mondo.collegato(app)
         scatta("11-siti-senza-rete", "Siti visitati senza rete (\"dati non aggiornati\")") {
             siti(DatiFinti.sitiNormali().copy(datiVecchi = true))
-        }
-    }
-
-    @Test
-    fun sitiNonCollegato() {
-        Mondo.collegato(app)
-        scatta("11-siti-non-collegato", "Siti visitati con il telefono non collegato", pagine = false) {
-            siti(SitiViewModel.StatoSiti(caricamento = false, configurazioneMancante = true))
         }
     }
 
@@ -76,7 +62,7 @@ class FotoSitiImpostazioniTest : Fotografo() {
     @Test
     fun impostazioniCollegato() {
         Mondo.collegato(app)
-        scatta("12-impostazioni-collegato", "Impostazioni: collegato come Telefono di Luca, chiusura della sera, avviso a tutto schermo attivo") {
+        scatta("12-impostazioni-collegato", "Impostazioni: \"Collegato come «Telefono di Luca»\" · Cambia, i 4 permessi attivi, la sera, Siti, Cosa vedono, in fondo la prova", pagine = true) {
             impostazioni()
         }
     }
@@ -85,25 +71,16 @@ class FotoSitiImpostazioniTest : Fotografo() {
     fun impostazioniAvvisoSpento() {
         Mondo.collegato(app)
         Mondo.permessi(app, sopra = false)
-        scatta("12-impostazioni-avviso-spento", "Impostazioni con l'avviso a tutto schermo spento (manca il permesso)") {
-            impostazioni()
-        }
-    }
-
-    @Test
-    fun impostazioniSeraleSpenta() {
-        Mondo.collegato(app)
-        runBlocking { Impostazioni(app).salvaChiusuraSerale(false, 21 * 60 + 30) }
-        scatta("12-impostazioni-serale-spenta", "Impostazioni con la chiusura della sera spenta") {
-            impostazioni()
+        scatta("12-impostazioni-avviso-spento", "Impostazioni arrivando da \"Da sistemare\" in Oggi: manca \"Mostra sopra le altre app\" (\"Apri\")", pagine = false) {
+            apriPactum(StatiFinti()).also { tocca("Risolvi"); aspetta("Permessi") }.comeAperta()
         }
     }
 
     @Test
     fun impostazioniCodiceLungo() {
         Mondo.collegato(app)
-        scatta("12-impostazioni-codice-lungo", "Impostazioni con \"Hai un codice lungo?\" aperto") {
-            impostazioni { tocca("Hai un codice lungo?") }
+        scatta("12-impostazioni-codice-lungo", "Impostazioni dopo \"Cambia\": il modulo del collegamento, con \"Hai un codice lungo?\" aperto") {
+            impostazioni { tocca("Cambia"); tocca("Hai un codice lungo?") }
         }
     }
 
@@ -119,7 +96,7 @@ class FotoSitiImpostazioniTest : Fotografo() {
     fun cosaVedeDaImpostazioni() {
         Mondo.collegato(app)
         scatta("12-impostazioni-cosa-vedono", "\"Cosa vedono i tuoi genitori\" aperto dalle Impostazioni (freccia indietro)") {
-            impostazioni { tocca("Guarda l'elenco") }
+            impostazioni { tocca("Cosa vedono i tuoi genitori") }
         }
     }
 }

@@ -1,11 +1,19 @@
 package eu.stgm.pactum.figlio.ui
 
+import eu.stgm.pactum.design.RigaToccabile
+import eu.stgm.pactum.design.TitoloSezione
 import android.os.SystemClock
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,19 +24,21 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimeInput
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -36,29 +46,43 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.design.RigaStato
+import eu.stgm.pactum.design.Tono
 import eu.stgm.pactum.figlio.dati.Battito
+import eu.stgm.pactum.figlio.dati.Collegamento
+import eu.stgm.pactum.figlio.dati.CorsaCollegamento
 import eu.stgm.pactum.figlio.dati.Impostazioni
-import eu.stgm.pactum.figlio.permessi.PermessiHelper
+import eu.stgm.pactum.figlio.permessi.StatoPermessi
 import eu.stgm.pactum.figlio.rete.PostinoClient
+import eu.stgm.pactum.figlio.siti.OsservazioneSiti
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
- * Le Impostazioni del figlio: il collegamento al patto (indirizzo del server e
- * codice di 6 cifre, v3; il vecchio codice lungo dietro "Hai un codice
- * lungo?"), la chiusura della sera, l'avviso a tutto schermo (0.9), e "Cosa
- * vede tuo padre" per sempre a un tocco.
+ * (0.15) Le Impostazioni del figlio, da ⚙ in ogni scheda, in quest'ordine: il
+ * collegamento (una riga quando è collegato, il modulo dopo "Cambia"), i
+ * quattro permessi (ognuno col suo stato e "Apri"), l'avviso della sera, i
+ * siti visitati, cosa vedono i genitori, e in fondo, piccolo, l'ultimo
+ * aggiornamento inviato e "Prova il collegamento". [suiPermessi] = aperte
+ * da "Da sistemare" in Oggi: si va dritti ai permessi.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
+fun ImpostazioniScreen(
+    onChiudi: () -> Unit,
+    onApriCosaVede: () -> Unit,
+    onApriSiti: () -> Unit,
+    suiPermessi: Boolean = false,
+) {
     val context = LocalContext.current
     val ambito = rememberCoroutineScope()
     val impostazioni = remember { Impostazioni(context.applicationContext) }
@@ -68,11 +92,46 @@ fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
     val ultimoBattito by impostazioni.ultimoBattitoConsegnato.collectAsState(initial = null)
     val serale by impostazioni.chiusuraSerale.collectAsState(initial = null)
     var sceltaOra by rememberSaveable { mutableStateOf(false) }
+    // "Cambia": il modulo del collegamento aperto anche da collegati.
+    var cambiaCollegamento by rememberSaveable { mutableStateOf(false) }
+    // (0.15) L'esito di un collegamento fatto da qui ("Collegamento riuscito.",
+    // "Codice lungo salvato", "ora sei collegato come un dispositivo nuovo…"):
+    // resta sopra "Collegato come" finché non si escono dalle Impostazioni.
+    var avvisoCollegamento by rememberSaveable { mutableStateOf<String?>(null) }
+    var avvisoCambioDispositivo by rememberSaveable { mutableStateOf(false) }
+    val statoCollegamento by Collegamento.stato.collectAsState()
+    val moduloAperto = configurazione?.let { !it.completa || cambiaCollegamento }
+    // Un collegamento partito da qui e finito a modulo chiuso (le Impostazioni
+    // chiuse a metà e riaperte): il suo esito si dice qui, e non riapre niente.
+    LaunchedEffect(statoCollegamento, moduloAperto) {
+        val finito = statoCollegamento as? CorsaCollegamento.Stato.Finito ?: return@LaunchedEffect
+        if (moduloAperto != false || !OriginiCollegamento.eDi(finito.numero, OriginiCollegamento.IMPOSTAZIONI)) return@LaunchedEffect
+        val letto = leggiEsitoCollegamento(context, finito.esito)
+        avvisoCollegamento = letto.testo ?: context.getString(R.string.impostazioni_url_non_valido)
+        avvisoCambioDispositivo = letto.cambioDispositivo
+        Collegamento.consuma(finito)
+    }
+    var permessi by remember { mutableStateOf(StatoPermessi.leggi(context)) }
+    var sitiAttivi by remember { mutableStateOf<Boolean?>(null) }
+    var rilettura by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        permessi = StatoPermessi.leggi(context)
+        rilettura++
+        onPauseOrDispose { }
+    }
+    LaunchedEffect(rilettura) { sitiAttivi = OsservazioneSiti.attivaOra(context) }
     val snackbarHostState = remember { SnackbarHostState() }
     val messaggioProvaOk = stringResource(R.string.impostazioni_prova_ok)
     val messaggioProvaFallita = stringResource(R.string.impostazioni_prova_fallita)
-    val messaggioProvaScollegato = stringResource(R.string.impostazioni_prova_scollegato)
+    val messaggioProvaScollegato = stringResource(R.string.scollegato)
     val messaggioConfigIncompleta = stringResource(R.string.impostazioni_config_incompleta)
+    val versoPermessi = remember { BringIntoViewRequester() }
+    LaunchedEffect(suiPermessi) {
+        if (suiPermessi) {
+            delay(150)
+            runCatching { versoPermessi.bringIntoView() }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -80,10 +139,7 @@ fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
                 title = { Text(stringResource(R.string.impostazioni_titolo)) },
                 navigationIcon = {
                     IconButton(onClick = onChiudi) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            stringResource(R.string.azione_indietro),
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))
                     }
                 },
             )
@@ -93,75 +149,54 @@ fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
         Column(
             modifier = Modifier
                 .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(Spazi.l + Spazi.xs),
             verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
+            // 1. Il collegamento. configurazione null = non ancora letta dal disco:
+            // il modulo aspetta, così i campi partono già con l'indirizzo salvato.
             TitoloSezione(stringResource(R.string.impostazioni_sezione_collegamento))
-            // (v3) Chi è questo telefono per il patto: "Collegato come: Telefono di Andrea".
-            RigaCollegatoCome()
-            Text(
-                text = stringResource(R.string.impostazioni_descrizione),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            // configurazione null = non ancora letta dal disco: il modulo aspetta,
-            // così i campi partono già con l'indirizzo salvato.
             configurazione?.let { attuale ->
-                ModuloCollegamento(
-                    onCollegato = {},
-                    giaCollegato = attuale.completa,
-                )
-            }
-
-            // Verifica onesta del canale: quando è arrivato l'ultimo battito
-            // e un pulsante per provarne uno adesso, con esito esplicito.
-            Text(
-                text = stringResource(
-                    R.string.impostazioni_ultimo_battito,
-                    ultimoBattito?.let { formattatoreBattito.format(Instant.ofEpochMilli(it)) }
-                        ?: stringResource(R.string.impostazioni_ultimo_battito_mai),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            OutlinedButton(
-                enabled = !provaInCorso,
-                onClick = {
-                    ambito.launch {
-                        provaInCorso = true
-                        try {
-                            val attuale = impostazioni.leggiConfigurazione()
-                            val esito = if (!attuale.completa) {
-                                messaggioConfigIncompleta
-                            } else {
-                                val codice = PostinoClient(attuale).provaBattito(
-                                    Battito(
-                                        tsDevice = System.currentTimeMillis(),
-                                        versioneApp = BuildConfig.VERSION_NAME,
-                                        elapsedRealtime = SystemClock.elapsedRealtime(),
-                                    ),
-                                )
-                                when (codice) {
-                                    in 200..299 -> {
-                                        impostazioni.registraBattitoConsegnato()
-                                        messaggioProvaOk
-                                    }
-                                    // Token revocato, o sostituito da un codice nuovo.
-                                    401 -> messaggioProvaScollegato
-                                    else -> messaggioProvaFallita
-                                }
-                            }
-                            snackbarHostState.showSnackbar(esito)
-                        } finally {
-                            provaInCorso = false
+                if (attuale.completa && !cambiaCollegamento) {
+                    avvisoCollegamento?.let {
+                        RigaStato(testo = it, tono = if (avvisoCambioDispositivo) Tono.Attenzione else Tono.Neutro)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            RigaCollegatoCome(alternativa = stringResource(R.string.impostazioni_collegato))
+                        }
+                        TextButton(onClick = { cambiaCollegamento = true }) {
+                            Text(stringResource(R.string.impostazioni_cambia))
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.impostazioni_prova_adesso))
+                } else {
+                    ModuloCollegamento(
+                        origine = OriginiCollegamento.IMPOSTAZIONI,
+                        onCollegato = { avviso ->
+                            avvisoCollegamento = avviso.testo
+                            avvisoCambioDispositivo = avviso.cambioDispositivo
+                            cambiaCollegamento = false
+                        },
+                        giaCollegato = attuale.completa,
+                    )
+                }
             }
 
-            // La chiusura della sera (C5): una notifica sola, all'ora scelta.
+            // 2. I permessi: tutti e quattro, ognuno col suo stato.
+            Column(
+                modifier = Modifier.bringIntoViewRequester(versoPermessi),
+                verticalArrangement = Arrangement.spacedBy(Spazi.s),
+            ) {
+                TitoloSezione(stringResource(R.string.permessi_titolo))
+                ElencoPermessi(stato = permessi, onAggiorna = { permessi = StatoPermessi.leggi(context) })
+            }
+
+            // 3. La chiusura della sera (C5): una notifica sola, all'ora scelta.
             TitoloSezione(stringResource(R.string.impostazioni_sezione_serale))
             serale?.let { config ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -204,62 +239,77 @@ fun ImpostazioniScreen(onChiudi: () -> Unit, onApriCosaVede: () -> Unit) {
                 }
             }
 
-            // (0.9) L'avviso a tutto schermo quando si va oltre una regola.
-            TitoloSezione(stringResource(R.string.impostazioni_sezione_avviso))
-            RigaAvvisoTuttoSchermo()
+            // 4. I siti visitati (v2.3): il SUO registro, che lui condivide.
+            // 5. Cosa vedono i genitori, per sempre a un tocco (C6).
+            Column {
+                RigaToccabile(
+                    titolo = stringResource(R.string.siti_titolo),
+                    sottotitolo = sitiAttivi?.let { stringResource(if (it) R.string.siti_stato_attiva else R.string.siti_stato_spenta) },
+                    onClick = onApriSiti,
+                )
+                RigaToccabile(
+                    titolo = stringResource(R.string.cosa_vede_titolo),
+                    onClick = onApriCosaVede,
+                )
+            }
 
-            // Per sempre a un tocco: cosa arriva al genitore, e cosa no (C6).
-            TitoloSezione(stringResource(R.string.cosa_vede_titolo))
-            Text(
-                text = stringResource(R.string.impostazioni_cosa_vede_testo),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            OutlinedButton(onClick = onApriCosaVede, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.impostazioni_cosa_vede_apri))
+            // 6. In fondo, piccolo: la verifica onesta del canale.
+            Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                Text(
+                    text = stringResource(
+                        R.string.impostazioni_ultimo_battito,
+                        ultimoBattito?.let { quandoLocale(Instant.ofEpochMilli(it)) }
+                            ?: stringResource(R.string.impostazioni_ultimo_battito_mai),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    enabled = !provaInCorso,
+                    onClick = {
+                        ambito.launch {
+                            provaInCorso = true
+                            try {
+                                val attuale = impostazioni.leggiConfigurazione()
+                                val esito = if (!attuale.completa) {
+                                    messaggioConfigIncompleta
+                                } else {
+                                    val codice = PostinoClient(attuale).provaBattito(
+                                        Battito(
+                                            tsDevice = System.currentTimeMillis(),
+                                            versioneApp = BuildConfig.VERSION_NAME,
+                                            elapsedRealtime = SystemClock.elapsedRealtime(),
+                                        ),
+                                    )
+                                    when (codice) {
+                                        in 200..299 -> {
+                                            impostazioni.registraBattitoConsegnato()
+                                            messaggioProvaOk
+                                        }
+                                        // Token revocato, o sostituito da un codice nuovo.
+                                        401 -> messaggioProvaScollegato
+                                        else -> messaggioProvaFallita
+                                    }
+                                }
+                                snackbarHostState.showSnackbar(esito)
+                            } finally {
+                                provaInCorso = false
+                            }
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.impostazioni_prova_adesso))
+                }
             }
         }
     }
 }
 
 /**
- * "Avviso a tutto schermo": attivo se Android lascia a Pactum "Mostra sopra le
- * altre app". Non c'è un interruttore nell'app: il permesso È l'interruttore, e
- * si riguarda a ogni ritorno dalle impostazioni di sistema.
+ * L'ora della chiusura serale. (0.15) Il quadrante solo dove ci sta in
+ * altezza; sul telefono in orizzontale (o molto basso) l'ora si scrive, così
+ * niente esce dallo schermo. Il dialogo scorre.
  */
-@Composable
-private fun RigaAvvisoTuttoSchermo() {
-    val context = LocalContext.current
-    val attivo = rememberMostraSopra()
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.impostazioni_avviso_riga),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = stringResource(if (attivo) R.string.impostazioni_avviso_attivo else R.string.impostazioni_avviso_spento),
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (attivo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    Text(
-        text = stringResource(
-            if (attivo) R.string.impostazioni_avviso_spiegazione_attivo else R.string.impostazioni_avviso_spiegazione_spento,
-        ),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    if (!attivo) {
-        OutlinedButton(
-            onClick = { PermessiHelper.apri(context, PermessiHelper.intentMostraSopra(context)) },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.passo_apri_impostazioni))
-        }
-        AiutoRestrizioni(stringResource(R.string.aiuto_mostra_sopra_testo))
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DialogoOra(minuti: Int, onAnnulla: () -> Unit, onScegli: (Int) -> Unit) {
@@ -268,10 +318,18 @@ private fun DialogoOra(minuti: Int, onAnnulla: () -> Unit, onScegli: (Int) -> Un
         initialMinute = minuti % 60,
         is24Hour = true,
     )
+    val alto = LocalConfiguration.current.screenHeightDp >= 560
     AlertDialog(
         onDismissRequest = onAnnulla,
         title = { Text(stringResource(R.string.impostazioni_serale_ora)) },
-        text = { TimePicker(state = stato) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (alto) TimePicker(state = stato) else TimeInput(state = stato)
+            }
+        },
         confirmButton = {
             Button(onClick = { onScegli(stato.hour * 60 + stato.minute) }) {
                 Text(stringResource(R.string.azione_conferma))
@@ -283,7 +341,4 @@ private fun DialogoOra(minuti: Int, onAnnulla: () -> Unit, onScegli: (Int) -> Un
     )
 }
 
-private fun testoOra(minuti: Int): String = "%02d:%02d".format(minuti / 60, minuti % 60)
-
-private val formattatoreBattito: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.systemDefault())
+private fun testoOra(minuti: Int): String = oraDaMinuti(minuti)

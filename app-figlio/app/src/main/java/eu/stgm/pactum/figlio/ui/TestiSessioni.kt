@@ -39,17 +39,26 @@ fun testoFinoAlle(context: Context, fine: Long, adesso: Long, formato: Int, form
     return context.getString(if (quando.domani) formatoDomani else formato, *prima, quando.ora)
 }
 
-fun paroleRispostaSessione(context: Context) = ParoleRispostaSessione(
-    approvata = context.getString(R.string.notifica_sessione_approvata),
-    rifiutata = context.getString(R.string.notifica_sessione_rifiutata),
-    cambioApprovato = context.getString(R.string.notifica_sessione_cambio_approvato),
-    cambioRifiutato = context.getString(R.string.notifica_sessione_cambio_rifiutato),
+/**
+ * Le frasi della risposta a una sessione. (0.15) [genitore] = chi ha deciso,
+ * se il payload lo dice: "Mamma ha approvato la sessione %1$s". I modelli
+ * restano col solo segnaposto della sessione.
+ */
+fun paroleRispostaSessione(context: Context, genitore: String? = null) = ParoleRispostaSessione(
+    approvata = modelloSessione(context, genitore, R.string.notifica_sessione_approvata, R.string.notifica_sessione_approvata_nome),
+    rifiutata = modelloSessione(context, genitore, R.string.notifica_sessione_rifiutata, R.string.notifica_sessione_rifiutata_nome),
+    cambioApprovato = modelloSessione(context, genitore, R.string.notifica_sessione_cambio_approvato, R.string.notifica_sessione_cambio_approvato_nome),
+    cambioRifiutato = modelloSessione(context, genitore, R.string.notifica_sessione_cambio_rifiutato, R.string.notifica_sessione_cambio_rifiutato_nome),
     approvataTesto = context.getString(R.string.notifica_sessione_approvata_testo),
     rifiutataTesto = context.getString(R.string.notifica_sessione_rifiutata_testo),
     cambioApprovatoTesto = context.getString(R.string.notifica_sessione_cambio_approvato_testo),
     cambioRifiutatoTesto = context.getString(R.string.notifica_sessione_cambio_rifiutato_testo),
-    genitoreDice = context.getString(R.string.proposta_motivazione_genitore),
+    genitoreDice = modelloGenitoreDice(context, genitore),
 )
+
+/** Il modello col nome del genitore già dentro ("Mamma ha approvato la sessione %1$s"), o quello di sempre. */
+private fun modelloSessione(context: Context, genitore: String?, senza: Int, conNome: Int): String =
+    genitore?.let { context.getString(conNome, it.replace("%", "%%"), "%1\$s") } ?: context.getString(senza)
 
 /**
  * (0.11) Titolo e testo della notifica `sessione_risposta`: il nome della
@@ -63,7 +72,9 @@ fun avvisoRispostaSessione(context: Context, payload: JsonObject, messaggio: Str
     val nome = risposta.nome ?: sessione?.nome?.takeIf { it.isNotBlank() }
     // (0.12) Il nome con l'emoji del suo tema, fra «»: "📚 «Studio»".
     val scritto = nome?.let { nomeSessioneTraVirgolette(context, it) }
-    return TestoSessioni.avvisoRisposta(risposta, scritto, sessione?.motivazione, messaggio, paroleRispostaSessione(context))
+    // (0.15) Chi ha deciso, dal payload (contratto v3.6), o dalla sessione del patto.
+    val genitore = eu.stgm.pactum.figlio.faccende.LetturaFaccende.nomeGenitore(payload["genitore"]) ?: sessione?.decisaDa
+    return TestoSessioni.avvisoRisposta(risposta, scritto, sessione?.motivazione, messaggio, paroleRispostaSessione(context, genitore))
 }
 
 /** Cosa dire dopo aver mandato, cambiato o eliminato una sessione. [cambio] = era già approvata. */
@@ -75,7 +86,7 @@ fun testoEsitoSessione(context: Context, esito: EsitoSessione, cambio: Boolean =
     EsitoSessione.NonTrovata -> context.getString(R.string.sessione_esito_non_trovata)
     EsitoSessione.ValoriNonValidi -> context.getString(R.string.sessione_esito_valori)
     EsitoSessione.ServerDaAggiornare -> context.getString(R.string.sessioni_server_da_aggiornare)
-    EsitoSessione.Scollegato -> context.getString(R.string.oggi_scollegato)
+    EsitoSessione.Scollegato -> context.getString(R.string.scollegato)
     EsitoSessione.SenzaRete -> context.getString(R.string.sessione_esito_senza_rete)
     EsitoSessione.Errore -> context.getString(R.string.sessione_esito_errore)
 }
@@ -105,7 +116,7 @@ fun testoEsitoAvvio(context: Context, esito: EsitoAvvio, adesso: Long = System.c
     EsitoAvvio.NonTrovata -> context.getString(R.string.sessione_esito_non_trovata)
     EsitoAvvio.DurataNonValida -> context.getString(R.string.sessione_durata_non_valida)
     EsitoAvvio.ServerDaAggiornare -> context.getString(R.string.sessioni_server_da_aggiornare)
-    EsitoAvvio.Scollegato -> context.getString(R.string.oggi_scollegato)
+    EsitoAvvio.Scollegato -> context.getString(R.string.scollegato)
     EsitoAvvio.SenzaRete -> context.getString(R.string.sessione_esito_avvio_senza_rete)
     EsitoAvvio.Errore -> context.getString(R.string.sessione_esito_avvio_errore)
 }

@@ -4,15 +4,20 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
@@ -99,51 +104,95 @@ object CoperturaFinestrelle {
         }
     }
 
+    /**
+     * (0.15) Solo l'aspetto: lo stesso mondo dell'app (fondo chiaro, testo
+     * scuro, pulsanti verdi con gli angoli tondi e senza MAIUSCOLO), una
+     * colonna che scorre (coi caratteri grandi o in orizzontale niente esce
+     * dallo schermo) e i margini delle barre di sistema. Quando si apre, si
+     * chiude e cosa copre non cambia.
+     */
     private fun costruisci(app: Context): View {
         val dp = { valore: Float -> TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, valore, app.resources.displayMetrics).toInt() }
         val testo = { id: Int, grande: Boolean ->
             TextView(app).apply {
                 text = app.getString(id)
-                setTextColor(Color.WHITE)
+                setTextColor(if (grande) INCHIOSTRO else INCHIOSTRO_TENUE)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, if (grande) 24f else 16f)
+                setLineSpacing(0f, 1.15f)
                 setPadding(0, 0, 0, dp(16f))
             }
         }
-        return LinearLayout(app).apply {
+        val pulsante = { id: Int, pieno: Boolean, azione: () -> Unit ->
+            Button(app).apply {
+                text = app.getString(id)
+                isAllCaps = false
+                stateListAnimator = null
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextColor(if (pieno) Color.WHITE else VERDE)
+                minHeight = dp(48f)
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(20f).toFloat()
+                    if (pieno) setColor(VERDE) else {
+                        setColor(Color.TRANSPARENT)
+                        setStroke(dp(1f), BORDO)
+                    }
+                }
+                setOnClickListener { azione() }
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    .apply { topMargin = dp(8f) }
+            }
+        }
+        val colonna = LinearLayout(app).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.rgb(0x1C, 0x1B, 0x1F))
             setPadding(dp(24f), dp(32f), dp(24f), dp(32f))
             addView(testo(R.string.barriera_faccende_titolo, true))
             addView(testo(R.string.finestrella_testo, false))
             addView(testo(R.string.finestrella_aiuto, false))
             addView(
-                Button(app).apply {
-                    text = app.getString(R.string.finestrella_chiudi)
-                    setOnClickListener {
-                        pausa()
-                        togli(app)
-                    }
+                pulsante(R.string.finestrella_chiudi, true) {
+                    pausa()
+                    togli(app)
                 },
             )
             addView(
-                Button(app).apply {
-                    text = app.getString(R.string.barriera_faccende_apri)
-                    setOnClickListener {
-                        pausa()
-                        togli(app)
-                        try {
-                            app.startActivity(
-                                Intent(app, MainActivity::class.java)
-                                    .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                                    .putExtra(MainActivity.EXTRA_DESTINAZIONE, MainActivity.DEST_FACCENDE),
-                            )
-                        } catch (e: Exception) {
-                            // Pactum non si apre: la copertura è tolta lo stesso, per la pausa
-                        }
+                pulsante(R.string.barriera_faccende_apri, false) {
+                    pausa()
+                    togli(app)
+                    try {
+                        app.startActivity(
+                            Intent(app, MainActivity::class.java)
+                                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                .putExtra(MainActivity.EXTRA_DESTINAZIONE, MainActivity.DEST_FACCENDE),
+                        )
+                    } catch (e: Exception) {
+                        // Pactum non si apre: la copertura è tolta lo stesso, per la pausa
                     }
                 },
             )
         }
+        return ScrollView(app).apply {
+            setBackgroundColor(FONDO)
+            isFillViewport = true
+            addView(colonna, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            // I margini delle barre di sistema (e del ritaglio della fotocamera).
+            setOnApplyWindowInsetsListener { vista, insets ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val barre = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                    vista.setPadding(barre.left, barre.top, barre.right, barre.bottom)
+                } else {
+                    @Suppress("DEPRECATION")
+                    vista.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
+                }
+                insets
+            }
+        }
     }
+
+    // I colori dell'app (ui/theme/Theme.kt): fondo, testo, verde, bordo.
+    private val FONDO = Color.rgb(0xFB, 0xFD, 0xFC)
+    private val INCHIOSTRO = Color.rgb(0x18, 0x1D, 0x1B)
+    private val INCHIOSTRO_TENUE = Color.rgb(0x41, 0x49, 0x44)
+    private val VERDE = Color.rgb(0x1F, 0x6E, 0x5C)
+    private val BORDO = Color.rgb(0x71, 0x79, 0x73)
 }

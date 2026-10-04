@@ -1,7 +1,15 @@
 package eu.stgm.pactum.figlio.ui
 
+import eu.stgm.pactum.design.RigaStato
+import eu.stgm.pactum.design.StatoVuoto
+import eu.stgm.pactum.design.Caricamento
+import eu.stgm.pactum.design.Pillola
+import eu.stgm.pactum.design.CardEvidenza
+import eu.stgm.pactum.design.FilaPulsanti
+import eu.stgm.pactum.design.FoglioDalBasso
+import eu.stgm.pactum.design.Tono
+import eu.stgm.pactum.design.TitoloSezione
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,22 +19,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -49,11 +60,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.BarraUso
+import eu.stgm.pactum.design.LegendaStriscia
+import eu.stgm.pactum.design.TestoSuUnaRiga
 import eu.stgm.pactum.design.GiornoPatto
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.design.StrisciaGiorni
@@ -63,37 +78,58 @@ import eu.stgm.pactum.figlio.bonus.BonusInSospeso
 import eu.stgm.pactum.figlio.bonus.EsitoBonus
 import eu.stgm.pactum.figlio.dati.Riepilogo
 import eu.stgm.pactum.figlio.dati.StatoBonus
+import eu.stgm.pactum.figlio.faccende.StatoBlocco
+import eu.stgm.pactum.figlio.faccende.TestoFaccende
+import eu.stgm.pactum.figlio.faccende.QuandoBlocca
+import eu.stgm.pactum.figlio.faccende.VistaFaccende
+import eu.stgm.pactum.figlio.permessi.StatoPermessi
 import eu.stgm.pactum.figlio.ui.OggiViewModel.RigaRegola
 import eu.stgm.pactum.figlio.valutatore.MomentoFascia
 import kotlinx.coroutines.launch
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Oggi: il patto prima del consumo (tavola rotonda D1). Un solo eroe, la
- * serie; sotto la striscia degli 8 giorni identica a quella del genitore; poi
- * una riga per regola; in fondo, più piccolo, dove è finito il tempo.
+ * (0.15) Oggi risponde a UNA domanda: "com'è oggi?". Dall'alto: al massimo
+ * una card di stato (il blocco dei lavori di casa, o la sessione in corso),
+ * le righe di stato che servono (dati vecchi, scollegato, un permesso da
+ * sistemare, un "Inizia" senza risposta), la card del patto (serie, striscia,
+ * "6 su 7"), una riga per regola, e dove è finito il tempo (le prime 3 app).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OggiScreen(
     onApriImpostazioni: () -> Unit,
-    onApriSiti: () -> Unit,
-    onApriDiario: () -> Unit,
+    onApriPermessi: () -> Unit,
+    onApriLavori: () -> Unit,
+    onApriTutteLeApp: () -> Unit,
     vm: OggiViewModel = viewModel(),
+    dichiarazioniVm: DichiarazioniViewModel = viewModel(),
 ) {
     val stato by vm.stato.collectAsStateWithLifecycle()
+    val statoDiario by dichiarazioniVm.stato.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    val mostraSopra = rememberMostraSopra()
-    // (0.11) La Sessione in corso, in cima, con "Termina la sessione".
+    val ambitoSnackbar = rememberCoroutineScope()
+    // (0.11) La Sessione in corso; (0.13) il blocco dei lavori di casa.
     val inSessione = rememberSessioneInCorso()
     val avvioIncerto = rememberAvvioIncerto()
-    val ambitoSnackbar = rememberCoroutineScope()
+    val memoria by StatoBlocco.memoria.collectAsStateWithLifecycle()
+    val bloccato = rememberBloccoFaccende()
+    var permessi by remember { mutableStateOf(StatoPermessi.leggi(context)) }
+    val conVitaReale = stato.regole.any { it is RigaRegola.VitaReale }
 
-    // Prima lettura e rilettura a ogni ritorno in primo piano.
+    // Prima lettura e rilettura a ogni ritorno in primo piano (e i permessi,
+    // che si danno nelle impostazioni di sistema).
     LifecycleResumeEffect(Unit) {
         vm.aggiorna()
+        permessi = StatoPermessi.leggi(context)
+        onPauseOrDispose { }
+    }
+    // Lo stato di oggi delle regole di vita reale ("Segna", o già segnato).
+    LifecycleResumeEffect(conVitaReale) {
+        if (conVitaReale) dichiarazioniVm.aggiorna()
         onPauseOrDispose { }
     }
 
@@ -125,171 +161,180 @@ fun OggiScreen(
         if (stato.evento != null) vm.consumaEvento()
     }
 
+    // (0.15) "Segna" su una regola di vita reale: la dichiarazione, subito.
+    val dichiarare = rememberDichiarare(
+        vm = dichiarazioniVm,
+        regole = stato.regole.filterIsInstance<RigaRegola.VitaReale>().map { it.regola },
+        snackbarHostState = snackbarHostState,
+    )
+    // (0.15) Il foglio del bonus, aperto su una regola di tempo (sopravvive a una rotazione).
+    var foglioBonusId by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    val daFare = VistaFaccende.daFare(memoria)
+    val cima = Cima.di(
+        bloccato = bloccato,
+        sessioneInCorso = inSessione.attiva != null,
+        bloccoProgrammato = !bloccato && memoria.prossimo != null && daFare.isNotEmpty(),
+    )
+    val permessiMancanti = Permessi.mancanti(permessi)
+    // La prima lettura: niente numeri finti ("0 min") prima che i dati ci siano.
+    val primaLettura = stato.caricamento && stato.striscia.isEmpty() && stato.regole.isEmpty() &&
+        stato.righe.isEmpty() && stato.minutiTotali == 0L
+
     Scaffold(
         // Le barre di sistema le copre lo Scaffold esterno (MainActivity).
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.oggi_titolo)) },
-                actions = {
-                    IconButton(onClick = { vm.aggiorna() }) {
-                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
-                    }
-                    IconButton(onClick = onApriImpostazioni) {
-                        Icon(Icons.Filled.Settings, stringResource(R.string.azione_impostazioni))
-                    }
-                },
+                actions = { AzioniBarra(onAggiorna = { vm.aggiorna() }, onApriImpostazioni = onApriImpostazioni) },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         LazyColumn(
+            state = rememberLazyListState(),
             modifier = Modifier.padding(padding).fillMaxSize(),
             contentPadding = PaddingValues(Spazi.l + Spazi.xs),
             verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
-            // (0.11) Una Sessione in corso: prima di tutto, perché si possa
-            // sempre terminare da qui.
-            inSessione.attiva?.let { attiva ->
-                item(key = "sessione-in-corso") {
-                    SchedaSessioneInCorso(
-                        attiva = attiva,
-                        adesso = inSessione.adesso,
-                        onTerminata = {
-                            ambitoSnackbar.launch {
-                                snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
-                            }
-                            vm.aggiorna()
-                        },
-                    )
+            // 1. Una sola card di stato, solo se c'è qualcosa.
+            when (cima.card) {
+                CardCima.BLOCCO -> item(key = "blocco") {
+                    CardBloccoLavori(daFare = daFare.size, onApriLavori = onApriLavori)
+                }
+                CardCima.SESSIONE -> inSessione.attiva?.let { attiva ->
+                    item(key = "sessione-in-corso") {
+                        SchedaSessioneInCorso(
+                            attiva = attiva,
+                            adesso = inSessione.adesso,
+                            onTerminata = {
+                                ambitoSnackbar.launch {
+                                    snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
+                                }
+                                vm.aggiorna()
+                            },
+                        )
+                    }
+                }
+                null -> Unit
+            }
+
+            // 2. Le righe di stato, una per cosa e solo se servono.
+            if (cima.sessioneInRiga) {
+                inSessione.attiva?.let { attiva ->
+                    item(key = "sessione-riga") {
+                        RigaSessioneInCorso(
+                            attiva = attiva,
+                            adesso = inSessione.adesso,
+                            onTerminata = {
+                                ambitoSnackbar.launch {
+                                    snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
+                                }
+                                vm.aggiorna()
+                            },
+                        )
+                    }
+                }
+            }
+            if (cima.bloccoProgrammatoInRiga) {
+                memoria.prossimo?.let { prossimo ->
+                    item(key = "blocco-programmato") {
+                        RigaStato(
+                            testo = testoBloccoProgrammato(context, prossimo, memoria.oraServer(eu.stgm.pactum.figlio.faccende.Orologio.adesso())),
+                            tono = Tono.Attenzione,
+                            azione = stringResource(R.string.oggi_vai_ai_lavori_breve),
+                            onAzione = onApriLavori,
+                        )
+                    }
                 }
             }
             // (0.11) Un "Inizia" rimasto senza risposta: si dice finché non si chiarisce.
             avvioIncerto?.let { incerto -> item(key = "sessione-incerta") { RigaAvvioIncerto(incerto) } }
             if (stato.scollegato) {
                 // (v3) Non è un'età dei dati: il telefono va ricollegato, e si dice come.
-                item { RigaNeutra(stringResource(R.string.oggi_scollegato)) }
+                item(key = "scollegato") {
+                    RigaStato(
+                        testo = stringResource(R.string.scollegato),
+                        azione = stringResource(R.string.azione_collega),
+                        onAzione = onApriImpostazioni,
+                    )
+                }
             } else if (stato.datiFermi) {
-                item { BannerDatiVecchi(stato.datiFermiAlle) }
+                item(key = "dati-fermi") { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
             }
-
-            if (stato.caricamento && stato.striscia.isEmpty() && stato.regole.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Text(
-                                text = stringResource(R.string.oggi_caricamento),
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(top = Spazi.s),
-                            )
-                        }
-                    }
+            // (0.15) Un permesso che manca (batteria, notifiche, "Mostra sopra le
+            // altre app"): una riga, e "Risolvi" porta ai Permessi.
+            if (permessiMancanti.isNotEmpty()) {
+                item(key = "permessi") {
+                    RigaStato(
+                        testo = testoPermessiMancanti(permessiMancanti),
+                        tono = Tono.Attenzione,
+                        azione = stringResource(R.string.azione_risolvi),
+                        onAzione = onApriPermessi,
+                    )
                 }
             }
 
+            if (primaLettura) {
+                item(key = "caricamento") {
+                    Caricamento(testo = stringResource(R.string.oggi_caricamento), centrato = false)
+                }
+                return@LazyColumn
+            }
+
+            // 3. La card del patto.
             if (stato.striscia.isNotEmpty()) {
-                // xxl tra l'eroe e il resto: 16 dello spacedBy + 16 qui.
-                item {
+                item(key = "patto") {
                     SchedaPatto(
                         striscia = stato.striscia,
                         riepilogo = stato.riepilogo,
                         serie = stato.serie,
                         record = stato.record,
                         righeDispositivi = stato.righeDispositivi,
-                        modifier = Modifier.padding(bottom = Spazi.l),
                     )
                 }
             }
 
-            // (0.9) Finché manca "Mostra sopra le altre app": chi aggiorna non
-            // ripassa dall'onboarding, e qui il permesso si vede.
-            if (!mostraSopra) {
-                item { SchedaMostraSopra() }
-            }
-
+            // 4. Le regole di oggi, una riga per regola.
             if (stato.regole.isNotEmpty()) {
-                item { Sopratitolo(stringResource(R.string.oggi_sezione_regole)) }
-                item {
+                item(key = "regole-titolo") { TitoloSezione(stringResource(R.string.oggi_sezione_regole)) }
+                item(key = "regole") {
                     Column {
                         stato.regole.forEachIndexed { indice, riga ->
-                            if (indice > 0) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            }
+                            if (indice > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             RigaDellaRegola(
                                 riga = riga,
-                                bonus = stato.bonus,
                                 sospeso = sospeso,
-                                onBonus = { minuti -> vm.concedi(riga.regola.id, minuti) },
-                                onApriDiario = onApriDiario,
+                                diOggi = (riga as? RigaRegola.VitaReale)?.let {
+                                    dichiarazioneDiOggi(it.regola, statoDiario.tutte, oggiDelPatto(statoDiario.fuso))
+                                },
+                                onBonus = { foglioBonusId = riga.regola.id },
+                                onSegna = { dichiarare.apri(riga.regola) },
                             )
                         }
                     }
                 }
-                val bonus = stato.bonus
-                if (bonus != null && stato.regole.any { it is RigaRegola.Tempo }) {
-                    item {
-                        Text(
-                            // (v3) I tetti valgono per dispositivo: con un computer lo si dice.
-                            text = stringResource(
-                                if (stato.altriDispositivi) R.string.oggi_bonus_tetti_telefono else R.string.oggi_bonus_tetti,
-                                bonus.giorno.residui,
-                                bonus.giorno.tetto,
-                                bonus.settimana.residui,
-                                bonus.settimana.tetto,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
             }
 
-            // I siti visitati (v2.3): stanno qui, in chiaro, nell'app del figlio.
-            // È il SUO registro, che lui condivide — non una registrazione
-            // fatta su di lui (contratto-api.md, "Siti visitati").
-            item {
-                Card(
-                    onClick = onApriSiti,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
-                ) {
-                    Column(modifier = Modifier.padding(Spazi.l)) {
-                        Text(
-                            text = stringResource(R.string.siti_scorciatoia_titolo),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        Text(
-                            text = stringResource(R.string.siti_scorciatoia_testo),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = Spazi.xs),
-                        )
-                    }
-                }
-            }
-
-            // Dove è finito il tempo: scende sotto, e il totale non è più un eroe.
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Sopratitolo(
+            // 5. Dove è finito il tempo: il totale e le prime 3 app.
+            item(key = "tempo-titolo") {
+                Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                    TitoloSezione(
                         // (v3) Con altri dispositivi: questi minuti sono solo del telefono.
                         testo = stringResource(
                             if (stato.altriDispositivi) R.string.oggi_sezione_tempo_telefono else R.string.oggi_sezione_tempo,
                         ),
-                        modifier = Modifier.weight(1f),
                     )
                     Text(
-                        text = testoDurata(stato.minutiTotali),
-                        style = MaterialTheme.typography.labelLarge,
+                        text = stringResource(R.string.oggi_tempo_totale, testoDurata(stato.minutiTotali)),
+                        style = MaterialTheme.typography.bodyLarge,
                     )
                 }
             }
             // (0.11) Il tempo passato in sessione: c'è, ma non conta. Lo si dice.
             if (stato.minutiInSessione > 0) {
-                item {
+                item(key = "tempo-sessione") {
                     Text(
                         text = stringResource(R.string.oggi_in_sessione_non_contati, testoDurata(stato.minutiInSessione)),
                         style = MaterialTheme.typography.bodySmall,
@@ -297,38 +342,38 @@ fun OggiScreen(
                     )
                 }
             }
-            item {
+            item(key = "tempo-app") {
                 if (stato.righe.isEmpty()) {
                     if (!stato.caricamento) {
-                        RigaVuota(Icons.Outlined.CheckCircle, stringResource(R.string.oggi_vuoto))
+                        StatoVuoto(stringResource(R.string.oggi_vuoto), icona = Icons.Outlined.CheckCircle)
                     }
                 } else {
                     Column {
-                        stato.righe.forEachIndexed { indice, riga ->
-                            if (indice > 0) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = Spazi.m),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = riga.etichetta,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(
-                                    text = testoDurata(riga.minuti),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
+                        ElencoApp(stato.righe.take(APP_IN_OGGI))
+                        if (stato.righe.size > APP_IN_OGGI) {
+                            TextButton(onClick = onApriTutteLeApp, contentPadding = PaddingValues(horizontal = 0.dp, vertical = Spazi.s)) {
+                                Text(stringResource(R.string.oggi_vedi_tutte_app, stato.righe.size))
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    // Il foglio del bonus: +5 / +15 / +30, e il residuo detto una volta qui.
+    stato.regole.filterIsInstance<RigaRegola.Tempo>().firstOrNull { it.regola.id == foglioBonusId }?.let { riga ->
+        FoglioBonus(
+            riga = riga,
+            bonus = stato.bonus,
+            sospeso = sospeso,
+            altriDispositivi = stato.altriDispositivi,
+            onChiudi = { foglioBonusId = null },
+            onBonus = { minuti ->
+                foglioBonusId = null
+                vm.concedi(riga.regola.id, minuti)
+            },
+        )
     }
 
     // Il perché, se il ragazzo ha toccato "Aggiungi perché". Il dialogo dipende
@@ -343,11 +388,79 @@ fun OggiScreen(
     }
 }
 
+/** Quante app si vedono in Oggi prima di "Vedi tutte". */
+private const val APP_IN_OGGI = 3
+
+/** Le app del giorno, una riga ciascuna (nome a sinistra, minuti a destra). */
+@Composable
+private fun ElencoApp(righe: List<OggiViewModel.RigaUso>) {
+    righe.forEachIndexed { indice, riga ->
+        if (indice > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        RigaApp(riga)
+    }
+}
+
+@Composable
+private fun RigaApp(riga: OggiViewModel.RigaUso) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = riga.etichetta,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = testoDurata(riga.minuti),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
 /**
- * La scheda eroe: la serie, il record una riga sotto, la striscia degli 8
- * giorni e sotto la stessa riga di riepilogo che vede il genitore (D3).
- * (v3) Striscia, serie e riepilogo sono del figlio, su tutti i suoi
- * dispositivi; se ne ha più d'uno, sotto c'è una riga per ciascuno.
+ * (0.15) Il blocco dei lavori di casa, in cima a Oggi: "Prima i lavori di
+ * casa · 2 da fare" e "Vai ai lavori".
+ */
+@Composable
+private fun CardBloccoLavori(daFare: Int, onApriLavori: () -> Unit) {
+    CardEvidenza(tono = Tono.Attenzione) {
+        Text(
+            text = if (daFare > 0) {
+                pluralStringResource(R.plurals.oggi_blocco_lavori, daFare, daFare)
+            } else {
+                stringResource(R.string.faccende_bloccato)
+            },
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(modifier = Modifier.height(Spazi.m))
+        Button(onClick = onApriLavori) { Text(stringResource(R.string.oggi_vai_ai_lavori), maxLines = 1) }
+    }
+}
+
+/** "Alle 16:00 il telefono si blocca, se i lavori di casa non sono fatti" (e domani, giovedì…). */
+private fun testoBloccoProgrammato(context: android.content.Context, prossimo: Long, adesso: Long): String =
+    when (val quando = TestoFaccende.quandoBlocca(prossimo, adesso, ZoneId.systemDefault())) {
+        QuandoBlocca.Subito -> context.getString(R.string.faccende_bloccato)
+        is QuandoBlocca.Oggi -> context.getString(R.string.faccende_prossimo_alle, quando.ora)
+        is QuandoBlocca.Domani -> context.getString(R.string.faccende_prossimo_domani, quando.ora)
+        is QuandoBlocca.Giorno -> context.getString(R.string.faccende_prossimo_giorno, quando.giorno, quando.ora)
+        is QuandoBlocca.Data -> context.getString(R.string.faccende_prossimo_giorno, quando.data, quando.ora)
+    }
+
+/** "Da sistemare: manca il permesso «Notifiche»", o "Da sistemare: mancano 2 permessi". */
+@Composable
+fun testoPermessiMancanti(mancanti: List<Permesso>): String =
+    if (mancanti.size == 1) {
+        stringResource(R.string.oggi_manca_permesso, stringResource(nomePermesso(mancanti.first())))
+    } else {
+        stringResource(R.string.oggi_mancano_permessi, mancanti.size)
+    }
+
+/**
+ * La card del patto, in evidenza: la serie (su una riga), il record una riga
+ * sotto, la striscia degli 8 giorni, "6 su 7", e in una riga ciascuno il
+ * riepilogo del server e i dispositivi, se ci sono.
  */
 @Composable
 private fun SchedaPatto(
@@ -356,77 +469,58 @@ private fun SchedaPatto(
     serie: Int,
     record: Int,
     righeDispositivi: List<RigaDispositivo>,
-    modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        ),
-        elevation = CardDefaults.cardElevation(0.dp),
-    ) {
-        Column(modifier = Modifier.padding(Spazi.l + Spazi.xs)) {
-            if (serie > 0) {
-                Text(
-                    text = pluralStringResource(R.plurals.oggi_serie, serie, serie),
-                    style = MaterialTheme.typography.displaySmall,
-                )
-                Text(
-                    text = stringResource(R.string.oggi_serie_dentro),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+    CardEvidenza(tono = Tono.Positivo) {
+        // La serie non va mai a capo (B6): se non ci sta si rimpicciolisce.
+        TestoSuUnaRiga(
+            testo = if (serie > 0) {
+                pluralStringResource(R.plurals.oggi_serie, serie, serie)
             } else {
                 // Serie a zero: il numero grande non deve dare torto al ragazzo.
-                Text(
-                    text = stringResource(
-                        if (record > 0) R.string.oggi_si_riparte else R.string.oggi_si_comincia,
-                    ),
-                    style = MaterialTheme.typography.displaySmall,
-                )
-            }
-            if (record > 0) {
-                // Una riga sotto, senza colore, mai accanto al numero grande.
-                Text(
-                    text = stringResource(R.string.oggi_record, record),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = Spazi.xs),
-                )
-            }
-            Spacer(modifier = Modifier.height(Spazi.m))
-            val (mantenuti, conDati) = contaGiorni(striscia)
-            val frase = if (conDati == 0) {
-                stringResource(R.string.oggi_striscia_senza_dati)
-            } else {
-                pluralStringResource(R.plurals.oggi_striscia_frase, conDati, mantenuti, conDati)
-            }
-            StrisciaGiorni(giorni = striscia, lato = 32.dp, descrizione = frase)
+                stringResource(if (record > 0) R.string.oggi_si_riparte else R.string.oggi_si_comincia)
+            },
+            style = MaterialTheme.typography.displaySmall,
+            minimo = 18.sp,
+        )
+        if (serie > 0) {
+            Text(text = stringResource(R.string.oggi_serie_dentro), style = MaterialTheme.typography.bodyLarge)
+        }
+        if (record > 0) {
+            // Una riga sotto, piccola, mai accanto al numero grande.
             Text(
-                text = frase,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = Spazi.s),
+                text = stringResource(R.string.oggi_record, record),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = Spazi.xs),
             )
-            // Server vecchio senza `riepilogo`: la riga non c'è.
-            if (riepilogo != null) {
-                Text(
-                    text = testoRiepilogo(riepilogo),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = Spazi.xs),
-                )
-            }
-            // (v3) Una riga per dispositivo, dalla sua striscia: "Computer: 5 su 7".
-            if (righeDispositivi.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(Spazi.s))
-                righeDispositivi.forEach { riga ->
-                    Text(
-                        text = testoRigaDispositivo(riga),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = Spazi.xs),
-                    )
-                }
-            }
+        }
+        val (mantenuti, conDati) = contaGiorni(striscia)
+        val frase = if (conDati == 0) {
+            stringResource(R.string.oggi_striscia_senza_dati)
+        } else {
+            pluralStringResource(R.plurals.oggi_striscia_frase, conDati, mantenuti, conDati)
+        }
+        Spacer(modifier = Modifier.height(Spazi.m))
+        StrisciaGiorni(giorni = striscia, lato = 32.dp, descrizione = frase)
+        Spacer(modifier = Modifier.height(Spazi.s))
+        LegendaStriscia(
+            mantenuta = stringResource(R.string.legenda_mantenuta),
+            fuoriRegola = stringResource(R.string.legenda_fuori_regola),
+            senzaDati = stringResource(R.string.legenda_senza_dati),
+            oggi = stringResource(R.string.legenda_oggi),
+        )
+        Spacer(modifier = Modifier.height(Spazi.s))
+        Text(text = frase, style = MaterialTheme.typography.bodyMedium)
+        // Server vecchio senza `riepilogo`: la riga non c'è.
+        if (riepilogo != null) {
+            Text(text = testoRiepilogo(riepilogo), style = MaterialTheme.typography.bodySmall)
+        }
+        // (v3) I dispositivi, in una riga: "Questo telefono: 6 su 7 · Computer: 5 su 7".
+        if (righeDispositivi.isNotEmpty()) {
+            Text(
+                text = righeDispositivi.map { testoRigaDispositivo(it) }
+                    .joinToString(stringResource(R.string.elenco_separatore)),
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
@@ -465,23 +559,23 @@ private fun testoRiepilogo(riepilogo: Riepilogo): String {
     } else {
         pluralStringResource(R.plurals.riepilogo_interruzioni, interruzioni, interruzioni)
     }
-    return "$parteFuori · $parteInterruzioni"
+    return parteFuori + stringResource(R.string.elenco_separatore) + parteInterruzioni
 }
 
 @Composable
 private fun RigaDellaRegola(
     riga: RigaRegola,
-    bonus: StatoBonus?,
     sospeso: BonusInSospeso?,
-    onBonus: (Int) -> Unit,
-    onApriDiario: () -> Unit,
+    diOggi: eu.stgm.pactum.figlio.dati.Dichiarazione?,
+    onBonus: () -> Unit,
+    onSegna: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
         verticalArrangement = Arrangement.spacedBy(Spazi.s),
     ) {
         when (riga) {
-            is RigaRegola.Tempo -> RigaTempo(riga, bonus, sospeso, onBonus)
+            is RigaRegola.Tempo -> RigaTempo(riga, sospeso, onBonus)
             is RigaRegola.Fascia -> {
                 Text(
                     text = descrizioneRegola(riga.regola.tipo, riga.regola.parametri),
@@ -495,13 +589,24 @@ private fun RigaDellaRegola(
                     )
                 }
             }
-            is RigaRegola.VitaReale -> {
-                Text(
-                    text = descrizioneRegola(riga.regola.tipo, riga.regola.parametri),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                TextButton(onClick = onApriDiario, contentPadding = PaddingValues(0.dp)) {
-                    Text(stringResource(R.string.oggi_vita_reale_diario))
+            is RigaRegola.VitaReale -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = descrizioneRegola(riga.regola.tipo, riga.regola.parametri),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    if (diOggi != null) {
+                        Text(
+                            text = descrizioneStato(diOggi, riga.regola),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (diOggi == null) {
+                    OutlinedButton(onClick = onSegna, modifier = Modifier.padding(start = Spazi.s)) {
+                        Text(stringResource(R.string.oggi_segna))
+                    }
                 }
             }
             is RigaRegola.Altra -> Text(
@@ -513,30 +618,36 @@ private fun RigaDellaRegola(
 }
 
 /**
- * Limite di tempo: la barra sul limite efficace (l'unica scala che il ragazzo
- * si è dato), "48 min su 1 h", e sotto il bonus in due tocchi.
+ * Limite di tempo: il nome, "48 min su 1 h" e il "+" del bonus; sotto la
+ * barra sul limite efficace (l'unica scala che il ragazzo si è dato) e, se è
+ * oltre, la pillola "7 min oltre".
  */
 @Composable
 private fun RigaTempo(
     riga: RigaRegola.Tempo,
-    bonus: StatoBonus?,
     sospeso: BonusInSospeso?,
-    onBonus: (Int) -> Unit,
+    onBonus: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = riga.nome,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = stringResource(
-                R.string.oggi_minuti_su_limite,
-                testoDurata(riga.minuti),
-                testoDurata(riga.limiteEfficace.toLong()),
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = riga.nome,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = stringResource(
+                    R.string.oggi_minuti_su_limite,
+                    testoDurata(riga.minuti),
+                    testoDurata(riga.limiteEfficace.toLong()),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // Un solo "+": apre il foglio del bonus (area di tocco 48 dp).
+        FilledTonalIconButton(onClick = onBonus) {
+            Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.oggi_bonus_apri, riga.nome))
+        }
     }
     BarraUso(
         minuti = riga.minuti.toInt(),
@@ -545,40 +656,74 @@ private fun RigaTempo(
     )
     // Oltre il limite la barra resta piena e verde: l'eccedenza si dice a parole.
     if (riga.minuti > riga.limiteEfficace) {
-        Etichetta(
-            stringResource(R.string.oggi_oltre, testoDurata(riga.minuti - riga.limiteEfficace)),
+        Pillola(stringResource(R.string.oggi_oltre, testoDurata(riga.minuti - riga.limiteEfficace)), tono = Tono.Attenzione)
+    }
+    if (sospeso?.regolaId == riga.regola.id) {
+        Text(
+            text = stringResource(R.string.oggi_bonus_in_partenza, sospeso.minuti),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
 
+/**
+ * (0.15) Il foglio del bonus di una regola: +5 / +15 / +30 e quanto bonus
+ * resta oggi e questa settimana, detto UNA volta, qui. Il bonus parte come
+ * sempre: il tocco lo prepara, la snackbar offre "Aggiungi perché".
+ */
+@Composable
+private fun FoglioBonus(
+    riga: RigaRegola.Tempo,
+    bonus: StatoBonus?,
+    sospeso: BonusInSospeso?,
+    altriDispositivi: Boolean,
+    onChiudi: () -> Unit,
+    onBonus: (Int) -> Unit,
+) {
     // Il residuo vero di oggi è il più piccolo dei due tetti. Senza i contatori
     // (server vecchio) decide il server.
     val residuo = bonus?.let { minOf(it.giorno.residui, it.settimana.residui) }
-    Row(horizontalArrangement = Arrangement.spacedBy(Spazi.s)) {
-        listOf(5, 15, 30).forEach { minuti ->
-            FilledTonalButton(
-                enabled = sospeso == null && (residuo == null || minuti <= residuo),
-                onClick = { onBonus(minuti) },
-                contentPadding = PaddingValues(horizontal = Spazi.m),
-            ) {
-                Text(stringResource(R.string.bonus_piu_minuti, minuti))
+    FoglioDalBasso(onChiudi = onChiudi, titolo = stringResource(R.string.oggi_bonus_foglio_titolo, riga.nome)) {
+      Column(verticalArrangement = Arrangement.spacedBy(Spazi.m)) {
+        if (bonus != null) {
+            Text(
+                // (v3) I tetti valgono per dispositivo: con un computer lo si dice.
+                text = stringResource(
+                    if (altriDispositivi) R.string.oggi_bonus_tetti_telefono else R.string.oggi_bonus_tetti,
+                    bonus.giorno.residui,
+                    bonus.giorno.tetto,
+                    bonus.settimana.residui,
+                    bonus.settimana.tetto,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        if (riga.bonusOggi > 0) {
+            Text(
+                text = stringResource(R.string.oggi_bonus_gia_dato_solo, riga.bonusOggi),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (sospeso != null) {
+            Text(
+                text = stringResource(R.string.oggi_bonus_in_partenza, sospeso.minuti),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        FilaPulsanti {
+            listOf(5, 15, 30).forEach { minuti ->
+                FilledTonalButton(
+                    enabled = sospeso == null && (residuo == null || minuti <= residuo),
+                    onClick = { onBonus(minuti) },
+                ) {
+                    Text(stringResource(R.string.bonus_piu_minuti, minuti), maxLines = 1, softWrap = false)
+                }
             }
         }
-    }
-    val rigaBonus = when {
-        sospeso?.regolaId == riga.regola.id ->
-            stringResource(R.string.oggi_bonus_in_partenza, sospeso.minuti)
-        riga.bonusOggi > 0 && residuo != null ->
-            stringResource(R.string.oggi_bonus_gia_dato, riga.bonusOggi, residuo)
-        riga.bonusOggi > 0 -> stringResource(R.string.oggi_bonus_gia_dato_solo, riga.bonusOggi)
-        residuo != null -> stringResource(R.string.oggi_bonus_restano, residuo)
-        else -> null
-    }
-    rigaBonus?.let {
-        Text(
-            text = it,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+      }
     }
 }
 
@@ -653,4 +798,51 @@ private fun testoEsitoBonus(
     is EsitoBonus.Scaduto -> context.getString(R.string.bonus_scaduto)
     // Era già partito: niente "non è partito in tempo".
     is EsitoBonus.GiornoCambiato -> context.getString(R.string.bonus_giorno_cambiato)
+}
+
+/**
+ * (0.15) Tutte le app di oggi, dalla più usata: la pagina di "Vedi tutte".
+ * Una riga per elemento della lista (non un blocco solo: scorre leggera).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TutteLeAppScreen(onChiudi: () -> Unit, vm: OggiViewModel = viewModel()) {
+    val stato by vm.stato.collectAsStateWithLifecycle()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(
+                            if (stato.altriDispositivi) R.string.oggi_sezione_tempo_telefono else R.string.oggi_sezione_tempo,
+                        ),
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onChiudi) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.padding(padding).fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = Spazi.l + Spazi.xs, vertical = Spazi.s),
+        ) {
+            item(key = "totale") {
+                Text(
+                    text = stringResource(R.string.oggi_tempo_totale, testoDurata(stato.minutiTotali)),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(vertical = Spazi.s),
+                )
+            }
+            items(stato.righe) { riga ->
+                Column {
+                    RigaApp(riga)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+    }
 }

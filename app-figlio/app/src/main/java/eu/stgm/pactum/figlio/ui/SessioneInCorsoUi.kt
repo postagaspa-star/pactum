@@ -1,9 +1,14 @@
 package eu.stgm.pactum.figlio.ui
 
+import eu.stgm.pactum.design.CardEvidenza
+import eu.stgm.pactum.design.RigaStato
+import eu.stgm.pactum.design.Tono
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,21 +18,22 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -87,9 +93,10 @@ fun rememberAccessoUso(): Boolean {
 }
 
 /**
- * (0.11) Le schermate che prendono il posto delle schede (i permessi, "Cosa
- * vede tuo padre", la prima regola): con una sessione in corso, la sua scheda
- * sta sopra, così "Termina la sessione" si raggiunge anche da lì.
+ * (0.11) Le schermate del primo avvio (Collega, i permessi, "Cosa vedono i
+ * tuoi genitori", la prima regola): con una sessione in corso, in cima la sua
+ * riga con "Termina", così terminarla si può anche da lì. (0.15) Una riga, non
+ * una card: sopra la schermata c'è al massimo una cosa.
  */
 @Composable
 fun ConSessioneInCorso(contenuto: @Composable () -> Unit) {
@@ -103,9 +110,9 @@ fun ConSessioneInCorso(contenuto: @Composable () -> Unit) {
         Box(
             modifier = Modifier
                 .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = Spazi.l, vertical = Spazi.s),
+                .padding(horizontal = Spazi.l + Spazi.xs, vertical = Spazi.s),
         ) {
-            SchedaSessioneInCorso(attiva = attiva, adesso = vista.adesso, onTerminata = {})
+            RigaSessioneInCorso(attiva = attiva, adesso = vista.adesso, onTerminata = {})
         }
         Box(modifier = Modifier.weight(1f).consumeWindowInsets(WindowInsets.statusBars)) {
             contenuto()
@@ -123,29 +130,39 @@ fun rememberAvvioIncerto(): AvvioIncerto? {
 /** (0.11) Lo si dice in una riga neutra (Oggi e Sessioni). */
 @Composable
 fun RigaAvvioIncerto(incerto: AvvioIncerto) {
-    RigaNeutra(stringResource(R.string.sessione_incerta_riga, nomeSessioneTraVirgolette(LocalContext.current, incerto.nome)))
+    RigaStato(stringResource(R.string.sessione_incerta_riga, nomeSessioneTraVirgolette(LocalContext.current, incerto.nome)))
 }
 
 /**
- * (0.11) In cima a Oggi (e a Sessioni) mentre una Sessione è in corso: quale,
- * fino a quando, quanto manca, le app che si possono usare, e "Termina la
- * sessione" con la conferma. Terminare vale subito, anche senza rete: la
- * barriera si ferma adesso e il server lo saprà appena può. [onTerminata] =
- * per dirlo nella snackbar della schermata. Vederla qui vuol dire saperla
- * partita: da qui in poi vale la barriera.
+ * (0.11, 0.15) "Termina" della sessione in corso: la conferma ("Terminare la
+ * sessione?") e tutto quello che serve a chi mostra la sessione, card o riga.
+ * Vederla vuol dire saperla partita: la si segna annunciata. "Termina la
+ * sessione" toccato nella notifica fissa (RichiestaTermine) apre la conferma.
+ * Terminare vale subito, anche senza rete: la barriera si ferma adesso e il
+ * server lo saprà appena può. [onTerminata] = per dirlo nella snackbar.
  */
+@Stable
+class TermineSessione internal constructor(private val apriConferma: () -> Unit) {
+    fun chiedi() = apriConferma()
+}
+
 @Composable
-fun SchedaSessioneInCorso(
+fun rememberTermineSessione(
     attiva: SessioneAttiva,
-    adesso: Long,
     onTerminata: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+    /**
+     * (0.15) Ascolta "Termina la sessione" della notifica fissa: solo la card di
+     * Oggi (dove porta quel pulsante) e la riga sopra i passi del primo avvio.
+     * La card di Sessioni no: prendeva la richiesta prima del cambio di scheda,
+     * la conferma restava aperta là e ricompariva aprendo Sessioni.
+     */
+    ascoltaNotifica: Boolean,
+): TermineSessione {
     val context = LocalContext.current
     val ambito = rememberCoroutineScope()
     var conferma by rememberSaveable(attiva.svoltaId) { mutableStateOf(false) }
     var terminando by remember { mutableStateOf(false) }
-    val mancano = TestoSessioni.minutiMancanti(attiva.fine, adesso)
+    val onTerminataAttuale by rememberUpdatedState(onTerminata)
 
     // Il ragazzo la sta guardando: adesso lo sa.
     LaunchedEffect(attiva.svoltaId, attiva.annunciata) {
@@ -155,53 +172,10 @@ fun SchedaSessioneInCorso(
     }
     // "Termina la sessione" toccato nella notifica fissa: qui la conferma.
     val richiesta by RichiestaTermine.richiesta.collectAsStateWithLifecycle()
-    LaunchedEffect(richiesta) {
-        if (richiesta != 0L) {
+    LaunchedEffect(richiesta, ascoltaNotifica) {
+        if (ascoltaNotifica && richiesta != 0L) {
             if (RichiestaTermine.fresca(richiesta)) conferma = true
             RichiestaTermine.consuma()
-        }
-    }
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-    ) {
-        Column(
-            modifier = Modifier.padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.s),
-        ) {
-            Text(
-                text = testoFinoAlle(
-                    context,
-                    attiva.fine,
-                    adesso,
-                    R.string.sessione_in_corso_titolo,
-                    R.string.sessione_in_corso_titolo_domani,
-                    nomeSessioneTraVirgolette(context, attiva.nome),
-                ),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Text(
-                text = if (mancano <= 1) {
-                    stringResource(R.string.sessione_manca_poco)
-                } else {
-                    stringResource(R.string.sessione_mancano, testoDurata(mancano))
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Text(
-                text = stringResource(
-                    R.string.sessione_in_corso_app,
-                    elencoAppSessione(context, attiva.app.toList(), attiva.nomi, massimo = 6),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            OutlinedButton(onClick = { conferma = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.sessione_termina))
-            }
         }
     }
 
@@ -216,8 +190,8 @@ fun SchedaSessioneInCorso(
                     onClick = {
                         terminando = true
                         ambito.launch {
-                            // (0.12) Fino in fondo anche se questa scheda se ne va
-                            // (la sessione è finita: la scheda sparisce, e il suo
+                            // (0.12) Fino in fondo anche se questa schermata se ne va
+                            // (la sessione è finita: la card sparisce, e il suo
                             // ambito con lei). Fra "termina" e la pagina della fine
                             // niente altre attese: la sessione chiusa la dà termina.
                             withContext(NonCancellable) {
@@ -229,7 +203,7 @@ fun SchedaSessioneInCorso(
                                 }
                                 if (chiusa != null) {
                                     PaginaSessioneActivity.apriFine(context, chiusa)
-                                    onTerminata()
+                                    onTerminataAttuale()
                                 }
                             }
                         }
@@ -243,6 +217,74 @@ fun SchedaSessioneInCorso(
             },
         )
     }
+    return remember(attiva.svoltaId) { TermineSessione { conferma = true } }
+}
+
+/** "In sessione 📚 «Studio» fino alle 17:00" (o "fino a domani alle"). */
+@Composable
+fun titoloSessioneInCorso(attiva: SessioneAttiva, adesso: Long): String {
+    val context = LocalContext.current
+    return testoFinoAlle(
+        context,
+        attiva.fine,
+        adesso,
+        R.string.sessione_in_corso_titolo,
+        R.string.sessione_in_corso_titolo_domani,
+        nomeSessioneTraVirgolette(context, attiva.nome),
+    )
+}
+
+/**
+ * (0.11, 0.15) La card della sessione in corso, in cima a Oggi e a Sessioni:
+ * quale, fino a quando, quanto manca, e "Termina" con la conferma.
+ */
+@Composable
+fun SchedaSessioneInCorso(
+    attiva: SessioneAttiva,
+    adesso: Long,
+    onTerminata: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** La card di Oggi sì, quella di Sessioni no (rememberTermineSessione). */
+    ascoltaNotifica: Boolean = true,
+) {
+    val termine = rememberTermineSessione(attiva, onTerminata, ascoltaNotifica)
+    val mancano = TestoSessioni.minutiMancanti(attiva.fine, adesso)
+    CardEvidenza(modifier = modifier, tono = Tono.Neutro) {
+        Text(text = titoloSessioneInCorso(attiva, adesso), style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = if (mancano <= 1) {
+                stringResource(R.string.sessione_manca_poco)
+            } else {
+                stringResource(R.string.sessione_mancano, testoDurata(mancano))
+            },
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(modifier = Modifier.height(Spazi.m))
+        OutlinedButton(onClick = { termine.chiedi() }) {
+            Text(stringResource(R.string.sessione_termina_conferma), maxLines = 1)
+        }
+    }
+}
+
+/**
+ * (0.15) La sessione in corso in una riga ("In sessione 📚 «Studio» fino alle
+ * 17:00 · Termina"): in Oggi quando il blocco dei lavori di casa ha la card, e
+ * sopra le schermate del primo avvio.
+ */
+@Composable
+fun RigaSessioneInCorso(
+    attiva: SessioneAttiva,
+    adesso: Long,
+    onTerminata: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val termine = rememberTermineSessione(attiva, onTerminata, ascoltaNotifica = true)
+    RigaStato(
+        testo = titoloSessioneInCorso(attiva, adesso),
+        modifier = modifier,
+        azione = stringResource(R.string.sessione_termina_conferma),
+        onAzione = { termine.chiedi() },
+    )
 }
 
 private const val INTERVALLO_ORA_MS = 15_000L

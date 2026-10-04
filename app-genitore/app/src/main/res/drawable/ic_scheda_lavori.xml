@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- (0.15) Lavori di casa: una casetta con la spunta — un lavoro fatto. Stesso tratto delle altre voci. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,10.6 L12,4 L20,10.6 M6,9 L6,18.5 A1.5,1.5 0 0,0 7.5,20 L16.5,20 A1.5,1.5 0 0,0 18,18.5 L18,9" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9,13.9 L11.1,16 L15.2,11.9" />
+</vector>

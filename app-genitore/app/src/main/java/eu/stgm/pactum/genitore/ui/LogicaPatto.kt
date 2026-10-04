@@ -268,9 +268,6 @@ fun daGuardareInsieme(
         )
 }
 
-/** Quante righe di "Da guardare insieme" si vedono senza toccare niente. */
-const val VOCI_DA_GUARDARE_VISIBILI = 5
-
 // --- Notifiche ------------------------------------------------------------------
 
 /**

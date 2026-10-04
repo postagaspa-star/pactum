@@ -252,13 +252,13 @@ class GiroVedettaTest {
     // --- 0.10: dove porta il tocco su un avviso --------------------------------------------
 
     @Test
-    fun `una proposta del figlio apre la Panoramica, dove si decide, e il suo ritiro le proposte`() {
-        assertEquals(MainActivity.DEST_FINESTRA, Vedetta.destinazionePerTipo("nuova_proposta"))
-        assertEquals(MainActivity.DEST_TURNO, Vedetta.destinazionePerTipo("proposta_ritirata"))
-        // I tipi di prima restano dove andavano.
-        assertEquals(MainActivity.DEST_TURNO, Vedetta.destinazionePerTipo("proposta_risposta"))
-        assertEquals(MainActivity.DEST_TURNO, Vedetta.destinazionePerTipo("proposta_annullata"))
-        assertEquals(MainActivity.DEST_TURNO, Vedetta.destinazionePerTipo("dichiarazione"))
+    fun `una proposta del figlio, il suo ritiro e le risposte aprono Da decidere`() {
+        // (0.15) Tutto quello che aspetta il genitore, o gli risponde, apre "Da decidere".
+        assertEquals(MainActivity.DEST_DECIDERE, Vedetta.destinazionePerTipo("nuova_proposta"))
+        assertEquals(MainActivity.DEST_DECIDERE, Vedetta.destinazionePerTipo("proposta_ritirata"))
+        assertEquals(MainActivity.DEST_DECIDERE, Vedetta.destinazionePerTipo("proposta_risposta"))
+        assertEquals(MainActivity.DEST_DECIDERE, Vedetta.destinazionePerTipo("proposta_annullata"))
+        assertEquals(MainActivity.DEST_DECIDERE, Vedetta.destinazionePerTipo("dichiarazione"))
         assertEquals(MainActivity.DEST_NOTIFICHE, Vedetta.destinazionePerTipo("sforamento"))
         assertEquals(MainActivity.DEST_NOTIFICHE, Vedetta.destinazionePerTipo("tipo_del_futuro"))
     }
@@ -266,8 +266,8 @@ class GiroVedettaTest {
     // --- 0.11: le sessioni ---------------------------------------------------------------
 
     @Test
-    fun `una sessione da approvare apre la Panoramica, dove si decide, e una eliminata la lista`() {
-        assertEquals(MainActivity.DEST_FINESTRA, Vedetta.destinazionePerTipo("sessione_da_approvare"))
+    fun `una sessione da approvare apre Da decidere, e una eliminata la lista`() {
+        assertEquals(MainActivity.DEST_DECIDERE, Vedetta.destinazionePerTipo("sessione_da_approvare"))
         assertEquals(MainActivity.DEST_NOTIFICHE, Vedetta.destinazionePerTipo("sessione_eliminata"))
         // Le notifiche delle sessioni si avvisano e si ricordano come tutte le altre.
         val sessione = Notifica(id = 41, tipo = "sessione_da_approvare", messaggio = "m", tsServer = "2026-10-01T10:00:00+00:00")

@@ -34,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import eu.stgm.pactum.design.BarraUso
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.MediaPeriodo
@@ -46,12 +47,11 @@ import eu.stgm.pactum.genitore.ui.theme.coloreCategoria
  * I grafici della scheda Tempo, disegnati a mano con Canvas: nessuna libreria,
  * nessun colore fuori dalla palette dell'app.
  *
- * Tre forme sole:
+ * Due forme sole, più la barra:
  *  1. [AnelloCategorie]  — come è diviso il tempo di un giorno;
- *  2. [BarreGiorni]      — gli ultimi otto giorni, uno accanto all'altro;
- *  3. [BarraOrizzontale] — quanto vale un numero rispetto al più grande del
- *     giorno (le visite dei siti). Le barre delle app e delle categorie sono
- *     `BarraUso` di core-design, identiche nelle due app.
+ *  2. [BarreGiorni]      — gli ultimi otto giorni, uno accanto all'altro.
+ * Le barre delle app, delle categorie e (0.15) dei siti sono tutte `BarraUso` di
+ * core-design: una misura sola.
  *
  * Due leggi che valgono per tutti:
  *  - un giorno SENZA fotografia non è uno zero: è un tratteggio vuoto, perché
@@ -259,25 +259,26 @@ fun LegendaCategorie(fette: List<FettaCategoria>, modifier: Modifier = Modifier)
  * Gli otto giorni della finestra, dal più vecchio a oggi: una barra per giorno,
  * alta in proporzione al massimo della finestra.
  *
- * La barra ACCESA è quella scelta (o oggi, se nessuna scelta): `primary` pieno.
- * Le altre sono lo stesso blu al 35%: sono contesto, non protagoniste.
- * Un giorno senza fotografia non ha barra: ha un tratteggio basso e vuoto.
+ * (0.15) È un grafico da guardare: il giorno si sceglie nella fila dei giorni,
+ * in un posto solo (B1/B11). La barra ACCESA è quella scelta (o oggi, se nessuna
+ * scelta): `primary` pieno. Le altre sono grigie (`outline`), con un contrasto
+ * vero sul fondo della card (B13). Un giorno senza dati non ha barra: ha un
+ * tratteggio basso e vuoto.
  *
- * La cella si stringe da sola sugli schermi piccoli (stessa regola del semaforo):
- * meglio più magra che tagliata dal bordo.
+ * La cella si stringe da sola sugli schermi piccoli: meglio più magra che
+ * tagliata dal bordo.
  */
 @Composable
 fun BarreGiorni(
     giorni: List<UsoGiorno>,
     modifier: Modifier = Modifier,
     selezionato: String? = null,
-    onScelta: ((String) -> Unit)? = null,
     altezza: Dp = 104.dp,
 ) {
     if (giorni.isEmpty()) return
     val massimo = giorni.mapNotNull { it.totaleMinuti }.maxOrNull() ?: 0
     val acceso = MaterialTheme.colorScheme.primary
-    val spento = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+    val spento = MaterialTheme.colorScheme.outline
     val assente = MaterialTheme.colorScheme.outline
     val spazio = Spazi.s
     val cima = RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp)
@@ -297,14 +298,7 @@ fun BarreGiorni(
                 } else {
                     giorno.giorno == selezionato
                 }
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = if (onScelta == null) {
-                        Modifier
-                    } else {
-                        Modifier.clickable { onScelta.invoke(giorno.giorno) }
-                    },
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
                         modifier = Modifier.width(larghezza).height(altezza),
                         contentAlignment = Alignment.BottomCenter,
@@ -353,6 +347,8 @@ fun BarreGiorni(
                         // Il giorno del mese ("2026-07-14" → "14").
                         text = giorno.giorno.takeLast(2),
                         style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        softWrap = false,
                         color = if (inLuce) {
                             MaterialTheme.colorScheme.onSurface
                         } else {
@@ -366,51 +362,7 @@ fun BarreGiorni(
     }
 }
 
-// --- 3. Le barre orizzontali --------------------------------------------------
-
-/**
- * Quanto vale un numero rispetto al più grande del giorno, su un binario grigio.
- * La usano le visite dei siti: il `riferimento` è il sito più richiesto, un
- * confronto tra pari dentro la giornata, mai una soglia da rispettare — un sito
- * visitato non è un'infrazione (contratto-api.md, "Siti visitati — limiti e
- * patto etico"). Per questo non ha né limite né tacca, e mai il terracotta.
- */
-@Composable
-fun BarraOrizzontale(
-    quantita: Int,
-    riferimento: Int,
-    colore: Color,
-    modifier: Modifier = Modifier,
-    spessore: Dp = 9.dp,
-) {
-    val binario = MaterialTheme.colorScheme.surfaceVariant
-
-    Canvas(modifier = modifier.fillMaxWidth().height(spessore + 8.dp)) {
-        val alta = spessore.toPx()
-        val larga = size.width
-        if (larga <= 0f || alta <= 0f) return@Canvas
-        val alto = (size.height - alta) / 2f
-        val tondo = CornerRadius(alta / 2f, alta / 2f)
-
-        drawRoundRect(
-            color = binario,
-            topLeft = Offset(0f, alto),
-            size = Size(larga, alta),
-            cornerRadius = tondo,
-        )
-
-        val scala = (if (riferimento > 0) riferimento else quantita).coerceAtLeast(1)
-        if (quantita > 0) {
-            val pieno = (larga * quantita / scala.toFloat()).coerceIn(alta, larga)
-            drawRoundRect(
-                color = colore,
-                topLeft = Offset(0f, alto),
-                size = Size(pieno, alta),
-                cornerRadius = tondo,
-            )
-        }
-    }
-}
+// --- 3. I siti -----------------------------------------------------------------
 
 /**
  * Una riga "sito visitato": il dominio a sinistra, quante volte è stato chiesto
@@ -453,11 +405,9 @@ fun RigaBarraSito(
                 modifier = Modifier.padding(start = Spazi.s),
             )
         }
-        BarraOrizzontale(
-            quantita = minuti ?: visite,
-            riferimento = riferimento,
-            colore = MaterialTheme.colorScheme.primary,
-        )
+        // (0.15) La stessa barra delle app (una misura sola: B6/B8).
+        Spacer(modifier = Modifier.height(Spazi.xs))
+        BarraUso(minuti = minuti ?: visite, limite = null, massimoDelGiorno = riferimento.coerceAtLeast(minuti ?: visite))
     }
 }
 
@@ -492,10 +442,10 @@ private fun MediaCella(etichetta: Int, media: MediaPeriodo, modifier: Modifier =
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(Spazi.xs))
+        // (0.15) Col testo grande va a capo invece di tagliarsi (B8).
         Text(
             text = testoDurata(media.minuti.toLong()),
-            style = MaterialTheme.typography.titleLarge,
-            maxLines = 1,
+            style = MaterialTheme.typography.titleMedium,
         )
         Text(
             text = stringResource(R.string.media_su_giorni, media.giorni),

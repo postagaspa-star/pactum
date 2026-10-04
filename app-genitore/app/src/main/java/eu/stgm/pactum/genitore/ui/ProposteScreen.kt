@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -36,9 +38,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.design.Pillola
+import eu.stgm.pactum.design.CardNormale
+import eu.stgm.pactum.design.FilaPulsanti
+import eu.stgm.pactum.design.Tono
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.DirezioniProposta
 import eu.stgm.pactum.genitore.dati.EsitiRisposta
@@ -54,147 +61,18 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
-// Le proposte: la prima metà di "Proposte e conferme" (TurnoScreen). Proporre, mai
-// imporre: il confronto lo calcola il server ed è la stessa frase che vede il
-// figlio. Quattro blocchi — da decidere (0.10), da mandare, in attesa di
-// risposta, come sono andate.
-
-/**
- * La sezione delle proposte dentro "Proposte e conferme".
- * - (0.10) DA DECIDERE: le proposte del figlio che aspettano te, ciascuna con
- *   "Accetta" e "Rifiuta" (la stessa card della Panoramica). C'è solo se ce ne sono;
- * - DA MANDARE: le regole attive, ciascuna col suo "Proponi una modifica" —
- *   tranne quelle che ne hanno già una in attesa (il server ne accetta una sola
- *   per regola, di chiunque sia): lì una riga dice perché;
- * - IN ATTESA DI RISPOSTA: le tue proposte pendenti, il confronto in grande, e
- *   (0.10) "Ritira";
- * - COME SONO ANDATE: le chiuse di tutti e due, come righe di storia, ciascuna
- *   con chi l'ha fatta.
- *
- * [regolePerId] = tutte le regole della finestra (anche eliminate): le proposte
- * si raccontano anche quando la regola non è più fra quelle su cui proporre.
- * [giaChiuse] = le proposte appena decise o ritirate, fuori dalle card finché
- * l'elenco è di una lettura partita prima ([lettaAlle]). [nomi] = i nomi delle
- * app (una proposta che cambia app la dice col nome); [scollegati] = i
- * dispositivi scollegati (lì una proposta si può solo rifiutare).
- *
- * (0.11) [sessioniDaApprovare] = quante sessioni del figlio aspettano te: si
- * decidono nella Panoramica, e una riga lo dice (il numero accanto al nome le conta).
- */
-internal fun LazyListScope.sezioneProposte(
-    regoleAttive: List<RegolaFinestra>,
-    proposte: List<Proposta>,
-    onProponi: (RegolaFinestra) -> Unit,
-    regolePerId: Map<Long, RegolaFinestra> = regoleAttive.associateBy { it.id },
-    nomeFiglio: String? = null,
-    piuDispositivi: Boolean = false,
-    giaChiuse: Map<Long, PropostaChiusa> = emptyMap(),
-    lettaAlle: Long? = null,
-    nomi: Map<String, String> = emptyMap(),
-    scollegati: Set<Long> = emptySet(),
-    invioInCorso: Boolean = false,
-    onDecidi: (Proposta, String, String?) -> Unit = { _, _, _ -> },
-    onRitira: (Proposta) -> Unit = {},
-    sessioniDaApprovare: Int = 0,
-    // (0.13) Chi sei tu (contratto v3.6): le proposte di un altro genitore dicono il suo nome.
-    io: RiferimentoGenitore? = null,
-) {
-    val daDecidere = proposteDaDecidere(proposte, giaChiuse, lettaAlle)
-    val pendenti = proposteInAttesaDelFiglio(proposte, giaChiuse, lettaAlle)
-    val chiuse = proposteChiuse(proposte)
-    // Una proposta appena chiusa da qui non tiene più ferma la sua regola.
-    val ancoraAperte = proposte.filterNot { chiusaPrimaDellaLettura(it.id, giaChiuse, lettaAlle) }
-    val conPropostaInAttesa = regoleConPropostaInAttesa(ancoraAperte)
-    val conPropostaDelFiglio = regoleConPropostaDelFiglio(ancoraAperte)
-
-    item { TitoloSezione(stringResource(R.string.turno_sezione_proposte)) }
-
-    // (0.11) Le sessioni da approvare non stanno qui ma nella Panoramica: si dice.
-    if (sessioniDaApprovare > 0) {
-        item {
-            RigaVuota(pluralStringResource(R.plurals.turno_sessioni_da_approvare, sessioniDaApprovare, sessioniDaApprovare))
-        }
-    }
-
-    // (0.10) Prima quello che aspetta te.
-    if (daDecidere.isNotEmpty()) {
-        item { SopraTitolo(stringResource(R.string.proposte_da_decidere)) }
-        items(daDecidere, key = { "da-decidere-${it.id}" }) { proposta ->
-            val regola = regolePerId[proposta.regolaId]
-            CardPropostaDaDecidere(
-                proposta = proposta,
-                regola = regola,
-                nomeFiglio = nomeFiglio,
-                piuDispositivi = piuDispositivi,
-                invioInCorso = invioInCorso,
-                onDecidi = { esito, motivazione -> onDecidi(proposta, esito, motivazione) },
-                nomi = nomi,
-                scollegata = suDispositivoScollegato(regola, scollegati),
-            )
-        }
-    }
-
-    item {
-        SopraTitolo(
-            stringResource(R.string.proposte_da_mandare),
-            modifier = if (daDecidere.isNotEmpty()) Modifier.padding(top = Spazi.s) else Modifier,
-        )
-    }
-    if (regoleAttive.isEmpty()) {
-        item { RigaVuota(stringResource(R.string.proposte_nessuna_regola_attiva)) }
-    } else {
-        items(regoleAttive, key = { "attiva-${it.id}" }) { regola ->
-            CardRegolaProponibile(
-                regola = regola,
-                propostaInAttesa = regola.id in conPropostaInAttesa,
-                propostaDelFiglio = regola.id in conPropostaDelFiglio,
-                nomeFiglio = nomeFiglio,
-                onProponi = onProponi,
-            )
-        }
-    }
-
-    if (proposte.isEmpty()) {
-        item { RigaVuota(stringResource(R.string.proposte_elenco_vuoto)) }
-    }
-
-    if (pendenti.isNotEmpty()) {
-        item {
-            SopraTitolo(
-                stringResource(R.string.proposte_in_attesa),
-                modifier = Modifier.padding(top = Spazi.s),
-            )
-        }
-        items(pendenti, key = { "pendente-${it.id}" }) {
-            CardPropostaPendente(
-                proposta = it,
-                regola = regolePerId[it.regolaId],
-                invioInCorso = invioInCorso,
-                onRitira = onRitira,
-                io = io,
-            )
-        }
-    }
-
-    if (chiuse.isNotEmpty()) {
-        item {
-            Column(modifier = Modifier.fillMaxWidth().padding(top = Spazi.s)) {
-                SopraTitolo(stringResource(R.string.proposte_come_sono_andate))
-                ListaRighe(chiuse) {
-                    RigaPropostaChiusa(it, regolePerId[it.regolaId], nomeFiglio, piuDispositivi, nomi, io)
-                }
-            }
-        }
-    }
-}
+// Le proposte. Proporre, mai imporre: il confronto lo calcola il server ed è la
+// stessa frase che vede il figlio. (0.15) Le card stanno in "Da decidere" (quelle
+// del figlio da decidere, le tue in attesa), le chiuse nello Storico del patto, e
+// "Proponi una modifica" si apre dal dettaglio della regola.
 
 /**
  * (0.10) Una proposta del figlio che aspetta il genitore: chi propone, che cosa
  * chiede (detto come le regole, coi nomi delle app — mai un pacchetto — e dove
  * vale quando serve), il confronto, la sua motivazione, e i due gesti. Accettare
  * la rende valida subito: lo dice la card, e lo ripete la domanda prima del sì.
- * Tutti e due i gesti passano da una domanda, col perché facoltativo. La stessa
- * card in cima alla Panoramica e sotto DA DECIDERE in "Proposte e conferme".
+ * Tutti e due i gesti passano da una domanda, col perché facoltativo. (0.15) Sta
+ * in "Da decidere"; il confronto è in evidenza, la motivazione del figlio si legge.
  *
  * Sulla regola di un dispositivo scollegato ([scollegata]) accettare non si può
  * più (il server risponde `dispositivo_revocato`): c'è solo "Rifiuta", e una riga
@@ -217,8 +95,8 @@ internal fun CardPropostaDaDecidere(
     // Quale domanda è aperta (accetta / rifiuta): una rotazione non la chiude.
     var domanda by rememberSaveable(proposta.id) { mutableStateOf<String?>(null) }
 
-    CardContenuto {
-        Column(modifier = Modifier.padding(Spazi.l)) {
+    CardNormale {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TagDirezione(proposta.direzione)
                 Spacer(modifier = Modifier.weight(1f))
@@ -236,20 +114,21 @@ internal fun CardPropostaDaDecidere(
                     modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
+            // Il confronto in evidenza: è la cosa da capire prima di rispondere.
             if (confronto != null) {
                 Text(
                     text = confronto,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
+            // Il perché del figlio, leggibile (non sottovoce).
             proposta.motivazione?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = stringResource(R.string.proposta_motivazione, it),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = Spazi.xs),
+                    modifier = Modifier.padding(top = Spazi.s),
                 )
             }
             Text(
@@ -260,25 +139,15 @@ internal fun CardPropostaDaDecidere(
                 color = if (scollegata) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = Spazi.s),
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = Spazi.s),
-                horizontalArrangement = Arrangement.spacedBy(Spazi.s),
-            ) {
+            // Due pulsanti insieme: in fila se ci stanno, se no uno sotto l'altro (mai a capo).
+            FilaPulsanti(modifier = Modifier.padding(top = Spazi.m)) {
                 if (!scollegata) {
-                    Button(
-                        onClick = { domanda = EsitiRisposta.ACCETTA },
-                        enabled = !invioInCorso,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.proposta_accetta))
+                    Button(onClick = { domanda = EsitiRisposta.ACCETTA }, enabled = !invioInCorso) {
+                        Text(stringResource(R.string.proposta_accetta), maxLines = 1, softWrap = false)
                     }
                 }
-                OutlinedButton(
-                    onClick = { domanda = EsitiRisposta.RIFIUTA },
-                    enabled = !invioInCorso,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.proposta_rifiuta))
+                OutlinedButton(onClick = { domanda = EsitiRisposta.RIFIUTA }, enabled = !invioInCorso) {
+                    Text(stringResource(R.string.proposta_rifiuta), maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -375,55 +244,12 @@ private fun SopraTitoloRegola(regola: RegolaFinestra) {
 }
 
 /**
- * Una regola attiva su cui proporre. Con una proposta già in attesa il pulsante
- * non c'è: il server rifiuterebbe la seconda (409 `proposta_gia_pendente`), e
- * al suo posto una riga dice perché. (0.10) Se quella in attesa è del figlio
- * ([propostaDelFiglio]), la riga dice che è sua e che sta qui sopra, da decidere.
- */
-@Composable
-private fun CardRegolaProponibile(
-    regola: RegolaFinestra,
-    propostaInAttesa: Boolean,
-    propostaDelFiglio: Boolean,
-    nomeFiglio: String?,
-    onProponi: (RegolaFinestra) -> Unit,
-) {
-    CardContenuto {
-        Column(modifier = Modifier.padding(Spazi.l)) {
-            SopraTitoloRegola(regola)
-            Text(
-                text = descrizioneRegola(regola),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = Spazi.xs),
-            )
-            Spacer(modifier = Modifier.height(Spazi.s))
-            if (propostaInAttesa) {
-                val nome = nomeDaScrivere(nomeFiglio)
-                Text(
-                    text = when {
-                        !propostaDelFiglio -> stringResource(R.string.proposte_gia_in_attesa)
-                        nome != null -> stringResource(R.string.proposte_gia_proposta_del_figlio, nome)
-                        else -> stringResource(R.string.proposte_gia_proposta_del_figlio_senza_nome)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                FilledTonalButton(onClick = { onProponi(regola) }) {
-                    Text(stringResource(R.string.proposte_bottone_proponi))
-                }
-            }
-        }
-    }
-}
-
-/**
  * Una proposta che aspetta il figlio: il confronto calcolato dal server in
- * `headlineSmall` — è l'elemento più forte, ed è la stessa frase che legge lui.
+ * `titleMedium` — è l'elemento più forte, ed è la stessa frase che legge lui.
  * (0.10) Finché il figlio non risponde, la si può ritirare: prima una domanda.
  */
 @Composable
-private fun CardPropostaPendente(
+internal fun CardPropostaPendente(
     proposta: Proposta,
     regola: RegolaFinestra?,
     invioInCorso: Boolean,
@@ -457,8 +283,8 @@ private fun CardPropostaPendente(
             },
         )
     }
-    CardContenuto {
-        Column(modifier = Modifier.padding(Spazi.l)) {
+    CardNormale {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TagDirezione(proposta.direzione)
                 Spacer(modifier = Modifier.weight(1f))
@@ -475,7 +301,7 @@ private fun CardPropostaPendente(
             if (proposta.confronto.isNotBlank()) {
                 Text(
                     text = proposta.confronto,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = Spazi.s),
                 )
             }
@@ -524,7 +350,7 @@ private fun CardPropostaPendente(
  * cambio di app non si mostra (confrontoDaMostrare).
  */
 @Composable
-private fun RigaPropostaChiusa(
+internal fun RigaPropostaChiusa(
     proposta: Proposta,
     regola: RegolaFinestra?,
     nomeFiglio: String?,
@@ -603,30 +429,15 @@ private fun RigaPropostaChiusa(
 }
 
 /**
- * La direzione della proposta, con tre vestiti per tre azioni diverse:
- * stringe → ocra (`tertiaryContainer`), allenta → blu (`primaryContainer`),
- * eliminazione → neutro con bordo. Mai i colori del patto.
+ * La direzione della proposta, in una pillola: stringe → attenzione (ocra),
+ * allenta → il blu dell'app, eliminazione → neutra. Mai i colori del patto.
  */
 @Composable
 private fun TagDirezione(direzione: String) {
-    val schema = MaterialTheme.colorScheme
     when (direzione) {
-        DirezioniProposta.STRINGE -> Etichetta(
-            testo = stringResource(R.string.proposta_tag_stringe),
-            contenitore = schema.tertiaryContainer,
-            inchiostro = schema.onTertiaryContainer,
-        )
-        DirezioniProposta.ALLENTA -> Etichetta(
-            testo = stringResource(R.string.proposta_tag_allenta),
-            contenitore = schema.primaryContainer,
-            inchiostro = schema.onPrimaryContainer,
-        )
-        DirezioniProposta.ELIMINA -> Etichetta(
-            testo = stringResource(R.string.proposta_tag_elimina),
-            contenitore = schema.surfaceVariant,
-            inchiostro = schema.onSurfaceVariant,
-            bordo = BorderStroke(1.dp, schema.outline),
-        )
+        DirezioniProposta.STRINGE -> Pillola(stringResource(R.string.proposta_tag_stringe), tono = Tono.Attenzione)
+        DirezioniProposta.ALLENTA -> Pillola(stringResource(R.string.proposta_tag_allenta), tono = Tono.Positivo)
+        DirezioniProposta.ELIMINA -> Pillola(stringResource(R.string.proposta_tag_elimina), tono = Tono.Neutro)
         else -> Unit
     }
 }
@@ -823,11 +634,18 @@ private fun ScegliModalita(elimina: Boolean, onElimina: (Boolean) -> Unit) {
     }
 }
 
+/** (0.15) Si tocca tutta la riga, non solo il cerchietto (B12). */
 @Composable
 private fun RigaRadio(selezionato: Boolean, testo: String, onClick: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = selezionato, onClick = onClick)
-        Text(text = testo, style = MaterialTheme.typography.bodyMedium)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .selectable(selected = selezionato, onClick = onClick, role = Role.RadioButton),
+    ) {
+        RadioButton(selected = selezionato, onClick = null)
+        Text(text = testo, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = Spazi.s))
     }
 }
 

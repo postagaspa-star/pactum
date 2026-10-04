@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- (0.15) Mostra il codice d'accesso lungo: un occhio, stesso tratto delle altre icone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M2.5,12 C4.8,7.6 8.2,5.5 12,5.5 C15.8,5.5 19.2,7.6 21.5,12 C19.2,16.4 15.8,18.5 12,18.5 C8.2,18.5 4.8,16.4 2.5,12 Z" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:pathData="M12,9 a3,3 0 1,0 0.001,0 z" />
+</vector>

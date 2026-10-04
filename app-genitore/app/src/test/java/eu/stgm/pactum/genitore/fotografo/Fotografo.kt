@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.PowerManager
 import android.view.View
 import android.view.ViewGroup
@@ -38,6 +40,7 @@ import com.github.takahirom.roborazzi.captureScreenRoboImage
 import eu.stgm.pactum.genitore.MainActivity
 import kotlinx.coroutines.runBlocking
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.shadows.ShadowNetworkCapabilities
 import org.robolectric.Shadows.shadowOf
 import java.io.File
 import java.util.Locale
@@ -154,6 +157,12 @@ class Fotografo(private val compose: ComposeTestRule, val server: ServerFinto) {
         }
         shadowOf(app.getSystemService(PowerManager::class.java))
             .setIgnoringBatteryOptimizations(app.packageName, preparazione.esenteBatteria)
+        // Il telefono è in rete (come sarebbe davvero): senza, la riga "Avvisi in
+        // ritardo" della Panoramica non compare mai (si dice solo se c'è rete).
+        val connettivita = app.getSystemService(ConnectivityManager::class.java)
+        val capacita = ShadowNetworkCapabilities.newInstance()
+        shadowOf(capacita).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        shadowOf(connettivita).setNetworkCapabilities(connettivita.activeNetwork, capacita)
         val ds = preferenze(app)
         runBlocking {
             ds.edit { p ->

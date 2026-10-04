@@ -66,8 +66,6 @@ fun parole(): Parole = paroleDi(LocalContext.current)
 
 private val formatoOra: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val formatoDataOra: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM HH:mm")
-private val formatoDataOraCompleta: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
 
 /** "HH:mm" se l'istante è di oggi (fuso del telefono), altrimenti "dd/MM HH:mm". */
 fun oraOppureDataOra(istante: Instant): String {
@@ -77,11 +75,64 @@ fun oraOppureDataOra(istante: Instant): String {
     return formato.format(locale)
 }
 
-fun dataOraLocale(istante: Instant): String =
-    formatoDataOra.format(istante.atZone(ZoneId.systemDefault()))
 
-fun dataOraCompletaLocale(istante: Instant): String =
-    formatoDataOraCompleta.format(istante.atZone(ZoneId.systemDefault()))
+/**
+ * (0.15) Un dato che manca, a schermo: una lineetta, mai un "?" (che sembra una
+ * domanda rivolta al genitore).
+ */
+const val DATO_MANCANTE = "—"
+
+/**
+ * (0.15) Un giorno detto in UN formato solo: "oggi", "ieri", altrimenti "14/09".
+ * Lo usano tutte le righe che dicono "quando" a livello di giorno.
+ */
+fun testoGiorno(parole: Parole, giorno: LocalDate, oggi: LocalDate): String = when (giorno) {
+    oggi -> parole.testo(R.string.giorno_oggi)
+    oggi.minusDays(1) -> parole.testo(R.string.giorno_ieri)
+    else -> formatoGiornoBreve.format(giorno)
+}
+
+/**
+ * (0.15) Giorno e ora in UN formato solo, nel fuso del telefono: "oggi 15:10",
+ * "ieri 15:10", altrimenti "14/09 15:10".
+ */
+fun testoQuando(
+    parole: Parole,
+    istante: Instant,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    val locale = istante.atZone(zona)
+    val ora = formatoOra.format(locale)
+    return when (locale.toLocalDate()) {
+        oggi -> parole.testo(R.string.quando_oggi, ora)
+        oggi.minusDays(1) -> parole.testo(R.string.quando_ieri, ora)
+        else -> formatoDataOra.format(locale)
+    }
+}
+
+/** I giorni della settimana nell'ordine del contratto (giorni:[lun..dom]). */
+private val GIORNI_CONTRATTO = listOf("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+
+/**
+ * (0.15) I giorni di una fascia oraria detti come li direbbe una persona: tutti e
+ * sette "ogni giorno", da lunedì a venerdì "da lunedì a venerdì", sabato e
+ * domenica "sabato e domenica"; gli altri casi come prima ("lun, mer, ven"),
+ * nell'ordine della settimana (B34).
+ */
+fun fraseGiorniFascia(parole: Parole, giorni: List<String>): String {
+    val puliti = giorni.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct()
+    val noti = puliti.filter { it in GIORNI_CONTRATTO }.toSet()
+    if (noti.size == puliti.size) {
+        when (noti) {
+            GIORNI_CONTRATTO.toSet() -> return parole.testo(R.string.fascia_ogni_giorno)
+            GIORNI_CONTRATTO.take(5).toSet() -> return parole.testo(R.string.fascia_feriali)
+            GIORNI_CONTRATTO.takeLast(2).toSet() -> return parole.testo(R.string.fascia_fine_settimana)
+        }
+    }
+    return puliti.sortedBy { GIORNI_CONTRATTO.indexOf(it).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+        .joinToString(", ")
+}
 
 // contentOrNull e non content: un `null` JSON è un JsonPrimitive il cui
 // content è la parola "null", che finirebbe scritta in faccia al genitore.
@@ -163,18 +214,21 @@ fun descrizioneRegola(
         } else {
             R.string.regola_fascia_oraria
         },
-        campo(parametri, "dalle") ?: "?",
-        campo(parametri, "alle") ?: "?",
+        campo(parametri, "dalle") ?: DATO_MANCANTE,
+        campo(parametri, "alle") ?: DATO_MANCANTE,
+        // (0.15) I giorni detti come li direbbe una persona: "ogni giorno", non i
+        // sette token del contratto (B34).
         (parametri["giorni"] as? JsonArray)
-            ?.joinToString(", ") { (it as? JsonPrimitive)?.contentOrNull ?: "?" }
-            ?: "?",
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            ?.let { fraseGiorniFascia(parole, it) }
+            ?: DATO_MANCANTE,
     )
 
     TipiRegola.VITA_REALE -> parole.testo(
         R.string.regola_vita_reale,
-        campo(parametri, "descrizione") ?: "?",
-        campo(parametri, "arbitro_nome") ?: "?",
-        campo(parametri, "frequenza") ?: "?",
+        campo(parametri, "descrizione") ?: DATO_MANCANTE,
+        campo(parametri, "arbitro_nome") ?: DATO_MANCANTE,
+        campo(parametri, "frequenza") ?: DATO_MANCANTE,
     )
 
     else -> tipo
@@ -215,7 +269,7 @@ private fun nomeBersaglio(
 ): String {
     val chiave = campo(parametri, "app_o_categoria")
     if (eTotale(chiave)) return nomeTotale(parole, tipoDispositivo)
-    return nomeLeggibile(chiave ?: "?", nomeApp)
+    return nomeLeggibile(chiave ?: DATO_MANCANTE, nomeApp)
 }
 
 /**
@@ -466,7 +520,8 @@ fun descrizioneBuco(parole: Parole, sottoTipo: String?): String = when (sottoTip
     "siti_non_leggibili" -> parole.testo(R.string.manomissione_siti_non_leggibili)
     // (0.13) Il programma del computer chiuso mentre le faccende lo bloccavano.
     "chiuso_durante_blocco" -> parole.testo(R.string.manomissione_chiuso_durante_blocco)
-    else -> parole.testo(R.string.manomissione_generica, sottoTipo ?: "?")
+    // (0.15) Senza sotto-tipo niente "Anomalia: ?": solo "Anomalia".
+    else -> sottoTipo?.let { parole.testo(R.string.manomissione_generica, it) } ?: parole.testo(R.string.tipo_manomissione)
 }
 
 // --- Dispositivi (v3) -----------------------------------------------------------
@@ -2010,10 +2065,10 @@ private fun suRegola(parole: Parole, regola: RegolaFinestra): String? = when (re
     }
     TipiRegola.FASCIA_ORARIA -> parole.testo(
         R.string.regola_su_fascia,
-        campo(regola.parametri, "dalle") ?: "?",
-        campo(regola.parametri, "alle") ?: "?",
+        campo(regola.parametri, "dalle") ?: DATO_MANCANTE,
+        campo(regola.parametri, "alle") ?: DATO_MANCANTE,
     )
     TipiRegola.VITA_REALE ->
-        parole.testo(R.string.regola_su_vita_reale, campo(regola.parametri, "descrizione") ?: "?")
+        parole.testo(R.string.regola_su_vita_reale, campo(regola.parametri, "descrizione") ?: DATO_MANCANTE)
     else -> null
 }

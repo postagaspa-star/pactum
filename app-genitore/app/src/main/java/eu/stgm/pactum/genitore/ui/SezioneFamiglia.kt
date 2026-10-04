@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -31,14 +33,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import eu.stgm.pactum.design.Caricamento
+import eu.stgm.pactum.design.CardNormale
+import eu.stgm.pactum.design.MenuAzioni
+import eu.stgm.pactum.design.RigaStato
 import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.design.StatoVuoto
+import eu.stgm.pactum.design.TestoSuUnaRiga
+import eu.stgm.pactum.design.TitoloSezione
+import eu.stgm.pactum.design.VoceMenu
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Dispositivo
 import eu.stgm.pactum.genitore.dati.Figlio
@@ -101,9 +114,9 @@ fun SezioneFamiglia(
     )
 
     when {
-        stato.configurazioneMancante -> RigaVuota(stringResource(R.string.famiglia_config_mancante))
+        stato.configurazioneMancante -> StatoVuoto(stringResource(R.string.famiglia_config_mancante))
 
-        stato.serverVecchio -> RigaVuota(stringResource(R.string.famiglia_server_vecchio))
+        stato.serverVecchio -> StatoVuoto(stringResource(R.string.famiglia_server_vecchio))
 
         else -> {
             // (0.13) Prima i genitori (contratto v3.6), poi i figli.
@@ -320,18 +333,25 @@ private fun BloccoFigli(
     onAggiungiFiglio: () -> Unit,
 ) {
     when {
-        stato.figli.isEmpty() && stato.errore -> {
-            RigaDatiVecchi(stringResource(R.string.famiglia_non_letta))
-            OutlinedButton(onClick = onRiprova) {
-                Text(stringResource(R.string.famiglia_riprova))
-            }
-        }
+        stato.figli.isEmpty() && stato.errore -> RigaStato(
+            testo = stringResource(R.string.famiglia_non_letta),
+            azione = stringResource(R.string.famiglia_riprova),
+            onAzione = onRiprova,
+        )
 
-        stato.figli.isEmpty() -> RigaVuota(stringResource(R.string.famiglia_caricamento))
+        // (0.15) Famiglia letta, ma senza figli: si dice, e si può aggiungerne uno
+        // (prima restava "Sto leggendo la famiglia…" per sempre: B27).
+        stato.figli.isEmpty() && stato.lettaDalServer -> StatoVuoto(
+            testo = stringResource(R.string.famiglia_nessun_figlio),
+            azione = stringResource(R.string.famiglia_aggiungi_figlio),
+            onAzione = if (stato.lavoroInCorso) null else onAggiungiFiglio,
+        )
+
+        stato.figli.isEmpty() -> Caricamento(testo = stringResource(R.string.famiglia_caricamento), centrato = false)
 
         else -> {
             // Una famiglia già in mano ma non riletta: si dice, non si finge fresca.
-            if (stato.errore) RigaDatiVecchi(stringResource(R.string.famiglia_non_letta))
+            if (stato.errore) RigaStato(stringResource(R.string.famiglia_non_letta))
             stato.figli.forEach { figlio ->
                 CardFiglio(
                     figlio = figlio,
@@ -370,22 +390,21 @@ private fun BloccoGenitori(
 ) {
     SopraTitolo(stringResource(R.string.genitori_titolo), modifier = Modifier.padding(top = Spazi.s))
     when {
-        stato.genitoriServerVecchio -> RigaVuota(stringResource(R.string.genitori_server_vecchio))
+        stato.genitoriServerVecchio -> StatoVuoto(stringResource(R.string.genitori_server_vecchio))
 
-        !stato.genitoriLetti && stato.genitoriErrore -> {
-            RigaDatiVecchi(stringResource(R.string.genitori_non_letti))
-            OutlinedButton(onClick = onRiprova) {
-                Text(stringResource(R.string.famiglia_riprova))
-            }
-        }
+        !stato.genitoriLetti && stato.genitoriErrore -> RigaStato(
+            testo = stringResource(R.string.genitori_non_letti),
+            azione = stringResource(R.string.famiglia_riprova),
+            onAzione = onRiprova,
+        )
 
-        !stato.genitoriLetti -> RigaVuota(stringResource(R.string.genitori_caricamento))
+        !stato.genitoriLetti -> Caricamento(testo = stringResource(R.string.genitori_caricamento), centrato = false)
 
         else -> {
-            if (stato.genitoriErrore) RigaDatiVecchi(stringResource(R.string.genitori_non_letti))
+            if (stato.genitoriErrore) RigaStato(stringResource(R.string.genitori_non_letti))
             if (stato.genitori.isNotEmpty()) {
-                CardContenuto {
-                    ListaRighe(stato.genitori, modifier = Modifier.padding(horizontal = Spazi.l)) { genitore ->
+                CardNormale {
+                    ListaRighe(stato.genitori) { genitore ->
                         RigaGenitore(
                             genitore = genitore,
                             io = stato.io,
@@ -427,33 +446,31 @@ private fun RigaGenitore(
         !genitore.abbinato -> stringResource(R.string.genitore_stato_da_collegare)
         else -> stringResource(R.string.genitore_stato_collegato)
     }
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.s)) {
-        Text(
-            text = if (genitore.id == io?.id) stringResource(R.string.genitore_tu, nome) else nome,
-            style = MaterialTheme.typography.bodyLarge,
+    // (0.15) I gesti nel "⋯" della riga, non più in una fila di pulsanti che esce dallo schermo (B10).
+    val voci = if (genitore.revocato) {
+        emptyList()
+    } else {
+        listOfNotNull(
+            VoceMenu(stringResource(R.string.famiglia_rinomina), onRinomina, abilitata = !occupato),
+            VoceMenu(stringResource(R.string.famiglia_nuovo_codice), onNuovoCodice, abilitata = !occupato)
+                .takeIf { puoiDareNuovoCodice(genitore, io) },
+            VoceMenu(stringResource(R.string.famiglia_togli), onTogli, distruttiva = true, abilitata = !occupato)
+                .takeIf { puoiTogliere(genitore, io, genitori) },
         )
-        Text(
-            text = stato,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (!genitore.revocato) {
-            Row {
-                TextButton(onClick = onRinomina, enabled = !occupato) {
-                    Text(stringResource(R.string.famiglia_rinomina))
-                }
-                if (puoiDareNuovoCodice(genitore, io)) {
-                    TextButton(onClick = onNuovoCodice, enabled = !occupato) {
-                        Text(stringResource(R.string.famiglia_nuovo_codice))
-                    }
-                }
-                if (puoiTogliere(genitore, io, genitori)) {
-                    TextButton(onClick = onTogli, enabled = !occupato) {
-                        Text(stringResource(R.string.famiglia_togli))
-                    }
-                }
-            }
+    }
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.xs), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (genitore.id == io?.id) stringResource(R.string.genitore_tu, nome) else nome,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = stato,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        MenuAzioni(voci, descrizione = stringResource(R.string.azioni_per, nome))
     }
 }
 
@@ -467,20 +484,22 @@ private fun CardFiglio(
     onNuovoCodice: (Dispositivo) -> Unit,
     onScollega: (Dispositivo) -> Unit,
 ) {
-    CardContenuto {
-        Column(modifier = Modifier.padding(Spazi.l)) {
+    val nomeFiglio = figlio.nome.ifBlank { stringResource(R.string.figlio_senza_nome) }
+    CardNormale {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = figlio.nome.ifBlank { stringResource(R.string.figlio_senza_nome) },
+                    text = nomeFiglio,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onRinomina, enabled = !occupato) {
-                    Text(stringResource(R.string.famiglia_rinomina))
-                }
+                MenuAzioni(
+                    listOf(VoceMenu(stringResource(R.string.famiglia_rinomina), onRinomina, abilitata = !occupato)),
+                    descrizione = stringResource(R.string.azioni_per, nomeFiglio),
+                )
             }
             if (figlio.dispositivi.isEmpty()) {
-                RigaVuota(stringResource(R.string.famiglia_nessun_dispositivo))
+                StatoVuoto(stringResource(R.string.famiglia_nessun_dispositivo))
             } else {
                 ListaRighe(figlio.dispositivi) { dispositivo ->
                     RigaDispositivoFamiglia(
@@ -518,7 +537,8 @@ private fun RigaDispositivoFamiglia(
         else -> stringResource(R.string.famiglia_stato_collegato)
     }
     val versione = dispositivo.versioneApp?.takeIf { it.isNotBlank() && dispositivo.abbinato && !dispositivo.revocato }
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.s)) {
+    val nome = nomeDelDispositivo(p, dispositivo.nome, dispositivo.tipo)
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.xs)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconaDispositivo(dispositivo.tipo)
             Column(
@@ -527,7 +547,7 @@ private fun RigaDispositivoFamiglia(
                     .padding(start = Spazi.m),
             ) {
                 Text(
-                    text = nomeDelDispositivo(p, dispositivo.nome, dispositivo.tipo),
+                    text = nome,
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
@@ -540,15 +560,15 @@ private fun RigaDispositivoFamiglia(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-        if (!dispositivo.revocato) {
-            Row(modifier = Modifier.padding(start = 32.dp)) {
-                TextButton(onClick = onNuovoCodice, enabled = !occupato) {
-                    Text(stringResource(R.string.famiglia_nuovo_codice))
-                }
-                TextButton(onClick = onScollega, enabled = !occupato) {
-                    Text(stringResource(R.string.famiglia_scollega))
-                }
+            // (0.15) "Nuovo codice" e "Scollega" nel "⋯" della riga (B10); uno scollegato non ha più gesti.
+            if (!dispositivo.revocato) {
+                MenuAzioni(
+                    listOf(
+                        VoceMenu(stringResource(R.string.famiglia_nuovo_codice), onNuovoCodice, abilitata = !occupato),
+                        VoceMenu(stringResource(R.string.famiglia_scollega), onScollega, distruttiva = true, abilitata = !occupato),
+                    ),
+                    descrizione = stringResource(R.string.azioni_per, nome),
+                )
             }
         }
     }
@@ -642,8 +662,15 @@ private fun DialogoNuovoDispositivo(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 listOf(TipiDispositivo.TELEFONO, TipiDispositivo.COMPUTER).forEach { opzione ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = tipo == opzione, onClick = { scegliTipo(opzione) })
+                    // (0.15) Si tocca tutta la riga, non solo il cerchietto (B12).
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .selectable(selected = tipo == opzione, onClick = { scegliTipo(opzione) }, role = Role.RadioButton),
+                    ) {
+                        RadioButton(selected = tipo == opzione, onClick = null)
                         IconaDispositivo(opzione)
                         Text(
                             text = nomeDelDispositivo(p, null, opzione),
@@ -653,7 +680,7 @@ private fun DialogoNuovoDispositivo(
                     }
                 }
                 // Neutra, come le altre note: un'informazione, non un errore.
-                if (giaPresente != null) RigaDatiVecchi(giaPresente)
+                if (giaPresente != null) RigaStato(giaPresente)
                 OutlinedTextField(
                     value = nome,
                     onValueChange = { nome = it },
@@ -716,6 +743,8 @@ private fun DialogoCodice(
 
     AlertDialog(
         onDismissRequest = onChiudi,
+        // (0.15) Toccando fuori (o con Indietro) il codice non sparisce: si chiude con "Fatto" (B24).
+        properties = DialogProperties(dismissOnClickOutside = false, dismissOnBackPress = false),
         title = { Text(stringResource(R.string.codice_titolo, codice.nomeDispositivo)) },
         text = {
             Column(
@@ -729,24 +758,25 @@ private fun DialogoCodice(
                     textAlign = TextAlign.Center,
                 )
                 SelectionContainer {
-                    Text(
-                        text = codiceADueGruppi(codice.codice),
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.SemiBold,
+                    // (0.15) Sempre su una riga: col testo grande il carattere si
+                    // rimpicciolisce invece di spezzare "483" / "920" (B23).
+                    TestoSuUnaRiga(
+                        testo = codiceADueGruppi(codice.codice),
+                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.SemiBold),
+                        minimo = 24.sp,
                         // Scaduto o già usato: il codice non serve più, si spegne.
                         color = if (scaduto || collegato) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
                             MaterialTheme.colorScheme.onSurface
                         },
-                        textAlign = TextAlign.Center,
                     )
                 }
                 Text(
                     text = when {
                         collegato -> stringResource(R.string.codice_collegato)
                         scaduto -> stringResource(R.string.codice_scaduto)
-                        else -> stringResource(R.string.codice_scade_tra, testoContoAllaRovescia(rimasti))
+                        else -> stringResource(R.string.codice_scade_tra, testoScadeTra(parole(), rimasti))
                     },
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,

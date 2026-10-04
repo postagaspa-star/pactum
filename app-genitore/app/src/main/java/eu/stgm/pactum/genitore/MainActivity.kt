@@ -9,60 +9,80 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.BarraSchede
+import eu.stgm.pactum.design.VoceBarra
+import eu.stgm.pactum.design.attivaBordoPieno
 import eu.stgm.pactum.genitore.dati.Impostazioni
+import eu.stgm.pactum.genitore.rete.EsitoAbbinamento
 import eu.stgm.pactum.genitore.servizio.EsenzioneBatteria
 import eu.stgm.pactum.genitore.servizio.VedettaService
 import eu.stgm.pactum.genitore.sync.Vedetta
 import eu.stgm.pactum.genitore.ui.CollegamentoViewModel
-import eu.stgm.pactum.genitore.ui.FaccendeScreen
+import eu.stgm.pactum.genitore.ui.Cornice
+import eu.stgm.pactum.genitore.ui.DaDecidereScreen
+import eu.stgm.pactum.genitore.ui.DaiLavoriScreen
 import eu.stgm.pactum.genitore.ui.FaccendeViewModel
 import eu.stgm.pactum.genitore.ui.FamigliaViewModel
-import eu.stgm.pactum.genitore.ui.FinestraScreen
 import eu.stgm.pactum.genitore.ui.FinestraViewModel
-import eu.stgm.pactum.genitore.ui.ProposteViewModel
-import eu.stgm.pactum.genitore.ui.VerdettiViewModel
 import eu.stgm.pactum.genitore.ui.ImpostazioniScreen
+import eu.stgm.pactum.genitore.ui.LavoriScreen
+import eu.stgm.pactum.genitore.ui.LocalCornice
+import eu.stgm.pactum.genitore.ui.Messaggi
+import eu.stgm.pactum.genitore.ui.Navigazione
 import eu.stgm.pactum.genitore.ui.NotificheScreen
 import eu.stgm.pactum.genitore.ui.NotificheViewModel
+import eu.stgm.pactum.genitore.ui.Pagina
+import eu.stgm.pactum.genitore.ui.PanoramicaScreen
+import eu.stgm.pactum.genitore.ui.ProposteViewModel
+import eu.stgm.pactum.genitore.ui.RegolaScreen
+import eu.stgm.pactum.genitore.ui.Scheda
+import eu.stgm.pactum.genitore.ui.Schermo
+import eu.stgm.pactum.genitore.ui.StoricoScreen
 import eu.stgm.pactum.genitore.ui.TempoScreen
-import eu.stgm.pactum.genitore.ui.TurnoScreen
+import eu.stgm.pactum.genitore.ui.VerdettiViewModel
+import eu.stgm.pactum.genitore.ui.codificaNavigazione
+import eu.stgm.pactum.genitore.ui.decodificaNavigazione
+import eu.stgm.pactum.genitore.ui.daDecidereDelScelto
+import eu.stgm.pactum.genitore.ui.dopoLaRiga
+import eu.stgm.pactum.genitore.ui.ingresso
+import eu.stgm.pactum.genitore.ui.messaggioAbbinamento
+import eu.stgm.pactum.genitore.ui.parole
+import eu.stgm.pactum.genitore.ui.quanteDaDecidereInTutto
+import eu.stgm.pactum.genitore.ui.testoCollegato
 import eu.stgm.pactum.genitore.ui.theme.PactumTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -81,6 +101,9 @@ class MainActivity : ComponentActivity() {
     private val faccendaRichiesta = mutableStateOf<Long?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // (0.15) Bordo pieno con le icone scure della barra di stato (B14): lo
+        // Scaffold della radice gestisce i margini delle barre di sistema.
+        attivaBordoPieno()
         super.onCreate(savedInstanceState)
         // La destinazione vale solo per un tocco VERO sulla notifica. Due casi in
         // cui Android riconsegna lo stesso intent vecchio, extra compreso:
@@ -141,7 +164,10 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_FACCENDA = "faccenda"
         const val DEST_FINESTRA = "finestra"
 
-        /** (0.13) La pagina delle faccende del figlio della notifica (sopra la Panoramica). */
+        /** (0.15) La scheda "Da decidere" del figlio della notifica. */
+        const val DEST_DECIDERE = "decidere"
+
+        /** (0.13) I lavori di casa del figlio della notifica ((0.15) la scheda Lavori). */
         const val DEST_FACCENDE = "faccende"
         const val DEST_TEMPO = "tempo"
         const val DEST_TURNO = "turno"
@@ -151,33 +177,45 @@ class MainActivity : ComponentActivity() {
         // notifica fissa quando gli avvisi possono arrivare in ritardo o sono spenti.
         const val DEST_AVVISI = "avvisi"
 
-        // Le destinazioni di prima (6 schede): le notifiche già nella tendina le
-        // portano ancora nel loro PendingIntent. Restano riconosciute e finiscono
-        // su "Proposte e conferme", così nessun tocco cade nel vuoto dopo l'aggiornamento.
+        // Le destinazioni di prima (6 schede, poi "Proposte e conferme"): le notifiche
+        // già nella tendina le portano ancora nel loro PendingIntent. Restano
+        // riconosciute e (0.15) finiscono su "Da decidere", così nessun tocco cade
+        // nel vuoto dopo l'aggiornamento (v. ingresso, ui/Navigazione.kt).
         const val DEST_PROPOSTE = "proposte"
         const val DEST_VERDETTI = "verdetti"
     }
 }
 
-/** Le quattro voci della barra, con le icone disegnate per Pactum. */
-private enum class Destinazione(@DrawableRes val icona: Int, @StringRes val etichetta: Int) {
-    FINESTRA(R.drawable.ic_notifica_binocolo, R.string.scheda_finestra),
-    TEMPO(R.drawable.ic_scheda_tempo, R.string.scheda_tempo),
-    TURNO(R.drawable.ic_scheda_turno, R.string.scheda_turno),
-    IMPOSTAZIONI(R.drawable.ic_scheda_impostazioni, R.string.scheda_impostazioni),
-}
+/** (0.15) Le quattro schede fisse della barra in basso, con le icone disegnate per Pactum. */
+private val VociBarra = listOf(
+    Triple(Scheda.PANORAMICA, R.drawable.ic_notifica_binocolo, R.string.scheda_finestra),
+    Triple(Scheda.DA_DECIDERE, R.drawable.ic_scheda_turno, R.string.scheda_da_decidere),
+    Triple(Scheda.LAVORI, R.drawable.ic_scheda_lavori, R.string.scheda_lavori),
+    Triple(Scheda.TEMPO, R.drawable.ic_scheda_tempo, R.string.scheda_tempo),
+)
 
 /** Ogni quanto si ricontano le notifiche non lette, per il badge. */
 private const val INTERVALLO_NON_LETTE_MS = 60_000L
 
-/** L'altezza della barra di Material 3 (NavigationBarTokens.ContainerHeight). */
-private val ALTEZZA_BARRA_MATERIAL = 80.dp
+/** La chiave dello stato salvato di una schermata (scorrimento, sezioni aperte, scelte). */
+private fun chiaveSchermo(schermo: Schermo): String = when (schermo) {
+    is Schermo.SuScheda -> "scheda-${schermo.scheda.name}"
+    is Schermo.SuPagina -> "pagina-" + when (val p = schermo.pagina) {
+        Pagina.Notifiche -> "notifiche"
+        is Pagina.Impostazioni -> "impostazioni"
+        Pagina.Storico -> "storico"
+        is Pagina.Regola -> "regola-${p.regolaId}"
+        Pagina.DaiLavori -> "dai"
+    }
+}
 
 /**
- * Quattro voci: guarda · misura · proposte e conferme · impostazioni (tavola rotonda
- * C4). La finestra è la casa; le notifiche non sono una scheda, sono la lista
- * che si apre dalla campanella della finestra, col conto delle non lette come
- * badge sulla campanella (e solo lì).
+ * (0.15) Quattro schede fisse — Panoramica · Da decidere · Lavori · Tempo — e
+ * sopra, in ogni scheda, la campanella delle notifiche, ⟳ e le Impostazioni, che
+ * aprono pagine sopra. La navigazione è una pila ([Navigazione], logica pura):
+ * Indietro torna da dove si era venuti, da una scheda alla Panoramica, dalla
+ * Panoramica esce. Ogni schermata tiene il suo stato (scorrimento, sezioni
+ * aperte, giorno scelto) cambiando scheda e ruotando: [rememberSaveableStateHolder].
  */
 @Composable
 private fun GenitoreRoot(
@@ -188,15 +226,12 @@ private fun GenitoreRoot(
     faccendaRichiesta: Long? = null,
     onFaccendaConsumata: () -> Unit = {},
 ) {
-    var destinazione by rememberSaveable { mutableStateOf(Destinazione.FINESTRA) }
-    var notificheAperte by rememberSaveable { mutableStateOf(false) }
-    // (0.13) La pagina delle faccende, sopra la Panoramica come le notifiche; con
-    // "Dai faccende" già aperto, o con la foto di una faccenda.
-    var faccendeAperte by rememberSaveable { mutableStateOf(false) }
-    var daiSubito by rememberSaveable { mutableStateOf(false) }
+    // La pila si salva come testo (rotazione, app chiusa da Android).
+    var pila by rememberSaveable { mutableStateOf(codificaNavigazione(Navigazione())) }
+    val navigazione = remember(pila) { decodificaNavigazione(pila) }
+    val vai: (Navigazione) -> Unit = { pila = codificaNavigazione(it) }
+    // (0.13) La foto di un lavoro da aprire nella scheda Lavori (da una notifica).
     var fotoDaAprire by rememberSaveable { mutableStateOf<Long?>(null) }
-    // (0.9) Le Impostazioni si aprono già sulla sezione "Avvisi del patto".
-    var avvisiDaMostrare by rememberSaveable { mutableStateOf(false) }
 
     // Lo stesso ViewModel che usa la lista delle notifiche (scope dell'attività):
     // il badge e la lista contano le stesse cose.
@@ -206,6 +241,7 @@ private fun GenitoreRoot(
     // (v3) La famiglia, condivisa da tutte le schermate: si rilegge insieme al
     // badge, così i figli, i loro dispositivi e i loro numeri restano freschi.
     val famigliaVm: FamigliaViewModel = viewModel()
+    val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
     val cicloVita = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(cicloVita) {
         cicloVita.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -256,142 +292,169 @@ private fun GenitoreRoot(
     RichiestaPermessoNotifiche()
     RichiestaEsenzioneBatteria(configurata)
 
-    // Arrivo da una notifica: salta alla scheda giusta, una volta sola.
+    // I messaggi in basso di tutta l'app: un esito si vede anche se la pagina che
+    // l'ha chiesto si è chiusa (i lavori di casa appena dati).
+    val statoMessaggi = remember { SnackbarHostState() }
+    val ambitoMessaggi = rememberCoroutineScope()
+    val messaggi = remember { Messaggi(statoMessaggi, ambitoMessaggi) }
+
+    // (0.13) Com'è andato il collegamento col codice di 6 cifre, anche se è finito
+    // mentre le Impostazioni erano chiuse: si dice, e (0.15) se è riuscito si torna
+    // alla Panoramica, che adesso ha qualcosa da mostrare.
+    val collegamento by collegamentoVm.stato.collectAsStateWithLifecycle()
+    val p = parole()
+    LaunchedEffect(collegamento.esito) {
+        val esito = collegamento.esito ?: return@LaunchedEffect
+        collegamentoVm.consumaEsito()
+        val messaggio = if (esito is EsitoAbbinamento.Collegato) {
+            vai(Navigazione())
+            testoCollegato(p, esito.genitore)
+        } else {
+            messaggioAbbinamento(p, esito)
+        }
+        if (messaggio != null) messaggi.mostra(messaggio)
+    }
+
+    // Arrivo da una notifica: la scheda (o la pagina) giusta, una volta sola.
+    var ingressiAvvisi by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(destinazioneRichiesta) {
         if (destinazioneRichiesta == null) return@LaunchedEffect
-        when (destinazioneRichiesta) {
-            MainActivity.DEST_TEMPO -> {
-                destinazione = Destinazione.TEMPO
-                notificheAperte = false
-                faccendeAperte = false
-            }
-            MainActivity.DEST_TURNO,
-            MainActivity.DEST_PROPOSTE,
-            MainActivity.DEST_VERDETTI -> {
-                destinazione = Destinazione.TURNO
-                notificheAperte = false
-                faccendeAperte = false
-            }
-            MainActivity.DEST_NOTIFICHE -> {
-                destinazione = Destinazione.FINESTRA
-                notificheAperte = true
-                faccendeAperte = false
-            }
-            MainActivity.DEST_AVVISI -> {
-                destinazione = Destinazione.IMPOSTAZIONI
-                notificheAperte = false
-                faccendeAperte = false
-                avvisiDaMostrare = true
-            }
-            // (0.13) Le faccende del figlio della notifica, e la foto se è di una faccenda.
-            MainActivity.DEST_FACCENDE -> {
-                destinazione = Destinazione.FINESTRA
-                notificheAperte = false
-                faccendeAperte = true
-                fotoDaAprire = faccendaRichiesta
-            }
-            // DEST_FINESTRA e qualunque valore sconosciuto: la casa.
-            else -> {
-                destinazione = Destinazione.FINESTRA
-                notificheAperte = false
-                faccendeAperte = false
-            }
-        }
+        vai(ingresso(destinazioneRichiesta, navigazione))
+        // (0.15) Dalla notifica fissa degli avvisi le Impostazioni tornano sugli
+        // Avvisi anche se erano già aperte e scorse altrove.
+        if (destinazioneRichiesta == MainActivity.DEST_AVVISI) ingressiAvvisi++
+        // (0.13) Le faccende del figlio della notifica, e la foto se è di una faccenda.
+        if (destinazioneRichiesta == MainActivity.DEST_FACCENDE) fotoDaAprire = faccendaRichiesta
         onDestinazioneConsumata()
         onFaccendaConsumata()
     }
 
-    // Indietro chiude le notifiche (o le faccende) e torna alla finestra.
-    BackHandler(enabled = notificheAperte) { notificheAperte = false }
-    BackHandler(enabled = faccendeAperte && !notificheAperte) { faccendeAperte = false }
+    // Indietro: da una pagina a dove si era; da una scheda alla Panoramica; dalla
+    // Panoramica esce (BackHandler spento: ci pensa Android).
+    val dopoIndietro = navigazione.indietro()
+    BackHandler(enabled = dopoIndietro != null) { dopoIndietro?.let(vai) }
 
-    // "Proposte e conferme" va a capo su 360 e su 411dp (è ~124dp, una voce ne
-    // ha 84-97): tutte le etichette tengono due righe (minLines) così icone ed
-    // etichette restano sulla stessa linea. Ma Material centra icona+etichette
-    // in 80dp: con due righe la pillola dell'icona finiva a 4dp dal bordo alto
-    // (12 di norma). La barra cresce di UNA riga d'etichetta: icone ed etichette
-    // corte stanno dove le mette Material, la seconda riga ha il suo posto sotto.
-    val altezzaVoce = with(LocalDensity.current) {
-        ALTEZZA_BARRA_MATERIAL + MaterialTheme.typography.labelMedium.lineHeight.toDp()
+    // Lo stato salvato di ogni schermata. Quello di una pagina chiusa si butta: la
+    // prossima volta si riapre dall'inizio. Le schede tengono sempre il loro.
+    val contenitore = rememberSaveableStateHolder()
+    val chiaviPagine = navigazione.pila.filterIsInstance<Schermo.SuPagina>().map(::chiaveSchermo).toSet()
+    var pagineAperte by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(chiaviPagine) {
+        (pagineAperte - chiaviPagine).forEach { contenitore.removeState(it) }
+        pagineAperte = chiaviPagine
     }
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                Destinazione.entries.forEach { voce ->
-                    NavigationBarItem(
-                        modifier = Modifier.heightIn(min = altezzaVoce),
-                        selected = destinazione == voce,
-                        onClick = {
-                            destinazione = voce
-                            notificheAperte = false
-                            faccendeAperte = false
-                        },
-                        icon = {
-                            // L'etichetta sotto dice già il nome: l'icona tace.
-                            // Niente badge qui: il conto delle non lette sta
-                            // solo sulla campanella, da dove si aprono.
-                            Icon(painterResource(voce.icona), contentDescription = null)
-                        },
-                        // Va a capo, centrata, mai troncata (v. altezzaVoce).
-                        label = {
-                            Text(
-                                text = stringResource(voce.etichetta),
-                                textAlign = TextAlign.Center,
-                                minLines = 2,
+    // Il numero sulla voce "Da decidere": per il figlio scelto dalla sua finestra
+    // e dalle sue dichiarazioni (le letture della lista), per gli altri figli dalla
+    // famiglia (proposte + sessioni).
+    val daDecidere = quanteDaDecidereInTutto(
+        figli = famiglia.figli,
+        sceltoId = famiglia.figlioScelto?.id,
+        delScelto = daDecidereDelScelto(famiglia, finestraVm, proposteVm, verdettiVm),
+    )
+    // (0.15) Le dichiarazioni del figlio scelto (la stessa lettura che fa "Da
+    // decidere" quando si apre): all'apertura dell'app, al cambio di figlio e
+    // quando arriva una notifica nuova (una dichiarazione nuova ne porta una), così
+    // il numero c'è già prima di aprire la scheda. Niente giro in più ogni minuto.
+    var nonLettePrima by remember { mutableIntStateOf(nonLette) }
+    var arrivi by remember { mutableIntStateOf(0) }
+    LaunchedEffect(nonLette) {
+        if (nonLette > nonLettePrima) arrivi++
+        nonLettePrima = nonLette
+    }
+    LifecycleResumeEffect(famiglia.figlioId, famiglia.pronta, arrivi) {
+        if (famiglia.pronta) verdettiVm.aggiorna(famiglia.figlioId)
+        onPauseOrDispose { }
+    }
+
+    val cornice = Cornice(
+        notificheNonLette = nonLette,
+        messaggi = messaggi,
+        vaiAScheda = { vai(navigazione.apriScheda(it)) },
+        apri = { vai(navigazione.apri(it)) },
+        indietro = { vai(dopoIndietro ?: Navigazione()) },
+        allaPanoramica = { vai(Navigazione()) },
+    )
+
+    CompositionLocalProvider(LocalCornice provides cornice) {
+        Scaffold(
+            bottomBar = {
+                if (!navigazione.suUnaPagina) {
+                    BarraInBasso(
+                        scelta = navigazione.scheda,
+                        daDecidere = daDecidere,
+                        onScegli = { vai(navigazione.scegli(it)) },
+                    )
+                }
+            },
+            snackbarHost = { SnackbarHost(statoMessaggi) },
+        ) { padding ->
+            // consumeWindowInsets: il padding dello Scaffold esterno copre già le
+            // barre di sistema; senza consumarlo, le TopAppBar degli Scaffold interni
+            // riapplicherebbero l'inset della status bar (doppio spazio su Android 15).
+            // (0.15) imePadding: con adjustResize (manifest) e il bordo pieno la
+            // tastiera arriva come inset; qui ogni schermata le resta sopra, una volta
+            // sola (consumato: gli imePadding delle pagine dentro non contano due volte).
+            Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
+                val inCima = navigazione.inCima
+                contenitore.SaveableStateProvider(chiaveSchermo(inCima)) {
+                    when (inCima) {
+                        is Schermo.SuScheda -> when (inCima.scheda) {
+                            Scheda.PANORAMICA -> PanoramicaScreen()
+                            Scheda.DA_DECIDERE -> DaDecidereScreen()
+                            Scheda.LAVORI -> LavoriScreen(
+                                fotoRichiesta = fotoDaAprire,
+                                onFotoRichiestaConsumata = { fotoDaAprire = null },
                             )
-                        },
-                    )
+                            Scheda.TEMPO -> TempoScreen()
+                        }
+                        is Schermo.SuPagina -> when (val pagina = inCima.pagina) {
+                            Pagina.Notifiche -> NotificheScreen(
+                                // (0.15) Ogni riga porta dove si guarda il fatto: il figlio
+                                // della notifica, e per un lavoro fatto la sua foto.
+                                onApri = { apri ->
+                                    apri.figlioId?.let(famigliaVm::scegli)
+                                    if (apri.faccendaId != null) fotoDaAprire = apri.faccendaId
+                                    vai(navigazione.dopoLaRiga(apri))
+                                },
+                            )
+                            is Pagina.Impostazioni -> ImpostazioniScreen(sezione = pagina.sezione, richiesta = ingressiAvvisi)
+                            Pagina.Storico -> StoricoScreen()
+                            is Pagina.Regola -> RegolaScreen(regolaId = pagina.regolaId)
+                            Pagina.DaiLavori -> DaiLavoriScreen()
+                        }
+                    }
                 }
-            }
-        },
-    ) { padding ->
-        // consumeWindowInsets: il padding dello Scaffold esterno copre già le
-        // barre di sistema; senza consumarlo, le TopAppBar degli Scaffold interni
-        // riapplicherebbero l'inset della status bar (doppio spazio su Android 15).
-        Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
-            when (destinazione) {
-                Destinazione.FINESTRA -> when {
-                    notificheAperte -> NotificheScreen(
-                        onChiudi = { notificheAperte = false },
-                        vm = notificheVm,
-                        // (0.13) Da una notifica delle faccende: le faccende di quel figlio (e la foto).
-                        onApriFaccende = { figlioId, faccendaId ->
-                            if (figlioId != null) famigliaVm.scegli(figlioId)
-                            fotoDaAprire = faccendaId
-                            notificheAperte = false
-                            faccendeAperte = true
-                        },
-                    )
-                    faccendeAperte -> FaccendeScreen(
-                        onChiudi = { faccendeAperte = false },
-                        fotoRichiesta = fotoDaAprire,
-                        onFotoRichiestaConsumata = { fotoDaAprire = null },
-                        daiSubito = daiSubito,
-                        onDaiSubitoConsumato = { daiSubito = false },
-                    )
-                    else -> FinestraScreen(
-                        notificheNonLette = nonLette,
-                        onApriNotifiche = { notificheAperte = true },
-                        onApriAvvisi = {
-                            destinazione = Destinazione.IMPOSTAZIONI
-                            avvisiDaMostrare = true
-                        },
-                        onApriFaccende = { dai ->
-                            daiSubito = dai
-                            faccendeAperte = true
-                        },
-                    )
-                }
-                Destinazione.TEMPO -> TempoScreen()
-                Destinazione.TURNO -> TurnoScreen()
-                Destinazione.IMPOSTAZIONI -> ImpostazioniScreen(
-                    mostraAvvisi = avvisiDaMostrare,
-                    onAvvisiMostrati = { avvisiDaMostrare = false },
-                )
             }
         }
     }
+}
+
+/**
+ * (0.15) La barra in basso: quattro voci fisse ([BarraSchede] di core-design:
+ * etichette sempre su una riga). "Da decidere" porta il numero delle cose che
+ * aspettano il genitore.
+ */
+@Composable
+private fun BarraInBasso(scelta: Scheda, daDecidere: Int, onScegli: (Scheda) -> Unit) {
+    val descrizioneBadge = if (daDecidere > 0) {
+        pluralStringResource(R.plurals.da_decidere_badge, daDecidere, daDecidere)
+    } else {
+        null
+    }
+    val voci = VociBarra.map { (scheda, icona, etichetta) ->
+        VoceBarra(
+            etichetta = stringResource(etichetta),
+            icona = painterResource(icona),
+            badge = daDecidere.takeIf { scheda == Scheda.DA_DECIDERE && it > 0 },
+            descrizioneBadge = descrizioneBadge.takeIf { scheda == Scheda.DA_DECIDERE },
+        )
+    }
+    BarraSchede(
+        voci = voci,
+        selezionata = VociBarra.indexOfFirst { it.first == scelta },
+        onSeleziona = { indice -> onScegli(VociBarra[indice].first) },
+    )
 }
 
 /**

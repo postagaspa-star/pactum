@@ -3,12 +3,11 @@ package eu.stgm.pactum.genitore.fotografo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import eu.stgm.pactum.genitore.MainActivity
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Famiglia
@@ -19,9 +18,6 @@ import eu.stgm.pactum.genitore.fotografo.ServerFinto.Companion.corpo
 import eu.stgm.pactum.genitore.fotografo.Variante.Companion.CHIARO_360
 import eu.stgm.pactum.genitore.fotografo.Variante.Companion.CHIARO_360_GRANDE
 import eu.stgm.pactum.genitore.fotografo.Variante.Companion.CHIARO_411
-import eu.stgm.pactum.genitore.fotografo.Variante.Companion.RIDOTTE
-import eu.stgm.pactum.genitore.fotografo.Variante.Companion.SCURO_411
-import eu.stgm.pactum.genitore.fotografo.Variante.Companion.TUTTE
 import eu.stgm.pactum.genitore.ui.giornoBreve
 import org.junit.After
 import org.junit.Before
@@ -34,17 +30,15 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /**
- * Il FOTOGRAFO dell'app del genitore: disegna sul PC, senza telefono né
- * emulatore, ogni schermata e ogni dialogo importante, coi dati finti di
+ * Il FOTOGRAFO dell'app del genitore (0.15): disegna sul PC, senza telefono né
+ * emulatore, ogni scheda, ogni pagina e i dialoghi principali, coi dati finti di
  * [DatiFinti] serviti da un server finto. L'app è quella vera (MainActivity, i
  * ViewModel veri, la rete vera verso il server finto): niente è rifatto apposta.
  *
  * Non fa parte della suite normale: parte solo con
  *   gradlew :app:testDebugUnitTest -Pfotografo -Pfotografo.cartella=…
- * Ogni schermata in tema chiaro e scuro, a 360 e 411 dp, testo normale e grande
- * (1,3); gli stati principali (normale, vuoto, senza rete, collegamento non
- * valido, server vecchio, più figli). Con le pagine (-p1, -p2…) quando la
- * schermata scorre.
+ * L'app è sempre chiara: ogni stato a 360 dp, testo normale e grande (1,3); le
+ * quattro schede principali anche a 411 dp. Le pagine successive (-p2…) solo a 360.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -58,8 +52,11 @@ class FotografoGenitoreTest {
     private val server = ServerFinto()
     private lateinit var f: Fotografo
 
-    /** Le varianti in cui si scattano tutte le pagine dello stato principale. */
-    private val conPagine = setOf(CHIARO_360, CHIARO_411, CHIARO_360_GRANDE)
+    /** Ogni stato: chiaro a 360, testo normale e grande. */
+    private val due = listOf(CHIARO_360, CHIARO_360_GRANDE)
+
+    /** Le quattro schede principali: anche a 411. */
+    private val tre = due + CHIARO_411
 
     @Before
     fun prima() {
@@ -99,53 +96,51 @@ class FotografoGenitoreTest {
         },
     )
 
+    private val luca = Preparazione(figlioScelto = LUCA)
+    private val sara = Preparazione(figlioScelto = SARA)
+
     // --- 01 Panoramica ----------------------------------------------------------------------
 
     private val panoramicaPronta: Fotografo.() -> Boolean = {
-        nonCe(s(R.string.finestra_caricamento)) && ce("Luca ti propone")
+        nonCe(s(R.string.finestra_caricamento)) && ce(s(R.string.patto_ultimi_giorni))
     }
 
     @Test
     fun panoramica() {
-        TUTTE.forEach { v ->
+        tre.forEach { v ->
             f.scatta(
-                "01-panoramica_normale", "Panoramica di Luca (2 figli; proposte, sessioni e lavori in cima)", v,
-                pagine = v in conPagine, pronto = panoramicaPronta,
+                "01-panoramica_normale", "Panoramica di Luca (2 figli): richieste da decidere, blocco attivo, patto, dispositivi", v,
+                preparazione = luca, pagine = v == CHIARO_360, pronto = panoramicaPronta,
             )
         }
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
                 "01-panoramica_sara-telefono-silenzioso", "Panoramica di Sara: telefono silenzioso da 2 ore", v,
-                preparazione = Preparazione(figlioScelto = SARA), pagine = v == CHIARO_360,
-                pronto = { nonCe(s(R.string.finestra_caricamento)) && ce("ULTIMI 8 GIORNI") || ce("Nessun aggiornamento") },
+                preparazione = sara, pagine = v == CHIARO_360, pronto = panoramicaPronta,
             )
         }
-        f.scatta(
-            "01-panoramica_un-figlio", "Panoramica con un figlio solo (Luca)", CHIARO_360,
-            scenario = DatiFinti.scenarioNormale(soloLuca = true), pronto = panoramicaPronta,
-        )
-        f.scatta(
-            "01-panoramica_prima-volta-intro", "Panoramica con la scheda «Come funziona Pactum» ancora aperta", CHIARO_360,
-            preparazione = Preparazione(introChiusa = false), pagine = true, pronto = panoramicaPronta,
-        )
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
-                "01-panoramica_vuoto-figlio-senza-dispositivi", "Panoramica di Sara appena creata: nessun dispositivo, nessuna regola", v,
-                scenario = DatiFinti.scenarioVuoto(), preparazione = Preparazione(figlioScelto = SARA),
+                "01-panoramica_un-figlio", "Panoramica con un figlio solo (Luca): il nome in cima alla card del patto", v,
+                scenario = DatiFinti.scenarioNormale(soloLuca = true), pagine = v == CHIARO_360, pronto = panoramicaPronta,
+            )
+        }
+        due.forEach { v ->
+            f.scatta(
+                "01-panoramica_vuoto-figlio-senza-dispositivi", "Panoramica di Sara appena creata: nessun dispositivo (col pulsante)", v,
+                scenario = DatiFinti.scenarioVuoto(), preparazione = sara,
                 pronto = { ce(s(R.string.nessun_dispositivo_titolo)) },
             )
         }
-        listOf(CHIARO_360, SCURO_411).forEach { v ->
-            f.scatta(
-                "01-panoramica_vuoto-senza-regole", "Panoramica di Sara: telefono collegato, ancora nessuna regola", v,
-                scenario = scenarioSaraSenzaRegole(), preparazione = Preparazione(figlioScelto = SARA),
-                pronto = { ce(s(R.string.regole_vuoto_titolo)) },
-            )
-        }
-        RIDOTTE.forEach { v ->
+        f.scatta(
+            "01-panoramica_vuoto-senza-regole", "Panoramica di Sara: telefono collegato, ancora nessuna regola", CHIARO_360,
+            scenario = scenarioSaraSenzaRegole(), preparazione = sara,
+            pronto = { ce(s(R.string.regole_vuoto_titolo)) },
+        )
+        due.forEach { v ->
             f.scatta(
                 "01-panoramica_dati-vecchi", "Panoramica coi dati di prima: la rete è caduta dopo la prima lettura", v,
-                pronto = panoramicaPronta,
+                preparazione = luca, pronto = panoramicaPronta,
                 gesti = {
                     server.scenario = DatiFinti.scenarioSenzaRete()
                     toccaDescrizione(s(R.string.azione_aggiorna))
@@ -153,78 +148,178 @@ class FotografoGenitoreTest {
                 dopo = { ce("Dati non aggiornati") },
             )
         }
-        RIDOTTE.forEach { v ->
+        // (0.15) Si guarda Luca, cade la rete, si tocca Sara: l'errore resta SOTTO la
+        // scelta del figlio, e si può tornare a Luca.
+        f.scatta(
+            "01-panoramica_cambio-figlio-senza-rete", "Panoramica: tocco su Sara mentre la rete è caduta (la scelta del figlio resta in cima)", CHIARO_360,
+            preparazione = luca, pronto = panoramicaPronta,
+            gesti = {
+                val normale = DatiFinti.scenarioNormale()
+                server.scenario = normale.copy(
+                    finestra = { id -> if (id == DatiFinti.SARA) ServerFinto.Risposta.SenzaRete else normale.finestra(id) },
+                )
+                tocca("Sara", esatto = true)
+            },
+            dopo = { ce(s(R.string.finestra_errore_nessun_dato)) && ce("Luca") },
+        )
+        due.forEach { v ->
             f.scatta(
                 "01-panoramica_senza-rete", "Panoramica alla prima apertura senza rete (niente dati in mano)", v,
                 scenario = DatiFinti.scenarioSenzaRete(),
                 pronto = { ce(s(R.string.finestra_errore_nessun_dato)) },
             )
         }
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
                 "01-panoramica_collegamento-non-valido", "Panoramica: il collegamento di questo telefono non vale più (401)", v,
                 scenario = DatiFinti.scenarioNonValido(),
                 pronto = { ce(s(R.string.collegamento_non_valido_titolo)) },
             )
         }
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
-                "01-panoramica_server-vecchio", "Panoramica su un server 0.7 (niente famiglia, un telefono)", v,
-                scenario = DatiFinti.scenarioServerVecchio(), pagine = v == CHIARO_360,
-                pronto = { nonCe(s(R.string.finestra_caricamento)) && ce("ULTIMI 8 GIORNI") },
-            )
-        }
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "01-panoramica_prima-apertura", "Panoramica alla prima apertura: manca il collegamento", v,
+                "01-panoramica_prima-apertura", "Panoramica alla prima apertura: manca il collegamento (col pulsante)", v,
                 scenario = DatiFinti.scenarioSenzaRete(), preparazione = Preparazione(configurato = false, ultimoControlloMinutiFa = null),
                 pronto = { ce(s(R.string.config_mancante_titolo)) },
             )
         }
         f.scatta(
+            "01-panoramica_server-vecchio", "Panoramica su un server 0.7 (niente famiglia, un telefono)", CHIARO_360,
+            scenario = DatiFinti.scenarioServerVecchio(), pagine = true,
+            pronto = { nonCe(s(R.string.finestra_caricamento)) && ce(s(R.string.patto_ultimi_giorni)) },
+        )
+        f.scatta(
             "01-panoramica_avvisi-spenti", "Panoramica con gli avvisi di Pactum spenti su questo telefono", CHIARO_360,
-            preparazione = Preparazione(notifiche = false), pronto = panoramicaPronta,
+            preparazione = Preparazione(notifiche = false, figlioScelto = LUCA), pronto = panoramicaPronta,
         )
         f.scatta(
             "01-panoramica_avvisi-in-ritardo", "Panoramica: la vedetta non controlla da 3 ore", CHIARO_360,
-            preparazione = Preparazione(ultimoControlloMinutiFa = 180), pronto = panoramicaPronta,
+            preparazione = Preparazione(ultimoControlloMinutiFa = 180, figlioScelto = LUCA), pronto = panoramicaPronta,
         )
-        listOf(CHIARO_411, CHIARO_360_GRANDE).forEach { v ->
-            f.scatta(
-                "01-panoramica_storico-aperto", "Panoramica scorsa fino in fondo con lo «Storico del patto» aperto", v,
-                pronto = panoramicaPronta,
-                gesti = {
-                    inFondo()
-                    tocca(s(R.string.sezione_storico))
-                },
-                pagine = true,
-            )
-        }
+        f.scatta(
+            "02-panoramica_segno-mandato", "Panoramica dopo «Manda un segno» (la frase in basso)", CHIARO_360,
+            preparazione = luca, pronto = panoramicaPronta,
+            gesti = {
+                scorriFino(s(R.string.segno_manda))
+                tocca(R.string.segno_manda)
+            },
+            dopo = { ce(s(R.string.segno_mandato)) },
+        )
     }
 
-    // --- 02 Dialoghi della Panoramica -------------------------------------------------------------
+    // --- 11 Storico del patto, 12 dettaglio di una regola ----------------------------------------------
 
     @Test
-    fun panoramicaDialoghi() {
-        RIDOTTE.forEach { v ->
+    fun storicoERegola() {
+        due.forEach { v ->
             f.scatta(
-                "02-panoramica-dialogo_accetta-proposta", "Dialogo «Accetta» sulla proposta di Luca", v,
-                pronto = panoramicaPronta,
-                gesti = { tocca(R.string.proposta_accetta) },
+                "11-storico_normale", "Storico del patto di Luca: regole cambiate, sessioni, proposte chiuse, dichiarazioni", v,
+                preparazione = luca, pagine = v == CHIARO_360, pronto = panoramicaPronta,
+                gesti = {
+                    scorriFino(s(R.string.sezione_storico))
+                    tocca(s(R.string.sezione_storico), esatto = true)
+                },
+                dopo = { ce(s(R.string.storico_regole)) && nonCe(s(R.string.storico_caricamento)) },
+            )
+        }
+        due.forEach { v ->
+            f.scatta(
+                "12-regola_dettaglio", "Dettaglio della regola «TikTok» (aperto dalla card del patto)", v,
+                preparazione = luca, pagine = v == CHIARO_360, pronto = panoramicaPronta,
+                gesti = { tocca("TikTok: al massimo") },
+                dopo = { ce(s(R.string.regola_titolo)) && (ce(s(R.string.proposte_bottone_proponi)) || ce("già una proposta")) },
+            )
+        }
+        due.forEach { v ->
+            f.scatta(
+                "12-regola-dialogo_nuova-proposta", "Dialogo «Proponi una modifica» su una regola di tempo (dal dettaglio)", v,
+                pagineDialogo = true, preparazione = luca, pronto = panoramicaPronta,
+                gesti = {
+                    tocca("Tutto il telefono: al massimo")
+                    aspetta("dettaglio") { ce(s(R.string.proposte_bottone_proponi)) }
+                    tocca(R.string.proposte_bottone_proponi)
+                },
+                dopo = { ce(s(R.string.proposta_invia)) },
+            )
+        }
+        f.scatta(
+            "12-regola-dialogo_nuova-proposta-fascia", "Dialogo «Proponi una modifica» su una fascia oraria di Sara", CHIARO_360,
+            pagineDialogo = true, preparazione = sara, pronto = panoramicaPronta,
+            gesti = {
+                tocca("Niente telefono dalle 21:30")
+                aspetta("dettaglio") { ce(s(R.string.proposte_bottone_proponi)) }
+                tocca(R.string.proposte_bottone_proponi)
+            },
+            dopo = { ce(s(R.string.proposta_invia)) },
+        )
+    }
+
+    // --- 07 Da decidere --------------------------------------------------------------------------
+
+    private val daDecidereProntaLuca: Fotografo.() -> Boolean = {
+        nonCe(s(R.string.turno_caricamento)) && (ce("Luca chiede") || ce("Luca ti propone") || ce(s(R.string.verdetto_conferma)))
+    }
+
+    @Test
+    fun daDecidere() {
+        tre.forEach { v ->
+            f.scatta(
+                "07-da-decidere_normale", "Da decidere di Luca: proposta, due sessioni, una dichiarazione, la tua proposta in attesa", v,
+                destinazione = MainActivity.DEST_DECIDERE, preparazione = luca,
+                pagine = v == CHIARO_360, pronto = daDecidereProntaLuca,
+            )
+        }
+        due.forEach { v ->
+            f.scatta(
+                "07-da-decidere_vuoto", "Da decidere di Sara: niente da decidere", v,
+                destinazione = MainActivity.DEST_DECIDERE, preparazione = sara,
+                pronto = { nonCe(s(R.string.turno_caricamento)) && ce(s(R.string.da_decidere_vuoto)) },
+            )
+        }
+        f.scatta(
+            "07-da-decidere_senza-rete", "Da decidere senza rete", CHIARO_360,
+            scenario = DatiFinti.scenarioSenzaRete(), destinazione = MainActivity.DEST_DECIDERE,
+            pronto = { ce(s(R.string.turno_errore)) },
+        )
+        f.scatta(
+            "07-da-decidere_collegamento-non-valido", "Da decidere: collegamento non più valido (401)", CHIARO_360,
+            scenario = DatiFinti.scenarioNonValido(), destinazione = MainActivity.DEST_DECIDERE,
+            pronto = { ce(s(R.string.collegamento_non_valido_titolo)) },
+        )
+        f.scatta(
+            "07-da-decidere_server-vecchio", "Da decidere su un server 0.7", CHIARO_360,
+            scenario = DatiFinti.scenarioServerVecchio(), destinazione = MainActivity.DEST_DECIDERE, pagine = true,
+            pronto = { nonCe(s(R.string.turno_caricamento)) && ce(s(R.string.sezione_storico)) },
+        )
+    }
+
+    @Test
+    fun daDecidereDialoghi() {
+        due.forEach { v ->
+            f.scatta(
+                "07-da-decidere-dialogo_accetta-proposta", "Dialogo «Accetta» sulla proposta di Luca", v,
+                destinazione = MainActivity.DEST_DECIDERE, preparazione = luca, pronto = daDecidereProntaLuca,
+                gesti = {
+                    scorriFino(s(R.string.proposta_accetta), esatto = true)
+                    tocca(R.string.proposta_accetta)
+                },
                 dopo = { ce(s(R.string.azione_annulla)) },
             )
         }
         f.scatta(
-            "02-panoramica-dialogo_rifiuta-proposta", "Dialogo «Rifiuta» sulla proposta di Luca", CHIARO_360,
-            pronto = panoramicaPronta,
-            gesti = { tocca(R.string.proposta_rifiuta) },
+            "07-da-decidere-dialogo_rifiuta-proposta", "Dialogo «Rifiuta» sulla proposta di Luca", CHIARO_360,
+            destinazione = MainActivity.DEST_DECIDERE, preparazione = luca, pronto = daDecidereProntaLuca,
+            gesti = {
+                scorriFino(s(R.string.proposta_rifiuta), esatto = true)
+                tocca(R.string.proposta_rifiuta)
+            },
             dopo = { ce(s(R.string.azione_annulla)) },
         )
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
-                "02-panoramica-dialogo_approva-sessione", "Dialogo «Approva» sul cambio della sessione Studio", v,
+                "07-da-decidere-dialogo_approva-sessione", "Dialogo «Approva» sul cambio della sessione Studio", v,
                 pagineDialogo = true,
-                pronto = panoramicaPronta,
+                destinazione = MainActivity.DEST_DECIDERE, preparazione = luca, pronto = daDecidereProntaLuca,
                 gesti = {
                     scorriFino(s(R.string.sessione_approva), esatto = true)
                     tocca(R.string.sessione_approva)
@@ -233,24 +328,26 @@ class FotografoGenitoreTest {
             )
         }
         f.scatta(
-            "02-panoramica-dialogo_non-approvare-sessione", "Dialogo «Non approvare» sulla sessione nuova «Allenamento»", CHIARO_360,
+            "07-da-decidere-dialogo_rifiuta-sessione", "Dialogo «Rifiuta» sulla sessione nuova «Allenamento»", CHIARO_360,
             pagineDialogo = true,
-            pronto = panoramicaPronta,
+            destinazione = MainActivity.DEST_DECIDERE, preparazione = luca, pronto = daDecidereProntaLuca,
             gesti = {
                 scorriFino("Allenamento")
-                // Il secondo "Non approvare": quello della sessione nuova (il primo è del cambio a «Studio»).
-                tocca(s(R.string.sessione_non_approvare), indice = 1, esatto = true)
+                // Il primo «Rifiuta» della lista: la sessione nuova viene prima della proposta.
+                scorriFino(s(R.string.sessione_rifiuta), esatto = true)
+                tocca(s(R.string.sessione_rifiuta), indice = 0, esatto = true)
             },
             dopo = { ce(s(R.string.azione_annulla)) },
         )
         f.scatta(
-            "02-panoramica_segno-mandato", "Panoramica dopo «Manda un segno» (la frase in basso)", CHIARO_360,
-            pronto = panoramicaPronta,
+            "07-da-decidere-dialogo_non-e-andata-cosi", "Domanda prima di «Non è andata così» (dal ⋯ della dichiarazione)", CHIARO_360,
+            destinazione = MainActivity.DEST_DECIDERE, preparazione = luca, pronto = daDecidereProntaLuca,
             gesti = {
-                scorriFino(s(R.string.segno_manda))
-                tocca(R.string.segno_manda)
+                scorriFino(s(R.string.verdetto_conferma), esatto = true)
+                toccaDescrizione(s(R.string.azione_altre_risposte))
+                tocca(R.string.verdetto_ribalta)
             },
-            dopo = { ce(s(R.string.segno_mandato)) },
+            dopo = { ce(s(R.string.verdetto_ribalta_titolo)) },
         )
     }
 
@@ -262,29 +359,26 @@ class FotografoGenitoreTest {
 
     @Test
     fun notifiche() {
-        TUTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
-                "03-notifiche_normale", "Notifiche non lette (9, di tutti e due i figli)", v,
-                destinazione = MainActivity.DEST_NOTIFICHE, pagine = v in conPagine, pronto = notifichePronte,
-            )
-        }
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "03-notifiche_vuoto", "Notifiche: niente di nuovo", v,
-                scenario = DatiFinti.scenarioVuoto(), destinazione = MainActivity.DEST_NOTIFICHE,
-                pronto = { ce(s(R.string.notifiche_vuoto)) },
-            )
-        }
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "03-notifiche_senza-rete", "Notifiche senza rete", v,
-                scenario = DatiFinti.scenarioSenzaRete(), destinazione = MainActivity.DEST_NOTIFICHE,
-                pronto = { ce(s(R.string.notifiche_errore)) },
+                "03-notifiche_normale", "Notifiche non lette (di tutti e due i figli): ogni riga si tocca", v,
+                destinazione = MainActivity.DEST_NOTIFICHE, pagine = v == CHIARO_360, pronto = notifichePronte,
             )
         }
         f.scatta(
-            "03-notifiche_server-vecchio", "Notifiche su un server 0.7", CHIARO_360,
-            scenario = DatiFinti.scenarioServerVecchio(), destinazione = MainActivity.DEST_NOTIFICHE, pronto = notifichePronte,
+            "03-notifiche_vuoto", "Notifiche: niente di nuovo", CHIARO_360,
+            scenario = DatiFinti.scenarioVuoto(), destinazione = MainActivity.DEST_NOTIFICHE,
+            pronto = { ce(s(R.string.notifiche_vuoto)) },
+        )
+        f.scatta(
+            "03-notifiche_senza-rete", "Notifiche senza rete", CHIARO_360,
+            scenario = DatiFinti.scenarioSenzaRete(), destinazione = MainActivity.DEST_NOTIFICHE,
+            pronto = { ce(s(R.string.notifiche_errore)) },
+        )
+        f.scatta(
+            "03-notifiche_collegamento-non-valido", "Notifiche: collegamento non più valido (401)", CHIARO_360,
+            scenario = DatiFinti.scenarioNonValido(), destinazione = MainActivity.DEST_NOTIFICHE,
+            pronto = { ce(s(R.string.collegamento_non_valido_titolo)) },
         )
         f.scatta(
             "03-notifiche_dialogo-segna-tutte", "Dialogo «Segna tutte come lette»", CHIARO_360,
@@ -302,100 +396,101 @@ class FotografoGenitoreTest {
 
     @Test
     fun lavoriDiCasa() {
-        TUTTE.forEach { v ->
+        tre.forEach { v ->
             f.scatta(
-                "04-lavori-di-casa_normale", "Lavori di casa di Luca: blocco attivo, da fare, fatti (con foto), annullati", v,
-                destinazione = MainActivity.DEST_FACCENDE, preparazione = Preparazione(figlioScelto = LUCA),
-                pagine = v in conPagine, pronto = faccendePronte,
+                "04-lavori-di-casa_normale", "Lavori di casa di Luca: blocco attivo, da fare, fatti (con foto), tolti", v,
+                destinazione = MainActivity.DEST_FACCENDE, preparazione = luca,
+                pagine = v == CHIARO_360, pronto = faccendePronte,
             )
         }
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
                 "04-lavori-di-casa_vuoto", "Lavori di casa di Sara: nessuno negli ultimi 30 giorni", v,
-                destinazione = MainActivity.DEST_FACCENDE, preparazione = Preparazione(figlioScelto = SARA),
+                destinazione = MainActivity.DEST_FACCENDE, preparazione = sara,
                 pronto = { ce(s(R.string.faccende_nessuna)) },
             )
         }
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "04-lavori-di-casa_server-vecchio", "Lavori di casa su un server più vecchio della v3.6", v,
-                scenario = scenarioFaccendeServerVecchio(), destinazione = MainActivity.DEST_FACCENDE,
-                preparazione = Preparazione(figlioScelto = LUCA),
-                pronto = { ce(s(R.string.faccende_server_vecchio_titolo)) },
-            )
-        }
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "04-lavori-di-casa_senza-rete", "Lavori di casa senza rete", v,
-                scenario = DatiFinti.scenarioSenzaRete(), destinazione = MainActivity.DEST_FACCENDE,
-                pronto = { ce(s(R.string.faccende_errore)) },
-            )
-        }
+        f.scatta(
+            "04-lavori-di-casa_server-vecchio", "Lavori di casa su un server più vecchio della v3.6", CHIARO_360,
+            scenario = scenarioFaccendeServerVecchio(), destinazione = MainActivity.DEST_FACCENDE, preparazione = luca,
+            pronto = { ce(s(R.string.faccende_server_vecchio_titolo)) },
+        )
+        f.scatta(
+            "04-lavori-di-casa_senza-rete", "Lavori di casa senza rete", CHIARO_360,
+            scenario = DatiFinti.scenarioSenzaRete(), destinazione = MainActivity.DEST_FACCENDE,
+            pronto = { ce(s(R.string.faccende_errore)) },
+        )
         f.scatta(
             "04-lavori-di-casa_collegamento-non-valido", "Lavori di casa: collegamento non più valido (401)", CHIARO_360,
             scenario = DatiFinti.scenarioNonValido(), destinazione = MainActivity.DEST_FACCENDE,
             pronto = { ce(s(R.string.collegamento_non_valido_titolo)) },
         )
         f.scatta(
-            "04-lavori-di-casa_dati-vecchi", "Lavori di casa coi dati di prima (rete caduta)", CHIARO_360,
-            destinazione = MainActivity.DEST_FACCENDE, preparazione = Preparazione(figlioScelto = LUCA),
-            pronto = faccendePronte,
+            "04-lavori-di-casa_prima-apertura", "Lavori di casa senza collegamento (il testo giusto, col pulsante)", CHIARO_360,
+            scenario = DatiFinti.scenarioSenzaRete(), destinazione = MainActivity.DEST_FACCENDE,
+            preparazione = Preparazione(configurato = false, ultimoControlloMinutiFa = null),
+            pronto = { ce(s(R.string.faccende_config_mancante)) },
+        )
+        f.scatta(
+            "04-lavori-di-casa_tolti-aperti", "Lavori di casa con la sezione «Tolti» aperta", CHIARO_360,
+            destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
             gesti = {
-                server.scenario = DatiFinti.scenarioSenzaRete()
-                toccaDescrizione(s(R.string.azione_aggiorna))
+                scorriFino(s(R.string.faccende_annullate))
+                tocca(s(R.string.faccende_annullate))
             },
-            dopo = { ce(s(R.string.faccende_dati_vecchi)) },
+            dopo = { ce("Tolto da") },
         )
     }
 
-    // --- 05 Dialoghi dei lavori di casa e foto ------------------------------------------------------
+    // --- 05 Dai lavori di casa, dialoghi e foto ------------------------------------------------------
 
     @Test
     fun lavoriDiCasaDialoghi() {
-        val luca = Preparazione(figlioScelto = LUCA)
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
-                "05-lavori-dialogo_dai-vuoto", "Dialogo «Dai lavori di casa» appena aperto", v,
-                pagineDialogo = true,
+                "05-lavori-dai_vuoto", "Pagina «Dai lavori di casa» appena aperta", v,
                 destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
+                pagine = v == CHIARO_360,
                 gesti = { tocca(R.string.faccende_dai) },
                 dopo = { ce(s(R.string.dai_manda)) },
             )
         }
-        listOf(CHIARO_360, CHIARO_360_GRANDE, SCURO_411).forEach { v ->
+        due.forEach { v ->
             f.scatta(
-                "05-lavori-dialogo_dai-compilato", "Dialogo «Dai lavori di casa» compilato: due lavori, una nota, blocco dalle…", v,
-                pagineDialogo = true,
+                "05-lavori-dai_compilato", "Pagina «Dai lavori di casa» compilata: due lavori, una nota, blocco dalle…", v,
                 destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
+                pagine = v == CHIARO_360,
                 gesti = {
                     tocca(R.string.faccende_dai)
+                    aspetta("pagina dai") { ce(s(R.string.dai_manda)) }
                     scrivi(0, "Apparecchia la tavola per sei")
                     tocca(R.string.dai_aggiungi)
                     tocca("Porta fuori la spazzatura", indice = 0, esatto = true)
                     // La nota è l'ultimo campo di testo.
-                    val campi = compose.onAllNodes(androidx.compose.ui.test.hasSetTextAction()).fetchSemanticsNodes().size
+                    val campi = compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size
                     scrivi(campi - 1, "Prima che arrivino i nonni, alle 19:30")
-                    // "Dalle…": il secondo pallino, in fondo al dialogo (si scorre fin lì).
-                    val pallini = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
+                    // "Dalle…": la seconda riga del blocco (tutta la riga si tocca).
+                    val righe = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
                     misuraTutto()
-                    pallini[1].performScrollTo()
+                    righe[1].performScrollTo()
                     toccaNodo(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton), 1)
-                    misuraTutto()
-                    colonnaDialogo()?.let { inCimaA(it) }
+                    inCima()
                 },
                 dopo = { ce(s(R.string.dai_manda)) },
             )
         }
         f.scatta(
-            "05-lavori-dialogo_dai-scegli-ora", "Dialogo «Da che ora» (orologio) sopra «Dai lavori di casa»", CHIARO_360,
+            "05-lavori-dai_scegli-ora", "Dialogo «Da che ora» (orologio) sopra «Dai lavori di casa»", CHIARO_360,
             destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
             gesti = {
                 tocca(R.string.faccende_dai)
-                tocca("Dalle ")
+                aspetta("pagina dai") { ce(s(R.string.dai_manda)) }
+                scorriFino(s(R.string.dai_cambia_ora), esatto = true)
+                tocca(R.string.dai_cambia_ora)
             },
             dopo = { ce(s(R.string.dai_scegli_ora)) },
         )
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
                 "05-lavori-dialogo_boccia", "Dialogo «Bocciare…?» su «Porta fuori la spazzatura»", v,
                 destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
@@ -407,13 +502,13 @@ class FotografoGenitoreTest {
             )
         }
         f.scatta(
-            "05-lavori-dialogo_annulla", "Dialogo «Annullare…?» su un lavoro da fare", CHIARO_360,
+            "05-lavori-dialogo_togli", "Dialogo «Togliere…?» su un lavoro da fare", CHIARO_360,
             destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
             gesti = {
-                scorriFino(s(R.string.faccenda_annulla), esatto = true)
-                tocca(R.string.faccenda_annulla)
+                scorriFino(s(R.string.faccenda_togli), esatto = true)
+                tocca(R.string.faccenda_togli)
             },
-            dopo = { ce(s(R.string.annulla_faccenda_lascia)) },
+            dopo = { ce(s(R.string.togli_faccenda_lascia)) },
         )
         val fotoAperta: Fotografo.() -> Boolean = {
             ce(s(R.string.foto_chiudi)) || compose.onAllNodes(
@@ -422,7 +517,7 @@ class FotografoGenitoreTest {
                 n.config[SemanticsProperties.ContentDescription].any { it.startsWith("Foto del lavoro") }
             }
         }
-        (RIDOTTE + Variante.SCURO_360 + CHIARO_411).forEach { v ->
+        due.forEach { v ->
             f.scatta(
                 "05-lavori-foto_a-tutto-schermo", "Foto a tutto schermo (aperta dalla notifica «lavoro fatto»)", v,
                 destinazione = MainActivity.DEST_FACCENDE, faccenda = 103L, preparazione = luca,
@@ -458,17 +553,17 @@ class FotografoGenitoreTest {
 
     @Test
     fun tempo() {
-        TUTTE.forEach { v ->
+        tre.forEach { v ->
             f.scatta(
-                "06-tempo_normale", "Tempo di Luca, telefono, oggi", v,
-                destinazione = MainActivity.DEST_TEMPO, preparazione = Preparazione(figlioScelto = LUCA),
-                pagine = v in conPagine, pronto = tempoPronto,
+                "06-tempo_normale", "Tempo di Luca, telefono, oggi (oggi scelto e visibile)", v,
+                destinazione = MainActivity.DEST_TEMPO, preparazione = luca,
+                pagine = v == CHIARO_360, pronto = tempoPronto,
             )
         }
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
                 "06-tempo_computer", "Tempo di Luca, computer (spento), oggi", v,
-                destinazione = MainActivity.DEST_TEMPO, preparazione = Preparazione(figlioScelto = LUCA),
+                destinazione = MainActivity.DEST_TEMPO, preparazione = luca,
                 pagine = v == CHIARO_360, pronto = tempoPronto,
                 gesti = { tocca("Computer di camera") },
                 dopo = {
@@ -478,46 +573,51 @@ class FotografoGenitoreTest {
             )
         }
         val quattroGiorniFa = giornoBreve(DatiFinti.oggi().minusDays(3).toString())
-        listOf(CHIARO_360, CHIARO_360_GRANDE).forEach { v ->
+        due.forEach { v ->
             f.scatta(
                 "06-tempo_giorno-senza-dati", "Tempo di Luca, telefono, un giorno senza dati ($quattroGiorniFa)", v,
-                destinazione = MainActivity.DEST_TEMPO, preparazione = Preparazione(figlioScelto = LUCA),
-                pronto = tempoPronto,
+                destinazione = MainActivity.DEST_TEMPO, preparazione = luca, pronto = tempoPronto,
                 gesti = { tocca(quattroGiorniFa, esatto = true) },
                 dopo = { ce(s(R.string.tempo_nessun_dato)) },
             )
         }
         f.scatta(
             "06-tempo_sara", "Tempo di Sara (un telefono, senza siti)", CHIARO_360,
-            destinazione = MainActivity.DEST_TEMPO, preparazione = Preparazione(figlioScelto = SARA),
-            pagine = true,
+            destinazione = MainActivity.DEST_TEMPO, preparazione = sara, pagine = true,
             pronto = { nonCe(s(R.string.tempo_caricamento)) && ce(s(R.string.tempo_etichetta_oggi)) },
         )
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "06-tempo_vuoto-figlio-senza-dispositivi", "Tempo di Sara appena creata (nessun dispositivo)", v,
-                scenario = DatiFinti.scenarioVuoto(), destinazione = MainActivity.DEST_TEMPO,
-                preparazione = Preparazione(figlioScelto = SARA),
-                pronto = { nonCe(s(R.string.tempo_caricamento)) && ce("Sara") },
-            )
-        }
+        f.scatta(
+            "06-tempo_spiegazione-siti", "Tempo di Luca: la «i» dei siti aperta, tutti i siti", CHIARO_360,
+            destinazione = MainActivity.DEST_TEMPO, preparazione = luca, pronto = tempoPronto,
+            gesti = {
+                scorriFino(s(R.string.siti_sezione_titolo))
+                toccaDescrizione(s(R.string.siti_spiegazione))
+            },
+            dopo = { ce(s(R.string.siti_stessa_lista)) },
+        )
+        f.scatta(
+            "06-tempo_vuoto-figlio-senza-dispositivi", "Tempo di Sara appena creata (nessun dispositivo)", CHIARO_360,
+            scenario = DatiFinti.scenarioVuoto(), destinazione = MainActivity.DEST_TEMPO, preparazione = sara,
+            pronto = { nonCe(s(R.string.tempo_caricamento)) && ce("Sara") },
+        )
         f.scatta(
             "06-tempo_vuoto-nessun-dato", "Tempo di Sara: telefono collegato, nessun dato ancora", CHIARO_360,
-            scenario = scenarioSaraSenzaRegole(), destinazione = MainActivity.DEST_TEMPO,
-            preparazione = Preparazione(figlioScelto = SARA),
+            scenario = scenarioSaraSenzaRegole(), destinazione = MainActivity.DEST_TEMPO, preparazione = sara,
             pronto = { ce(s(R.string.tempo_nessuna_fotografia_titolo)) || ce(s(R.string.tempo_nessun_dato)) },
         )
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "06-tempo_senza-rete", "Tempo senza rete", v,
-                scenario = DatiFinti.scenarioSenzaRete(), destinazione = MainActivity.DEST_TEMPO,
-                pronto = { ce(s(R.string.tempo_errore)) },
-            )
-        }
+        f.scatta(
+            "06-tempo_senza-rete", "Tempo senza rete", CHIARO_360,
+            scenario = DatiFinti.scenarioSenzaRete(), destinazione = MainActivity.DEST_TEMPO,
+            pronto = { ce(s(R.string.tempo_errore)) },
+        )
+        f.scatta(
+            "06-tempo_collegamento-non-valido", "Tempo: collegamento non più valido (401, non «server irraggiungibile»)", CHIARO_360,
+            scenario = DatiFinti.scenarioNonValido(), destinazione = MainActivity.DEST_TEMPO,
+            pronto = { ce(s(R.string.collegamento_non_valido_titolo)) },
+        )
         f.scatta(
             "06-tempo_dati-vecchi", "Tempo coi dati di prima (rete caduta)", CHIARO_360,
-            destinazione = MainActivity.DEST_TEMPO, preparazione = Preparazione(figlioScelto = LUCA),
-            pronto = tempoPronto,
+            destinazione = MainActivity.DEST_TEMPO, preparazione = luca, pronto = tempoPronto,
             gesti = {
                 server.scenario = DatiFinti.scenarioSenzaRete()
                 toccaDescrizione(s(R.string.azione_aggiorna))
@@ -531,131 +631,68 @@ class FotografoGenitoreTest {
         )
     }
 
-    // --- 07 Proposte e conferme -----------------------------------------------------------------------
-
-    private val turnoPronto: Fotografo.() -> Boolean = {
-        nonCe(s(R.string.turno_caricamento)) && ce(s(R.string.proposte_da_decidere))
-    }
-
-    @Test
-    fun proposteEConferme() {
-        TUTTE.forEach { v ->
-            f.scatta(
-                "07-proposte-e-conferme_normale", "Proposte e conferme di Luca", v,
-                destinazione = MainActivity.DEST_TURNO, preparazione = Preparazione(figlioScelto = LUCA),
-                pagine = v in conPagine, pronto = turnoPronto,
-            )
-        }
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "07-proposte-e-conferme_vuoto", "Proposte e conferme di Sara appena creata (niente regole)", v,
-                scenario = DatiFinti.scenarioVuoto(), destinazione = MainActivity.DEST_TURNO,
-                preparazione = Preparazione(figlioScelto = SARA),
-                pronto = { nonCe(s(R.string.turno_caricamento)) && ce("Sara") && (ce(s(R.string.proposte_nessuna_regola_attiva)) || ce(s(R.string.proposte_elenco_vuoto))) },
-            )
-        }
-        f.scatta(
-            "07-proposte-e-conferme_sara", "Proposte e conferme di Sara (regole, nessuna proposta)", CHIARO_360,
-            destinazione = MainActivity.DEST_TURNO, preparazione = Preparazione(figlioScelto = SARA), pagine = true,
-            pronto = { nonCe(s(R.string.turno_caricamento)) && ce(s(R.string.proposte_bottone_proponi)) },
-        )
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "07-proposte-e-conferme_senza-rete", "Proposte e conferme senza rete", v,
-                scenario = DatiFinti.scenarioSenzaRete(), destinazione = MainActivity.DEST_TURNO,
-                pronto = { ce(s(R.string.turno_errore)) },
-            )
-        }
-        f.scatta(
-            "07-proposte-e-conferme_server-vecchio", "Proposte e conferme su un server 0.7", CHIARO_360,
-            scenario = DatiFinti.scenarioServerVecchio(), destinazione = MainActivity.DEST_TURNO, pagine = true,
-            pronto = { nonCe(s(R.string.turno_caricamento)) && ce(s(R.string.proposte_bottone_proponi)) },
-        )
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "07-proposte-dialogo_nuova-proposta", "Dialogo «Proponi una modifica» su una regola di tempo", v,
-                pagineDialogo = true,
-                destinazione = MainActivity.DEST_TURNO, preparazione = Preparazione(figlioScelto = LUCA), pronto = turnoPronto,
-                gesti = {
-                    scorriFino(s(R.string.proposte_bottone_proponi), esatto = true)
-                    tocca(R.string.proposte_bottone_proponi)
-                },
-                dopo = { ce(s(R.string.azione_annulla)) },
-            )
-        }
-        f.scatta(
-            "07-proposte-dialogo_nuova-proposta-fascia", "Dialogo «Proponi una modifica» su una fascia oraria", CHIARO_360,
-            destinazione = MainActivity.DEST_TURNO, preparazione = Preparazione(figlioScelto = SARA),
-            pagineDialogo = true,
-            pronto = { nonCe(s(R.string.turno_caricamento)) && ce(s(R.string.proposte_bottone_proponi)) },
-            gesti = {
-                scorriFino("21:30")
-                tocca(s(R.string.proposte_bottone_proponi), indice = 1, esatto = true)
-            },
-            dopo = { ce(s(R.string.azione_annulla)) },
-        )
-    }
-
     // --- 08 Impostazioni -------------------------------------------------------------------------------
 
-    private val impostazioniAperte: Fotografo.() -> Unit = { tocca(R.string.scheda_impostazioni) }
+    private val impostazioniAperte: Fotografo.() -> Unit = { toccaDescrizione(s(R.string.impostazioni_titolo)) }
     private val impostazioniPronte: Fotografo.() -> Boolean = { ce("Computer di camera") && ce("Nonna") }
 
     @Test
     fun impostazioni() {
-        TUTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
-                "08-impostazioni_normale", "Impostazioni: collegamento, famiglia (genitori, figli, dispositivi), avvisi, riassunto, aggiornamenti", v,
-                pagine = v in conPagine, pronto = panoramicaPronta,
+                "08-impostazioni_normale", "Impostazioni: famiglia, avvisi, riassunto della sera, collegamento (chiuso), versione, come funziona", v,
+                pagine = v == CHIARO_360, preparazione = luca, pronto = panoramicaPronta,
                 gesti = impostazioniAperte, dopo = impostazioniPronte,
             )
         }
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
-                "08-impostazioni_prima-apertura", "Impostazioni alla prima apertura (niente collegamento)", v,
+                "08-impostazioni_prima-apertura", "Impostazioni dal primo avvio («Collega questo telefono»): il collegamento in vista", v,
                 scenario = DatiFinti.scenarioSenzaRete(), preparazione = Preparazione(configurato = false, ultimoControlloMinutiFa = null),
                 pagine = v == CHIARO_360,
                 pronto = { ce(s(R.string.config_mancante_titolo)) },
-                gesti = impostazioniAperte, dopo = { ce(s(R.string.famiglia_config_mancante)) },
-            )
-        }
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "08-impostazioni_collegamento-non-valido", "Impostazioni: collegamento non più valido (401)", v,
-                scenario = DatiFinti.scenarioNonValido(),
-                pronto = { ce(s(R.string.collegamento_non_valido_titolo)) },
-                gesti = impostazioniAperte, dopo = { ce(s(R.string.impostazioni_titolo)) && ce("Il collegamento di questo telefono") },
+                gesti = { tocca(R.string.azione_collega) },
+                dopo = { ce(s(R.string.connessione_codice)) },
             )
         }
         f.scatta(
+            "08-impostazioni_collegamento-non-valido", "Impostazioni: collegamento non più valido (401)", CHIARO_360,
+            scenario = DatiFinti.scenarioNonValido(), pagine = true,
+            pronto = { ce(s(R.string.collegamento_non_valido_titolo)) },
+            gesti = { tocca(R.string.azione_collega_di_nuovo) },
+            dopo = { ce(s(R.string.connessione_codice)) },
+        )
+        f.scatta(
             "08-impostazioni_server-vecchio", "Impostazioni su un server 0.7", CHIARO_360,
             scenario = DatiFinti.scenarioServerVecchio(), pagine = true,
-            pronto = { nonCe(s(R.string.finestra_caricamento)) && ce("ULTIMI 8 GIORNI") },
+            pronto = { nonCe(s(R.string.finestra_caricamento)) && ce(s(R.string.patto_ultimi_giorni)) },
             gesti = impostazioniAperte, dopo = { ce(s(R.string.famiglia_server_vecchio)) },
         )
-        listOf(CHIARO_360, SCURO_411).forEach { v ->
-            f.scatta(
-                "08-impostazioni_senza-rete", "Impostazioni senza rete (famiglia e genitori non letti)", v,
-                scenario = DatiFinti.scenarioSenzaRete(), pagine = v == CHIARO_360,
-                pronto = { ce(s(R.string.finestra_errore_nessun_dato)) },
-                gesti = impostazioniAperte, dopo = { ce(s(R.string.famiglia_non_letta)) },
-            )
-        }
-        listOf(CHIARO_360, CHIARO_360_GRANDE).forEach { v ->
+        f.scatta(
+            "08-impostazioni_senza-rete", "Impostazioni senza rete (famiglia e genitori non letti)", CHIARO_360,
+            scenario = DatiFinti.scenarioSenzaRete(), pagine = true,
+            pronto = { ce(s(R.string.finestra_errore_nessun_dato)) },
+            gesti = impostazioniAperte, dopo = { ce(s(R.string.famiglia_non_letta)) },
+        )
+        due.forEach { v ->
             f.scatta(
                 "08-impostazioni_avvisi-da-sistemare", "Impostazioni aperte sugli «Avvisi del patto» (notifiche spente, batteria non esente)", v,
                 destinazione = MainActivity.DEST_AVVISI,
                 preparazione = Preparazione(notifiche = false, esenteBatteria = false),
-                pronto = { ce(s(R.string.impostazioni_titolo)) && ce("Nonna") },
+                pronto = { ce(s(R.string.impostazioni_attivo_titolo)) && ce("Nonna") },
             )
         }
         f.scatta(
-            "08-impostazioni_codice-lungo", "Impostazioni col codice d'accesso lungo aperto", CHIARO_360,
-            pronto = panoramicaPronta,
+            "08-impostazioni_codice-lungo", "Impostazioni: «Cambia» il collegamento, codice d'accesso lungo aperto (nascosto)", CHIARO_360,
+            preparazione = luca, pronto = panoramicaPronta,
             gesti = {
                 impostazioniAperte()
                 aspetta("impostazioni") { impostazioniPronte() }
+                scorriFino(s(R.string.connessione_cambia), esatto = true)
+                tocca(R.string.connessione_cambia)
+                scorriFino(s(R.string.connessione_codice_lungo_apri), esatto = true)
                 tocca(R.string.connessione_codice_lungo_apri)
+                scorriFino(s(R.string.azione_salva), esatto = true)
             },
             dopo = { ce(s(R.string.connessione_codice_lungo_chiudi)) },
         )
@@ -664,71 +701,75 @@ class FotografoGenitoreTest {
     // --- 09 Dialoghi delle Impostazioni -----------------------------------------------------------------
 
     private fun Fotografo.apriImpostazioni() {
-        tocca(R.string.scheda_impostazioni)
+        toccaDescrizione(s(R.string.impostazioni_titolo))
         aspetta("impostazioni") { ce("Computer di camera") && ce("Nonna") }
     }
 
     @Test
     fun impostazioniDialoghi() {
-        RIDOTTE.forEach { v ->
+        f.scatta(
+            "09-impostazioni-dialogo_menu-genitore", "Il menu «⋯» di un genitore (Rinomina, Nuovo codice, Togli)", CHIARO_360,
+            preparazione = luca, pronto = panoramicaPronta,
+            gesti = {
+                apriImpostazioni()
+                toccaDescrizione(s(R.string.azioni_per, "Papà"))
+            },
+            dopo = { ce(s(R.string.famiglia_togli)) },
+        )
+        due.forEach { v ->
             f.scatta(
                 "09-impostazioni-dialogo_aggiungi-genitore", "Dialogo «Nuovo genitore» col nome scritto", v,
-                pronto = panoramicaPronta,
+                preparazione = luca, pronto = panoramicaPronta,
                 gesti = {
                     apriImpostazioni()
                     scorriFino(s(R.string.famiglia_aggiungi_genitore), esatto = true)
                     tocca(R.string.famiglia_aggiungi_genitore)
                     aspetta("dialogo") { ce(s(R.string.famiglia_nuovo_genitore_titolo)) }
-                    val campi = compose.onAllNodes(androidx.compose.ui.test.hasSetTextAction()).fetchSemanticsNodes().size
+                    val campi = compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size
                     scrivi(campi - 1, "Nonno Piero")
                 },
                 dopo = { ce(s(R.string.famiglia_crea_codice)) },
             )
         }
-        RIDOTTE.forEach { v ->
+        due.forEach { v ->
             f.scatta(
-                "09-impostazioni-dialogo_codice-genitore", "Dialogo del codice di 6 cifre per collegare il telefono di un genitore", v,
-                pagineDialogo = true,
-                pronto = panoramicaPronta,
+                "09-impostazioni-dialogo_codice-genitore", "Dialogo del codice di 6 cifre per il telefono di un genitore", v,
+                pagineDialogo = true, preparazione = luca, pronto = panoramicaPronta,
                 gesti = {
                     apriImpostazioni()
                     scorriFino(s(R.string.famiglia_aggiungi_genitore), esatto = true)
                     tocca(R.string.famiglia_aggiungi_genitore)
                     aspetta("dialogo") { ce(s(R.string.famiglia_nuovo_genitore_titolo)) }
-                    val campi = compose.onAllNodes(androidx.compose.ui.test.hasSetTextAction()).fetchSemanticsNodes().size
+                    val campi = compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size
                     scrivi(campi - 1, "Nonno Piero")
                     tocca(R.string.famiglia_crea_codice)
                 },
                 dopo = { ce("482") },
             )
         }
-        RIDOTTE.forEach { v ->
+        f.scatta(
+            "09-impostazioni-dialogo_nuovo-dispositivo", "Dialogo «Nuovo dispositivo di Luca»", CHIARO_360,
+            pagineDialogo = true, preparazione = luca, pronto = panoramicaPronta,
+            gesti = {
+                apriImpostazioni()
+                scorriFino(s(R.string.famiglia_aggiungi_dispositivo), esatto = true)
+                tocca(R.string.famiglia_aggiungi_dispositivo)
+                aspetta("dialogo") { ce(s(R.string.famiglia_tipo_scegli)) }
+                val campi = compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size
+                scrivi(campi - 1, "Tablet")
+            },
+            dopo = { ce(s(R.string.famiglia_crea_codice)) },
+        )
+        due.forEach { v ->
             f.scatta(
-                "09-impostazioni-dialogo_nuovo-dispositivo", "Dialogo «Nuovo dispositivo di Luca»", v,
-                pagineDialogo = true,
-                pronto = panoramicaPronta,
+                "09-impostazioni-dialogo_codice-dispositivo", "Dialogo del codice di 6 cifre per un dispositivo di Luca", v,
+                pagineDialogo = true, preparazione = luca, pronto = panoramicaPronta,
                 gesti = {
                     apriImpostazioni()
                     scorriFino(s(R.string.famiglia_aggiungi_dispositivo), esatto = true)
                     tocca(R.string.famiglia_aggiungi_dispositivo)
                     aspetta("dialogo") { ce(s(R.string.famiglia_tipo_scegli)) }
-                    val campi = compose.onAllNodes(androidx.compose.ui.test.hasSetTextAction()).fetchSemanticsNodes().size
-                    scrivi(campi - 1, "Tablet")
-                },
-                dopo = { ce(s(R.string.famiglia_crea_codice)) },
-            )
-        }
-        listOf(CHIARO_360, CHIARO_360_GRANDE).forEach { v ->
-            f.scatta(
-                "09-impostazioni-dialogo_codice-dispositivo", "Dialogo del codice di 6 cifre per collegare un dispositivo di Luca", v,
-                pagineDialogo = true,
-                pronto = panoramicaPronta,
-                gesti = {
-                    apriImpostazioni()
-                    scorriFino(s(R.string.famiglia_aggiungi_dispositivo), esatto = true)
-                    tocca(R.string.famiglia_aggiungi_dispositivo)
-                    aspetta("dialogo") { ce(s(R.string.famiglia_tipo_scegli)) }
-                    val campi = compose.onAllNodes(androidx.compose.ui.test.hasSetTextAction()).fetchSemanticsNodes().size
+                    val campi = compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size
                     scrivi(campi - 1, "Tablet")
                     tocca(R.string.famiglia_crea_codice)
                 },
@@ -736,38 +777,40 @@ class FotografoGenitoreTest {
             )
         }
         f.scatta(
-            "09-impostazioni-dialogo_togli-genitore", "Conferma «Togliere…?» su un genitore", CHIARO_360,
-            pronto = panoramicaPronta,
+            "09-impostazioni-dialogo_togli-genitore", "Conferma «Togliere…?» su un genitore (dal ⋯)", CHIARO_360,
+            preparazione = luca, pronto = panoramicaPronta,
             gesti = {
                 apriImpostazioni()
-                scorriFino(s(R.string.famiglia_togli), esatto = true)
+                toccaDescrizione(s(R.string.azioni_per, "Papà"))
                 tocca(R.string.famiglia_togli)
             },
             dopo = { ce(s(R.string.azione_annulla)) },
         )
         f.scatta(
-            "09-impostazioni-dialogo_scollega-dispositivo", "Conferma «Scollegare…?» su un dispositivo", CHIARO_360,
-            pronto = panoramicaPronta,
+            "09-impostazioni-dialogo_scollega-dispositivo", "Conferma «Scollegare…?» su un dispositivo (dal ⋯)", CHIARO_360,
+            preparazione = luca, pronto = panoramicaPronta,
             gesti = {
                 apriImpostazioni()
-                scorriFino(s(R.string.famiglia_scollega), esatto = true)
+                scorriFino("Computer di camera")
+                toccaDescrizione(s(R.string.azioni_per, "Computer di camera"))
                 tocca(R.string.famiglia_scollega)
             },
             dopo = { ce(s(R.string.azione_annulla)) },
         )
         f.scatta(
-            "09-impostazioni-dialogo_rinomina-figlio", "Dialogo «Nuovo nome per Luca»", CHIARO_360,
-            pronto = panoramicaPronta,
+            "09-impostazioni-dialogo_rinomina-figlio", "Dialogo «Nuovo nome per Luca» (dal ⋯)", CHIARO_360,
+            preparazione = luca, pronto = panoramicaPronta,
             gesti = {
                 apriImpostazioni()
-                scorriFino("Luca", esatto = true)
-                tocca(s(R.string.famiglia_rinomina), indice = 0, esatto = true)
+                scorriFino("Computer di camera")
+                toccaDescrizione(s(R.string.azioni_per, "Luca"))
+                tocca(R.string.famiglia_rinomina)
             },
             dopo = { ce(s(R.string.azione_salva)) && ce(s(R.string.azione_annulla)) },
         )
         f.scatta(
             "09-impostazioni-dialogo_nuovo-figlio", "Dialogo «Nuovo figlio»", CHIARO_360,
-            pronto = panoramicaPronta,
+            preparazione = luca, pronto = panoramicaPronta,
             gesti = {
                 apriImpostazioni()
                 scorriFino(s(R.string.famiglia_aggiungi_figlio), esatto = true)
@@ -776,12 +819,16 @@ class FotografoGenitoreTest {
             dopo = { ce(s(R.string.famiglia_nuovo_figlio_titolo)) },
         )
         f.scatta(
-            "09-impostazioni-dialogo_collega-come-altro", "Domanda «Collegare come un altro genitore?» (codice di 6 cifre scritto)", CHIARO_360,
-            pronto = panoramicaPronta,
+            "09-impostazioni-dialogo_collega-come-altro", "Domanda «Collegare come un altro genitore?» (dopo «Cambia», codice scritto)", CHIARO_360,
+            preparazione = luca, pronto = panoramicaPronta,
             gesti = {
                 apriImpostazioni()
-                inCima()
-                scrivi(1, "123456")
+                scorriFino(s(R.string.connessione_cambia), esatto = true)
+                tocca(R.string.connessione_cambia)
+                aspetta("modulo") { ce(s(R.string.connessione_codice)) }
+                val campi = compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size
+                // I campi del collegamento: indirizzo, codice di 6 cifre (i primi due dopo la famiglia).
+                scrivi(campi - 1, "123456")
                 tocca(R.string.connessione_collega)
             },
             dopo = { ce(s(R.string.connessione_conferma_titolo)) },
@@ -792,19 +839,15 @@ class FotografoGenitoreTest {
 
     @Test
     fun primaApertura() {
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "10-prima-apertura_permesso-notifiche", "Domanda del permesso per le notifiche (prima apertura)", v,
-                preparazione = Preparazione(notifiche = false, domandeFatte = false),
-                pronto = { ce(s(R.string.permesso_notifiche_titolo)) && ce("Luca ti propone") },
-            )
-        }
-        RIDOTTE.forEach { v ->
-            f.scatta(
-                "10-prima-apertura_batteria", "Domanda dell'esenzione dalla batteria", v,
-                preparazione = Preparazione(domandeFatte = false, esenteBatteria = false),
-                pronto = { ce(s(R.string.batteria_titolo)) && ce("Luca ti propone") },
-            )
-        }
+        f.scatta(
+            "10-prima-apertura_permesso-notifiche", "Domanda del permesso per le notifiche (prima apertura)", CHIARO_360,
+            preparazione = Preparazione(notifiche = false, domandeFatte = false, figlioScelto = LUCA),
+            pronto = { ce(s(R.string.permesso_notifiche_titolo)) },
+        )
+        f.scatta(
+            "10-prima-apertura_batteria", "Domanda dell'esenzione dalla batteria", CHIARO_360,
+            preparazione = Preparazione(domandeFatte = false, esenteBatteria = false, figlioScelto = LUCA),
+            pronto = { ce(s(R.string.batteria_titolo)) },
+        )
     }
 }

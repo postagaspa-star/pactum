@@ -101,7 +101,10 @@ class FaccendeTest {
         assertEquals("Lavoro fatto", p.testo(eu.stgm.pactum.genitore.R.string.tipo_faccenda_fatta))
         assertEquals("Lavori di casa", p.testo(eu.stgm.pactum.genitore.R.string.faccende_titolo))
         assertEquals("Dai lavori di casa", p.testo(eu.stgm.pactum.genitore.R.string.faccende_dai))
-        assertEquals("Lavoro annullato.", p.testo(eu.stgm.pactum.genitore.R.string.annulla_faccenda_fatto))
+        // (0.15) Un lavoro di casa si "toglie" (Annulla resta per chiudere i dialoghi).
+        assertEquals("Lavoro tolto.", p.testo(eu.stgm.pactum.genitore.R.string.togli_faccenda_fatto))
+        assertEquals("Togli", p.testo(eu.stgm.pactum.genitore.R.string.faccenda_togli))
+        assertEquals("Togliere «Svuota la lavastoviglie»?", p.testo(eu.stgm.pactum.genitore.R.string.togli_faccenda_titolo, "Svuota la lavastoviglie"))
         assertEquals("Bocciato: il lavoro è di nuovo da fare.", p.testo(eu.stgm.pactum.genitore.R.string.boccia_fatto))
     }
 
@@ -481,9 +484,10 @@ class FaccendeTest {
             righeBocciature(p, faccenda(bocciature = 1, ultimaBocciatura = Bocciatura(da = mamma)), mamma),
         )
         assertTrue(righeBocciature(p, faccenda(), mamma).isEmpty())
-        assertEquals("Annullato da Papà", testoAnnullata(p, faccenda(annullataDa = papa), mamma))
-        assertEquals("Annullato da te", testoAnnullata(p, faccenda(annullataDa = papa), papa))
-        assertEquals("Annullato", testoAnnullata(p, faccenda(), papa))
+        // (0.15) Un lavoro di casa si "toglie": "Tolto da Papà".
+        assertEquals("Tolto da Papà", testoAnnullata(p, faccenda(annullataDa = papa), mamma))
+        assertEquals("Tolto da te", testoAnnullata(p, faccenda(annullataDa = papa), papa))
+        assertEquals("Tolto", testoAnnullata(p, faccenda(), papa))
     }
 
     @Test
@@ -661,15 +665,15 @@ class FaccendeTest {
     @Test
     fun `ogni rifiuto delle faccende col suo motivo`() {
         assertEquals(
-            "Luca ha già 20 lavori di casa da fare: non se ne possono dare altri finché non ne fa qualcuno, o finché non ne annulli.",
+            "Luca ha già 20 lavori di casa da fare: non se ne possono dare altri finché non ne fa qualcuno, o finché non ne togli.",
             messaggioRifiutoFaccende(p, CodiciErrore.TROPPE_FACCENDE, GestoFaccende.DAI, "Luca"),
         )
         assertEquals(
-            "Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l'ha già bocciato o annullato. Ho riletto l'elenco.",
+            "Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l'ha già bocciato o tolto. Ho riletto l'elenco.",
             messaggioRifiutoFaccende(p, CodiciErrore.NON_BOCCIABILE, GestoFaccende.BOCCIA, "Luca"),
         )
         assertEquals(
-            "Non si può annullare: non è più da fare (la foto è arrivata, o qualcuno l'ha già annullato). Ho riletto l'elenco.",
+            "Non si può togliere: non è più da fare (la foto è arrivata, o qualcuno l'ha già tolto). Ho riletto l'elenco.",
             messaggioRifiutoFaccende(p, CodiciErrore.NON_ANNULLABILE, GestoFaccende.ANNULLA, "Luca"),
         )
         assertEquals(
@@ -731,7 +735,7 @@ class FaccendeTest {
     @Test
     fun `un 401 non è la rete, né per la famiglia né per le faccende`() {
         val frase = "Il collegamento di questo telefono non vale più: forse un altro genitore l'ha tolto. " +
-            "Per collegarlo di nuovo serve un codice nuovo (Impostazioni, Connessione)."
+            "Per collegarlo di nuovo serve un codice nuovo (Impostazioni, Collegamento)."
         assertEquals(frase, messaggioRifiutoFamiglia(p, CodiciErrore.COLLEGAMENTO_NON_VALIDO, null))
         assertEquals(frase, messaggioRifiutoFaccende(p, CodiciErrore.COLLEGAMENTO_NON_VALIDO, GestoFaccende.BOCCIA, "Luca"))
     }

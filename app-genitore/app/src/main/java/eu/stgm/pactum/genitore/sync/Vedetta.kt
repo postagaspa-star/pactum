@@ -724,27 +724,33 @@ class Vedetta(context: Context) {
         }
 
         /**
-         * Dove aprire l'app toccando la notifica (hook di navigazione). Le
-         * risposte che toccano al genitore vanno su "Proposte e conferme"; tutto il
-         * resto apre la lista delle notifiche sopra la finestra, dove quella
-         * stessa notifica si legge per intero e si segna come letta.
+         * Dove aprire l'app toccando la notifica (hook di navigazione). Tutto
+         * quello che aspetta il genitore o che gli risponde va su "Da decidere";
+         * tutto il resto apre la lista delle notifiche, dove quella stessa
+         * notifica si legge per intero, si tocca per andare dove serve e si segna
+         * come letta.
          *
-         * (0.10) Una proposta del figlio (al genitore arrivano solo le sue) apre la
-         * Panoramica di quel figlio, dove la card per decidere sta in cima; un suo
-         * ritiro, "Proposte e conferme", dove la si ritrova nella storia.
-         *
-         * (0.11) Anche una sessione da approvare apre la Panoramica di quel figlio:
-         * la sua card sta in cima. Una sessione eliminata apre la lista, come il resto.
+         * (0.15) Le proposte del figlio, le sessioni da approvare, le risposte alle
+         * tue proposte, i ritiri e le dichiarazioni: tutte su "Da decidere" (prima
+         * le prime due aprivano la Panoramica, le altre "Proposte e conferme").
          */
         internal fun destinazionePerTipo(tipo: String): String = when {
-            tipo == "nuova_proposta" || tipo == "sessione_da_approvare" -> MainActivity.DEST_FINESTRA
-            tipo in setOf("proposta_risposta", "proposta_annullata", "proposta_ritirata", "dichiarazione") ->
-                MainActivity.DEST_TURNO
+            tipo in TIPI_DA_DECIDERE -> MainActivity.DEST_DECIDERE
             // (0.13) Le faccende (contratto v3.6): la pagina delle faccende di quel
             // figlio, e per una faccenda fatta la sua foto.
             notificaDiFaccende(tipo) -> MainActivity.DEST_FACCENDE
             else -> MainActivity.DEST_NOTIFICHE
         }
+
+        /** (0.15) I tipi di notifica che portano a "Da decidere". */
+        private val TIPI_DA_DECIDERE = setOf(
+            "nuova_proposta",
+            "sessione_da_approvare",
+            "proposta_risposta",
+            "proposta_annullata",
+            "proposta_ritirata",
+            "dichiarazione",
+        )
 
         /**
          * (0.13) Il requestCode del tocco su un avviso: uno per destinazione, figlio e

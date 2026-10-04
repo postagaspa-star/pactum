@@ -1,6 +1,6 @@
 package eu.stgm.pactum.genitore.ui
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,66 +11,64 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.AddCircle
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.design.RigaStato
+import eu.stgm.pactum.design.StatoVuoto
+import eu.stgm.pactum.design.Caricamento
 import eu.stgm.pactum.genitore.R
+import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Notifica
-import kotlinx.coroutines.launch
+import eu.stgm.pactum.genitore.dati.TipiDispositivo
 
 /**
- * Le notifiche non lette del patto. Non è più una scheda: si apre dalla
- * campanella della finestra e si chiude col tasto indietro. "Letta" è un gesto
- * del genitore, qui — la vedetta non segna mai niente da sola.
+ * Le notifiche non lette del patto, di tutti i figli. (0.15) È una pagina che si
+ * apre dalla campanella di ogni scheda; ogni riga si tocca e porta dove si guarda
+ * il fatto ([onApri]: la stessa tabella delle notifiche di sistema). "Letta" è un
+ * gesto del genitore, qui — la vedetta non segna mai niente da sola.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificheScreen(
-    onChiudi: () -> Unit,
+    onApri: (ApriDaNotifica) -> Unit,
     vm: NotificheViewModel = viewModel(),
     famigliaVm: FamigliaViewModel = viewModel(),
-    // (0.13) Una notifica delle faccende apre le faccende del suo figlio (e la foto).
-    onApriFaccende: (figlioId: Long?, faccendaId: Long?) -> Unit = { _, _ -> },
 ) {
+    val cornice = LocalCornice.current
     val stato by vm.stato.collectAsStateWithLifecycle()
     // (v3) Le notifiche sono di tutti i figli: la famiglia dice di chi è ciascuna.
     val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
     val messaggioLettaFallita = stringResource(R.string.notifica_letta_fallita)
     val testi = parole()
     var confermaTutte by rememberSaveable { mutableStateOf(false) }
@@ -84,18 +82,16 @@ fun NotificheScreen(
     // subito (come l'esito del segno), così riaprire la lista non lo ripete. Lo
     // snackbar parte in uno scope suo: consumare cambia la chiave e
     // cancellerebbe questo effetto a metà messaggio.
-    val ambito = rememberCoroutineScope()
     LaunchedEffect(stato.lettaFallita) {
         if (!stato.lettaFallita) return@LaunchedEffect
         vm.consumaLettaFallita()
-        ambito.launch { snackbarHostState.showSnackbar(messaggioLettaFallita) }
+        cornice.messaggi.mostra(messaggioLettaFallita)
     }
     // (0.9) "Segna tutte come lette" andata a metà: si dice quante sono rimaste.
     LaunchedEffect(stato.tutteFallite) {
         val fallite = stato.tutteFallite ?: return@LaunchedEffect
         vm.consumaTutteFallite()
-        val messaggio = testi.testo(R.string.notifiche_segna_tutte_fallite, fallite)
-        ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+        cornice.messaggi.mostra(testi.testo(R.string.notifiche_segna_tutte_fallite, fallite))
     }
 
     if (confermaTutte) {
@@ -125,103 +121,100 @@ fun NotificheScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.notifiche_titolo)) },
-                navigationIcon = {
-                    IconButton(onClick = onChiudi) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            stringResource(R.string.azione_indietro),
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { vm.aggiorna() }) {
-                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
-                    }
-                },
-            )
+            BarraPagina(stringResource(R.string.notifiche_titolo)) {
+                IconButton(onClick = { vm.aggiorna() }) {
+                    Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
+                }
+            }
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when {
+                // (0.15) 401: il collegamento di questo telefono non vale più. Non è la rete (B26).
+                famiglia.collegamentoNonValido -> StatoVuoto(
+                    centrato = true,
+                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                    testo = stringResource(R.string.collegamento_non_valido),
+                    azione = stringResource(R.string.azione_collega_di_nuovo),
+                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                )
+
+                stato.configurazioneMancante -> StatoVuoto(
+                    centrato = true,
+                    titolo = stringResource(R.string.config_mancante_titolo),
+                    testo = stringResource(R.string.notifiche_config_mancante),
+                    azione = stringResource(R.string.azione_collega),
+                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                )
+
                 // Solo la prima lettura: dopo, le riletture del badge (ogni
                 // minuto) aggiornano la lista senza coprirla con la rotella.
                 stato.caricamento && !stato.primaLetturaFatta ->
-                    Caricamento(stringResource(R.string.notifiche_caricamento))
+                    Caricamento(testo = stringResource(R.string.notifiche_caricamento))
 
-                stato.configurazioneMancante -> Centro {
-                    StatoPrimaApertura(
-                        titolo = stringResource(R.string.config_mancante_titolo),
-                        testo = stringResource(R.string.notifiche_config_mancante),
-                        centrato = true,
-                        modifier = Modifier.padding(horizontal = Spazi.xxl),
-                    )
-                }
-
-                stato.errore && stato.notifiche.isEmpty() -> Centro {
-                    TestoCentrato(stringResource(R.string.notifiche_errore))
-                }
+                stato.errore && stato.notifiche.isEmpty() -> StatoVuoto(stringResource(R.string.notifiche_errore), centrato = true)
 
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(Spazi.l),
-                    verticalArrangement = Arrangement.spacedBy(Spazi.m),
+                    contentPadding = PaddingValues(vertical = Spazi.s),
                 ) {
-                    // Aggiornamento fallito con una lista già in mano: onestà come
-                    // nella finestra — si dice che i dati sono vecchi, invece di
-                    // spacciarli per freschi in silenzio.
+                    // Aggiornamento fallito con una lista già in mano: si dice che i
+                    // dati sono vecchi, invece di spacciarli per freschi in silenzio.
                     if (stato.errore) {
-                        item { RigaDatiVecchi(stringResource(R.string.notifiche_dati_vecchi)) }
+                        item(key = "dati-vecchi") {
+                            Box(modifier = Modifier.padding(horizontal = Spazi.l, vertical = Spazi.s)) {
+                                RigaStato(stringResource(R.string.notifiche_dati_vecchi))
+                            }
+                        }
                     }
                     if (stato.notifiche.isEmpty()) {
-                        item {
-                            RigaVuota(
+                        item(key = "vuoto") {
+                            StatoVuoto(
                                 stringResource(R.string.notifiche_vuoto),
-                                buonaNotizia = true,
+                                icona = Icons.Outlined.CheckCircle,
+                                modifier = Modifier.padding(Spazi.l),
                             )
                         }
-                    } else {
+                    } else if (stato.notifiche.size > 1) {
                         // (0.9) Con più di una, tutte insieme (dopo una conferma).
-                        if (stato.notifiche.size > 1) {
-                            item {
-                                TextButton(
-                                    onClick = { confermaTutte = true },
-                                    enabled = !stato.segnaturaInCorso,
-                                ) {
-                                    Text(stringResource(R.string.notifiche_segna_tutte))
-                                }
+                        item(key = "segna-tutte") {
+                            TextButton(
+                                onClick = { confermaTutte = true },
+                                enabled = !stato.segnaturaInCorso,
+                                modifier = Modifier.padding(horizontal = Spazi.s),
+                            ) {
+                                Text(stringResource(R.string.notifiche_segna_tutte))
                             }
                         }
-                        item {
-                            ListaRighe(stato.notifiche) { notifica ->
-                                RigaNotifica(
-                                    notifica = notifica,
-                                    // (0.10) Con la famiglia (chi propone), le proposte
-                                    // (che cosa) e i nomi delle app (mai un pacchetto);
-                                    // (0.11) e le sessioni (quali app chiede).
-                                    testo = testoNotifica(
-                                        parole(),
-                                        notifica,
-                                        stato.regolePerId,
-                                        famiglia.figli,
-                                        stato.propostePerId,
-                                        stato.nomi,
-                                        stato.sessioniPerId,
-                                        // (0.13) Qui la riga non si tocca: c'è il pulsante.
-                                        nellaTendina = false,
-                                    ),
-                                    diChi = etichettaNotifica(notifica, famiglia.figli),
-                                    onSegnaLetta = { vm.segnaLetta(notifica) },
-                                    onApriFaccende = if (notificaDiFaccende(notifica.tipo)) {
-                                        { onApriFaccende(notifica.figlioId, faccendaDellaNotifica(notifica)) }
-                                    } else {
-                                        null
-                                    },
-                                )
-                            }
-                        }
+                    }
+                    // (0.15) Una riga per notifica, ciascuna un elemento suo (B16), e
+                    // ciascuna si tocca per andare dove si guarda il fatto (B38).
+                    items(stato.notifiche, key = { "notifica-${it.id}" }) { notifica ->
+                        RigaNotifica(
+                            notifica = notifica,
+                            // (0.10) Con la famiglia (chi propone), le proposte
+                            // (che cosa) e i nomi delle app (mai un pacchetto);
+                            // (0.11) e le sessioni (quali app chiede).
+                            testo = testoNotifica(
+                                parole(),
+                                notifica,
+                                stato.regolePerId,
+                                famiglia.figli,
+                                stato.propostePerId,
+                                stato.nomi,
+                                stato.sessioniPerId,
+                                // (0.13) Qui la riga dice il fatto; il tocco porta alla foto.
+                                nellaTendina = false,
+                            ),
+                            diChi = etichettaNotifica(notifica, famiglia.figli),
+                            icona = iconaTipo(notifica, famiglia.figli),
+                            onApri = { onApri(destinazioneDellaRiga(notifica)) },
+                            onSegnaLetta = { vm.segnaLetta(notifica) },
+                        )
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.padding(horizontal = Spazi.l),
+                        )
                     }
                 }
             }
@@ -230,25 +223,30 @@ fun NotificheScreen(
 }
 
 /**
- * Una notifica: icona del tipo, cosa è successo, quando — e il segno di "letta".
- * Il [testo] lo scrive l'app (testoNotifica, lo stesso della notifica di sistema).
- * (v3) [diChi] = di quale figlio (e dispositivo), con più figli o più dispositivi:
- * la stessa riga che la notifica di sistema mostra sopra il titolo.
+ * Una notifica: icona del tipo, di chi è, cosa è successo, quando — e "Letta" a
+ * destra (una parola, non una spunta che sembra "approva"). Tutta la riga si tocca
+ * e porta dove si guarda il fatto ([onApri]). Il [testo] lo scrive l'app
+ * (testoNotifica, lo stesso della notifica di sistema). (v3) [diChi] = di quale
+ * figlio (e dispositivo), con più figli o più dispositivi.
  */
 @Composable
 private fun RigaNotifica(
     notifica: Notifica,
     testo: TestoNotifica,
     diChi: String?,
+    icona: Painter,
+    onApri: () -> Unit,
     onSegnaLetta: () -> Unit,
-    onApriFaccende: (() -> Unit)? = null,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onApri)
+            .padding(start = Spazi.l, end = Spazi.xs, top = Spazi.m, bottom = Spazi.m),
         verticalAlignment = Alignment.Top,
     ) {
         Icon(
-            painter = iconaTipo(notifica.tipo),
+            painter = icona,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = Spazi.xs).size(24.dp),
@@ -258,49 +256,33 @@ private fun RigaNotifica(
                 .weight(1f)
                 .padding(start = Spazi.m),
         ) {
-            if (diChi != null) {
-                Text(
-                    text = diChi.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = Spazi.xs),
-                )
-            }
+            val sopra = listOfNotNull(diChi, istanteServer(notifica.tsServer)?.let { testoQuando(parole(), it) })
+            if (sopra.isNotEmpty()) SopraTitolo(sopra.joinToString(" · "))
             Text(
                 text = testo.titolo,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
                 text = testo.testo,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = Spazi.xs),
             )
-            TestoOrario(notifica.tsServer, Modifier.padding(top = Spazi.xs))
-            // (0.13) La foto della faccenda fatta, o le faccende finite.
-            if (onApriFaccende != null) {
-                TextButton(onClick = onApriFaccende) {
-                    Text(
-                        stringResource(
-                            if (notifica.tipo == TipiNotificaFaccende.FACCENDA_FATTA) {
-                                R.string.faccenda_guarda_foto
-                            } else {
-                                R.string.faccende_apri
-                            },
-                        ),
-                    )
-                }
-            }
         }
-        IconButton(onClick = onSegnaLetta) {
-            Icon(Icons.Outlined.Done, stringResource(R.string.notifica_segna_letta))
+        val descrizione = stringResource(R.string.notifica_segna_letta)
+        TextButton(onClick = onSegnaLetta, modifier = Modifier.semantics { contentDescription = descrizione }) {
+            Text(stringResource(R.string.notifica_letta))
         }
     }
 }
 
-/** L'icona per tipo: mai un colore d'allarme, solo una forma che si riconosce. */
+/**
+ * L'icona per tipo: mai un colore d'allarme, solo una forma che si riconosce.
+ * (0.15) Spento e acceso hanno l'icona del dispositivo VERO: un telefono spento
+ * quella del telefono, non del computer (B19).
+ */
 @Composable
-private fun iconaTipo(tipo: String): Painter = when (tipo) {
+private fun iconaTipo(notifica: Notifica, figli: List<Figlio>): Painter = when (notifica.tipo) {
     "sforamento" -> painterResource(R.drawable.ic_scheda_tempo)
     "manomissione" -> rememberVectorPainter(Icons.Outlined.Info)
     "bonus" -> rememberVectorPainter(Icons.Outlined.AddCircle)
@@ -308,12 +290,23 @@ private fun iconaTipo(tipo: String): Painter = when (tipo) {
     // (0.10) Anche le proposte del figlio e i suoi ritiri: è la scheda dove si decide.
     "proposta_risposta", "proposta_annullata", "nuova_proposta", "proposta_ritirata", "dichiarazione" ->
         painterResource(R.drawable.ic_scheda_turno)
-    // (v3) Il computer spento o riacceso.
-    "sospensione", "ripresa" -> painterResource(R.drawable.ic_dispositivo_computer)
+    "sospensione", "ripresa" -> painterResource(
+        if (tipoDelDispositivo(notifica, figli) == TipiDispositivo.COMPUTER) {
+            R.drawable.ic_dispositivo_computer
+        } else {
+            R.drawable.ic_dispositivo_telefono
+        },
+    )
     // (0.11) Le sessioni: sono del telefono.
     "sessione_da_approvare", "sessione_eliminata" -> painterResource(R.drawable.ic_dispositivo_telefono)
-    // (0.13) Le faccende: fatte.
+    // (0.13) I lavori di casa.
     TipiNotificaFaccende.FACCENDA_FATTA, TipiNotificaFaccende.FACCENDE_FINITE ->
-        rememberVectorPainter(Icons.Outlined.CheckCircle)
+        painterResource(R.drawable.ic_scheda_lavori)
     else -> painterResource(R.drawable.ic_notifica_binocolo)
+}
+
+/** Il tipo del dispositivo della notifica (dalla famiglia); senza, il telefono. */
+private fun tipoDelDispositivo(notifica: Notifica, figli: List<Figlio>): String {
+    val id = notifica.dispositivoId ?: return TipiDispositivo.TELEFONO
+    return figli.flatMap { it.dispositivi }.firstOrNull { it.id == id }?.tipo ?: TipiDispositivo.TELEFONO
 }

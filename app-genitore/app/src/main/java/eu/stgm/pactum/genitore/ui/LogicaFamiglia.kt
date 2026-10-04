@@ -23,7 +23,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import java.time.Duration
 import java.time.Instant
-import java.util.Locale
+import eu.stgm.pactum.genitore.R
 
 // Logica pura della v3 (famiglia, figli, dispositivi): niente Compose, niente
 // risorse, così si prova con JUnit semplice (LogicaFamigliaTest). Qui si decide
@@ -634,10 +634,13 @@ fun dispositivoCreato(
 fun dispositiviDelloStessoTipo(figlio: Figlio, tipo: String): List<Dispositivo> =
     figlio.dispositivi.filter { !it.revocato && it.tipo == tipo }.sortedBy { it.id }
 
-/** Il conto alla rovescia come si legge su un orologio: "14:05", "0:09". */
-fun testoContoAllaRovescia(secondi: Long): String {
-    val s = secondi.coerceAtLeast(0)
-    return String.format(Locale.ROOT, "%d:%02d", s / 60, s % 60)
+/**
+ * (0.15) Quanto manca alla scadenza del codice, detto in modo che non sembri
+ * un'ora del giorno: "14 min", "1 min", "meno di un minuto" (prima "14:05").
+ */
+fun testoScadeTra(parole: Parole, secondi: Long): String {
+    val minuti = secondi.coerceAtLeast(0) / 60
+    return if (minuti < 1) parole.testo(R.string.codice_meno_di_un_minuto) else parole.testo(R.string.formato_minuti, minuti)
 }
 
 /** "483920" → "483 920": sei cifre si leggono e si dettano meglio in due gruppi. */

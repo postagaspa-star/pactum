@@ -325,7 +325,7 @@ class SessioniTest {
         assertEquals("Era già stata approvata.", p.testo(messaggioEsitoSessione(esito)))
         assertTrue(sessioneDaTogliere(esito))
         assertEquals(
-            "Era già stata decisa: non approvata.",
+            "Era già stata rifiutata.",
             p.testo(messaggioEsitoSessione(esitoRichiestaCambiata(nuova, sessione(stato = "rifiutata")))),
         )
         val cambio = checkNotNull(
@@ -479,18 +479,16 @@ class SessioniTest {
             "Durante la sessione il tempo nelle app della sessione non conta; le altre app sono coperte da una schermata.",
             p.testo(R.string.sessione_non_conta),
         )
-        assertEquals(
-            "Le avvia tuo figlio quando vuole. Durante una sessione il tempo nelle app della sessione non conta; " +
-                "le altre app sono coperte da una schermata.",
-            p.testo(R.string.sessioni_spiega),
-        )
+        // (0.15) La spiegazione fissa della sezione Sessioni non c'è più: la frase qui sopra
+        // si dice una volta sola, sotto le card di "Da decidere".
         assertEquals("Approva", p.testo(R.string.sessione_approva))
-        assertEquals("Non approvare", p.testo(R.string.sessione_non_approvare))
+        // (0.15) "Rifiuta" per le sessioni come per le proposte.
+        assertEquals("Rifiuta", p.testo(R.string.sessione_rifiuta))
         assertEquals("Perché? (facoltativo)", p.testo(R.string.proposta_campo_perche))
         assertEquals("Al massimo 500 caratteri", p.testo(R.string.sessione_perche_massimo, MASSIMO_MOTIVAZIONE_SESSIONE))
         assertEquals(
-            "Non approvi la sessione 📚 «Studio»?",
-            p.testo(R.string.sessione_non_approvare_titolo, nomeSessioneTraVirgolette(p, "Studio")),
+            "Rifiuti la sessione 📚 «Studio»?",
+            p.testo(R.string.sessione_rifiuta_titolo, nomeSessioneTraVirgolette(p, "Studio")),
         )
     }
 
@@ -906,9 +904,9 @@ class SessioniTest {
     fun `dopo la risposta, una frase che dice che cosa e successo`() {
         assertEquals("Fatto: la sessione è approvata.", frase(EsitoSessione.Decisa("approva", cambio = false)))
         assertEquals("Fatto: il cambio è approvato.", frase(EsitoSessione.Decisa("approva", cambio = true)))
-        assertEquals("Non hai approvato la sessione.", frase(EsitoSessione.Decisa("rifiuta", cambio = false)))
+        assertEquals("Hai rifiutato la sessione.", frase(EsitoSessione.Decisa("rifiuta", cambio = false)))
         assertEquals(
-            "Non hai approvato il cambio: la sessione resta com'era.",
+            "Hai rifiutato il cambio: la sessione resta com'era.",
             frase(EsitoSessione.Decisa("rifiuta", cambio = true)),
         )
         // Arrivato mentre il genitore guarda un altro figlio: di chi era.
@@ -947,7 +945,7 @@ class SessioniTest {
     fun `niente da decidere dice com'e davvero, mai un forse`() {
         val niente = CodiciErrore.NIENTE_DA_DECIDERE
         assertEquals("Era già stata approvata.", frase(EsitoSessione.NonDecisa(niente, SessioneRiletta.APPROVATA)))
-        assertEquals("Era già stata decisa: non approvata.", frase(EsitoSessione.NonDecisa(niente, SessioneRiletta.NON_APPROVATA)))
+        assertEquals("Era già stata rifiutata.", frase(EsitoSessione.NonDecisa(niente, SessioneRiletta.NON_APPROVATA)))
         assertEquals("Il cambio era già stato deciso.", frase(EsitoSessione.NonDecisa(niente, SessioneRiletta.CAMBIO_DECISO)))
         assertEquals(
             "Tuo figlio l'ha eliminata: non c'è più niente da decidere.",

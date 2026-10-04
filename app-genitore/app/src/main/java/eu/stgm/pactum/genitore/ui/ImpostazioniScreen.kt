@@ -1,16 +1,14 @@
 package eu.stgm.pactum.genitore.ui
 
 import android.os.Build
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -18,69 +16,82 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.genitore.BuildConfig
+import eu.stgm.pactum.design.TitoloSezione
+import eu.stgm.pactum.design.RigaStato
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.aggiornamento.Aggiornatore
 import eu.stgm.pactum.genitore.aggiornamento.EsitoAggiornamento
 import eu.stgm.pactum.genitore.dati.ConfigurazionePostino
 import eu.stgm.pactum.genitore.dati.Impostazioni
-import eu.stgm.pactum.genitore.rete.EsitoAbbinamento
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import eu.stgm.pactum.genitore.servizio.EsenzioneBatteria
 import eu.stgm.pactum.genitore.servizio.MarcaConRisparmio
 import eu.stgm.pactum.genitore.servizio.marcaConRisparmio
 import eu.stgm.pactum.genitore.sync.Vedetta
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.util.Locale
 
 /**
- * Impostazioni del binocolo, in cinque blocchi: la connessione (indirizzo del
- * server e codice d'accesso del genitore), la famiglia (v3: figli, dispositivi,
- * codici per collegarli), gli avvisi del patto (0.9: Pactum sempre attivo), il
- * digest giornaliero, gli aggiornamenti dell'app. [mostraAvvisi] = aperte dalla
- * notifica fissa: la sezione degli avvisi viene in vista da sola.
+ * (0.15) Le Impostazioni, una pagina che si apre dall'icona in alto di ogni
+ * scheda. In quest'ordine: la Famiglia (genitori, figli, dispositivi: la parte che
+ * si usa), gli Avvisi del patto, il Riassunto della sera, il Collegamento (chiuso
+ * in una riga quando il telefono è collegato), la Versione dell'app e "Come
+ * funziona Pactum". [sezione] = la sezione da portare in vista all'apertura (dalla
+ * notifica fissa, da "Risolvi" nella Panoramica, dal primo avvio).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImpostazioniScreen(
-    mostraAvvisi: Boolean = false,
-    onAvvisiMostrati: () -> Unit = {},
+    sezione: SezioneImpostazioni? = null,
+    /** Cambia a ogni arrivo dalla notifica fissa: la sezione si riporta in vista. */
+    richiesta: Int = 0,
     famigliaVm: FamigliaViewModel = viewModel(),
     collegamentoVm: CollegamentoViewModel = viewModel(),
 ) {
+    val cornice = LocalCornice.current
+    val messaggi = cornice.messaggi
     val context = LocalContext.current
     val ambito = rememberCoroutineScope()
     val impostazioni = remember { Impostazioni(context.applicationContext) }
@@ -104,11 +115,14 @@ fun ImpostazioniScreen(
     // (0.13) Il collegamento con il codice di 6 cifre; il codice lungo dietro un tocco.
     var codiceSei by rememberSaveable { mutableStateOf("") }
     var codiceLungoAperto by rememberSaveable { mutableStateOf(false) }
+    // (0.15) Il codice lungo si vede solo toccando l'occhio (B35).
+    var codiceLungoVisibile by rememberSaveable { mutableStateOf(false) }
     var domandaCollega by rememberSaveable { mutableStateOf(false) }
+    // (0.15) Il modulo del collegamento, quando il telefono è già collegato, si apre con "Cambia".
+    var collegamentoAperto by rememberSaveable { mutableStateOf(sezione == SezioneImpostazioni.COLLEGAMENTO) }
     var controlloInCorso by remember { mutableStateOf(false) }
     val aggiornatore = remember { Aggiornatore(context.applicationContext) }
     val ultimaVerifica by impostazioni.ultimaVerificaRiuscita.collectAsState(initial = null)
-    val snackbarHostState = remember { SnackbarHostState() }
     val messaggioSalvato = stringResource(R.string.impostazioni_salvate)
     val messaggioUrlNonValido = stringResource(R.string.impostazioni_url_non_valido)
     val messaggioProvaOk = stringResource(R.string.impostazioni_prova_ok)
@@ -124,19 +138,28 @@ fun ImpostazioniScreen(
         }
     }
 
-    // (0.13) Com'è andato il collegamento col codice di 6 cifre (anche se è finito
-    // mentre questa pagina era chiusa): il token è già salvato dal ViewModel.
-    LaunchedEffect(collegamento.esito) {
-        val esito = collegamento.esito ?: return@LaunchedEffect
-        collegamentoVm.consumaEsito()
-        val messaggio = if (esito is EsitoAbbinamento.Collegato) {
-            token = esito.token
-            codiceSei = ""
-            testoCollegato(p, esito.genitore)
-        } else {
-            messaggioAbbinamento(p, esito)
+    // (0.15) La sezione chiesta si porta in vista una volta sola (non a ogni rotazione).
+    // Dove comincia ogni sezione nella pagina: si scorre fin lì, col titolo in alto.
+    val scorrimento = rememberScrollState()
+    val inizioSezione = remember { mutableStateMapOf<SezioneImpostazioni, Int>() }
+    // Per quale [richiesta] la sezione è già stata portata in vista (null = mai):
+    // una volta sola, non a ogni rotazione; di nuovo a ogni nuovo arrivo.
+    var mostrataPer by rememberSaveable { mutableStateOf<Int?>(null) }
+    // La Famiglia sta in cima e cresce quando arriva dal server: prima di scorrere
+    // agli Avvisi o al Collegamento si aspetta che abbia la sua misura vera (al
+    // massimo 3 secondi), altrimenti la sezione chiesta scivola giù fuori vista.
+    val famigliaAssestata = (famiglia.lettaDalServer || famiglia.errore || famiglia.configurazioneMancante || famiglia.serverVecchio || famiglia.collegamentoNonValido) &&
+        (!famiglia.lettaDalServer || famiglia.genitoriLetti || famiglia.genitoriErrore || famiglia.genitoriServerVecchio)
+    val assestata by rememberUpdatedState(famigliaAssestata)
+    LaunchedEffect(sezione, richiesta) {
+        if (sezione == null || mostrataPer == richiesta) return@LaunchedEffect
+        if (sezione != SezioneImpostazioni.FAMIGLIA) {
+            withTimeoutOrNull(ATTESA_FAMIGLIA_MS) { snapshotFlow { assestata }.first { it } }
         }
-        if (messaggio != null) ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+        withFrameNanos { } // prima si dispone la pagina, poi si scorre
+        withFrameNanos { }
+        inizioSezione[sezione]?.let { scorrimento.animateScrollTo(it) }
+        mostrataPer = richiesta
     }
 
     // (0.13) Un telefono già collegato come genitore: prima di collegarlo come un altro, una domanda.
@@ -162,235 +185,262 @@ fun ImpostazioniScreen(
         )
     }
 
+    val configurato = configurazioneSalvata?.completa == true
+    // Collegato e valido: il collegamento sta chiuso in una riga, finché non si tocca "Cambia".
+    val collegamentoChiuso = configurato && !famiglia.collegamentoNonValido && !collegamentoAperto
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.impostazioni_titolo)) })
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = { BarraPagina(stringResource(R.string.impostazioni_titolo)) },
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .verticalScroll(scorrimento)
                 .padding(Spazi.l),
             verticalArrangement = Arrangement.spacedBy(Spazi.m),
         ) {
-            // Tre blocchi: connessione, digest, aggiornamenti. È l'unica
-            // schermata densa dell'app, e va bene: è configurazione.
-            TitoloSezione(stringResource(R.string.impostazioni_connessione_titolo))
-            // (0.13) Chi sei tu, quando il server lo dice (contratto v3.6); o che il
-            // collegamento di questo telefono non vale più (401).
-            val io = famiglia.io?.takeIf { configurazioneSalvata?.completa == true && !famiglia.collegamentoNonValido }
-            if (famiglia.collegamentoNonValido && configurazioneSalvata?.completa == true) {
-                RigaDatiVecchi(stringResource(R.string.collegamento_non_valido))
-            }
-            if (io != null) {
-                Text(
-                    text = stringResource(R.string.connessione_collegato_come, nomeDelGenitore(p, io.nome)),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            }
-            Text(
-                text = stringResource(R.string.connessione_codice_spiega),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            OutlinedTextField(
-                value = serverUrl,
-                onValueChange = {
-                    serverUrl = it
-                    urlNonValido = false
-                },
-                label = { Text(stringResource(R.string.impostazioni_server_url)) },
-                placeholder = { Text(stringResource(R.string.impostazioni_server_url_esempio)) },
-                isError = urlNonValido,
-                supportingText = if (urlNonValido) {
-                    { Text(stringResource(R.string.impostazioni_url_non_valido)) }
-                } else {
-                    null
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            // (0.13) Il codice di 6 cifre (contratto v3.6, POST /api/abbina col tipo
-            // "genitore"): lo crea un genitore già collegato. Solo cifre, al massimo 6.
-            // Collegamento e salvataggio li fa CollegamentoViewModel, in un blocco che
-            // la pagina non interrompe; quello che le schermate sanno del collegamento
-            // di prima lo fa dimenticare GenitoreRoot (MainActivity), a ogni cambio.
-            OutlinedTextField(
-                value = codiceSei,
-                onValueChange = { codiceSei = soloCifre(it) },
-                label = { Text(stringResource(R.string.connessione_codice)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Button(
-                enabled = codiceCompleto(codiceSei) && !collegamento.inCorso,
-                onClick = {
-                    // Un URL scritto male e accettato in silenzio = un binocolo
-                    // che non vede mai niente senza dirlo: si rifiuta subito.
-                    val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
-                    if (urlNormalizzato == null) {
-                        urlNonValido = true
-                        ambito.launch { snackbarHostState.showSnackbar(messaggioUrlNonValido) }
-                    } else {
-                        urlNonValido = false
-                        serverUrl = urlNormalizzato
-                        // Già collegato: prima una domanda (smetterà di essere chi è adesso).
-                        if (domandaPrimaDiCollegare(p, configurazioneSalvata?.completa == true, famiglia.io) != null) {
-                            domandaCollega = true
-                        } else {
-                            collegamentoVm.collega(urlNormalizzato, codiceSei)
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
+            // --- 1. La famiglia (la parte che si usa) -----------------------------------
+            Column(
+                modifier = Modifier.fillMaxWidth().inizio(inizioSezione, SezioneImpostazioni.FAMIGLIA),
+                verticalArrangement = Arrangement.spacedBy(Spazi.m),
             ) {
-                Text(
-                    stringResource(if (collegamento.inCorso) R.string.connessione_in_corso else R.string.connessione_collega),
+                SezioneFamiglia(
+                    famigliaVm = famigliaVm,
+                    indirizzoServer = configurazioneSalvata?.serverUrl?.takeIf { it.isNotBlank() },
+                    mostraMessaggio = messaggi::mostra,
                 )
             }
 
-            // Il codice d'accesso lungo, come prima della 0.13: per il primo genitore.
-            TextButton(onClick = { codiceLungoAperto = !codiceLungoAperto }) {
-                Text(
-                    stringResource(
-                        if (codiceLungoAperto) R.string.connessione_codice_lungo_chiudi else R.string.connessione_codice_lungo_apri,
-                    ),
-                )
+            // --- 2. Gli avvisi del patto (0.9) --------------------------------------------
+            Divisore()
+            Column(
+                modifier = Modifier.fillMaxWidth().inizio(inizioSezione, SezioneImpostazioni.AVVISI),
+                verticalArrangement = Arrangement.spacedBy(Spazi.m),
+            ) {
+                SezioneAvvisi()
             }
-            if (codiceLungoAperto) {
-                Text(
-                    text = stringResource(R.string.impostazioni_descrizione),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                OutlinedTextField(
-                    value = token,
-                    onValueChange = { token = it },
-                    label = { Text(stringResource(R.string.impostazioni_token)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(
-                    onClick = {
-                        val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
-                        if (urlNormalizzato == null) {
-                            urlNonValido = true
-                            ambito.launch { snackbarHostState.showSnackbar(messaggioUrlNonValido) }
-                        } else {
+
+            // --- 3. Il riassunto della sera ------------------------------------------------
+            Divisore()
+            SezioneDigest(impostazioni)
+
+            // --- 4. Il collegamento ---------------------------------------------------------
+            Divisore()
+            Column(
+                modifier = Modifier.fillMaxWidth().inizio(inizioSezione, SezioneImpostazioni.COLLEGAMENTO),
+                verticalArrangement = Arrangement.spacedBy(Spazi.m),
+            ) {
+                TitoloSezione(stringResource(R.string.impostazioni_connessione_titolo))
+                // (0.13) Chi sei tu, quando il server lo dice (contratto v3.6); o che il
+                // collegamento di questo telefono non vale più (401).
+                val io = famiglia.io?.takeIf { configurato && !famiglia.collegamentoNonValido }
+                if (famiglia.collegamentoNonValido && configurato) {
+                    RigaStato(stringResource(R.string.collegamento_non_valido))
+                }
+                if (collegamentoChiuso) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (io != null) {
+                                stringResource(R.string.connessione_collegato_come, nomeDelGenitore(p, io.nome))
+                            } else {
+                                stringResource(R.string.connessione_collegato)
+                            },
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { collegamentoAperto = true }) {
+                            Text(stringResource(R.string.connessione_cambia))
+                        }
+                    }
+                } else {
+                    if (io != null) {
+                        Text(
+                            text = stringResource(R.string.connessione_collegato_come, nomeDelGenitore(p, io.nome)),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.connessione_codice_spiega),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedTextField(
+                        value = serverUrl,
+                        onValueChange = {
+                            serverUrl = it
                             urlNonValido = false
-                            serverUrl = urlNormalizzato
-                            ambito.launch {
-                                impostazioni.salvaConfigurazione(urlNormalizzato, token)
-                                snackbarHostState.showSnackbar(messaggioSalvato)
+                        },
+                        label = { Text(stringResource(R.string.impostazioni_server_url)) },
+                        placeholder = { Text(stringResource(R.string.impostazioni_server_url_esempio)) },
+                        isError = urlNonValido,
+                        supportingText = if (urlNonValido) {
+                            { Text(stringResource(R.string.impostazioni_url_non_valido)) }
+                        } else {
+                            null
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    // (0.13) Il codice di 6 cifre (contratto v3.6, POST /api/abbina col tipo
+                    // "genitore"): lo crea un genitore già collegato. Solo cifre, al massimo 6.
+                    // Collegamento e salvataggio li fa CollegamentoViewModel, in un blocco che
+                    // la pagina non interrompe; l'esito lo dice la radice (MainActivity), che
+                    // dopo un collegamento riuscito torna alla Panoramica.
+                    OutlinedTextField(
+                        value = codiceSei,
+                        onValueChange = { codiceSei = soloCifre(it) },
+                        label = { Text(stringResource(R.string.connessione_codice)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Button(
+                        enabled = codiceCompleto(codiceSei) && !collegamento.inCorso,
+                        onClick = {
+                            // Un URL scritto male e accettato in silenzio = un binocolo
+                            // che non vede mai niente senza dirlo: si rifiuta subito.
+                            val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
+                            if (urlNormalizzato == null) {
+                                urlNonValido = true
+                                messaggi.mostra(messaggioUrlNonValido)
+                            } else {
+                                urlNonValido = false
+                                serverUrl = urlNormalizzato
+                                // Già collegato: prima una domanda (smetterà di essere chi è adesso).
+                                if (domandaPrimaDiCollegare(p, configurato, famiglia.io) != null) {
+                                    domandaCollega = true
+                                } else {
+                                    collegamentoVm.collega(urlNormalizzato, codiceSei)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            stringResource(if (collegamento.inCorso) R.string.connessione_in_corso else R.string.connessione_collega),
+                        )
+                    }
+
+                    // Il codice d'accesso lungo, come prima della 0.13: per il primo genitore.
+                    TextButton(onClick = { codiceLungoAperto = !codiceLungoAperto }) {
+                        Text(
+                            stringResource(
+                                if (codiceLungoAperto) R.string.connessione_codice_lungo_chiudi else R.string.connessione_codice_lungo_apri,
+                            ),
+                        )
+                    }
+                    if (codiceLungoAperto) {
+                        Text(
+                            text = stringResource(R.string.impostazioni_descrizione),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        OutlinedTextField(
+                            value = token,
+                            onValueChange = { token = it },
+                            label = { Text(stringResource(R.string.impostazioni_token)) },
+                            singleLine = true,
+                            visualTransformation = if (codiceLungoVisibile) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { codiceLungoVisibile = !codiceLungoVisibile }) {
+                                    Icon(
+                                        painterResource(if (codiceLungoVisibile) R.drawable.ic_occhio_chiuso else R.drawable.ic_occhio),
+                                        contentDescription = stringResource(
+                                            if (codiceLungoVisibile) R.string.codice_lungo_nascondi else R.string.codice_lungo_mostra,
+                                        ),
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Button(
+                            onClick = {
+                                val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
+                                if (urlNormalizzato == null) {
+                                    urlNonValido = true
+                                    messaggi.mostra(messaggioUrlNonValido)
+                                } else {
+                                    urlNonValido = false
+                                    serverUrl = urlNormalizzato
+                                    val primoCollegamento = !configurato
+                                    ambito.launch {
+                                        impostazioni.salvaConfigurazione(urlNormalizzato, token)
+                                        messaggi.mostra(messaggioSalvato)
+                                        // (0.15) Al primo collegamento si torna alla Panoramica.
+                                        if (primoCollegamento) cornice.allaPanoramica()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.azione_salva))
+                        }
+                    }
+                }
+
+                // Verifica onesta del canale: quando il server ha risposto l'ultima
+                // volta e un pulsante per provare adesso, con esito esplicito.
+                Text(
+                    text = stringResource(
+                        R.string.impostazioni_ultima_verifica,
+                        ultimaVerifica?.let { testoQuando(p, Instant.ofEpochMilli(it)) }
+                            ?: stringResource(R.string.impostazioni_ultima_verifica_mai),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    enabled = !provaInCorso,
+                    onClick = {
+                        // La prova usa quello che c'è SULLO SCHERMO, non l'ultima
+                        // configurazione salvata: altrimenti si prova un indirizzo
+                        // vecchio credendo di provare quello appena scritto.
+                        val urlProva = PostinoClient.normalizzaUrlServer(serverUrl)
+                        val tokenProva = token.trim()
+                        when {
+                            serverUrl.isBlank() || tokenProva.isEmpty() -> messaggi.mostra(messaggioConfigIncompleta)
+
+                            urlProva == null -> {
+                                urlNonValido = true
+                                messaggi.mostra(messaggioUrlNonValido)
+                            }
+
+                            else -> ambito.launch {
+                                provaInCorso = true
+                                try {
+                                    val provata = ConfigurazionePostino(urlProva, tokenProva)
+                                    val finestra = PostinoClient(provata).leggiFinestra()
+                                    val esito = if (finestra != null) {
+                                        // "Ultima verifica riuscita" racconta il canale
+                                        // configurato: si registra solo se la prova ha
+                                        // usato esattamente la configurazione salvata.
+                                        if (provata == impostazioni.leggiConfigurazione()) {
+                                            impostazioni.registraVerificaRiuscita()
+                                        }
+                                        messaggioProvaOk
+                                    } else {
+                                        messaggioProvaFallita
+                                    }
+                                    messaggi.mostra(esito)
+                                } finally {
+                                    provaInCorso = false
+                                }
                             }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(stringResource(R.string.azione_salva))
+                    Text(stringResource(R.string.impostazioni_prova_adesso))
                 }
             }
 
-            // Verifica onesta del canale: quando il server ha risposto l'ultima
-            // volta e un pulsante per provare adesso, con esito esplicito.
-            Text(
-                text = stringResource(
-                    R.string.impostazioni_ultima_verifica,
-                    ultimaVerifica?.let { dataOraCompletaLocale(Instant.ofEpochMilli(it)) }
-                        ?: stringResource(R.string.impostazioni_ultima_verifica_mai),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            OutlinedButton(
-                enabled = !provaInCorso,
-                onClick = {
-                    // La prova usa quello che c'è SULLO SCHERMO, non l'ultima
-                    // configurazione salvata: altrimenti si prova un indirizzo
-                    // vecchio credendo di provare quello appena scritto.
-                    val urlProva = PostinoClient.normalizzaUrlServer(serverUrl)
-                    val tokenProva = token.trim()
-                    when {
-                        serverUrl.isBlank() || tokenProva.isEmpty() -> ambito.launch {
-                            snackbarHostState.showSnackbar(messaggioConfigIncompleta)
-                        }
-
-                        urlProva == null -> {
-                            urlNonValido = true
-                            ambito.launch { snackbarHostState.showSnackbar(messaggioUrlNonValido) }
-                        }
-
-                        else -> ambito.launch {
-                            provaInCorso = true
-                            try {
-                                val provata = ConfigurazionePostino(urlProva, tokenProva)
-                                val finestra = PostinoClient(provata).leggiFinestra()
-                                val esito = if (finestra != null) {
-                                    // "Ultima verifica riuscita" racconta il canale
-                                    // configurato: si registra solo se la prova ha
-                                    // usato esattamente la configurazione salvata.
-                                    if (provata == impostazioni.leggiConfigurazione()) {
-                                        impostazioni.registraVerificaRiuscita()
-                                    }
-                                    messaggioProvaOk
-                                } else {
-                                    messaggioProvaFallita
-                                }
-                                snackbarHostState.showSnackbar(esito)
-                            } finally {
-                                provaInCorso = false
-                            }
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.impostazioni_prova_adesso))
-            }
-
-            // (v3) La famiglia: figli, dispositivi e i codici per collegarli.
-            HorizontalDivider(
-                modifier = Modifier.padding(top = Spazi.s),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            )
-            SezioneFamiglia(
-                famigliaVm = famigliaVm,
-                indirizzoServer = configurazioneSalvata?.serverUrl?.takeIf { it.isNotBlank() },
-                mostraMessaggio = { messaggio ->
-                    ambito.launch { snackbarHostState.showSnackbar(messaggio) }
-                },
-            )
-
-            // (0.9) Avvisi del patto: Pactum sempre attivo, gli avvisi accesi,
-            // l'esenzione dalla batteria e il risparmio batteria della marca.
-            HorizontalDivider(
-                modifier = Modifier.padding(top = Spazi.s),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            )
-            SezioneAvvisi(mostra = mostraAvvisi, onMostrata = onAvvisiMostrati)
-
-            // Digest giornaliero: l'ora scelta e l'interruttore. Si salva al
-            // gesto, senza pulsante: è una preferenza, non una configurazione.
-            HorizontalDivider(
-                modifier = Modifier.padding(top = Spazi.s),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            )
-            SezioneDigest(impostazioni)
-
-            // Aggiornamenti (tappa 6): la versione installata e un controllo
-            // manuale. La vedetta lo fa anche da sola a ogni giro; questo è per
-            // chi non vuole aspettare.
-            HorizontalDivider(
-                modifier = Modifier.padding(top = Spazi.s),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            )
+            // --- 5. La versione dell'app (tappa 6) -------------------------------------------
+            // La versione installata e un controllo manuale. La vedetta lo fa anche da
+            // sola a ogni giro; questo è per chi non vuole aspettare.
+            Divisore()
             TitoloSezione(stringResource(R.string.impostazioni_aggiornamenti_titolo))
             Text(
-                text = stringResource(
-                    R.string.impostazioni_versione_attuale,
-                    BuildConfig.VERSION_NAME,
-                ),
+                text = stringResource(R.string.impostazioni_versione_attuale, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.bodyMedium,
             )
             OutlinedButton(
@@ -423,7 +473,7 @@ fun ImpostazioniScreen(
                                 EsitoAggiornamento.Fallito ->
                                     context.getString(R.string.aggiornamento_fallito)
                             }
-                            snackbarHostState.showSnackbar(messaggio)
+                            messaggi.mostra(messaggio)
                         } finally {
                             controlloInCorso = false
                         }
@@ -433,8 +483,22 @@ fun ImpostazioniScreen(
             ) {
                 Text(stringResource(R.string.impostazioni_controlla_aggiornamenti))
             }
+
+            // --- 6. Come funziona Pactum ----------------------------------------------------
+            // La cornice (prima una card in mezzo alla Panoramica): cos'è Pactum, perché
+            // non impone il genitore le regole, e chi è l'arbitro delle regole di vita reale.
+            Divisore()
+            TitoloSezione(stringResource(R.string.intro_titolo))
+            Text(text = stringResource(R.string.intro_testo), style = MaterialTheme.typography.bodyMedium)
+            Text(text = stringResource(R.string.intro_arbitro), style = MaterialTheme.typography.bodyMedium)
         }
     }
+}
+
+/** La linea sottile fra due sezioni. */
+@Composable
+private fun Divisore() {
+    HorizontalDivider(modifier = Modifier.padding(top = Spazi.s), color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 /**
@@ -443,12 +507,11 @@ fun ImpostazioniScreen(
  * l'esenzione dalla batteria di Android, e il risparmio batteria della marca
  * (Xiaomi, Huawei, Oppo, Vivo, OnePlus, Samsung…), con un passo in parole
  * semplici. Ogni pulsante apre la schermata di Android giusta; lo stato si
- * rilegge al ritorno. [mostra] = ci si arriva dalla notifica fissa ("tocca per
- * sistemare"): la sezione viene in vista da sola.
+ * rilegge al ritorno. (0.15) Ci si arriva anche dalla notifica fissa e da
+ * "Risolvi" nella Panoramica: la pagina la porta in vista da sola.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SezioneAvvisi(mostra: Boolean, onMostrata: () -> Unit) {
+private fun SezioneAvvisi() {
     val context = LocalContext.current
     var esente by remember { mutableStateOf(EsenzioneBatteria.concessa(context)) }
     var accesi by remember { mutableStateOf(Vedetta.avvisiAccesi(context)) }
@@ -457,18 +520,11 @@ private fun SezioneAvvisi(mostra: Boolean, onMostrata: () -> Unit) {
         accesi = Vedetta.avvisiAccesi(context)
         onPauseOrDispose { }
     }
-    val inVista = remember { BringIntoViewRequester() }
-    LaunchedEffect(mostra) {
-        if (!mostra) return@LaunchedEffect
-        withFrameNanos { } // prima si dispone la schermata, poi si scorre
-        inVista.bringIntoView()
-        onMostrata()
-    }
     val marca = remember { marcaConRisparmio(Build.MANUFACTURER) }
     val nomeApp = stringResource(R.string.nome_app)
 
     Column(
-        modifier = Modifier.fillMaxWidth().bringIntoViewRequester(inVista),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Spazi.m),
     ) {
         TitoloSezione(stringResource(R.string.impostazioni_attivo_titolo))
@@ -528,9 +584,9 @@ private fun SezioneAvvisi(mostra: Boolean, onMostrata: () -> Unit) {
 }
 
 /**
- * Il digest giornaliero: ogni giorno, all'ora scelta, la vedetta manda una
- * notifica col tempo totale di oggi e le prime app (il dettaglio nella sezione
- * Tempo). Interruttore + ora, salvati subito in DataStore.
+ * Il riassunto della sera (il "digest giornaliero"): ogni giorno, all'ora scelta,
+ * la vedetta manda una notifica col tempo totale di oggi e le prime app (il
+ * dettaglio nella scheda Tempo). Interruttore + ora, salvati subito in DataStore.
  */
 @Composable
 private fun SezioneDigest(impostazioni: Impostazioni) {
@@ -596,3 +652,10 @@ private fun SezioneDigest(impostazioni: Impostazioni) {
 
 /** "21" → "21:00" (formato fisso: è un orario, non una frase da tradurre). */
 private fun testoOra(ora: Int): String = String.format(Locale.ROOT, "%02d:00", ora)
+
+/** Quanto si aspetta la Famiglia prima di portare in vista la sezione chiesta. */
+private const val ATTESA_FAMIGLIA_MS = 3_000L
+
+/** Si segna dove comincia la sezione [chi] dentro la pagina che scorre. */
+private fun Modifier.inizio(inizi: MutableMap<SezioneImpostazioni, Int>, chi: SezioneImpostazioni): Modifier =
+    onPlaced { inizi[chi] = it.positionInParent().y.roundToInt() }

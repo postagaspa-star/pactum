@@ -1362,7 +1362,8 @@ class TestiTest {
     @Test
     fun `il riassunto e la riga degli avvisi si leggono in italiano`() {
         assertEquals("Novità da leggere: 12", p.testo(R.string.riassunto_novita_titolo, 12))
-        assertEquals("Avvisi: ultimo controllo alle 21:30", p.testo(R.string.avvisi_ultimo_controllo, "alle 21:30"))
+        // (0.15) La riga c'è solo quando gli avvisi sono in ritardo (quando va tutto bene non c'è).
+        assertEquals("Avvisi in ritardo: ultimo controllo alle 21:30", p.testo(R.string.avvisi_controllo_vecchio, "alle 21:30"))
         assertEquals("Alcune non si sono segnate (3): riprova.", p.testo(R.string.notifiche_segna_tutte_fallite, 3))
     }
 

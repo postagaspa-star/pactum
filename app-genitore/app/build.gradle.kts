@@ -43,8 +43,10 @@ android {
         // v0.14.0 (contratto v3.7): anche il telefono può risultare spento (niente
         // avviso di silenzio), il silenzio non accusa, e nei testi "lavori di casa"
         // al posto di "faccende".
-        versionCode = 14
-        versionName = "0.14.0"
+        // v0.15.0: il riordino dell'interfaccia (4 schede fisse, una Panoramica
+        // corta, "Da decidere"), comportamento invariato.
+        versionCode = 15
+        versionName = "0.15.0"
     }
 
     signingConfigs {

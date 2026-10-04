@@ -6,8 +6,6 @@
          scheda: si aprono dalla campanella della Panoramica. -->
     <string name="scheda_finestra">Panoramica</string>
     <string name="scheda_tempo">Tempo</string>
-    <string name="scheda_turno">Proposte e conferme</string>
-    <string name="scheda_impostazioni">Impostazioni</string>
     <string name="azione_aggiorna">Aggiorna</string>
     <string name="azione_indietro">Indietro</string>
 
@@ -43,10 +41,9 @@
     <string name="intro_titolo">Come funziona Pactum</string>
     <!-- (0.14) Dalla 0.11 (sessioni) e dalla 0.13 (lavori di casa) "non blocca niente" non era più vero: si dicono le due eccezioni -->
     <string name="intro_testo">In Pactum è tuo figlio a darsi le regole. Tu le vedi e puoi proporre modifiche, ma non le imponi. Anche lui può chiederti di cambiare una sua regola: decidi tu. Pactum non blocca niente, con due eccezioni: le sessioni, che tuo figlio si sceglie da solo, e i lavori di casa, che gli date voi genitori: finché non sono fatti, telefono e computer restano bloccati. Per il resto è un testimone, non un controllore. Il tuo ruolo è verificare, proporre e rispondere alle sue proposte, con fiducia.</string>
-    <string name="intro_chiudi">Ho capito</string>
 
     <!-- Finestra (Panoramica) -->
-    <string name="finestra_titolo">Panoramica del patto</string>
+    <string name="finestra_titolo">Panoramica</string>
     <string name="finestra_caricamento">Sto caricando la panoramica…</string>
     <string name="finestra_errore">Non riesco a raggiungere il server. Questi sono gli ultimi dati ricevuti.</string>
     <string name="finestra_errore_nessun_dato">Non riesco a raggiungere il server. Controlla la connessione o riprova tra poco.</string>
@@ -56,9 +53,6 @@
     <string name="silenzio_allarme">Nessun aggiornamento dalle %1$s — l\'app del figlio non sta inviando dati</string>
     <string name="silenzio_mai">Nessun aggiornamento — l\'app del figlio non ha ancora inviato dati</string>
     <!-- (0.14, contratto v3.7) Il silenzio non accusa: si dice che cosa può essere, senza dare la colpa -->
-    <string name="silenzio_spiega">Può essere senza rete o scarico, oppure Pactum è stato fermato.</string>
-    <string name="silenzio_spiega_computer">Può essere senza rete o senza corrente, oppure Pactum è stato fermato.</string>
-    <string name="finestra_aggiornata_alle">Aggiornato alle %1$s</string>
 
     <!-- v3: la famiglia. In cima a Panoramica, Tempo e "Proposte e conferme" la
          scelta del figlio (con un figlio solo, il suo nome). -->
@@ -70,7 +64,6 @@
     </plurals>
 
     <!-- v3: i dispositivi nella Panoramica (una riga ciascuno, sotto la scheda del patto) -->
-    <string name="dispositivi_titolo">DISPOSITIVI</string>
     <string name="dispositivo_senza_nome">Dispositivo</string>
     <string name="dispositivo_telefono">Telefono</string>
     <string name="dispositivo_computer">Computer</string>
@@ -97,15 +90,10 @@
     <!-- La card del silenzio in cima, per UN dispositivo: "Telefono: nessun aggiornamento dalle 15:10" -->
     <string name="silenzio_dispositivo_titolo">%1$s: nessun aggiornamento %2$s</string>
     <string name="nessun_dispositivo_titolo">Nessun dispositivo collegato</string>
-    <string name="nessun_dispositivo">Per cominciare, aggiungi il telefono o il computer del figlio nelle Impostazioni, sezione Famiglia: lì crei il codice per collegarlo.</string>
+    <string name="nessun_dispositivo">Per cominciare, aggiungi il telefono o il computer del figlio: crei il codice per collegarlo.</string>
     <!-- Le regole raggruppate: un blocco per dispositivo, poi gli impegni di vita reale -->
     <string name="gruppo_impegni">IMPEGNI</string>
     <string name="gruppo_altre_regole">ALTRE REGOLE</string>
-    <string name="regole_nessuna_sul_dispositivo">Nessuna regola su questo dispositivo.</string>
-    <plurals name="striscia_descrizione_dispositivo">
-        <item quantity="one">%1$d giorno su %2$d dentro le regole di questo dispositivo</item>
-        <item quantity="other">%1$d giorni su %2$d dentro le regole di questo dispositivo</item>
-    </plurals>
 
     <!-- La scheda del patto (l\'eroe della Panoramica) -->
     <string name="patto_ultimi_giorni">ULTIMI 8 GIORNI</string>
@@ -159,7 +147,6 @@
     <string name="segno_gia_mandato_avviso">Il segno di oggi era già partito.</string>
     <string name="segno_fallito">Non sono riuscito a mandare il segno: riprova.</string>
 
-    <string name="sezione_regole">Le regole</string>
     <string name="regole_vuoto_titolo">Ancora nessuna regola</string>
     <string name="regole_vuoto">Il patto nasce sui dispositivi del figlio: appena si dà la prima regola, la vedi qui.</string>
     <string name="regola_eliminata">non più attiva</string>
@@ -179,14 +166,9 @@
          sola, dopo le regole, accanto ai minuti bonus degli 8 giorni. -->
     <string name="bonus_titolo">BONUS</string>
     <string name="bonus_residui">Oggi restano %1$d min su %2$d · questa settimana %3$d su %4$d</string>
-    <string name="bonus_striscia_titolo">MINUTI BONUS NEGLI ULTIMI 8 GIORNI</string>
+    <string name="bonus_striscia_titolo">Minuti bonus negli ultimi 8 giorni</string>
 
     <string name="sezione_da_guardare">Da guardare insieme</string>
-    <plurals name="da_guardare_altri">
-        <item quantity="one">Mostra un\'altra voce</item>
-        <item quantity="other">Mostra le altre %1$d voci</item>
-    </plurals>
-    <string name="da_guardare_meno">Mostra meno</string>
     <string name="sforamento_su_regola">%1$s — fuori regola</string>
     <string name="sforamento_generico">Fuori regola</string>
 
@@ -252,10 +234,9 @@
     <string name="riassunto_novita_titolo">Novità da leggere: %1$d</string>
     <string name="riassunto_novita_testo">Tocca per vederle nella lista delle notifiche.</string>
     <!-- (0.9) In cima alla Panoramica: quando Pactum ha guardato il patto l\'ultima volta -->
-    <string name="avvisi_ultimo_controllo">Avvisi: ultimo controllo %1$s</string>
-    <string name="avvisi_controllo_vecchio">Avvisi: ultimo controllo %1$s. Da allora Pactum non è riuscito a guardare il patto: gli avvisi possono arrivare in ritardo.</string>
+    <string name="avvisi_controllo_vecchio">Avvisi in ritardo: ultimo controllo %1$s</string>
     <string name="avvisi_spenti_panoramica">Gli avvisi di Pactum sono spenti su questo telefono: non ti arriva niente.</string>
-    <string name="avvisi_sistema">Sistema</string>
+    <string name="avvisi_risolvi">Risolvi</string>
     <string name="tipo_sforamento">Fuori regola</string>
     <string name="tipo_manomissione">Anomalia</string>
     <string name="tipo_bonus">Bonus</string>
@@ -349,7 +330,7 @@
 
     <!-- Impostazioni: tre blocchi (connessione, digest, aggiornamenti) -->
     <string name="impostazioni_titolo">Impostazioni</string>
-    <string name="impostazioni_connessione_titolo">Connessione</string>
+    <string name="impostazioni_connessione_titolo">Collegamento</string>
     <string name="impostazioni_descrizione">Indirizzo del server e codice d\'accesso del genitore. Te li fornisce chi ha configurato il server.</string>
     <string name="impostazioni_server_url">Indirizzo del server</string>
     <string name="impostazioni_server_url_esempio">https://pactum.esempio.it</string>
@@ -361,7 +342,6 @@
     <string name="impostazioni_prova_adesso">Prova adesso</string>
     <string name="impostazioni_prova_ok">Il server risponde correttamente.</string>
     <string name="impostazioni_prova_fallita">Verifica fallita: controlla indirizzo, codice d\'accesso e connessione.</string>
-    <string name="impostazioni_prova_ruolo_sbagliato">Il server risponde, ma questo codice d\'accesso è quello del figlio: incolla quello del genitore.</string>
     <string name="impostazioni_config_incompleta">Compila indirizzo del server e codice d\'accesso del genitore prima di provare.</string>
     <string name="azione_salva">Salva</string>
     <string name="azione_annulla">Annulla</string>
@@ -369,10 +349,10 @@
 
     <!-- v3: Impostazioni, sezione Famiglia (figli, dispositivi, codici di 6 cifre) -->
     <string name="famiglia_titolo">Famiglia</string>
-    <string name="famiglia_descrizione">I genitori, i figli e i loro dispositivi. Ogni telefono o computer del figlio, e il telefono di un altro genitore, si collega con un codice di 6 cifre che crei qui.</string>
+    <string name="famiglia_descrizione">I genitori, i figli e i loro dispositivi. Ognuno si collega con un codice di 6 cifre che crei qui.</string>
     <string name="famiglia_server_vecchio">Il server del patto non gestisce ancora più figli e dispositivi: questa sezione si attiva quando il server viene aggiornato.</string>
     <string name="famiglia_non_letta">Non riesco a leggere la famiglia dal server. Controlla la connessione o riprova.</string>
-    <string name="famiglia_config_mancante">Prima salva qui sopra l\'indirizzo del server e il codice d\'accesso.</string>
+    <string name="famiglia_config_mancante">Prima collega questo telefono al server: lo fai qui sotto, in «Collegamento».</string>
     <string name="famiglia_riprova">Riprova</string>
     <string name="famiglia_caricamento">Sto leggendo la famiglia…</string>
     <string name="famiglia_aggiungi_figlio">Aggiungi un figlio</string>
@@ -437,7 +417,6 @@
     <string name="tempo_config_mancante">Per vedere i tempi servono l\'indirizzo del server e il codice d\'accesso: li trovi nelle Impostazioni.</string>
     <string name="tempo_errore">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
     <string name="tempo_dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
-    <string name="tempo_aggiornato_alle">Dati aggiornati alle %1$s</string>
     <string name="tempo_nessuna_fotografia_titolo">Ancora nessun dato</string>
     <string name="tempo_nessuna_fotografia">Il telefono del figlio non ha ancora inviato i dati di utilizzo.</string>
     <string name="tempo_chip_oggi">oggi</string>
@@ -502,10 +481,10 @@
     <string name="media_su_giorni">su %1$d giorni</string>
 
     <!-- Digest giornaliero -->
-    <string name="impostazioni_digest_titolo">Digest giornaliero</string>
-    <string name="impostazioni_digest_descrizione">Ogni giorno, all\'ora scelta, una notifica col tempo totale di oggi e le prime app. Il dettaglio completo vive nella scheda Tempo.</string>
-    <string name="impostazioni_digest_attivo">Digest attivo</string>
-    <string name="impostazioni_digest_ora">Ora del digest</string>
+    <string name="impostazioni_digest_titolo">Riassunto della sera</string>
+    <string name="impostazioni_digest_descrizione">Ogni sera, all\'ora scelta, una notifica col tempo totale di oggi e le prime app. Il dettaglio è nella scheda Tempo.</string>
+    <string name="impostazioni_digest_attivo">Riassunto attivo</string>
+    <string name="impostazioni_digest_ora">Ora del riassunto</string>
     <string name="digest_titolo">Oggi: %1$s</string>
     <!-- (v3.3) Con un limite su tutto il dispositivo, accanto al totale: come per le app -->
     <string name="digest_titolo_con_limite">Oggi: %1$s (limite %2$s)</string>
@@ -548,9 +527,9 @@
     <string name="marca_apri_info_app">Apri «Info app»</string>
 
     <!-- Aggiornamenti (tappa 6) -->
-    <string name="impostazioni_aggiornamenti_titolo">Aggiornamenti</string>
+    <string name="impostazioni_aggiornamenti_titolo">Versione dell\'app</string>
     <string name="impostazioni_versione_attuale">Versione installata: %1$s</string>
-    <string name="impostazioni_controlla_aggiornamenti">Controlla aggiornamenti</string>
+    <string name="impostazioni_controlla_aggiornamenti">Cerca una nuova versione</string>
     <string name="aggiornamento_gia_aggiornato">Sei già all\'ultima versione.</string>
     <string name="aggiornamento_avviato">Nuova versione %1$s: installazione avviata. Conferma quando il sistema te lo chiede.</string>
     <string name="aggiornamento_config_mancante">Prima salva indirizzo del server e codice d\'accesso qui sopra.</string>
@@ -559,23 +538,15 @@
     <string name="aggiornamento_installazione_pendente">Installazione già avviata: conferma la richiesta di sistema quando compare.</string>
 
     <!-- Proposte e conferme: proposte + dichiarazioni in una schermata sola -->
-    <string name="turno_titolo">Proposte e conferme</string>
     <string name="turno_caricamento">Sto leggendo proposte e dichiarazioni…</string>
     <string name="turno_config_mancante">Per rispondere servono l\'indirizzo del server e il codice d\'accesso: li trovi nelle Impostazioni.</string>
     <string name="turno_errore">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
     <string name="turno_dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
-    <string name="turno_sezione_proposte">Proposte</string>
-    <string name="turno_sezione_dichiarazioni">Dichiarazioni</string>
-    <string name="turno_niente_in_attesa">Niente in attesa di te</string>
 
     <!-- Proposte -->
-    <string name="proposte_da_mandare">DA MANDARE</string>
-    <string name="proposte_in_attesa">IN ATTESA DI RISPOSTA</string>
-    <string name="proposte_come_sono_andate">COME SONO ANDATE</string>
-    <string name="proposte_nessuna_regola_attiva">Nessuna regola attiva su cui proporre: le regole nascono sui dispositivi del figlio.</string>
+    <string name="proposte_in_attesa">Le tue proposte in attesa</string>
     <string name="proposte_bottone_proponi">Proponi una modifica</string>
     <string name="proposte_gia_in_attesa">Su questa regola c\'è già una proposta in attesa di risposta.</string>
-    <string name="proposte_elenco_vuoto">Nessuna proposta ancora.</string>
     <string name="proposta_stato_pendente">In attesa di risposta</string>
     <string name="proposta_stato_accettata">Accettata</string>
     <string name="proposta_stato_rifiutata">Rifiutata</string>
@@ -596,7 +567,6 @@
 
     <!-- (0.10) Le proposte del figlio (contratto v3.4): il figlio chiede un cambio a
          una sua regola, il genitore decide. Se accetta, vale subito, anche se allenta. -->
-    <string name="proposte_da_decidere">DA DECIDERE</string>
     <string name="proposta_ti_propone">%1$s ti propone:</string>
     <string name="proposta_ti_propone_senza_nome">Tuo figlio ti propone:</string>
     <string name="proposta_togliere_regola">Togliere la regola «%1$s»</string>
@@ -659,8 +629,8 @@
     <string name="proposta_tua_risposta_rifiutata">Hai rifiutato</string>
     <string name="proposta_tua_risposta_motivazione">Hai detto: %1$s</string>
     <!-- Su una regola con la proposta del figlio in attesa non se ne manda un\'altra -->
-    <string name="proposte_gia_proposta_del_figlio">Su questa regola c\'è già una proposta di %1$s: la trovi qui sopra, da decidere.</string>
-    <string name="proposte_gia_proposta_del_figlio_senza_nome">Su questa regola c\'è già una proposta di tuo figlio: la trovi qui sopra, da decidere.</string>
+    <string name="proposte_gia_proposta_del_figlio">Su questa regola c\'è già una proposta di %1$s: la trovi in «Da decidere».</string>
+    <string name="proposte_gia_proposta_del_figlio_senza_nome">Su questa regola c\'è già una proposta di tuo figlio: la trovi in «Da decidere».</string>
     <!-- Nella scelta del figlio in cima: quante sue proposte (e, dalla 0.11, sessioni) aspettano te -->
     <string name="figlio_da_decidere">%1$d da decidere</string>
 
@@ -717,18 +687,18 @@
     <string name="sessione_chiesto_il">chiesto il %1$s alle %2$s</string>
     <string name="sessione_perche_massimo">Al massimo %1$d caratteri</string>
     <string name="sessione_approva">Approva</string>
-    <string name="sessione_non_approvare">Non approvare</string>
+    <string name="sessione_rifiuta">Rifiuta</string>
     <string name="sessione_approva_titolo">Approvi la sessione %1$s?</string>
     <string name="sessione_approva_cambio_titolo">Approvi il cambio alla sessione %1$s?</string>
-    <string name="sessione_non_approvare_titolo">Non approvi la sessione %1$s?</string>
-    <string name="sessione_non_approvare_cambio_titolo">Non approvi il cambio alla sessione %1$s?</string>
-    <string name="sessione_non_approvare_spiega">Non si potrà avviare. Tuo figlio può cambiarla e chiedertela di nuovo.</string>
-    <string name="sessione_non_approvare_cambio_spiega">La sessione resta com\'è adesso.</string>
+    <string name="sessione_rifiuta_titolo">Rifiuti la sessione %1$s?</string>
+    <string name="sessione_rifiuta_cambio_titolo">Rifiuti il cambio alla sessione %1$s?</string>
+    <string name="sessione_rifiuta_spiega">Non si potrà avviare. Tuo figlio può cambiarla e chiedertela di nuovo.</string>
+    <string name="sessione_rifiuta_cambio_spiega">La sessione resta com\'è adesso.</string>
     <!-- Dopo la risposta, una frase che dice che cosa è successo -->
     <string name="sessione_fatto_approvata">Fatto: la sessione è approvata.</string>
     <string name="sessione_fatto_cambio_approvato">Fatto: il cambio è approvato.</string>
-    <string name="sessione_fatto_non_approvata">Non hai approvato la sessione.</string>
-    <string name="sessione_fatto_cambio_non_approvato">Non hai approvato il cambio: la sessione resta com\'era.</string>
+    <string name="sessione_fatto_non_approvata">Hai rifiutato la sessione.</string>
+    <string name="sessione_fatto_cambio_non_approvato">Hai rifiutato il cambio: la sessione resta com\'era.</string>
     <string name="sessione_errore_server_da_aggiornare">Per le sessioni serve aggiornare il server di Pactum.</string>
     <string name="sessione_errore_non_accettata">Il server non ha accettato la risposta: controlla che l\'app e il server di Pactum siano aggiornati.</string>
     <string name="sessione_errore_telefono_scollegato">Questo telefono è stato scollegato: la sessione non si può più approvare.</string>
@@ -741,20 +711,17 @@
     <string name="sessione_esito_di">%1$s · %2$s</string>
     <!-- Non c\'era più niente da decidere: com\'è davvero, dalla rilettura -->
     <string name="sessione_gia_approvata">Era già stata approvata.</string>
-    <string name="sessione_gia_non_approvata">Era già stata decisa: non approvata.</string>
+    <string name="sessione_gia_non_approvata">Era già stata rifiutata.</string>
     <string name="sessione_cambio_gia_deciso">Il cambio era già stato deciso.</string>
     <string name="sessione_eliminata_dal_figlio">Tuo figlio l\'ha eliminata: non c\'è più niente da decidere.</string>
     <string name="sessione_niente_da_decidere">Non c\'è più niente da decidere: è già stata decisa, o tuo figlio l\'ha eliminata.</string>
     <!-- Nella Panoramica: le sessioni fatte negli 8 giorni, e quelle approvate -->
     <string name="sezione_sessioni">Sessioni</string>
-    <string name="sessioni_spiega">Le avvia tuo figlio quando vuole. Durante una sessione il tempo nelle app della sessione non conta; le altre app sono coperte da una schermata.</string>
-    <string name="sessioni_ultimi_giorni">ULTIMI 8 GIORNI</string>
     <string name="sessioni_nessuna_svolta">Nessuna sessione negli ultimi 8 giorni.</string>
     <plurals name="sessioni_altre">
         <item quantity="one">Mostra un\'altra sessione</item>
         <item quantity="other">Mostra le altre %1$d sessioni</item>
     </plurals>
-    <string name="sessioni_meno">Mostra meno</string>
     <string name="sessioni_approvate">Sessioni approvate (%1$d)</string>
     <!-- Le sessioni di un telefono scollegato: non si avviano più, e non c\'è niente da decidere -->
     <string name="sessioni_non_piu_valide">NON PIÙ VALIDE</string>
@@ -779,17 +746,12 @@
     <string name="sessione_ore_due_giorni">%1$s %2$s – %3$s %4$s</string>
     <string name="sessione_dalle">%1$s dalle %2$s</string>
     <!-- In "Proposte e conferme": il numero accanto al nome conta anche le sessioni -->
-    <plurals name="turno_sessioni_da_approvare">
-        <item quantity="one">Una sessione aspetta che tu la approvi: la trovi nella Panoramica.</item>
-        <item quantity="other">%1$d sessioni aspettano che tu le approvi: le trovi nella Panoramica.</item>
-    </plurals>
 
     <!-- Proposte: dialogo di creazione -->
     <string name="proposta_crea_titolo">Proponi una modifica</string>
     <string name="proposta_crea_regola">Regola attuale: %1$s</string>
     <string name="proposta_modalita_modifica">Modifica i parametri</string>
     <string name="proposta_modalita_elimina">Proponi di eliminare la regola</string>
-    <string name="proposta_campo_app">App o categoria</string>
     <string name="proposta_bersaglio">Su: %1$s</string>
     <string name="proposta_app_non_modificabile">Si propone un nuovo limite, non l\'app della regola.</string>
     <string name="proposta_campo_minuti">Minuti al giorno</string>
@@ -815,8 +777,6 @@
     </string-array>
 
     <!-- Dichiarazioni da confermare -->
-    <string name="verdetti_da_confermare">DA CONFERMARE</string>
-    <string name="verdetti_nel_registro">NEL REGISTRO</string>
     <string name="dichiarazione_regola_sconosciuta">Regola di vita reale</string>
     <string name="dichiarazione_giorno">Giorno: %1$s</string>
     <string name="dichiarazione_esito_successo">Dice di avercela fatta</string>
@@ -901,10 +861,9 @@
     <string name="faccende_spiega">Finché %1$s non ha mandato la foto di ogni lavoro, telefono e computer restano bloccati, tranne poche app fondamentali sul telefono.</string>
     <string name="faccende_spiega_senza_nome">Finché tuo figlio non ha mandato la foto di ogni lavoro, telefono e computer restano bloccati, tranne poche app fondamentali sul telefono.</string>
     <string name="faccende_dai">Dai lavori di casa</string>
-    <string name="faccende_apri">Apri i lavori di casa</string>
     <string name="faccende_da_fare">DA FARE</string>
     <string name="faccende_fatte">FATTI</string>
-    <string name="faccende_annullate">ANNULLATI</string>
+    <string name="faccende_annullate">Tolti</string>
     <string name="faccende_nessuna">Nessun lavoro di casa negli ultimi 30 giorni.</string>
     <string name="faccende_foto_30_giorni">Le foto restano 30 giorni, poi si cancellano. Si vedono solo qui: non vanno nella galleria.</string>
     <!-- Lo stato del blocco: "Blocco attivo dalle 16:00", "Il blocco parte alle 16:00" -->
@@ -930,10 +889,10 @@
     <string name="faccenda_foto_arrivata">Foto %1$s</string>
     <string name="faccenda_guarda_foto">Guarda la foto</string>
     <string name="faccenda_foto_cancellata">La foto non c\'è più: le foto restano 30 giorni.</string>
-    <string name="faccenda_annullata_da">Annullato da %1$s</string>
-    <string name="faccenda_annullata_da_te">Annullato da te</string>
-    <string name="faccenda_annullata">Annullato</string>
-    <string name="faccenda_annulla">Annulla</string>
+    <string name="faccenda_annullata_da">Tolto da %1$s</string>
+    <string name="faccenda_annullata_da_te">Tolto da te</string>
+    <string name="faccenda_annullata">Tolto</string>
+    <string name="faccenda_togli">Togli</string>
     <string name="faccenda_boccia">Boccia</string>
     <string name="faccenda_boccia_resta">Puoi bocciarlo ancora per %1$s.</string>
     <string name="faccenda_boccia_resta_poco">Puoi bocciarlo ancora per meno di un minuto.</string>
@@ -943,11 +902,11 @@
     <string name="boccia_testo">Il lavoro torna da fare e il blocco riparte subito. %1$s legge il perché, se lo scrivi.</string>
     <string name="boccia_testo_senza_nome">Il lavoro torna da fare e il blocco riparte subito. Tuo figlio legge il perché, se lo scrivi.</string>
     <string name="boccia_fatto">Bocciato: il lavoro è di nuovo da fare.</string>
-    <string name="annulla_faccenda_titolo">Annullare «%1$s»?</string>
-    <string name="annulla_faccenda_testo">Non sarà più da fare. Se era l\'ultimo che bloccava, il blocco finisce.</string>
-    <string name="annulla_faccenda_conferma">Annulla il lavoro</string>
-    <string name="annulla_faccenda_lascia">Lascialo</string>
-    <string name="annulla_faccenda_fatto">Lavoro annullato.</string>
+    <string name="togli_faccenda_titolo">Togliere «%1$s»?</string>
+    <string name="togli_faccenda_testo">Non sarà più da fare. Se era l\'ultimo che bloccava, il blocco finisce.</string>
+    <string name="togli_faccenda_conferma">Togli</string>
+    <string name="togli_faccenda_lascia">Lascialo</string>
+    <string name="togli_faccenda_fatto">Lavoro tolto.</string>
     <!-- "Dai lavori di casa": uno o più titoli, i titoli usati di recente, la nota, da quando blocca -->
     <string name="dai_titolo">Lavori di casa per %1$s</string>
     <string name="dai_titolo_senza_nome">Dai lavori di casa</string>
@@ -979,11 +938,11 @@
     <string name="faccende_versione_vecchia">Su «%1$s» c\'è Pactum %2$s: lì il blocco non parte. Serve la 0.13 o più nuova.</string>
     <string name="faccende_versione_sconosciuta">Su «%1$s» non so che versione di Pactum c\'è: se è più vecchia della 0.13, lì il blocco non parte.</string>
     <!-- I rifiuti del server sui lavori di casa, ciascuno col suo motivo -->
-    <string name="faccende_errore_troppe">%1$s ha già 20 lavori di casa da fare: non se ne possono dare altri finché non ne fa qualcuno, o finché non ne annulli.</string>
-    <string name="faccende_errore_troppe_senza_nome">Ci sono già 20 lavori di casa da fare: non se ne possono dare altri finché non ne fa qualcuno, o finché non ne annulli.</string>
+    <string name="faccende_errore_troppe">%1$s ha già 20 lavori di casa da fare: non se ne possono dare altri finché non ne fa qualcuno, o finché non ne togli.</string>
+    <string name="faccende_errore_troppe_senza_nome">Ci sono già 20 lavori di casa da fare: non se ne possono dare altri finché non ne fa qualcuno, o finché non ne togli.</string>
     <string name="faccende_errore_parametri">Qualcosa non va: ogni lavoro da 1 a 80 caratteri, la nota fino a 300. Controlla e riprova.</string>
-    <string name="faccende_errore_non_bocciabile">Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l\'ha già bocciato o annullato. Ho riletto l\'elenco.</string>
-    <string name="faccende_errore_non_annullabile">Non si può annullare: non è più da fare (la foto è arrivata, o qualcuno l\'ha già annullato). Ho riletto l\'elenco.</string>
+    <string name="faccende_errore_non_bocciabile">Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l\'ha già bocciato o tolto. Ho riletto l\'elenco.</string>
+    <string name="faccende_errore_non_annullabile">Non si può togliere: non è più da fare (la foto è arrivata, o qualcuno l\'ha già tolto). Ho riletto l\'elenco.</string>
     <string name="faccende_errore_non_trovata">Non trovo più questo lavoro: ho riletto l\'elenco.</string>
     <string name="faccende_errore_figlio_non_trovato">Non trovo più questo figlio: ho riletto la famiglia.</string>
     <string name="faccende_errore_rete">Non riesco a raggiungere il server: riprova.</string>
@@ -1019,11 +978,110 @@
     <string name="sessione_ultima_decisione_tua">ultima decisione: tu</string>
     <!-- (0.13) 401: il server non riconosce più il collegamento di questo telefono -->
     <string name="collegamento_non_valido_titolo">Telefono non più collegato</string>
-    <string name="collegamento_non_valido">Il collegamento di questo telefono non vale più: forse un altro genitore l\'ha tolto. Per collegarlo di nuovo serve un codice nuovo (Impostazioni, Connessione).</string>
+    <string name="collegamento_non_valido">Il collegamento di questo telefono non vale più: forse un altro genitore l\'ha tolto. Per collegarlo di nuovo serve un codice nuovo (Impostazioni, Collegamento).</string>
     <string name="famiglia_errore_genitore_revocato">Questo genitore è stato tolto e non riceve più codici. Per collegare di nuovo il suo telefono, aggiungilo come genitore nuovo.</string>
     <!-- (0.13) Un telefono già collegato come genitore: prima di collegarlo come un altro, una domanda -->
     <string name="connessione_conferma_titolo">Collegare come un altro genitore?</string>
     <string name="connessione_conferma_testo">Questo telefono è «%1$s»: vuoi collegarlo come un altro genitore? Smetterà di essere «%1$s». Per tornare «%1$s» servirà un codice nuovo.</string>
     <string name="connessione_conferma_testo_senza_nome">Questo telefono è già collegato al patto: vuoi collegarlo come un altro genitore? Il collegamento di adesso smetterà di valere su questo telefono.</string>
     <string name="connessione_in_corso">Collegamento in corso…</string>
+
+    <!-- (0.15) Il riordino: quattro schede fisse (Panoramica · Da decidere · Lavori ·
+         Tempo), Notifiche e Impostazioni come pagine sopra, lo Storico e il
+         dettaglio di una regola a pagina intera. -->
+    <string name="scheda_da_decidere">Da decidere</string>
+    <string name="scheda_lavori">Lavori</string>
+    <plurals name="da_decidere_badge">
+        <item quantity="one">%1$d cosa da decidere</item>
+        <item quantity="other">%1$d cose da decidere</item>
+    </plurals>
+    <string name="azione_collega">Collega questo telefono</string>
+    <string name="azione_collega_di_nuovo">Collega di nuovo</string>
+    <string name="azione_vedi_tutte">Vedi tutte</string>
+    <string name="azione_vedi_tutti">Vedi tutti</string>
+    <string name="azione_mostra_meno">Mostra meno</string>
+    <string name="azione_altre_risposte">Altre risposte</string>
+    <string name="azioni_per">Altre azioni per %1$s</string>
+    <!-- Un solo formato per tipo di data: "oggi", "ieri", "14/09"; "oggi 15:10", "14/09 15:10" -->
+    <string name="giorno_oggi">oggi</string>
+    <string name="giorno_ieri">ieri</string>
+    <string name="quando_oggi">oggi %1$s</string>
+    <string name="quando_ieri">ieri %1$s</string>
+    <!-- I giorni di una fascia oraria, detti come li direbbe una persona -->
+    <string name="fascia_ogni_giorno">ogni giorno</string>
+    <string name="fascia_feriali">da lunedì a venerdì</string>
+    <string name="fascia_fine_settimana">sabato e domenica</string>
+    <string name="elenco_due_parti">%1$s, %2$s</string>
+    <string name="riepilogo_due_parti">%1$s · %2$s</string>
+
+    <!-- Panoramica: le righe in cima (solo se c'è qualcosa), la card del patto, i dispositivi -->
+    <plurals name="riga_richieste_da_decidere">
+        <item quantity="one">Una richiesta da decidere</item>
+        <item quantity="other">%1$d richieste da decidere</item>
+    </plurals>
+    <plurals name="riga_lavori_da_fare">
+        <item quantity="one">1 lavoro da fare</item>
+        <item quantity="other">%1$d lavori da fare</item>
+    </plurals>
+    <plurals name="riga_foto_da_guardare">
+        <item quantity="one">Una foto da guardare</item>
+        <item quantity="other">%1$d foto da guardare</item>
+    </plurals>
+    <string name="silenzio_dispositivo_mai">%1$s: nessun aggiornamento ancora</string>
+    <string name="patto_di">Il patto di %1$s</string>
+    <string name="sezione_dispositivi">Dispositivi</string>
+    <string name="legenda_mantenuta">Mantenuta</string>
+    <string name="legenda_fuori_regola">Fuori regola</string>
+    <string name="legenda_senza_dati">Senza dati</string>
+    <string name="legenda_oggi">Oggi</string>
+
+    <!-- Da decidere -->
+    <string name="da_decidere_titolo">Da decidere</string>
+    <string name="da_decidere_vuoto">Niente da decidere.</string>
+    <!-- Le due risposte meno usate a una dichiarazione: prima una domanda -->
+    <string name="verdetto_per_conto_titolo">Confermi per conto di %1$s?</string>
+    <string name="verdetto_per_conto_titolo_arbitro">Confermi per conto dell\'arbitro?</string>
+    <string name="verdetto_per_conto_testo">Il successo risulterà confermato da te per conto di %1$s.</string>
+    <string name="verdetto_per_conto_testo_arbitro">Il successo risulterà confermato da te per conto dell\'arbitro.</string>
+    <string name="verdetto_ribalta_titolo">Non è andata così?</string>
+    <string name="verdetto_ribalta_testo">La dichiarazione non sarà confermata: conterà come non riuscita. Tuo figlio lo vede.</string>
+    <string name="dichiarazione_stato_confermata_per_conto_arbitro">Confermato dal genitore per conto dell\'arbitro</string>
+
+    <!-- Lo Storico del patto, a pagina intera -->
+    <string name="storico_caricamento">Sto leggendo lo storico…</string>
+    <string name="storico_regole">Regole cambiate</string>
+    <string name="storico_regole_vuoto">Nessun cambio alle regole finora.</string>
+    <string name="storico_proposte">Proposte chiuse</string>
+    <string name="storico_proposte_vuoto">Nessuna proposta chiusa.</string>
+    <string name="storico_dichiarazioni">Dichiarazioni nel registro</string>
+    <string name="storico_dichiarazioni_vuoto">Nessuna dichiarazione nel registro.</string>
+
+    <!-- Il dettaglio di una regola -->
+    <string name="regola_titolo">Regola</string>
+    <string name="regola_non_trovata">Questa regola non c\'è più.</string>
+    <string name="regola_oggi">Oggi: %1$s</string>
+    <string name="regola_non_proponibile">Questa regola non è più attiva: non si propone più niente.</string>
+    <string name="regola_di_dispositivo_scollegato">Questa regola è di un dispositivo scollegato: non si cambia più.</string>
+
+    <!-- Lavori di casa: la pagina "Dai lavori di casa" e lo stato senza collegamento -->
+    <string name="faccende_config_mancante">Per dare e vedere i lavori di casa serve collegare questo telefono al server.</string>
+    <string name="dai_cambia_ora">Cambia ora</string>
+
+    <!-- Tempo: i siti, la spiegazione in una riga (il resto dietro la "i") -->
+    <string name="siti_contesto_breve">Solo i nomi dei siti, mai le pagine aperte o le ricerche.</string>
+    <string name="siti_contesto_breve_computer">Solo i nomi dei siti, letti per un istante dalla barra del browser: mai le pagine aperte o le ricerche.</string>
+    <string name="siti_spiegazione">Come funziona questa lista</string>
+
+    <!-- Notifiche: "Letta" al posto della spunta (che sembrava "approva") -->
+    <string name="notifica_letta">Letta</string>
+
+    <!-- Impostazioni -->
+    <string name="connessione_collegato">Questo telefono è collegato.</string>
+    <string name="connessione_cambia">Cambia</string>
+    <string name="codice_lungo_mostra">Mostra il codice</string>
+    <string name="codice_lungo_nascondi">Nascondi il codice</string>
+    <string name="codice_meno_di_un_minuto">meno di un minuto</string>
+    <string name="famiglia_nessun_figlio">Nessun figlio ancora.</string>
+    <!-- Come funziona Pactum: chi è l'arbitro delle regole di vita reale -->
+    <string name="intro_arbitro">Le regole di vita reale (per esempio «Camminare un\'ora») non si misurano col telefono: le conferma l\'arbitro, la persona che tuo figlio ha scelto per verificarle. Quando dice di avercela fatta, puoi confermare tu, anche per conto dell\'arbitro, o dire che non è andata così.</string>
 </resources>

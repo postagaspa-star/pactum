@@ -675,18 +675,21 @@ class LogicaFamigliaTest {
     }
 
     @Test
-    fun `il conto alla rovescia si legge come un orologio e non va sotto zero`() {
+    fun `il conto alla rovescia dice i minuti, non sembra un'ora, e non va sotto zero`() {
         val validita = Duration.ofMinutes(15)
         assertEquals(900L, secondiRimasti(validita, 0))
-        // Per eccesso: appena arrivato si legge ancora "15:00".
+        // Per eccesso: appena arrivato si legge ancora "15 min".
         assertEquals(900L, secondiRimasti(validita, 1))
-        assertEquals("15:00", testoContoAllaRovescia(900))
-        assertEquals("14:05", testoContoAllaRovescia(845))
-        assertEquals("0:09", testoContoAllaRovescia(9))
+        // (0.15) "Scade tra 14 min", non "Scade tra 14:05" (che sembrava un'ora del giorno).
+        assertEquals("15 min", testoScadeTra(ParoleDiProva, 900))
+        assertEquals("14 min", testoScadeTra(ParoleDiProva, 845))
+        assertEquals("1 min", testoScadeTra(ParoleDiProva, 60))
+        assertEquals("meno di un minuto", testoScadeTra(ParoleDiProva, 9))
+        assertEquals("Scade tra 14 min", ParoleDiProva.testo(eu.stgm.pactum.genitore.R.string.codice_scade_tra, testoScadeTra(ParoleDiProva, 845)))
         assertEquals(0L, secondiRimasti(validita, 930_000))
         // Un tempo passato negativo (non succede con l'orologio monotono) vale zero.
         assertEquals(900L, secondiRimasti(validita, -5_000))
-        assertEquals("0:00", testoContoAllaRovescia(-5))
+        assertEquals("meno di un minuto", testoScadeTra(ParoleDiProva, -5))
     }
 
     @Test

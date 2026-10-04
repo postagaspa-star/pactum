@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,23 +32,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.design.Spazi
+import eu.stgm.pactum.design.TitoloSezione
+import eu.stgm.pactum.design.StatoVuoto
+import eu.stgm.pactum.design.Pillola
+import eu.stgm.pactum.design.CardNormale
+import eu.stgm.pactum.design.FilaPulsanti
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.EsitiSessione
 import eu.stgm.pactum.genitore.dati.MASSIMO_MOTIVAZIONE_SESSIONE
 import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.Sessione
 
-// (0.11) Le sessioni nella Panoramica (contratto v3.5). In cima, insieme alle
-// proposte del figlio, una card per ogni sessione che aspetta il genitore — una
-// nuova, o un cambio della lista di una già approvata — con "Approva" e "Non
-// approvare". Più giù, la sezione Sessioni: quelle fatte negli 8 giorni (inizio,
-// durata, fine, chiusure anticipate), quelle approvate con le loro app e quelle
-// non più valide perché il telefono è scollegato. Quali app il figlio ha provato ad
+// (0.11) Le sessioni (contratto v3.5). (0.15) In "Da decidere", una card per ogni
+// sessione che aspetta il genitore — una nuova, o un cambio della lista di una già
+// approvata — con "Approva" e "Rifiuta". Nello Storico del patto, la sezione
+// Sessioni: quelle fatte negli 8 giorni (inizio, durata, fine, chiusure
+// anticipate), quelle approvate con le loro app e quelle non più valide perché il
+// telefono è scollegato. Quali app il figlio ha provato ad
 // aprire durante una sessione non si vede: non arriva nemmeno al server
 // (decisione di Andrea).
 //
-// La domanda prima del sì (o del no) non vive nella card ma nella Panoramica
-// (DomandaSessione): si apre su UNA versione della richiesta, mostra quella, e si
+// La domanda prima del sì (o del no) non vive nella card ma nella lista di "Da
+// decidere" (DomandaSessione): si apre su UNA versione della richiesta, mostra quella, e si
 // risponde con quella. Se la card cambia mentre la domanda è aperta (il giro di
 // ogni minuto porta una versione nuova), la domanda si chiude e lo si dice: il
 // genitore non approva mai una lista che non ha visto.
@@ -93,10 +99,10 @@ internal fun CardSessioneDaApprovare(
 ) {
     val p = parole()
     val senzaVersione = richiesta.sessione.versione == null
-    CardContenuto {
-        Column(modifier = Modifier.padding(Spazi.l)) {
+    CardNormale {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Etichetta(stringResource(R.string.sessione_tag))
+                Pillola(stringResource(R.string.sessione_tag))
                 Spacer(modifier = Modifier.weight(1f))
                 // Un cambio dice quando è stato chiesto (richiesta_ts). Una sessione
                 // nuova no: `creata_ts` non è l'ora della richiesta se è stata
@@ -123,18 +129,15 @@ internal fun CardSessioneDaApprovare(
                     modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
-            ContenutoRichiesta(richiesta, nomiFinestra, limita = true)
-            Text(
-                text = stringResource(R.string.sessione_non_conta),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = Spazi.m),
-            )
+            // (0.15) Sulla card al massimo 4 app per elenco, poi "Vedi tutte" (apre qui).
+            // Che cos'è una sessione lo dice una riga sola, sotto la lista.
+            var tutte by rememberSaveable(richiesta.sessione.id) { mutableStateOf(false) }
+            ContenutoRichiesta(richiesta, nomiFinestra, limita = !tutte, onVediTutte = { tutte = true })
             Text(
                 text = seApprovi(p, richiesta, nomeFiglio),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = Spazi.s),
+                modifier = Modifier.padding(top = Spazi.m),
             )
             if (senzaVersione) {
                 Text(
@@ -144,16 +147,14 @@ internal fun CardSessioneDaApprovare(
                     modifier = Modifier.padding(top = Spazi.s),
                 )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = Spazi.s),
-                horizontalArrangement = Arrangement.spacedBy(Spazi.s),
-            ) {
-                val attivi = !invioInCorso && !senzaVersione
-                Button(onClick = { onApri(EsitiSessione.APPROVA) }, enabled = attivi, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.sessione_approva))
+            val attivi = !invioInCorso && !senzaVersione
+            // Due pulsanti insieme: in fila se ci stanno, se no uno sotto l'altro (B4).
+            FilaPulsanti(modifier = Modifier.padding(top = Spazi.m)) {
+                Button(onClick = { onApri(EsitiSessione.APPROVA) }, enabled = attivi) {
+                    Text(stringResource(R.string.sessione_approva), maxLines = 1, softWrap = false)
                 }
-                OutlinedButton(onClick = { onApri(EsitiSessione.RIFIUTA) }, enabled = attivi, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.sessione_non_approvare))
+                OutlinedButton(onClick = { onApri(EsitiSessione.RIFIUTA) }, enabled = attivi) {
+                    Text(stringResource(R.string.sessione_rifiuta), maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -174,13 +175,18 @@ private fun nomeNelTitolo(richiesta: SessioneDaApprovare): String =
  * altre N"; nella domanda prima del sì tutte.
  */
 @Composable
-private fun ContenutoRichiesta(richiesta: SessioneDaApprovare, nomiFinestra: Map<String, String>, limita: Boolean) {
+private fun ContenutoRichiesta(
+    richiesta: SessioneDaApprovare,
+    nomiFinestra: Map<String, String>,
+    limita: Boolean,
+    onVediTutte: () -> Unit = {},
+) {
     val differenze = richiesta.differenze?.takeIf { richiesta.cambio }
     if (differenze == null) {
         SopraTitolo(stringResource(R.string.sessione_le_app), modifier = Modifier.padding(top = Spazi.m))
-        ElencoAppDellaSessione(appDellaSessione(richiesta.app, richiesta.nomi, nomiFinestra), limita)
+        ElencoAppDellaSessione(appDellaSessione(richiesta.app, richiesta.nomi, nomiFinestra), limita, onVediTutte)
     } else {
-        CambioDellaSessione(differenze, richiesta.nomi, nomiFinestra, limita)
+        CambioDellaSessione(differenze, richiesta.nomi, nomiFinestra, limita, onVediTutte)
     }
 }
 
@@ -196,6 +202,7 @@ private fun CambioDellaSessione(
     nomiSessione: Map<String, String>,
     nomiFinestra: Map<String, String>,
     limita: Boolean,
+    onVediTutte: () -> Unit = {},
 ) {
     val p = parole()
     differenze.nuovoNome?.let {
@@ -215,11 +222,11 @@ private fun CambioDellaSessione(
     val appCambiano = differenze.aggiunte.isNotEmpty() || differenze.tolte.isNotEmpty()
     if (differenze.aggiunte.isNotEmpty()) {
         SopraTitolo(stringResource(R.string.sessione_aggiunge), modifier = Modifier.padding(top = Spazi.m))
-        ElencoAppDellaSessione(appDellaSessione(differenze.aggiunte, nomiSessione, nomiFinestra), limita)
+        ElencoAppDellaSessione(appDellaSessione(differenze.aggiunte, nomiSessione, nomiFinestra), limita, onVediTutte)
     }
     if (differenze.tolte.isNotEmpty()) {
         SopraTitolo(stringResource(R.string.sessione_toglie), modifier = Modifier.padding(top = Spazi.m))
-        ElencoAppDellaSessione(appDellaSessione(differenze.tolte, nomiSessione, nomiFinestra), limita)
+        ElencoAppDellaSessione(appDellaSessione(differenze.tolte, nomiSessione, nomiFinestra), limita, onVediTutte)
     }
     if (differenze.nomiCambiati.isNotEmpty()) {
         SopraTitolo(
@@ -247,7 +254,7 @@ private fun CambioDellaSessione(
     } else {
         // Le app non cambiano: la lista intera, coi nomi nuovi.
         SopraTitolo(stringResource(R.string.sessione_le_app), modifier = Modifier.padding(top = Spazi.m))
-        ElencoAppDellaSessione(appDellaSessione(differenze.restano, nomiSessione, nomiFinestra), limita)
+        ElencoAppDellaSessione(appDellaSessione(differenze.restano, nomiSessione, nomiFinestra), limita, onVediTutte)
     }
 }
 
@@ -259,9 +266,9 @@ private fun CambioDellaSessione(
  * che cosa sono. Con [limita], al massimo [APP_VISIBILI] app e poi "e altre N app".
  */
 @Composable
-private fun ElencoAppDellaSessione(app: AppDellaSessione, limita: Boolean) {
+private fun ElencoAppDellaSessione(app: AppDellaSessione, limita: Boolean, onVediTutte: () -> Unit = {}) {
     val p = parole()
-    val massimo = if (limita) APP_VISIBILI else Int.MAX_VALUE
+    val massimo = if (limita) APP_VISIBILI_CARD else Int.MAX_VALUE
     val nomi = app.nomi.take(massimo)
     val chiavi = app.senzaNome.take((massimo - nomi.size).coerceAtLeast(0))
     val nascoste = app.nomi.size + app.senzaNome.size - nomi.size - chiavi.size
@@ -278,11 +285,15 @@ private fun ElencoAppDellaSessione(app: AppDellaSessione, limita: Boolean) {
             )
         }
         if (nascoste > 0) {
-            Text(
-                text = stringResource(R.string.sessione_e_altre_app, nascoste),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.sessione_e_altre_app, nascoste),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onVediTutte) { Text(stringResource(R.string.azione_vedi_tutte)) }
+            }
         }
         if (app.gruppoApk) {
             Column {
@@ -325,8 +336,8 @@ internal fun DialogoDecisioneSessione(
                     when {
                         approva && richiesta.cambio -> R.string.sessione_approva_cambio_titolo
                         approva -> R.string.sessione_approva_titolo
-                        richiesta.cambio -> R.string.sessione_non_approvare_cambio_titolo
-                        else -> R.string.sessione_non_approvare_titolo
+                        richiesta.cambio -> R.string.sessione_rifiuta_cambio_titolo
+                        else -> R.string.sessione_rifiuta_titolo
                     },
                     nome,
                 ),
@@ -346,9 +357,9 @@ internal fun DialogoDecisioneSessione(
                     Text(
                         text = stringResource(
                             if (richiesta.cambio) {
-                                R.string.sessione_non_approvare_cambio_spiega
+                                R.string.sessione_rifiuta_cambio_spiega
                             } else {
-                                R.string.sessione_non_approvare_spiega
+                                R.string.sessione_rifiuta_spiega
                             },
                         ),
                         style = MaterialTheme.typography.bodyMedium,
@@ -370,7 +381,7 @@ internal fun DialogoDecisioneSessione(
         },
         confirmButton = {
             Button(onClick = { onConferma(if (approva) null else perche.trim().ifBlank { null }) }) {
-                Text(stringResource(if (approva) R.string.sessione_approva else R.string.sessione_non_approvare))
+                Text(stringResource(if (approva) R.string.sessione_approva else R.string.sessione_rifiuta))
             }
         },
         dismissButton = {
@@ -380,14 +391,13 @@ internal fun DialogoDecisioneSessione(
 }
 
 /**
- * La sezione Sessioni della Panoramica: che cosa sono, in una riga; le sessioni
- * fatte negli 8 giorni, dalla più recente ("📚 Studio · oggi 15:02–16:40 · chiusa
- * prima (prevista 2 h)"), le prime [SESSIONI_SVOLTE_VISIBILI] e le altre dietro un
- * tocco; le sessioni approvate, che il figlio può avviare, con le loro app, chiuse
- * di default; e quelle non più valide perché il loro telefono è scollegato
- * ([nonPiuValide]). Non c'è se non c'è niente di tutto questo (o se il server non
- * conosce le sessioni). [telefono] = il nome del telefono da scrivere sopra una
- * riga (null = non serve: un telefono solo).
+ * (0.15) Le sessioni nello Storico del patto (prima erano nella Panoramica): le
+ * sessioni fatte negli 8 giorni, dalla più recente ("📚 Studio · oggi 15:02–16:40 ·
+ * chiusa prima (prevista 2 h)"), le prime [SESSIONI_SVOLTE_VISIBILI] e le altre
+ * dietro un tocco; le sessioni approvate, che il figlio può avviare, con le loro
+ * app, chiuse di default; e quelle non più valide perché il loro telefono è
+ * scollegato ([nonPiuValide]). Ogni riga è un elemento suo della lista. [telefono] =
+ * il nome del telefono da scrivere sopra una riga (null = un telefono solo).
  */
 internal fun LazyListScope.sezioneSessioni(
     svolte: List<SessioneRaccontata>,
@@ -401,27 +411,13 @@ internal fun LazyListScope.sezioneSessioni(
     onApprovate: () -> Unit,
     io: RiferimentoGenitore? = null,
 ) {
-    if (svolte.isEmpty() && approvate.isEmpty() && nonPiuValide.isEmpty()) return
-    item(key = "sessioni-titolo") {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            TitoloSezione(stringResource(R.string.sezione_sessioni))
-            Text(
-                text = stringResource(R.string.sessioni_spiega),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = Spazi.xs),
-            )
-        }
-    }
+    item(key = "sessioni-titolo") { TitoloSezione(stringResource(R.string.sezione_sessioni)) }
     if (svolte.isEmpty()) {
-        item(key = "sessioni-nessuna") { RigaVuota(stringResource(R.string.sessioni_nessuna_svolta)) }
+        item(key = "sessioni-nessuna") { StatoVuoto(stringResource(R.string.sessioni_nessuna_svolta)) }
     } else {
         val visibili = if (tutteLeSvolte) svolte else svolte.take(SESSIONI_SVOLTE_VISIBILI)
-        item(key = "sessioni-svolte") {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                SopraTitolo(stringResource(R.string.sessioni_ultimi_giorni))
-                ListaRighe(visibili) { RigaSessioneSvolta(it, telefono(it.svolta.dispositivoId)) }
-            }
+        items(visibili, key = { "sessione-svolta-${it.svolta.id}" }) {
+            RigaSessioneSvolta(it, telefono(it.svolta.dispositivoId))
         }
         val nascoste = svolte.size - SESSIONI_SVOLTE_VISIBILI
         if (nascoste > 0) {
@@ -429,7 +425,7 @@ internal fun LazyListScope.sezioneSessioni(
                 TextButton(onClick = onTutteLeSvolte) {
                     Text(
                         if (tutteLeSvolte) {
-                            stringResource(R.string.sessioni_meno)
+                            stringResource(R.string.azione_mostra_meno)
                         } else {
                             pluralStringResource(R.plurals.sessioni_altre, nascoste, nascoste)
                         },
@@ -450,26 +446,22 @@ internal fun LazyListScope.sezioneSessioni(
             }
         }
         if (approvateAperte) {
-            item(key = "sessioni-approvate-elenco") {
-                ListaRighe(approvate) { sessione ->
-                    RigaSessioneApprovata(
-                        sessione = sessione,
-                        nomiFinestra = nomiFinestra,
-                        telefono = telefono(sessione.dispositivoId ?: sessione.dispositivo?.id),
-                        io = io,
-                    )
-                }
+            items(approvate, key = { "sessione-approvata-${it.id}" }) { sessione ->
+                RigaSessioneApprovata(
+                    sessione = sessione,
+                    nomiFinestra = nomiFinestra,
+                    telefono = telefono(sessione.dispositivoId ?: sessione.dispositivo?.id),
+                    io = io,
+                )
             }
         }
     }
     if (nonPiuValide.isNotEmpty()) {
         item(key = "sessioni-non-piu-valide") {
-            Column(modifier = Modifier.fillMaxWidth().padding(top = Spazi.s)) {
-                SopraTitolo(stringResource(R.string.sessioni_non_piu_valide))
-                ListaRighe(nonPiuValide) { sessione ->
-                    RigaSessioneNonPiuValida(sessione, telefono(sessione.dispositivoId ?: sessione.dispositivo?.id))
-                }
-            }
+            SopraTitolo(stringResource(R.string.sessioni_non_piu_valide), modifier = Modifier.padding(top = Spazi.s))
+        }
+        items(nonPiuValide, key = { "sessione-non-valida-${it.id}" }) { sessione ->
+            RigaSessioneNonPiuValida(sessione, telefono(sessione.dispositivoId ?: sessione.dispositivo?.id))
         }
     }
 }
@@ -477,9 +469,9 @@ internal fun LazyListScope.sezioneSessioni(
 /** Una sessione fatta, in una riga; una in corso nel blu dell'app, così si nota. */
 @Composable
 private fun RigaSessioneSvolta(sessione: SessioneRaccontata, telefono: String?) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.xs)) {
         if (telefono != null) {
-            SopraTitolo(telefono.uppercase(), modifier = Modifier.padding(bottom = Spazi.xs))
+            SopraTitolo(telefono, modifier = Modifier.padding(bottom = Spazi.xs))
         }
         Text(
             text = testoSessioneSvolta(parole(), sessione),
@@ -507,9 +499,9 @@ private fun RigaSessioneApprovata(
 ) {
     val p = parole()
     val app = elencoAppSessione(p, appDellaSessione(sessione.app, sessione.nomi, nomiFinestra))
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.xs)) {
         if (telefono != null) {
-            SopraTitolo(telefono.uppercase(), modifier = Modifier.padding(bottom = Spazi.xs))
+            SopraTitolo(telefono, modifier = Modifier.padding(bottom = Spazi.xs))
         }
         Text(text = nomeSessioneConEmoji(p, sessione.nome), style = MaterialTheme.typography.bodyLarge)
         if (app != null) {
@@ -534,9 +526,9 @@ private fun RigaSessioneApprovata(
 /** Una sessione di un telefono scollegato: non si avvia più, e non c'è niente da decidere. */
 @Composable
 private fun RigaSessioneNonPiuValida(sessione: Sessione, telefono: String?) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.m)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.xs)) {
         if (telefono != null) {
-            SopraTitolo(telefono.uppercase(), modifier = Modifier.padding(bottom = Spazi.xs))
+            SopraTitolo(telefono, modifier = Modifier.padding(bottom = Spazi.xs))
         }
         Text(
             text = stringResource(R.string.sessione_non_piu_valida, nomeSessioneConEmoji(parole(), sessione.nome)),

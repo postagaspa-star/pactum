@@ -1,15 +1,15 @@
 {
   "figlio": {
-    "versione_code": 14,
-    "versione_nome": "0.14.0",
+    "versione_code": 15,
+    "versione_nome": "0.15.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.14.0: «lavori di casa» al posto di «faccende»; quando il telefono si spegne lo dice al server, e in stand-by continua a farsi sentire: niente più falsi avvisi ai genitori."
+    "note": "v0.15.0: l'app è riordinata. Quattro schede fisse (Oggi, Regole, Sessioni, Lavori), Oggi con solo quello che serve adesso, un solo «+» per il bonus, proposte e dichiarazioni dentro Regole, tutti i permessi nelle Impostazioni. Il funzionamento non cambia."
   },
   "genitore": {
-    "versione_code": 14,
-    "versione_nome": "0.14.0",
+    "versione_code": 15,
+    "versione_nome": "0.15.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.14.0: «lavori di casa» al posto di «faccende»; un telefono spento si vede come spento, senza allarme; gli avvisi di silenzio non accusano."
+    "note": "v0.15.0: l'app è riordinata. Quattro schede fisse (Panoramica, Da decidere, Lavori, Tempo), una Panoramica corta, tutto quello che aspetta una tua risposta in un posto solo, notifiche e impostazioni in alto in ogni scheda. Il funzionamento non cambia."
   },
   "computer": {
     "versione_code": 14,

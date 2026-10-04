@@ -129,15 +129,15 @@ rest to mean anything.
 
 ## Status — work in progress
 
-Where it honestly stands at version 0.14, in October 2026:
+Where it honestly stands at version 0.15, in October 2026:
 
 - **It's deployed in one family, mine.** Since September the server has run on a
   NAS at home, in Docker, reachable from outside through Tailscale Funnel, with a
   nightly backup of the log. My phone reports to it, and the parent app has been
   on my father's phone since the start of October, so real use is measured in
   days, not months.
-- **The Windows program runs on the home computer but is two versions behind**
-  the phone apps.
+- **The Windows program runs on the home computer but is behind** the phone
+  apps.
 - **Sessions, the chores lock and several parents have been built, tested and
   adversarially reviewed, not yet tried live** on a real phone.
 - **The app categories were redone in 0.13.** The first version trusted the
@@ -145,8 +145,10 @@ Where it honestly stands at version 0.14, in October 2026:
   under social. Curated lists replaced it.
 - **Tests aren't use.** There are more than 2,000 automated tests across the four
   parts and every milestone went through an adversarial review, but the
-  behaviour that matters most only shows up on a real phone over a real day. The
-  visual design is where the work is now.
+  behaviour that matters most only shows up on a real phone over a real day.
+- **0.15 reorganised both phone apps** without changing what they do: four fixed
+  tabs each, a home screen that answers one question, one place for everything
+  waiting on a parent, and shared components instead of per-screen copies.
 
 Treat this as a system in early real use, not a finished product.
 

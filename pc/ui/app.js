@@ -23,10 +23,10 @@
     { id: 'oggi', titolo: 'Oggi', icona: 'oggi', gruppo: 1 },
     { id: 'regole', titolo: 'Le mie regole', icona: 'regole', gruppo: 1 },
     { id: 'proposte', titolo: 'Proposte', icona: 'proposte', gruppo: 1 },
-    { id: 'faccende', titolo: 'Faccende', icona: 'faccende', gruppo: 1 },
+    { id: 'faccende', titolo: 'Lavori di casa', icona: 'faccende', gruppo: 1 },
     { id: 'diario', titolo: 'Diario', icona: 'diario', gruppo: 1 },
     { id: 'siti', titolo: 'Siti', icona: 'siti', gruppo: 2 },
-    { id: 'cosa-vede', titolo: 'Cosa vede tuo padre', icona: 'occhio', gruppo: 2 },
+    { id: 'cosa-vede', titolo: 'Cosa vedono i tuoi genitori', icona: 'occhio', gruppo: 2 },
     { id: 'impostazioni', titolo: 'Impostazioni', icona: 'impostazioni', gruppo: 2 },
   ];
 
@@ -1406,9 +1406,11 @@
 
   // --- Diario ------------------------------------------------------------------------------
 
-  // --- Faccende (contratto v3.6) --------------------------------------------------------------
+  // --- Lavori di casa (contratto v3.6; testi v3.7) --------------------------------------------
+  // Nel codice si chiamano "faccende" (come le chiavi del contratto); il figlio legge "lavori di casa",
+  // e al singolare "lavoro", al maschile (fatto, rimandato, annullato).
 
-  /** Le faccende del patto (GET /api/patto → faccende, v3.6), o null se il server non le manda ancora. */
+  /** I lavori di casa del patto (GET /api/patto → faccende, v3.6), o null se il server non li manda ancora. */
   function faccendeDelPatto() {
     return S.patto && Array.isArray(S.patto.faccende) ? S.patto.faccende : null;
   }
@@ -1418,22 +1420,22 @@
     return S.patto && S.patto.blocco && typeof S.patto.blocco === 'object' ? S.patto.blocco : null;
   }
 
-  /** Quante faccende restano da fare: per il numero accanto a "Faccende" nel menu. */
+  /** Quanti lavori di casa restano da fare: per il numero accanto a "Lavori di casa" nel menu. */
   function faccendeDaFare() {
     return (faccendeDelPatto() || []).filter((f) => f.stato === 'da_fare').length;
   }
 
   function sezioneFaccende() {
-    const parti = [h('p', { class: 'intro' }, 'Le faccende che un genitore ti ha dato. Le foto si mandano dal telefono: qui le vedi e basta. Finché non le hai fatte tutte, il computer resta coperto: è una regola decisa in famiglia, non un blocco di Pactum su di te.')];
+    const parti = [h('p', { class: 'intro' }, 'I lavori di casa che un genitore ti ha dato. Le foto si mandano dal telefono: qui li vedi e basta. Finché non li hai fatti tutti, il computer resta coperto: è una regola decisa in famiglia, non un blocco di Pactum su di te.')];
     const patto = S.patto;
     if (!patto) {
-      if (!S.pattoNonAggiornato) parti.push(caricamento('Sto leggendo le faccende…'));
+      if (!S.pattoNonAggiornato) parti.push(caricamento('Sto leggendo i lavori di casa…'));
       return parti;
     }
     const blocco = bloccoDelPatto();
     const faccende = faccendeDelPatto();
     if (!blocco && !faccende) {
-      parti.push(rigaVuota('info', 'Per le faccende serve aggiornare il server di Pactum.'));
+      parti.push(rigaVuota('info', 'Per i lavori di casa serve aggiornare il server di Pactum.'));
       return parti;
     }
     parti.push(schedaBlocco(blocco));
@@ -1441,11 +1443,11 @@
     const daFare = (faccende || []).filter((f) => f.stato === 'da_fare');
     const chiuse = (faccende || []).filter((f) => f.stato !== 'da_fare');
     parti.push(titoloSezione('Da fare'));
-    if (!daFare.length) parti.push(rigaVuota('spunta', 'Nessuna faccenda da fare. Tutto a posto.'));
+    if (!daFare.length) parti.push(rigaVuota('spunta', 'Nessun lavoro di casa da fare. Tutto a posto.'));
     else daFare.forEach((f) => parti.push(cardFaccenda(f)));
 
     if (chiuse.length) {
-      parti.push(titoloSezione('Chiuse di recente'));
+      parti.push(titoloSezione('Chiusi di recente'));
       parti.push(h('ul', { class: 'lista-dichiarazioni' }, chiuse.map(rigaFaccendaChiusa)));
     }
     return parti;
@@ -1457,16 +1459,16 @@
     if (blocco && blocco.attivo) {
       const dal = T.quando(blocco.dal);
       scheda.append(
-        h('p', { class: 'card-titolo' }, 'Il computer è bloccato: prima le faccende.'),
-        h('p', { class: 'secondario' }, (dal ? 'Bloccato ' + dal + '. ' : '') + 'Si sblocca da solo quando dal telefono hai mandato la foto di ogni faccenda.'));
+        h('p', { class: 'card-titolo' }, 'Il computer è bloccato: prima i lavori di casa.'),
+        h('p', { class: 'secondario' }, (dal ? 'Bloccato ' + dal + '. ' : '') + 'Si sblocca da solo quando dal telefono hai mandato la foto di ogni lavoro.'));
     } else if (blocco && blocco.prossimo) {
       scheda.append(
         h('p', { class: 'card-titolo' }, 'Il blocco parte ' + (T.dalQuando(blocco.prossimo) || 'più tardi') + '.'),
-        h('p', { class: 'secondario' }, 'Se le fai prima dal telefono, il blocco non parte.'));
+        h('p', { class: 'secondario' }, 'Se li fai prima e mandi le foto dal telefono, il blocco non parte.'));
     } else {
       scheda.append(
         h('p', { class: 'card-titolo' }, 'Nessun blocco in corso.'),
-        h('p', { class: 'secondario' }, 'Quando un genitore ti dà delle faccende, finché non le fai il computer resta bloccato.'));
+        h('p', { class: 'secondario' }, 'Quando un genitore ti dà dei lavori di casa, finché non li fai il computer resta bloccato.'));
     }
     return scheda;
   }
@@ -1475,19 +1477,19 @@
     const id = 'faccenda-' + f.id;
     const chi = f.creata_da && f.creata_da.nome;
     const card = h('article', { class: 'card', 'aria-labelledby': id },
-      h('p', { class: 'descrizione', id }, f.titolo || 'Faccenda'));
+      h('p', { class: 'descrizione', id }, f.titolo || 'Lavoro di casa'));
     if (chi) card.append(h('p', { class: 'secondario' }, 'da ' + chi));
     if (f.nota) card.append(h('p', { class: 'secondario' }, f.nota));
     if (T.numero(f.bocciature) > 0) {
-      card.append(h('p', { class: 'piccolo secondario' }, 'Il genitore l\'ha rimandata: rifalla e manda una foto nuova dal telefono.'));
+      card.append(h('p', { class: 'piccolo secondario' }, 'Il genitore l\'ha rimandato: rifallo e manda una foto nuova dal telefono.'));
     }
     card.append(h('p', { class: 'piccolo secondario' }, 'La foto si manda dal telefono.'));
     return card;
   }
 
   function rigaFaccendaChiusa(f) {
-    const li = h('li', { class: 'riga-dichiarazione' }, h('p', { class: 'riga-titolo' }, f.titolo || 'Faccenda'));
-    li.append(h('p', { class: 'secondario' }, f.stato === 'annullata' ? 'Annullata dal genitore.' : 'Fatta.'));
+    const li = h('li', { class: 'riga-dichiarazione' }, h('p', { class: 'riga-titolo' }, f.titolo || 'Lavoro di casa'));
+    li.append(h('p', { class: 'secondario' }, f.stato === 'annullata' ? 'Annullato dal genitore.' : 'Fatto.'));
     return li;
   }
 
@@ -1712,9 +1714,9 @@
         'Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.',
         'Le tue risposte alle sue proposte, con la tua motivazione se la scrivi.',
         'Le proposte che gli mandi tu, con il tuo perché se lo scrivi, e quelle che ritiri.',
-        'Le faccende che un genitore ti dà: quali sono, chi te le ha date, quando le hai fatte (la foto arriva dal telefono) e se le ha rimandate. E se il computer è bloccato perché ci sono faccende da fare.',
+        'I lavori di casa che un genitore ti dà: quali sono, chi te li ha dati, quando li hai fatti (la foto arriva dal telefono) e se li ha rimandati. E se il computer è bloccato perché ci sono lavori di casa da fare.',
         'Quando il programma ha mandato l\'ultimo aggiornamento, e se da più di tre quarti d\'ora non ne manda mentre il computer è acceso.',
-        'Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, gli mandi o ritiri una proposta, o quando c\'è un\'interruzione nella registrazione (anche se Pactum è stato chiuso mentre un blocco delle faccende era in corso).',
+        'Un avviso quando crei, cambi o togli una regola, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, rispondi a una sua proposta, gli mandi o ritiri una proposta, o quando c\'è un\'interruzione nella registrazione (anche se Pactum è stato chiuso mentre era in corso il blocco dei lavori di casa).',
       ]),
       blocco('COSA RESTA FUORI', [
         'Gli indirizzi completi delle pagine. Il programma legge l\'indirizzo della pagina aperta per un istante, ne ricava il nome del sito e butta via il resto: non lo salva, non lo manda, non lo mostra. Il genitore vede youtube.com, mai quale video.',
@@ -1726,9 +1728,9 @@
         'Dove sei: la posizione non viene mai letta.',
       ]),
       // Le stesse frasi dell'app del telefono (cosa_vede_computer): stessi fatti, stesse parole.
-      blocco('BLOCCARE: SOLO LE FACCENDE', [
+      blocco('BLOCCARE: SOLO I LAVORI DI CASA', [
         'Pactum non blocca i singoli programmi o siti: lì il genitore vede e basta, non limita.',
-        'L\'unica cosa che blocca sono le faccende. Quando un genitore te ne dà, finché non le fai tutte (una foto per ognuna, dal telefono) il computer resta coperto. È una regola decisa in famiglia, non un controllo nascosto: la copertura si vede, e se la chiudi resta scritto nel registro.',
+        'L\'unica cosa che blocca sono i lavori di casa. Quando un genitore te ne dà, finché non li fai tutti (una foto per ognuno, dal telefono) il computer resta coperto. È una regola decisa in famiglia, non un controllo nascosto: la copertura si vede, e se la chiudi resta scritto nel registro.',
       ]),
       blocco('I SITI SUL COMPUTER', [
         'Il programma legge l\'indirizzo nella barra del browser e tiene solo il nome del sito: l\'indirizzo completo non viene mai salvato né mandato.',
@@ -1769,7 +1771,7 @@
           disabled: S.aggiornoAdesso, onclick: aggiornaAdesso,
         }, icona('aggiorna'), S.aggiornoAdesso ? 'Aggiorno…' : 'Aggiorna adesso'))),
       h('section', { class: 'card', 'aria-labelledby': 'imp-cosa-vede' },
-        h('h2', { class: 'card-titolo', id: 'imp-cosa-vede' }, 'Cosa vede tuo padre'),
+        h('h2', { class: 'card-titolo', id: 'imp-cosa-vede' }, 'Cosa vedono i tuoi genitori'),
         h('p', null, 'Tutto quello che arriva nella sua app, e quello che resta fuori.'),
         h('p', null, h('a', { href: '#cosa-vede', class: 'link-freccia', chiave: 'imp-link-cosa-vede' }, 'Guarda l\'elenco', icona('freccia')))),
       h('section', { class: 'card', 'aria-labelledby': 'imp-chiudere' },
@@ -1836,7 +1838,7 @@
       S.modalita === 'prova' ? h('p', { class: 'piccolo secondario' }, 'Modalità di prova: il codice 123456 funziona, 000000 no, 999999 fa scattare «troppi tentativi».') : null,
       modulo,
       h('p', null, h('button', { type: 'button', class: 'bottone collegamento', chiave: 'collega-cosa-vede', onclick: dialogoCosaVede },
-        'Prima di collegarlo: cosa vedrà tuo padre')));
+        'Prima di collegarlo: cosa vedranno i tuoi genitori')));
   }
 
   async function collega(testoServer, testoCodice) {
@@ -2566,7 +2568,7 @@
 
   function dialogoCosaVede() {
     apriDialogo({
-      titolo: 'Cosa vede tuo padre',
+      titolo: 'Cosa vedono i tuoi genitori',
       fuoco: '.azioni-dialogo .bottone',
       costruisci(d) {
         d.corpo.append(h('div', { class: 'dialogo-scorre' }, sezioneCosaVede()),

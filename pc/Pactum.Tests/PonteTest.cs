@@ -167,6 +167,7 @@ public class PonteTest
     [Theory]
     [InlineData("proposte", "https://pactum.locale/index.html#proposte")]
     [InlineData("diario", "https://pactum.locale/index.html#diario")]
+    [InlineData("faccende", "https://pactum.locale/index.html#faccende")] // (0.14) i lavori di casa
     [InlineData(null, "https://pactum.locale/index.html")]
     [InlineData("sconosciuta", "https://pactum.locale/index.html")]
     [InlineData("proposte';alert(1)//", "https://pactum.locale/index.html")]

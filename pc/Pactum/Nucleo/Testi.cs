@@ -83,15 +83,20 @@ public static class Testi
         ? $"Il limite che ti sei dato: {Durata(limite)} al giorno, più {Durata(bonus)} di bonus oggi."
         : $"Il limite che ti sei dato: {Durata(limite)} al giorno.";
 
-    // ---------- Il blocco delle faccende (0.13, contratto v3.6) ----------
+    // ---------- Il blocco dei lavori di casa (0.13, contratto v3.6; testi 0.14, contratto v3.7) ----------
+    // Nel codice si chiamano "faccende" (come le chiavi del contratto, /api/faccende); quello che il figlio
+    // legge dice "lavori di casa", e al singolare "lavoro" (maschile).
 
-    /// <summary>Il titolo della finestra che copre gli schermi quando ci sono faccende da fare.</summary>
-    public const string TitoloBlocco = "Prima le faccende";
+    /// <summary>Il titolo della finestra che copre gli schermi quando ci sono lavori di casa da fare.</summary>
+    public const string TitoloBlocco = "Prima i lavori di casa";
 
     /// <summary>La frase che dice come ci si sblocca (le foto si mandano dal telefono).</summary>
-    public const string SottoBlocco = "Si sblocca da solo quando dal telefono hai mandato la foto di ogni faccenda.";
+    public const string SottoBlocco = "Si sblocca da solo quando dal telefono hai mandato la foto di ogni lavoro.";
 
-    /// <summary>"da Mamma" accanto a una faccenda, o stringa vuota se non si sa chi l'ha data.</summary>
+    /// <summary>L'elenco di ripiego quando lo stato salvato si è perso (v. <c>StatoBlocco.Generico</c>).</summary>
+    public const string LavoriDaFare = "Ci sono lavori di casa da fare";
+
+    /// <summary>"da Mamma" accanto a un lavoro di casa, o stringa vuota se non si sa chi l'ha dato.</summary>
     public static string DaChi(string? chi) => string.IsNullOrWhiteSpace(chi) ? "" : "da " + chi!.Trim();
 
     /// <summary>
@@ -135,6 +140,14 @@ public static class Testi
     public const string SezioneProposte = "proposte";
     public const string SezioneDiario = "diario";
 
+    /// <summary>(0.14) La sezione "Lavori di casa" della finestra (il suo nome nel codice resta "faccende").</summary>
+    public const string SezioneLavori = "faccende";
+
+    /// <summary>(0.14, contratto v3.7) I fumetti delle notifiche sui lavori di casa (tipi <c>nuove_faccende</c>, <c>faccenda_bocciata</c>, <c>faccenda_annullata</c>).</summary>
+    public const string TitoloNuoviLavori = "Nuovi lavori di casa";
+    public const string TitoloLavoroRimandato = "Lavoro di casa rimandato";
+    public const string TitoloLavoroAnnullato = "Lavoro di casa annullato";
+
     /// <summary>Il confronto fisso di una proposta di eliminare (contratto, POST /api/proposte).</summary>
     private const string ConfrontoEliminazione = "propone di eliminare la regola";
 
@@ -166,12 +179,17 @@ public static class Testi
             "proposta_ritirata" when autore is null or "genitore" => (PropostaRitirata, "Non c'è più niente da decidere: la regola resta com'è."),
             "verdetto" => ("Esito della tua dichiarazione", "L'esito è in Pactum, nel Diario."),
             "segno" => ("Un segno dal genitore", "Ho visto la settimana. Bene così."),
+            // (0.14) I lavori di casa: il testo è il messaggio del server ("Mamma ti ha dato 3 lavori di casa").
+            "nuove_faccende" => (TitoloNuoviLavori, "Li trovi in Pactum, in Lavori di casa. Le foto si mandano dal telefono."),
+            "faccenda_bocciata" => (TitoloLavoroRimandato, "Rifallo e manda una foto nuova dal telefono."),
+            "faccenda_annullata" => (TitoloLavoroAnnullato, "Non c'è più da farlo."),
             _ => (TitoloNovita, "Apri Pactum per vedere cosa è cambiato."),
         };
         string? sezione = tipo switch
         {
             "nuova_proposta" or "proposta_risposta" or "proposta_ritirata" => SezioneProposte,
             "verdetto" => SezioneDiario,
+            "nuove_faccende" or "faccenda_bocciata" or "faccenda_annullata" => SezioneLavori,
             _ => null,
         };
 

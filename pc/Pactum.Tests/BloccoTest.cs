@@ -157,7 +157,7 @@ public class BloccoTest
         Assert.True(s.AttivoServer);
         Assert.True(s.AttivoA(0));
         Assert.True(s.AttivoA(Ora));
-        Assert.Equal("Ci sono faccende da fare", Assert.Single(s.DaMostrare()).Titolo);
+        Assert.Equal("Ci sono lavori di casa da fare", Assert.Single(s.DaMostrare()).Titolo);
     }
 
     [Fact]
@@ -188,5 +188,36 @@ public class BloccoTest
         Assert.Equal("il corridoio", f.Nota);
         Assert.Equal(Ora - 1000, f.BloccoDaMs);
         Assert.True(riletto.AttivoA(Ora));
+    }
+
+    // ---------- (0.14, contratto v3.7) "Lavori di casa" in quello che il figlio legge ----------
+
+    [Fact]
+    public void La_copertura_dice_lavori_di_casa_e_mai_faccende()
+    {
+        Assert.Equal("Prima i lavori di casa", Testi.TitoloBlocco);
+        Assert.Equal("Si sblocca da solo quando dal telefono hai mandato la foto di ogni lavoro.", Testi.SottoBlocco);
+        var testo = Testi.TestoBlocco(new[] { Faccenda(1, "Riordina la camera", Ora, "Papà", "anche sotto il letto") });
+        Assert.Equal(string.Join(Environment.NewLine,
+            "Prima i lavori di casa",
+            "Riordina la camera — da Papà: anche sotto il letto",
+            "Si sblocca da solo quando dal telefono hai mandato la foto di ogni lavoro."), testo);
+        Assert.DoesNotContain("faccend", testo, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("faccend", StatoBlocco.Generico().DaMostrare()[0].Titolo, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("nuove_faccende", "Mamma ti ha dato 3 lavori di casa", "Nuovi lavori di casa", "Mamma ti ha dato 3 lavori di casa.")]
+    [InlineData("nuove_faccende", "", "Nuovi lavori di casa", "Li trovi in Pactum, in Lavori di casa. Le foto si mandano dal telefono.")]
+    [InlineData("faccenda_bocciata", "Papà ha bocciato «Riordina la camera»: si vede ancora il pavimento", "Lavoro di casa rimandato", "Papà ha bocciato «Riordina la camera»: si vede ancora il pavimento.")]
+    [InlineData("faccenda_bocciata", null, "Lavoro di casa rimandato", "Rifallo e manda una foto nuova dal telefono.")]
+    [InlineData("faccenda_annullata", "", "Lavoro di casa annullato", "Non c'è più da farlo.")]
+    public void I_fumetti_dei_lavori_di_casa_aprono_la_loro_sezione(string tipo, string? messaggio, string titolo, string testo)
+    {
+        var (t, x, sezione) = Testi.Notifica(tipo, messaggio, null);
+        Assert.Equal(titolo, t);
+        Assert.Equal(testo, x);
+        Assert.Equal("faccende", sezione);
+        Assert.DoesNotContain("faccend", t + x, StringComparison.OrdinalIgnoreCase);
     }
 }

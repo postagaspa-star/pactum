@@ -11,7 +11,7 @@ namespace Pactum.Interfaccia;
 
 /// <summary>
 /// (0.13, contratto v3.6) Il blocco delle faccende: quando ci sono faccende da fare, una finestra senza
-/// bordi sempre in primo piano copre OGNI schermo. Dice "Prima le faccende", l'elenco con chi le ha date,
+/// bordi sempre in primo piano copre OGNI schermo. Dice "Prima i lavori di casa" (0.14), l'elenco con chi li ha dati,
 /// e che si sblocca da solo quando dal telefono è arrivata la foto di ogni faccenda.
 ///
 /// È la prima cosa di Pactum che blocca, ed è una decisione di Andrea per la sua famiglia. Si tiene onesta:
@@ -381,7 +381,7 @@ internal readonly record struct DisposizioneBlocco(Rectangle Colonna, int Larghe
 
 /// <summary>
 /// Il contenuto del blocco, disegnato come l'interfaccia (<see cref="Aspetto"/>): il marchio, il titolo
-/// "Prima le faccende", una scheda per faccenda (titolo, chi l'ha data, nota), e la frase di come ci si
+/// "Prima i lavori di casa", una scheda per lavoro (titolo, chi l'ha dato, nota), e la frase di come ci si
 /// sblocca. Una sola funzione misura e disegna, così misure e disegno non si separano mai.
 /// </summary>
 internal sealed class FoglioBlocco : Control

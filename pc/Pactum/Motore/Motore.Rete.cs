@@ -243,6 +243,31 @@ public sealed partial class Motore
         }
     }
 
+    /// <summary>
+    /// (0.14) Un evento da solo, subito, prima del resto della coda: la <c>sospensione</c> allo spegnimento, che
+    /// deve arrivare prima che la rete se ne vada. L'evento è già in coda (su disco): se arriva, lo si toglie; se
+    /// no, resta lì e parte al giro dopo (alla riaccensione) col suo <c>ts_device</c>. Lo stesso id mandato due
+    /// volte non fa danni (idempotenza del contratto). Mai un'eccezione.
+    /// </summary>
+    internal async Task<bool> InviaSubitoAsync(Evento evento, TimeSpan tempoMassimo)
+    {
+        try
+        {
+            var (server, tok) = Credenziali();
+            if (server == null || tok == null) return false;
+            var r = await postino.InviaAsync("POST", server, "api/eventi", tok, Eventi.Lotto(new[] { evento }).ToJsonString(), tempoMassimo).ConfigureAwait(false);
+            Annota(r);
+            if (!CodaEventi.Riuscito(r.Stato)) return false;
+            coda.Rimuovi(new[] { evento.Id });
+            return true;
+        }
+        catch (Exception e)
+        {
+            Log.Errore("invio subito di un evento", e);
+            return false;
+        }
+    }
+
     /// <summary>Manda la coda. Con <paramref name="tempoMassimo"/> ogni chiamata ha quel tempo (chiusura, sospensione).</summary>
     private async Task<bool> InviaCodaAsync(TimeSpan? tempoMassimo)
     {

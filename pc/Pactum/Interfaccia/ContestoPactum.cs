@@ -190,7 +190,7 @@ public sealed class ContestoPactum : ApplicationContext
         try
         {
             scelta = MessageBox.Show(
-                "Se chiudi, tuo padre vedrà un'interruzione nella registrazione.\n\nChiudere Pactum?",
+                "Se chiudi, i tuoi genitori vedranno un'interruzione nella registrazione.\n\nChiudere Pactum?",
                 "Chiudi Pactum",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning,
@@ -314,7 +314,7 @@ public sealed class ContestoPactum : ApplicationContext
         separatoreChiudi.Visible = !vista.Coperto;
         if (opzioni.CartellaProvaAvvisi != null)
         {
-            Log.Info(vista.Coperto ? $"blocco delle faccende (prova): coprirebbe gli schermi, {vista.Faccende.Count} da fare" : "blocco delle faccende (prova): toglierebbe la copertura");
+            Log.Info(vista.Coperto ? $"blocco dei lavori di casa (prova): coprirebbe gli schermi, {vista.Faccende.Count} da fare" : "blocco dei lavori di casa (prova): toglierebbe la copertura");
             return;
         }
         try
@@ -324,7 +324,7 @@ public sealed class ContestoPactum : ApplicationContext
         }
         catch (Exception e)
         {
-            Log.Errore("blocco delle faccende non aggiornato", e);
+            Log.Errore("blocco dei lavori di casa non aggiornato", e);
         }
     }
 
@@ -456,7 +456,11 @@ public sealed class ContestoPactum : ApplicationContext
     private void SuSessioneFinita(object? mittente, SessionEndedEventArgs e)
     {
         Log.Info("sessione finita");
-        Esci(e.Reason == SessionEndReasons.SystemShutdown ? Chiusure.Spegnimento : Chiusure.Disconnessione);
+        bool spegnimento = e.Reason == SessionEndReasons.SystemShutdown;
+        // (0.14) In uno spegnimento forzato SessionEnding non arriva: la sospensione si accoda (e si prova a
+        // mandare) qui. Se SessionEnding c'è già stato, non si ripete.
+        motore.FineSessione(spegnimento, soloSeMancante: true);
+        Esci(spegnimento ? Chiusure.Spegnimento : Chiusure.Disconnessione);
     }
 
     private void SuCambioSessione(object? mittente, SessionSwitchEventArgs e)

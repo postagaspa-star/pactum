@@ -264,7 +264,7 @@ public class MotoreBloccoTest
         m.PreparaBlocco(precedente, Tempo.AdessoUtcMs());
         Assert.True(m.Coperto); // resta coperto con l'elenco generico
         var generica = Assert.Single(m.VistaBloccoCorrente.Faccende);
-        Assert.Equal("Ci sono faccende da fare", generica.Titolo);
+        Assert.Equal("Ci sono lavori di casa da fare", generica.Titolo);
         // E lo dice al genitore.
         Assert.Contains(m.EventiInCoda("manomissione"),
             e => Nucleo.Json.Testo(e.Dettagli["sotto_tipo"]) == "stato_blocco_perso");

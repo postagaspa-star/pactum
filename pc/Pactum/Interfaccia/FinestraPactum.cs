@@ -30,7 +30,7 @@ public sealed class FinestraPactum : Form
     /// <summary>(0.10) Le sezioni dell'interfaccia (SEZIONI di app.js): solo queste si aprono da fuori.</summary>
     private static readonly HashSet<string> Sezioni = new(StringComparer.Ordinal)
     {
-        "oggi", "regole", "proposte", "diario", "siti", "cosa-vede", "impostazioni",
+        "oggi", "regole", "proposte", "faccende", "diario", "siti", "cosa-vede", "impostazioni",
     };
 
     public FinestraPactum(Ponte ponte, string cartellaUi, string cartellaDatiWebView, Icon icona, string? fileAutoprova, string? sezione = null)

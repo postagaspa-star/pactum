@@ -21,7 +21,7 @@
  *   ?prova=1&vecchio=1    (0.10) un server di prima della v3.4: niente proposte
  *                         del figlio (403 a «Proponi al genitore», 404 a
  *                         «Ritira»), niente `autore` né `proposte_inviate`;
- *                         (0.13) niente faccende né blocco (la sezione Faccende
+ *                         (0.13) niente faccende né blocco (la sezione Lavori di casa
  *                         dice che il server va aggiornato)
  * Nella barra a sinistra c'è anche l'interruttore "Simula rete assente".
  */
@@ -510,7 +510,7 @@
       server: S.server,
       figlio: S.abbinato ? S.figlio : null,
       dispositivo: S.abbinato ? S.computer : null,
-      versione: '0.13.0',
+      versione: '0.14.0',
       ultimo_invio_ok: S.abbinato ? isoTs(S.ultimoInvio) : null,
       rete_ok: opzioni.rete,
       patto_aggiornato: S.abbinato ? isoTs(S.pattoAggiornato) : null,

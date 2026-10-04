@@ -52,7 +52,7 @@ public sealed class StatoBlocco
     public static StatoBlocco Generico() => new()
     {
         AttivoServer = true,
-        DaFare = { new Faccenda { Id = 0, Titolo = "Ci sono faccende da fare", BloccoDaMs = 0 } },
+        DaFare = { new Faccenda { Id = 0, Titolo = Testi.LavoriDaFare, BloccoDaMs = 0 } },
     };
 
     /// <summary>

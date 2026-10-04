@@ -182,13 +182,21 @@ public sealed partial class Motore : IDisposable
     {
         sospeso = true;
         long adesso = Tempo.AdessoUtcMs();
-        // Prima di addormentarsi: gli sforamenti degli ultimi secondi vanno in coda (lo schermo si spegne: niente avvisi).
-        ValutaRegole(adesso, conAvvisi: false);
-        if (Abbinato) coda.Accoda(Eventi.Sospensione("sospensione", adesso));
-        lock (misura) SalvaGiorno(contatore.Oggi);
+        // (0.14) Prima di tutto la sospensione, su disco (coda.json) col suo ts_device: se la rete se ne va
+        // prima di consegnarla, parte al risveglio con l'ora giusta.
+        var sospensione = Abbinato ? Eventi.Sospensione("sospensione", adesso) : null;
+        if (sospensione != null) coda.Accoda(sospensione);
         ScriviVivo(null);
+        // Gli sforamenti degli ultimi secondi vanno in coda (lo schermo si spegne: niente avvisi).
+        ValutaRegole(adesso, conAvvisi: false);
+        lock (misura) SalvaGiorno(contatore.Oggi);
         Log.Info("sospensione");
-        _ = InviaCodaAsync(TimeSpan.FromSeconds(2));
+        // La sospensione parte da sola e per prima, poi il resto: Windows non aspetta molto prima di dormire.
+        _ = Task.Run(async () =>
+        {
+            if (sospensione != null) await InviaSubitoAsync(sospensione, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            await InviaCodaAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        });
     }
 
     /// <summary>Windows si riattiva (PowerModeChanged.Resume).</summary>
@@ -208,20 +216,69 @@ public sealed partial class Motore : IDisposable
         });
     }
 
-    /// <summary>L'utente esce o Windows si spegne (SessionEnding): si scrive la chiusura pulita subito.</summary>
-    public void FineSessione(bool spegnimento)
+    /// <summary>(0.14) Quanto si aspetta la rete in tutto allo spegnimento: Windows non va trattenuto.</summary>
+    private static readonly TimeSpan TempoSpegnimento = TimeSpan.FromSeconds(2.5);
+
+    /// <summary>(0.14) Quanto, di quel tempo, può prendere la sola sospensione.</summary>
+    private static readonly TimeSpan TempoSospensione = TimeSpan.FromSeconds(2);
+
+    // (0.14) L'ultima FineSessione (orologio monotono): in uno spegnimento normale arrivano sia SessionEnding sia
+    // SessionEnded, e la seconda non deve ripetere la sospensione.
+    private readonly object fineSessioneBlocco = new();
+    private long fineSessioneTick = long.MinValue;
+
+    /// <summary>
+    /// L'utente esce o Windows si spegne: si scrive la chiusura pulita e si manda la <c>sospensione</c>.
+    /// (0.14, contratto v3.7) L'ordine conta, perché la rete se ne va da un momento all'altro:
+    /// <list type="number">
+    /// <item>la <c>sospensione</c> va subito su disco (<c>coda.json</c>) col suo <c>ts_device</c>, insieme alla chiusura
+    /// in <c>vivo.json</c>: se non si riesce a mandarla, parte alla riaccensione con l'ora vera dello spegnimento;</item>
+    /// <item>la si manda da sola, per prima (al massimo <see cref="TempoSospensione"/>), così una coda lunga o un evento
+    /// rifiutato non la fanno arrivare tardi;</item>
+    /// <item>poi gli sforamenti degli ultimi secondi e le fotografie del giorno, in coda, e con il tempo che resta
+    /// (in tutto al massimo <see cref="TempoSpegnimento"/>) si manda il resto.</item>
+    /// </list>
+    /// Con <paramref name="soloSeMancante"/> (da SessionEnded) non fa niente se una FineSessione c'è stata da meno
+    /// di un minuto: serve agli spegnimenti forzati, dove SessionEnding non arriva.
+    /// </summary>
+    public void FineSessione(bool spegnimento, bool soloSeMancante = false)
     {
+        lock (fineSessioneBlocco)
+        {
+            long ora = Environment.TickCount64;
+            if (soloSeMancante && fineSessioneTick != long.MinValue && ora - fineSessioneTick < 60_000) return;
+            fineSessioneTick = ora;
+        }
+        var cronometro = System.Diagnostics.Stopwatch.StartNew();
         var motivo = spegnimento ? Chiusure.Spegnimento : Chiusure.Disconnessione;
         ImpostaChiusura(motivo);
         long adesso = Tempo.AdessoUtcMs();
-        // Prima di spegnersi: gli sforamenti degli ultimi secondi partono con l'ultimo invio (niente avvisi a schermo).
+
+        var sospensione = Abbinato ? Eventi.Sospensione(motivo, adesso) : null;
+        if (sospensione != null) coda.Accoda(sospensione);
+        ScriviVivo(motivo);
+        if (sospensione != null) AspettaAlPiù(InviaSubitoAsync(sospensione, TempoSospensione), TempoSospensione + TimeSpan.FromMilliseconds(200));
+
+        // Gli sforamenti degli ultimi secondi e le fotografie: in coda (niente avvisi a schermo).
         ValutaRegole(adesso, conAvvisi: false);
-        if (Abbinato) coda.Accoda(Eventi.Sospensione(motivo, adesso));
         AccodaFotografie(adesso);
         lock (misura) SalvaGiorno(contatore.Oggi);
-        ScriviVivo(motivo);
         Log.Info($"fine sessione ({motivo})");
-        InviaCodaAsync(TimeSpan.FromSeconds(2)).Wait(TimeSpan.FromSeconds(2.5));
+        var resta = TempoSpegnimento - cronometro.Elapsed;
+        if (resta > TimeSpan.FromMilliseconds(300)) AspettaAlPiù(InviaCodaAsync(resta), resta);
+    }
+
+    /// <summary>Aspetta un invio al massimo per quel tempo; un errore non ferma mai lo spegnimento.</summary>
+    private static void AspettaAlPiù(Task compito, TimeSpan tempo)
+    {
+        try
+        {
+            compito.Wait(tempo);
+        }
+        catch (AggregateException e)
+        {
+            Log.Errore("invio allo spegnimento", e.InnerException ?? e);
+        }
     }
 
     public void SchermoBloccato(bool bloccato) => this.bloccato = bloccato;
@@ -238,7 +295,7 @@ public sealed partial class Motore : IDisposable
                 ? "avvio in ritardo: il computer era acceso senza Pactum"
                 : "il programma era stato chiuso mentre Windows era acceso");
         }
-        if (esito.ChiusoDuranteBlocco) Log.Avviso("il programma era stato chiuso durante un blocco delle faccende");
+        if (esito.ChiusoDuranteBlocco) Log.Avviso("il programma era stato chiuso durante un blocco dei lavori di casa");
         if (esito.CambioOra != null) Log.Avviso("l'orologio è stato spostato mentre il programma era chiuso");
         if (!Abbinato) return;
         if (esito.ProgrammaChiuso != null) coda.Accoda(Eventi.Manomissione(esito.ProgrammaChiuso, adesso));
@@ -707,7 +764,7 @@ public sealed partial class Motore : IDisposable
         // (0.13) Il segno in vivo.json segue la copertura subito, non al prossimo salvataggio periodico:
         // così un programma chiuso di colpo durante un blocco si riconosce al riavvio.
         if (cambiaCopertura) ScriviVivo(ChiusuraDaScrivere());
-        Log.Info(nuovoCoperto ? $"blocco delle faccende attivo: {faccende.Count} da fare" : "blocco delle faccende tolto");
+        Log.Info(nuovoCoperto ? $"blocco dei lavori di casa attivo: {faccende.Count} da fare" : "blocco dei lavori di casa tolto");
         try
         {
             CambioBlocco?.Invoke(new VistaBlocco(nuovoCoperto, faccende));

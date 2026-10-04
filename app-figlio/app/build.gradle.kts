@@ -77,6 +77,13 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+    // Solo per i test: il fotografo delle schermate (Robolectric) legge le
+    // risorse dell'app (stringhe, icone). L'APK non cambia.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
     // Il design system condiviso (redesign C5): una cartella sorgente comune
     // alle due app, non un modulo — le due app sono build Gradle separate.
     sourceSets["main"].kotlin.srcDir("../../core-design/src/main/kotlin")
@@ -100,4 +107,29 @@ dependencies {
     // domini sono logica pura, ed è la parte dove un errore si vedrebbe come
     // "internet rotto" o "registro sempre vuoto". Va provata.
     testImplementation(libs.junit)
+    // Il fotografo delle schermate: Compose disegnato sul PC (Robolectric con la
+    // grafica vera) e salvato in PNG (Roborazzi). Solo test, mai nell'APK.
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+}
+
+// Il fotografo (src/test/.../fotografo) NON gira con la suite normale: è lento
+// e scarica Android per Robolectric. Si lancia a parte con -Pfotografo
+// (oppure -Pfotografo=<cartella dei PNG>; senza cartella: build/fotografo).
+// Con -Pfotografo girano SOLO i suoi test.
+val fotografo: String? = providers.gradleProperty("fotografo").orNull
+tasks.withType<Test>().configureEach {
+    if (fotografo != null) {
+        filter { includeTestsMatching("eu.stgm.pactum.figlio.fotografo.*") }
+        val cartella = fotografo.takeIf { it.isNotBlank() && it != "true" }
+            ?: layout.buildDirectory.dir("fotografo").get().asFile.absolutePath
+        systemProperty("fotografo.cartella", cartella)
+        systemProperty("roborazzi.test.record", "true")
+        maxHeapSize = "4g"
+        outputs.upToDateWhen { false }
+    } else {
+        exclude("eu/stgm/pactum/figlio/fotografo/**")
+    }
 }

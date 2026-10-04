@@ -87,6 +87,34 @@ android {
     // Il design system condiviso (redesign C5): una cartella sorgente comune
     // alle due app, non un modulo — le due app sono build Gradle separate.
     sourceSets["main"].kotlin.srcDir("../../core-design/src/main/kotlin")
+    // Il "fotografo" (solo test): Robolectric ha bisogno delle risorse vere
+    // (stringhe, icone) per disegnare le schermate sul PC.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+// Il "fotografo": test che disegnano OGNI schermata in PNG sul PC (Robolectric +
+// Roborazzi, niente telefono né emulatore). Lenti, quindi fuori dalla suite
+// normale: partono SOLO con -Pfotografo, e allora girano solo loro.
+//   gradlew :app:testDebugUnitTest -Pfotografo [-Pfotografo.cartella=C:/percorso]
+// Senza cartella, le foto vanno in build/fotografo.
+val fotografo = providers.gradleProperty("fotografo").isPresent
+val cartellaFoto = providers.gradleProperty("fotografo.cartella")
+tasks.withType<Test>().configureEach {
+    if (fotografo) {
+        filter { includeTestsMatching("eu.stgm.pactum.genitore.fotografo.*") }
+        systemProperty("roborazzi.test.record", "true")
+        systemProperty(
+            "fotografo.cartella",
+            cartellaFoto.orElse(layout.buildDirectory.dir("fotografo").map { it.asFile.path }).get(),
+        )
+        providers.gradleProperty("fotografo.solo").orNull?.let { systemProperty("fotografo.solo", it) }
+        maxHeapSize = "3g"
+        outputs.upToDateWhen { false }
+    } else {
+        exclude("eu/stgm/pactum/genitore/fotografo/**")
+    }
 }
 
 dependencies {
@@ -107,4 +135,10 @@ dependencies {
     // stanno le voci del Tempo e cosa dice la riga di riepilogo sono logica
     // pura — ed è lì che un errore farebbe dire all'app una cosa falsa sul patto.
     testImplementation(libs.junit)
+    // Il "fotografo" (v. sopra): solo nei test, niente entra nell'app.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.okhttp.mockwebserver)
 }

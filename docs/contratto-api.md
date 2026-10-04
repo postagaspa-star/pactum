@@ -888,8 +888,55 @@ Dicono quello che le sezioni qui sopra lasciavano aperto. Quelle segnate **(03/1
 - App 0.13 con server vecchio: `/api/faccende` e `/api/genitori` rispondono `404`/`405` → l'app dice che per le faccende e i genitori serve aggiornare il server di Pactum.
 - **Ordine sul NAS**: come sempre, prima gli APK e lo zip 0.13 in `server/apk`, poi la ricostruzione dell'immagine.
 
+## v3.7 — telefono spento o in stand-by, e "lavori di casa" (04/10/2026, richieste di Andrea)
+
+Due correzioni, nessuna funzione nuova.
+
+1. **Un telefono spento o in stand-by non è un'interruzione.** Finora il telefono, a differenza del computer, non avvisava quando si spegneva, e a schermo spento Android addormentava Pactum: i battiti si fermavano e dopo 45 minuti il genitore riceveva "Il telefono non invia aggiornamenti", come se il figlio avesse staccato Pactum.
+2. **Nei testi non si dice più "faccende" ma "lavori di casa"** (decisione di Andrea). Cambiano solo le parole che si leggono; i nomi tecnici restano (`/api/faccende`, `nuove_faccende`, `faccenda_fatta`, …).
+
+Tutto il resto del contratto resta valido.
+
+### Il telefono si spegne: `sospensione` anche dai telefoni
+
+- Il telefono manda l'evento `sospensione` `{ "motivo": "spegnimento" }` quando Android si spegne o si riavvia (avviso di spegnimento di sistema), subito, prima che la rete se ne vada; se non ce la fa, lo manda alla riaccensione con il `ts_device` dello spegnimento (dagli eventi d'uso di Android, `DEVICE_SHUTDOWN`), insieme a `ripresa` `{ "motivo": "avvio" }`.
+- Il server tratta i telefoni come i computer: dopo una `sospensione`, finché non arriva un segno di vita (battito o `ripresa`), `stato_silenzio` dà `silente: false`, `spento: true`, `spento_dal` = l'ora della sospensione. Per una `sospensione` consegnata in ritardo vale il suo `ts_device` (con le stesse tutele della chiusura delle sessioni: non nel futuro, non più di 48 ore prima dell'arrivo), così il genitore che aveva ricevuto un avviso di silenzio può sapere che il telefono era spento.
+- Un telefono spento per più di 24 ore: come per il computer, l'app del genitore dice "spento, oppure Pactum non è partito".
+
+### Il telefono in stand-by: i battiti continuano
+
+- A schermo spento il telefono continua a mandare un battito circa ogni 15 minuti (sveglia permessa anche in stand-by, con l'esenzione dal risparmio batteria che Pactum chiede già). Così un telefono acceso in tasca o sul comodino non risulta mai silenzioso.
+- Il silenzio (`silente: true`, oltre 45 minuti senza battiti) resta per i casi veri: Pactum fermato o tolto, telefono senza rete a lungo.
+
+### L'app del genitore: avvisi di silenzio senza accuse
+
+- Telefono spento: si vede "Telefono spento dalle …" come per il computer, nessun avviso.
+- Se un avviso di silenzio è già partito e poi si scopre che il dispositivo era spento, l'app manda "Il telefono era spento dalle …: non è un'interruzione" (come già fa per il computer).
+- Il testo del silenzio non accusa: "Il telefono non manda aggiornamenti dalle …: può essere senza rete o scarico, oppure Pactum è stato fermato."
+
+### "Lavori di casa" nei messaggi del server
+
+I `messaggio` delle notifiche cambiano così (i `tipo` e i `payload` no):
+- `nuove_faccende`: "<nome del genitore> ti ha dato 3 lavori di casa" / "<nome del genitore> ti ha dato un lavoro di casa: «<titolo>»";
+- `faccende_finite`: "<nome del figlio> ha finito i lavori di casa: telefono e computer sbloccati" / "<nome del figlio> ha finito i lavori di casa";
+- `faccenda_fatta`, `faccenda_bocciata`, `faccenda_annullata`: come prima (contengono solo il titolo).
+Nelle app: la scheda e la pagina si chiamano **Lavori di casa**, la barriera dice **"Prima i lavori di casa"**; al singolare "lavoro" (maschile: fatto, bocciato, annullato).
+
+### Precisazioni (scritte costruendo il server 0.14, 04/10/2026)
+
+- **La `sospensione` dai telefoni il server la accettava già**: la validazione degli eventi non guarda il tipo del dispositivo. Fino alla v3.6 finiva nel registro senza cambiare lo stato; dalla v3.7 il telefono risulta spento.
+- **Il momento della sospensione** (quello di `spento_dal`) è il suo `ts_device` solo se cade **più di 2 minuti prima dell'arrivo e non più di 48 ore prima**; negli altri casi (un `ts_device` che manca o non è un'ora possibile, nel futuro, entro 2 minuti, oltre 48 ore) vale l'arrivo. Sono le tutele della chiusura delle sessioni, scritte una volta sola nel server. **Valgono anche per i computer**: prima, per una sospensione del computer consegnata in ritardo, `spento_dal` era l'arrivo.
+- **Quale viene dopo, tra sospensione e ripresa**: il server le mette in fila per il loro momento (la stessa regola, anche per la `ripresa`) e, a parità, per ordine d'arrivo. Così, alla riaccensione, la sospensione recuperata e la ripresa possono arrivare nello stesso pacco **in qualsiasi ordine**: vince quella successa dopo. Senza `ts_device`, o entro 2 minuti dall'arrivo, conta l'ordine del pacco, come prima per il computer: "ripresa e poi sospensione" vuol dire che si è appena spento.
+- **Un battito è un segno di vita** se è arrivato dopo il momento della sospensione: se la sospensione arriva in ritardo e il telefono aveva già mandato un battito dopo l'ora che dichiara, non è spento (ed è silente se tace da più di 45 minuti).
+- **Testi**: oltre ai due messaggi qui sopra, il server non ha altri testi per le persone con "faccende". Restano com'erano i testi tecnici: il `detail` `"faccenda non trovata"` dei `404` (le app lo riconoscono, come `"sessione non trovata"`), i codici d'errore (`troppe_faccende`, `blocco_faccende`, …) e il log del server.
+
+### Compatibilità
+
+- Nessun cambio al database. Un server v3.6 con un telefono 0.14: la `sospensione` del telefono si registra ma non cambia lo stato (resta il silenzio come prima). Un server v3.7 con un telefono 0.13: niente `sospensione`, si comporta come prima.
+
 ---
-**Versione: v3.6 — 02/10/2026** (decisioni di Andrea): più genitori (tabella `genitori`, `GET/POST /api/genitori`, codice di 6 cifre, `POST /api/abbina` con `tipo: "genitore"`, revoca, `io` e `genitori` in `GET /api/famiglia`), chi ha fatto cosa nelle risposte, notifiche del genitore lette da ciascuno; le faccende (`/api/faccende`, foto JPEG fino a 4 MB senza dati nascosti tenute 30 giorni, boccia entro 24 ore, annulla, `GET /api/faccende/blocco`, `faccende` e `blocco` in patto e finestra, `faccende_da_fare` e `blocco_attivo` in famiglia, notifiche `nuove_faccende`, `faccenda_fatta`, `faccende_finite`, `faccenda_bocciata`, `faccenda_annullata`); blocco del telefono tranne le app fondamentali e del computer intero finché le faccende non sono fatte; niente sessioni durante il blocco. Copia del database prima della migrazione.
+**Versione: v3.7 — 04/10/2026** (richieste di Andrea): `sospensione` anche dai telefoni (spento come i computer, anche consegnata in ritardo col suo `ts_device`), battiti ogni ~15 minuti anche in stand-by, avvisi di silenzio senza accuse; nei testi "lavori di casa" al posto di "faccende". Nessun cambio al database.
+**v3.6 — 02/10/2026** (decisioni di Andrea): più genitori (tabella `genitori`, `GET/POST /api/genitori`, codice di 6 cifre, `POST /api/abbina` con `tipo: "genitore"`, revoca, `io` e `genitori` in `GET /api/famiglia`), chi ha fatto cosa nelle risposte, notifiche del genitore lette da ciascuno; le faccende (`/api/faccende`, foto JPEG fino a 4 MB senza dati nascosti tenute 30 giorni, boccia entro 24 ore, annulla, `GET /api/faccende/blocco`, `faccende` e `blocco` in patto e finestra, `faccende_da_fare` e `blocco_attivo` in famiglia, notifiche `nuove_faccende`, `faccenda_fatta`, `faccende_finite`, `faccenda_bocciata`, `faccenda_annullata`); blocco del telefono tranne le app fondamentali e del computer intero finché le faccende non sono fatte; niente sessioni durante il blocco. Copia del database prima della migrazione.
 **v3.5 — 01/10/2026** (decisioni di Andrea): le Sessioni — il figlio crea sessioni (nome + app del telefono, anche `gruppo:apk`), il genitore le approva una volta e approva ogni cambio della lista (`modifica_in_attesa`); il figlio le avvia quando vuole per 1–1440 minuti e le può chiudere prima; nelle app della sessione il tempo non conta, fuori lista conta come sempre; barriera "Esci" sulle app fuori lista; `sessioni`, `sessione_in_corso`, `sessioni_svolte` in `GET /api/patto`, `sessioni`, `sessioni_da_approvare`, `sessioni_svolte` in `GET /api/finestra`, `sessioni_da_approvare` in `GET /api/famiglia`; notifiche `sessione_da_approvare`, `sessione_risposta`, `sessione_eliminata`; `sessioni_minuti` nella fotografia e accanto a `totale_minuti` in `uso_recente`. Due tabelle nuove. In più, per tutto il server: i corpi JSON con `NaN`/`Infinity`, surrogati da soli o interi oltre i 64 bit → `422` prima di ogni endpoint; un intero oltre i 64 bit in un percorso o in una query → `422` (`404` sulle sessioni), mai un `500`; minuti del giorno oltre 1440 non validi.
 **v3.4 — 01/10/2026** (decisione di Andrea del 30/09): le proposte del figlio — `POST /api/proposte` anche col token del dispositivo (notifica `nuova_proposta` al genitore), `POST /api/proposte/{id}/risposta` anche col token del genitore sulle proposte del figlio (accetta = vale subito; notifica `proposta_risposta` a tutti i dispositivi del figlio; niente `modifica_regola` doppia al genitore), `POST /api/proposte/{id}/ritira` per chi ha proposto (stato `ritirata`, notifica `proposta_ritirata` all'altro); campo `autore` su ogni proposta; `proposte_inviate` in `GET /api/patto` (`proposte_pendenti` resta quelle a cui risponde il figlio), `proposte_pendenti` in `GET /api/finestra`, `proposte_da_decidere` in `GET /api/famiglia`; una sola pendente per regola di chiunque sia. Database: colonna `autore` e stato `ritirata`, con la copia prima della migrazione.
 **v3.3 — 30/09/2026** (decisione di Andrea): limite sul totale del dispositivo — `app_o_categoria = "totale"` accettato per telefoni e computer, valutato dalle app con lo `sforamento` di sempre (semaforo invariato); nella finestra la regola totale non ha `nome` e il suo limite sta accanto al `totale_minuti` del giorno in `uso_recente` (`limite`, `regola_id`, `bonus`); nel confronto delle proposte "tutto il telefono" / "tutto il computer"; `GET /api/notifiche?dopo_id=N` (solo le non lette arrivate dopo) e risposte `/api/` compresse gzip su richiesta, per l'app del genitore sempre attiva. Nessun cambio al database.

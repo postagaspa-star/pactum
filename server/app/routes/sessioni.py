@@ -60,9 +60,8 @@ ELENCO_MASSIMO = 200
 # La chiusura anticipata (termina): un ts_device a meno di 2 minuti dall'arrivo e' una
 # chiusura fatta con la rete, e vale l'arrivo (cosi' un orologio un po' avanti o
 # indietro non sposta niente). Una chiusura fatta senza rete vale da quando e' stata
-# fatta solo se arriva entro 48 ore.
-TOLLERANZA_OROLOGIO = timedelta(minutes=2)
-RITARDO_MASSIMO = timedelta(hours=48)
+# fatta solo se arriva entro 48 ore. (v3.7) Le tutele stanno in clock.momento_dichiarato:
+# le stesse valgono per l'ora di una sospensione consegnata in ritardo.
 
 NON_TROVATA = "sessione non trovata"
 
@@ -365,17 +364,6 @@ def _chiudi_scadute(conn: sqlite3.Connection, dispositivo_id: int, ora: datetime
     )
 
 
-def _da_ts_device(ts_device: int | None) -> datetime | None:
-    """ts_device (epoch in millisecondi UTC) come istante; None se manca o non e' una
-    data possibile."""
-    if ts_device is None:
-        return None
-    try:
-        return datetime.fromtimestamp(ts_device / 1000, tz=timezone.utc)
-    except (OverflowError, OSError, ValueError):
-        return None
-
-
 def _nome_figlio(conn: sqlite3.Connection, figlio_id: int) -> str:
     return famiglia.figlio_o_404(conn, figlio_id)["nome"]
 
@@ -622,15 +610,9 @@ def termina_sessione(
         aperta = _aperta(conn, chi.dispositivo_id)
         if aperta is None or (corpo.svolta_id is not None and corpo.svolta_id != aperta["id"]):
             raise HTTPException(status_code=404, detail="nessuna sessione in corso")
-        fine = arrivo
-        dal_telefono = _da_ts_device(corpo.ts_device)
-        if (
-            dal_telefono is not None
-            and arrivo - dal_telefono > TOLLERANZA_OROLOGIO
-            and arrivo - dal_telefono <= RITARDO_MASSIMO
-            and datetime.fromisoformat(aperta["inizio_ts"]) <= dal_telefono
-        ):
-            fine = dal_telefono
+        fine = clock.momento_dichiarato(arrivo, corpo.ts_device)
+        if fine < datetime.fromisoformat(aperta["inizio_ts"]):
+            fine = arrivo  # non prima dell'inizio
         if fine >= datetime.fromisoformat(aperta["fine_prevista_ts"]):
             raise HTTPException(status_code=404, detail="nessuna sessione in corso")
         conn.execute(

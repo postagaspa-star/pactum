@@ -2,7 +2,8 @@
 dispositivi"). Qui vivono le letture condivise da piu' endpoint: quale figlio
 vuole il genitore, quali dispositivi ha, qual e' il primo (quello a cui valgono i
 campi di primo livello della finestra per le app 0.7), se un dispositivo tace o
-e' solo spento, (v3.4) come si chiamano le sue app (finestra e proposte)."""
+e' solo spento (v3.7: telefoni e computer), (v3.4) come si chiamano le sue app
+(finestra e proposte)."""
 
 import json
 import sqlite3
@@ -10,6 +11,7 @@ from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 
+from . import clock
 from .config import SOGLIA_SILENZIO_MINUTI
 
 # (v3.1) Le etichette leggibili delle app si cercano nelle fotografie degli ultimi
@@ -90,6 +92,36 @@ def nomi_recenti(conn: sqlite3.Connection, figlio_id: int, oggi) -> dict:
     return nomi
 
 
+def _ultimo_fra_sospensioni_e_riprese(conn: sqlite3.Connection, dispositivo_id: int):
+    """(v3.7) L'ultimo fatto tra sospensioni e riprese del dispositivo, con il suo momento
+    (clock.momento_dichiarato: l'ora del dispositivo per un fatto consegnato in ritardo,
+    con le tutele; altrimenti l'arrivo). Si mettono in fila per momento e, a parita',
+    per ordine d'arrivo (rowid): una sospensione recuperata alla riaccensione e la ripresa
+    dello stesso avvio possono arrivare nello stesso pacco in qualsiasi ordine, e vince
+    quella successa dopo. Con un orologio sano e' lo stesso ordine della coda.
+
+    Un momento non e' mai piu' di 48 ore prima del suo arrivo: l'ultimo fatto e' sempre
+    tra quelli arrivati nelle 48 ore prima dell'ultimo arrivo, e solo quelli si leggono.
+    (tipo, momento ISO) oppure None se il dispositivo non ne ha mai mandati."""
+    tipi = "tipo IN ('sospensione', 'ripresa')"
+    ultimo_arrivo = conn.execute(
+        f"SELECT MAX(ts_server) AS t FROM eventi WHERE dispositivo_id = ? AND {tipi}", (dispositivo_id,)
+    ).fetchone()["t"]
+    if ultimo_arrivo is None:
+        return None
+    dal = clock.iso(datetime.fromisoformat(ultimo_arrivo) - clock.RITARDO_MASSIMO)
+    candidati = []
+    for riga in conn.execute(
+        f"SELECT rowid, tipo, ts_server, ts_device FROM eventi WHERE dispositivo_id = ? AND {tipi}"
+        " AND ts_server >= ?",
+        (dispositivo_id, dal),
+    ).fetchall():
+        momento = clock.momento_dichiarato(datetime.fromisoformat(riga["ts_server"]), riga["ts_device"])
+        candidati.append((momento, riga["rowid"], riga["tipo"]))
+    momento, _, tipo = max(candidati)
+    return tipo, clock.iso(momento)
+
+
 def stato_silenzio(conn: sqlite3.Connection, dispositivo: sqlite3.Row | None, ora: datetime) -> dict:
     """`silente` = nessun battito da piu' di 45 minuti, calcolato in lettura
     sull'orologio del server; `ultimo_battito` null se non e' mai arrivato niente
@@ -98,8 +130,13 @@ def stato_silenzio(conn: sqlite3.Connection, dispositivo: sqlite3.Row | None, or
     (v3) Per un COMPUTER il silenzio dopo una `sospensione` non e'
     un'interruzione: un computer spento la sera e' normale. Finche' dopo la
     sospensione non arriva un segno di vita (un battito o una `ripresa`), il
-    computer e' `spento` dal momento della sospensione e non `silente`. Per i
-    telefoni non cambia niente: `spento` e' sempre false."""
+    computer e' `spento` dal momento della sospensione e non `silente`.
+
+    (v3.7) Lo stesso per i TELEFONI, che ora mandano la sospensione quando si spengono.
+    Il momento della sospensione e' l'ora del dispositivo se e' stata consegnata in
+    ritardo (alla riaccensione), con le tutele delle sessioni; se no, l'arrivo. Un
+    battito conta come segno di vita se e' arrivato dopo quel momento; una ripresa se e'
+    successa dopo (_ultimo_fra_sospensioni_e_riprese)."""
     if dispositivo is None:
         return {"ultimo_battito": None, "silente": True, "spento": False, "spento_dal": None}
     ultimo = conn.execute(
@@ -107,28 +144,16 @@ def stato_silenzio(conn: sqlite3.Connection, dispositivo: sqlite3.Row | None, or
         (dispositivo["id"],),
     ).fetchone()["ultimo"]
 
-    if dispositivo["tipo"] == "computer":
-        # rowid = ordine d'arrivo: sospensione e ripresa possono arrivare nello
-        # stesso pacco (stesso ts_server), nell'ordine della coda del computer.
-        sospensione = conn.execute(
-            "SELECT rowid, ts_server FROM eventi WHERE dispositivo_id = ? AND tipo = 'sospensione'"
-            " ORDER BY rowid DESC LIMIT 1",
-            (dispositivo["id"],),
-        ).fetchone()
-        if sospensione is not None:
-            ripresa_dopo = conn.execute(
-                "SELECT 1 FROM eventi WHERE dispositivo_id = ? AND tipo = 'ripresa' AND rowid > ?"
-                " LIMIT 1",
-                (dispositivo["id"], sospensione["rowid"]),
-            ).fetchone()
-            battito_dopo = ultimo is not None and ultimo > sospensione["ts_server"]
-            if ripresa_dopo is None and not battito_dopo:
-                return {
-                    "ultimo_battito": ultimo,
-                    "silente": False,
-                    "spento": True,
-                    "spento_dal": sospensione["ts_server"],
-                }
+    fatto = _ultimo_fra_sospensioni_e_riprese(conn, dispositivo["id"])
+    if fatto is not None and fatto[0] == "sospensione":
+        spento_dal = fatto[1]
+        if ultimo is None or ultimo <= spento_dal:  # nessun battito dopo: e' spento
+            return {
+                "ultimo_battito": ultimo,
+                "silente": False,
+                "spento": True,
+                "spento_dal": spento_dal,
+            }
 
     if ultimo is None:
         return {"ultimo_battito": None, "silente": True, "spento": False, "spento_dal": None}

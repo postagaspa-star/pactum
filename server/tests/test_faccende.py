@@ -152,13 +152,13 @@ def test_dare_faccende(client, famiglia):
     # l'avviso arriva a tutti i dispositivi di Luca, e a nessun altro
     for headers in (FIGLIO, famiglia.pc):
         (avviso,) = _notifiche(client, headers, "nuove_faccende")
-        assert avviso["messaggio"] == "Mamma ti ha dato 2 faccende"
+        assert avviso["messaggio"] == "Mamma ti ha dato 2 lavori di casa"  # (v3.7)
         assert avviso["payload"] == {"faccenda_ids": [f["id"] for f in date], "blocco_da": ORA, "genitore": MAMMA}
         assert (avviso["destinatario"], avviso["figlio_id"], avviso["dispositivo_id"]) == ("figlio", 1, None)
     assert _notifiche(client, famiglia.tel_sara, "nuove_faccende") == []
     (una,) = _date(client, "Porta fuori il cane")
     assert _notifiche(client, FIGLIO, "nuove_faccende")[-1]["messaggio"] == (
-        "Genitore ti ha dato una faccenda: «Porta fuori il cane»"
+        "Genitore ti ha dato un lavoro di casa: «Porta fuori il cane»"
     )
     assert una["creata_da"] == GENITORE_1
 
@@ -290,7 +290,7 @@ def test_un_blocco_programmato(client, famiglia, orologio):
     assert _foto(client, letto["id"]).status_code == 200
     assert _blocco(client)["attivo"] is False
     (finite,) = _notifiche(client, GENITORE, "faccende_finite")
-    assert finite["messaggio"] == "Luca ha finito le faccende: telefono e computer sbloccati"
+    assert finite["messaggio"] == "Luca ha finito i lavori di casa: telefono e computer sbloccati"
 
 
 def test_le_faccende_fatte_in_anticipo(client, famiglia, orologio):
@@ -301,7 +301,7 @@ def test_le_faccende_fatte_in_anticipo(client, famiglia, orologio):
     orologio.vai_a(datetime(2026, 7, 15, 15, 0, tzinfo=timezone.utc))
     assert _blocco(client) == {"attivo": False, "dal": None, "prossimo": None, "da_fare": []}
     (finite,) = _notifiche(client, GENITORE, "faccende_finite")
-    assert finite["messaggio"] == "Luca ha finito le faccende"
+    assert finite["messaggio"] == "Luca ha finito i lavori di casa"
     assert finite["payload"] == {"faccenda_ids": [lavatrice["id"], letto["id"]]}
 
 
@@ -325,7 +325,7 @@ def test_il_giro_completo(client, famiglia, db_path, orologio):
     assert _blocco(client)["attivo"] is False
     for headers in (GENITORE, famiglia.mamma):
         (finite,) = _notifiche(client, headers, "faccende_finite")
-        assert finite["messaggio"] == "Luca ha finito le faccende: telefono e computer sbloccati"
+        assert finite["messaggio"] == "Luca ha finito i lavori di casa: telefono e computer sbloccati"
         assert finite["payload"] == {"faccenda_ids": [lavatrice["id"], letto["id"]]}
     assert sorted(os.listdir(_cartella(db_path))) == [f"{lavatrice['id']}.jpg", f"{letto['id']}.jpg"]
     # un giro nuovo: faccende_finite elenca solo quelle del suo giro

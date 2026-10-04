@@ -113,10 +113,12 @@ def dai_faccende(
             faccende.registra_storia(conn, faccenda_id, "data", ts, chi.genitore_id)
         firme = Firme(conn)
         chi_le_da = firme.di(chi.genitore_id)
+        # (v3.7) Nei testi che si leggono "lavori di casa", non "faccende" (i nomi
+        # tecnici restano).
         messaggio = (
-            f"{chi_le_da['nome']} ti ha dato una faccenda: «{corpo.faccende[0].titolo}»"
+            f"{chi_le_da['nome']} ti ha dato un lavoro di casa: «{corpo.faccende[0].titolo}»"
             if len(ids) == 1
-            else f"{chi_le_da['nome']} ti ha dato {len(ids)} faccende"
+            else f"{chi_le_da['nome']} ti ha dato {len(ids)} lavori di casa"
         )
         accoda_notifica(
             conn,
@@ -402,7 +404,7 @@ def _consegna(
                 accoda_notifica(
                     conn,
                     "faccende_finite",
-                    f"{nome_figlio} ha finito le faccende"
+                    f"{nome_figlio} ha finito i lavori di casa"  # (v3.7)
                     + (": telefono e computer sbloccati" if sbloccati else ""),
                     {"faccenda_ids": fatte},
                     ts,

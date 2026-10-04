@@ -32,10 +32,12 @@ android {
         // (contratto v3.4). 0.11: le Sessioni (contratto v3.5). 0.12: i
         // preavvisi "il tempo sta per finire" e le pagine animate delle
         // sessioni (nessun cambio al server). 0.13: le faccende e il loro
-        // blocco (contratto v3.6). Nuova funzione = nuovo versionCode,
-        // altrimenti l'auto-aggiornamento non la propone.
-        versionCode = 13
-        versionName = "0.13.0"
+        // blocco (contratto v3.6). 0.14: la sospensione allo spegnimento e il
+        // battito anche in stand-by, "lavori di casa" nei testi (contratto
+        // v3.7). Nuova funzione = nuovo versionCode, altrimenti
+        // l'auto-aggiornamento non la propone.
+        versionCode = 14
+        versionName = "0.14.0"
     }
 
     signingConfigs {

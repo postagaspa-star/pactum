@@ -13,7 +13,9 @@ import eu.stgm.pactum.figlio.faccende.ControlloBlocco
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.servizio.PactumService
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
+import eu.stgm.pactum.figlio.sync.BattitoCadenzato
 import eu.stgm.pactum.figlio.sync.BattitoWorker
+import eu.stgm.pactum.figlio.sync.Spegnimento
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -58,20 +60,26 @@ class BootReceiver : BroadcastReceiver() {
     private fun dopoAccensione(context: Context) {
         BattitoWorker.pianifica(context)
 
-        // La notifica "Pactum sta facendo da testimone" deve tornare da sola
-        // dopo il riavvio: senza, la promessa di trasparenza si rompe in
-        // silenzio finché qualcuno non riapre l'app. FGS specialUse avviabile
-        // da BOOT_COMPLETED (architettura.md); il controllo sull'accesso ai
-        // dati di utilizzo evita di partire prima dell'onboarding.
-        if (PermessiHelper.haAccessoUso(context)) {
-            PactumService.avvia(context)
-        }
-
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val adesso = System.currentTimeMillis()
                 val elapsed = SystemClock.elapsedRealtime()
+                // (0.14, v3.7) Prima di tutto la `sospensione` dello spegnimento
+                // (se l'avviso non l'aveva già messa in coda) e la `ripresa`: in
+                // coda prima che il servizio mandi il primo battito.
+                runCatching { Spegnimento.allaRiaccensione(context, adesso) }
+                // La notifica "Pactum sta facendo da testimone" deve tornare da sola
+                // dopo il riavvio: senza, la promessa di trasparenza si rompe in
+                // silenzio finché qualcuno non riapre l'app. FGS specialUse avviabile
+                // da BOOT_COMPLETED (architettura.md); il controllo sull'accesso ai
+                // dati di utilizzo evita di partire prima dell'onboarding.
+                if (PermessiHelper.haAccessoUso(context)) {
+                    runCatching { PactumService.avvia(context) }
+                }
+                // (0.14) La sveglia del battito anche in stand-by (le sveglie non
+                // sopravvivono al riavvio).
+                runCatching { BattitoCadenzato.programma(context) }
                 // Nuova ancora subito: l'orologio post-riavvio è la nuova base.
                 Impostazioni(context).salvaAncoraTempo(AncoraTempo(adesso, elapsed))
                 // L'osservazione dei siti (v2.3) non sopravvive da sola al

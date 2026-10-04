@@ -19,12 +19,10 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.avviso.Chiamata
 import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
-import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.faccende.ArchivioBlocco
@@ -55,7 +53,10 @@ import eu.stgm.pactum.figlio.sessione.SvoltaLocale
 import eu.stgm.pactum.figlio.sessione.TestoSessioni
 import eu.stgm.pactum.figlio.sessione.nomeSessioneTraVirgolette
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
+import eu.stgm.pactum.figlio.sync.BattitoCadenzato
 import eu.stgm.pactum.figlio.sync.ConsegnaEventi
+import eu.stgm.pactum.figlio.sync.Spegnimento
+import eu.stgm.pactum.figlio.sync.SpegnimentoReceiver
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -124,6 +125,9 @@ class PactumService : Service() {
     // sentinella lo consuma lei.
     private val accensioniFaccende = Channel<Unit>(Channel.CONFLATED)
 
+    // (0.14) L'avviso di spegnimento del telefono (v. onCreate).
+    private val ricevitoreSpegnimento = SpegnimentoReceiver()
+
     // (0.13) La rete che torna: le foto in coda partono subito, e il blocco si richiede.
     private val ascoltoRete = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -186,6 +190,18 @@ class PactumService : Service() {
         } catch (e: Exception) {
             // senza: le foto ripartono al giro, con attesa crescente
         }
+        // (0.14) L'avviso di spegnimento: da Android 9 arriva solo a chi lo
+        // ascolta mentre è vivo. La `sospensione` parte da qui.
+        try {
+            ContextCompat.registerReceiver(
+                this,
+                ricevitoreSpegnimento,
+                IntentFilter().apply { Spegnimento.AZIONI.forEach { addAction(it) } },
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        } catch (e: Exception) {
+            // senza: la `sospensione` la ritrova la riaccensione negli eventi d'uso
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -200,6 +216,8 @@ class PactumService : Service() {
             },
         )
         avviaLoopBattito()
+        // (0.14) La sveglia del battito anche in stand-by.
+        BattitoCadenzato.programma(applicationContext)
         avviaLoopSentinella()
         avviaLoopSerale()
         avviaLoopSessione()
@@ -218,6 +236,11 @@ class PactumService : Service() {
         try {
             getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(ascoltoRete)
         } catch (e: Exception) {
+            // mai registrato
+        }
+        try {
+            unregisterReceiver(ricevitoreSpegnimento)
+        } catch (e: IllegalArgumentException) {
             // mai registrato
         }
         ambito.cancel()
@@ -592,18 +615,17 @@ class PactumService : Service() {
         }
     }
 
+    /**
+     * (0.14) Il battito passa da BattitoCadenzato: un solo lucchetto con la
+     * sveglia dello stand-by e col worker, mai due battiti insieme. Dopo,
+     * la sveglia del prossimo (se non ce n'è già una in arrivo).
+     */
     private suspend fun inviaBattito() {
-        val impostazioni = Impostazioni(applicationContext)
-        val configurazione = impostazioni.leggiConfigurazione()
-        if (!configurazione.completa) return // patto non ancora configurato
-        val consegnato = PostinoClient(configurazione).inviaBattito(
-            Battito(
-                tsDevice = System.currentTimeMillis(),
-                versioneApp = BuildConfig.VERSION_NAME,
-                elapsedRealtime = SystemClock.elapsedRealtime(),
-            ),
-        )
-        if (consegnato) impostazioni.registraBattitoConsegnato()
+        try {
+            BattitoCadenzato.batti(applicationContext)
+        } finally {
+            BattitoCadenzato.programma(applicationContext)
+        }
     }
 
     /**

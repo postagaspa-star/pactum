@@ -71,6 +71,11 @@ class Impostazioni(private val context: Context) {
         val ANCORA_WALL = longPreferencesKey("ancora_wall_clock")
         val ANCORA_ELAPSED = longPreferencesKey("ancora_elapsed_realtime")
         val ULTIMO_BATTITO_OK = longPreferencesKey("ultimo_battito_ok")
+        // (0.14) Lo spegnimento già messo in coda dall'avviso di Android
+        // (orologio a muro), e l'ultimo spegnimento degli eventi d'uso già
+        // guardato alla riaccensione: niente `sospensione` doppie.
+        val SPEGNIMENTO_ANNUNCIATO = longPreferencesKey("spegnimento_annunciato")
+        val SPEGNIMENTO_VISTO = longPreferencesKey("spegnimento_visto")
         val DRIFT_OROLOGIO = longPreferencesKey("drift_orologio_ms")
 
         // Tappa 5.
@@ -375,6 +380,20 @@ class Impostazioni(private val context: Context) {
 
     suspend fun registraAccessoUsoNoto(concesso: Boolean) {
         context.dataStore.edit { p -> p[Chiavi.ACCESSO_USO_NOTO] = concesso }
+    }
+
+    /** (0.14) Quando l'avviso di spegnimento di Android ha messo in coda la `sospensione`. */
+    suspend fun leggiSpegnimentoAnnunciato(): Long? = context.dataStore.data.first()[Chiavi.SPEGNIMENTO_ANNUNCIATO]
+
+    suspend fun registraSpegnimentoAnnunciato(quando: Long) {
+        context.dataStore.edit { p -> p[Chiavi.SPEGNIMENTO_ANNUNCIATO] = quando }
+    }
+
+    /** (0.14) L'ultimo spegnimento (dagli eventi d'uso) già guardato alla riaccensione. */
+    suspend fun leggiSpegnimentoVisto(): Long? = context.dataStore.data.first()[Chiavi.SPEGNIMENTO_VISTO]
+
+    suspend fun registraSpegnimentoVisto(quando: Long) {
+        context.dataStore.edit { p -> p[Chiavi.SPEGNIMENTO_VISTO] = quando }
     }
 
     /** (0.13) L'ultimo stato noto di "Mostra sopra le altre app" (null = mai osservato). */

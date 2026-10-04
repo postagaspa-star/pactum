@@ -35,6 +35,9 @@
          per un'app installata a mano), SCHEDULE_EXACT_ALARM solo su Android 12.
          Se Android non la concede, si ripiega sulla sveglia inesatta. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- (0.14) Il battito in stand-by: la sveglia tiene sveglio il telefono il
+         tempo di un battito (wakelock breve, al massimo un minuto). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
@@ -114,6 +117,28 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_condivisi" />
         </provider>
+
+        <!-- (0.14) La sveglia del battito ogni ~15 minuti, anche in stand-by.
+             Interno: l'invoca solo il PendingIntent di AlarmManager. -->
+        <receiver
+            android:name=".sync.SvegliaBattitoReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- (0.14) L'avviso di spegnimento: da Android 9 arriva solo al
+             ricevitore registrato dal servizio; questo vale per Android 8 e
+             per le varianti di alcune marche. Non esportato: nessun'altra app
+             può far credere a Pactum che il telefono si spenga. -->
+        <receiver
+            android:name=".sync.SpegnimentoReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_SHUTDOWN" />
+                <action android:name="android.intent.action.QUICKBOOT_POWEROFF" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWEROFF" />
+            </intent-filter>
+        </receiver>
 
         <!-- (0.13) La sveglia del blocco programmato delle faccende. Interno:
              l'invoca solo il PendingIntent di AlarmManager. -->

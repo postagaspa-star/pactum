@@ -9,11 +9,9 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.core.app.NotificationManagerCompat
-import eu.stgm.pactum.figlio.BuildConfig
 import eu.stgm.pactum.figlio.aggiornamento.Aggiornatore
 import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
 import eu.stgm.pactum.figlio.dati.AncoraTempo
-import eu.stgm.pactum.figlio.dati.Battito
 import eu.stgm.pactum.figlio.dati.CodaEventi
 import eu.stgm.pactum.figlio.dati.Evento
 import eu.stgm.pactum.figlio.dati.Impostazioni
@@ -156,14 +154,12 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         runCatching { ConsegnaFoto.riprovaSeServe(context, forza = true) }
         runCatching { ControlloBlocco.dopo(context) }
 
-        val battitoOk = postino.inviaBattito(
-            Battito(
-                tsDevice = System.currentTimeMillis(),
-                versioneApp = BuildConfig.VERSION_NAME,
-                elapsedRealtime = SystemClock.elapsedRealtime(),
-            ),
-        )
-        if (battitoOk) impostazioni.registraBattitoConsegnato()
+        // (0.14) Il battito sotto lo stesso lucchetto della sveglia dello
+        // stand-by e del servizio: se ne è partito uno da poco, non se ne fa
+        // un altro (null = non serviva, va bene così). Poi la sveglia del
+        // prossimo, se non ce n'è una in arrivo.
+        val battitoOk = BattitoCadenzato.batti(context) != false
+        BattitoCadenzato.programma(context)
 
         val eventi = coda.inAttesa()
         // (0.13) In pacchi più piccoli se il server dice che il corpo è troppo

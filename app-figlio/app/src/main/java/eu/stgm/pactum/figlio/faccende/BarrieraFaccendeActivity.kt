@@ -31,7 +31,7 @@ import eu.stgm.pactum.figlio.ui.theme.PactumTheme
 import kotlinx.coroutines.delay
 
 /**
- * (0.13) La barriera delle faccende: "Prima le faccende", sopra un'app che
+ * (0.13) La barriera delle faccende: "Prima i lavori di casa", sopra un'app che
  * durante il blocco non si usa. L'elenco delle faccende da fare con chi le ha
  * date, e un solo pulsante, "Apri Pactum", che porta alla pagina Faccende
  * (dove c'è "Scatta la foto"); il tasto indietro fa lo stesso. Se si torna

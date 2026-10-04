@@ -48,6 +48,15 @@ object TipiEvento {
 
     /** Sforamento rilevato dal valutatore locale (max uno per regola per giorno). */
     const val SFORAMENTO = "sforamento"
+
+    /**
+     * (0.14, v3.7) Il telefono si spegne o si riavvia: `{ "motivo": "spegnimento" }`.
+     * Come per il computer, il silenzio dopo non è un'interruzione.
+     */
+    const val SOSPENSIONE = "sospensione"
+
+    /** (0.14, v3.7) Il telefono si è riacceso: `{ "motivo": "avvio", "avvio_sistema_ts": ms }`. */
+    const val RIPRESA = "ripresa"
 }
 
 /** I `sotto_tipo` delle manomissioni che l'app del figlio sa dichiarare. */

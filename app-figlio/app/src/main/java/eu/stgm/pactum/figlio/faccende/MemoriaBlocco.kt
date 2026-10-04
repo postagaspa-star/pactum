@@ -73,7 +73,7 @@ data class MemoriaBlocco(
     val sentitoIl: Long? = null,
     /** Da quando dura questo blocco, senza interruzioni: la chiave dell'avviso. */
     val episodio: Long? = null,
-    /** L'episodio di blocco già annunciato con la notifica "Prima le faccende". */
+    /** L'episodio di blocco già annunciato con la notifica "Prima i lavori di casa". */
     val annunciato: Long? = null,
     /** Il server ha già risposto sulle faccende (v3.6). */
     val conosciuto: Boolean = false,

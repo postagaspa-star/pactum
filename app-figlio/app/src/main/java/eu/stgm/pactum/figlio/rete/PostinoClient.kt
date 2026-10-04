@@ -83,6 +83,30 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         inviaSemplice("/api/battito", json.encodeToString(Battito.serializer(), battito))
 
     /**
+     * (0.14) Pochi eventi mandati di corsa, con un tempo massimo per tutta la
+     * richiesta ([limiteMs]): la `sospensione` mentre il telefono si spegne,
+     * che non deve trattenere lo spegnimento. True se il server li ha presi;
+     * se no restano in coda e partono alla riaccensione (stesso id: il server
+     * non li conta due volte).
+     */
+    suspend fun inviaEventiSubito(eventi: List<Evento>, limiteMs: Long): Boolean {
+        if (eventi.isEmpty()) return true
+        if (!configurazione.completa) return false
+        val corpo = json.encodeToString(PaccoEventi.serializer(), PaccoEventi(eventi))
+        return withContext(Dispatchers.IO) {
+            try {
+                val veloce = http.newBuilder().callTimeout(limiteMs, TimeUnit.MILLISECONDS).build()
+                val richiesta = richiesta("/api/eventi").post(corpo.toRequestBody(JSON_MEDIA_TYPE)).build()
+                veloce.newCall(richiesta).execute().use { it.isSuccessful }
+            } catch (e: IOException) {
+                false
+            } catch (e: IllegalArgumentException) {
+                false
+            }
+        }
+    }
+
+    /**
      * La coda degli eventi, in pacchi (0.13): tutta in una volta, e se il
      * server risponde 413 (corpo oltre 8 MB) in pacchi sempre più piccoli
      * (PacchiEventi). Restituisce quali eventi sono arrivati (o sono da

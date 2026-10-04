@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
  * processore dorme e un "aspetta fino alle 16" dorme con lui. Così si chiede
  * ad Android una sveglia ESATTA (setExactAndAllowWhileIdle, come la vedetta
  * dell'app del genitore): quando suona, il giro delle faccende si sveglia,
- * dice "Prima le faccende" e, se il servizio non c'è, lo rimette in piedi.
+ * dice "Prima i lavori di casa" e, se il servizio non c'è, lo rimette in piedi.
  *
  * USE_EXACT_ALARM da Android 13 (concesso all'installazione), SCHEDULE_EXACT_ALARM
  * su Android 12. Se Android non concede la sveglia esatta si ripiega su quella
@@ -78,7 +78,7 @@ object SvegliaFaccende {
 /**
  * Riceve la sveglia del blocco: sveglia il giro delle faccende e, se il
  * servizio non c'è più, lo rimette in piedi (la sveglia esatta lo permette).
- * In ogni caso l'avviso "Prima le faccende" parte da qui.
+ * In ogni caso l'avviso "Prima i lavori di casa" parte da qui.
  */
 class SvegliaFaccendeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

@@ -270,8 +270,8 @@ class TestoDispositiviTest {
             "le regole e la storia di «%2\$s» restano lì.",
         senzaNomi = "Questo telefono ora è collegato a un dispositivo nuovo: " +
             "le regole e la storia del dispositivo di prima restano lì.",
-        consiglio = "Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga di «%1\$s».",
-        consiglioSenzaNome = "Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» " +
+        consiglio = "Se era lo stesso telefono, chiedi a un genitore un «Nuovo codice» sulla riga di «%1\$s».",
+        consiglioSenzaNome = "Se era lo stesso telefono, chiedi a un genitore un «Nuovo codice» " +
             "sulla riga del dispositivo di prima.",
     )
 
@@ -280,7 +280,7 @@ class TestoDispositiviTest {
         assertEquals(
             "Questo telefono ora è collegato come «Telefono di Andrea», un dispositivo nuovo: " +
                 "le regole e la storia di «Telefono» restano lì. " +
-                "Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga di «Telefono».",
+                "Se era lo stesso telefono, chiedi a un genitore un «Nuovo codice» sulla riga di «Telefono».",
             testoCambioDispositivo(CambioDispositivo(" Telefono di Andrea ", "Telefono "), paroleCambio),
         )
     }
@@ -299,7 +299,7 @@ class TestoDispositiviTest {
     fun `con un nome che manca la frase senza nomi, mai virgolette vuote`() {
         val senzaNomi = "Questo telefono ora è collegato a un dispositivo nuovo: " +
             "le regole e la storia del dispositivo di prima restano lì. " +
-            "Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga del dispositivo di prima."
+            "Se era lo stesso telefono, chiedi a un genitore un «Nuovo codice» sulla riga del dispositivo di prima."
         assertEquals(senzaNomi, testoCambioDispositivo(CambioDispositivo("Telefono di Andrea", ""), paroleCambio))
         assertEquals(senzaNomi, testoCambioDispositivo(CambioDispositivo(" ", "Telefono"), paroleCambio))
         assertFalse(testoCambioDispositivo(CambioDispositivo("", "", primaScollegato = true), paroleCambio).contains("«»"))

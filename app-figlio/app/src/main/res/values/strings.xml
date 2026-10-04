@@ -33,7 +33,7 @@
          stato_silenzio con spento), più dichiarazioni, proposte e avvisi del
          genitore, e la sezione "Sul computer" dei Siti visitati. Se la finestra
          cambia, questo elenco cambia con lei. -->
-    <string name="cosa_vede_titolo">Cosa vede tuo padre</string>
+    <string name="cosa_vede_titolo">Cosa vedono i tuoi genitori</string>
     <string name="cosa_vede_intro">Qui c\'è tutto quello che arriva nella sua app, detto per intero. Niente di più, niente di nascosto.</string>
     <string name="cosa_vede_si_titolo">COSA VEDE</string>
     <string-array name="cosa_vede_si">
@@ -42,7 +42,7 @@
         <item>Le tue regole di ogni dispositivo, anche quelle che hai tolto: come sono cambiate, se le avete concordate e da quando le potrai allentare.</item>
         <item>La striscia degli ultimi 8 giorni, la stessa che vedi tu in Oggi, anche dispositivo per dispositivo e regola per regola.</item>
         <item>I giorni fuori regola: su quale regola, di quanti minuti sei andato oltre e quando è stato registrato.</item>
-        <item>Le interruzioni nella registrazione, e quando. Per esempio telefono spento a lungo, permessi tolti, notifiche spente, osservazione dei siti spenta, ora cambiata a mano; sul computer anche il programma Pactum chiuso mentre il computer era acceso, e i siti che per un po\' non si riescono a leggere.</item>
+        <item>Le interruzioni nella registrazione, e quando. Per esempio permessi tolti, notifiche spente, osservazione dei siti spenta, ora cambiata a mano, Pactum fermato dalle Impostazioni mentre il telefono era bloccato per i lavori di casa; sul computer anche il programma Pactum chiuso mentre il computer era acceso, e i siti che per un po\' non si riescono a leggere.</item>
         <item>I bonus che ti dai: quanti minuti, su quale regola e il perché, se lo scrivi. E quanti minuti di bonus ti sei dato in ciascuno degli ultimi 8 giorni, dispositivo per dispositivo.</item>
         <item>Le tue dichiarazioni nel Diario, con la tua nota, e se sono state confermate.</item>
         <item>Le proposte che gli mandi, con il tuo perché se lo scrivi, e le tue risposte alle sue proposte, con la tua motivazione se la scrivi.</item>
@@ -50,14 +50,15 @@
         <item>Il tempo passato in TUTTE le app del telefono, giorno per giorno negli ultimi 8 giorni, anche per categoria, con la media della settimana e del mese. Il tempo nelle app di una sessione, mentre è in corso, non è nei tempi delle app: vede la sessione, quanto è durata e i minuti passati in sessione.</item>
         <item>I siti visitati sul telefono, se hai acceso l\'osservazione: solo il nome del sito e quante volte al giorno. E se per una parte della giornata il telefono ha tenuto nascosti i nomi dei siti.</item>
         <item>Sul computer: il tempo passato in ogni programma, giorno per giorno, anche per categoria, con la media della settimana e del mese; i siti, con quante volte e quanti minuti al giorno; se il computer è acceso o spento, e da quando è spento.</item>
-        <item>Per ogni dispositivo, quando ha inviato l\'ultimo aggiornamento, e se non ne invia da più di tre quarti d\'ora. Quando spegni il computer, lui vede che è spento: non conta come silenzio.</item>
-        <item>Un avviso quando crei, cambi o elimini una regola o una sessione, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, gli mandi o ritiri una proposta, rispondi a una sua proposta, o quando c\'è un\'interruzione nella registrazione.</item>
+        <item>I lavori di casa che ti dà: quando sono fatti, la foto che scatti da Pactum per ognuno (la tiene 30 giorni), le bocciature e gli annullamenti. E se il telefono è bloccato per i lavori di casa.</item>
+        <item>Per ogni dispositivo, quando ha inviato l\'ultimo aggiornamento, e se non ne invia da più di tre quarti d\'ora. Quando spegni il telefono o il computer, vede che è spento e da quando: non conta come silenzio.</item>
+        <item>Un avviso quando crei, cambi o elimini una regola o una sessione, ti dai un bonus, vai oltre una regola, dichiari qualcosa nel Diario, gli mandi o ritiri una proposta, rispondi a una sua proposta, mandi la foto di un lavoro di casa, finisci i lavori di casa, o quando c\'è un\'interruzione nella registrazione.</item>
     </string-array>
     <string name="cosa_vede_no_titolo">COSA RESTA FUORI</string>
     <string-array name="cosa_vede_no">
         <item>I messaggi e le chat.</item>
         <item>Quello che guardi, leggi o ascolti dentro le app, i programmi e i siti.</item>
-        <item>Le foto, i video e i tuoi file.</item>
+        <item>Le foto, i video e i tuoi file. Vede solo le foto dei lavori di casa che scatti da Pactum, e senza dati nascosti (niente posizione).</item>
         <item>Quello che scrivi o cerchi.</item>
         <item>Gli indirizzi completi delle pagine: vede youtube.com, mai quale video.</item>
         <item>I titoli delle pagine e delle finestre: sul computer non vengono mai letti.</item>
@@ -203,11 +204,11 @@
     <string name="collega_altro_dispositivo_senza_nomi">Questo telefono ora è collegato a un dispositivo nuovo: le regole e la storia del dispositivo di prima restano lì.</string>
     <!-- Segue la frase qui sopra, solo se il dispositivo di prima non è stato scollegato
          (a un dispositivo scollegato il genitore non può più dare un codice). -->
-    <string name="collega_altro_dispositivo_consiglio">Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga di «%1$s».</string>
-    <string name="collega_altro_dispositivo_consiglio_senza_nome">Se era lo stesso telefono, chiedi a tuo padre un «Nuovo codice» sulla riga del dispositivo di prima.</string>
+    <string name="collega_altro_dispositivo_consiglio">Se era lo stesso telefono, chiedi a un genitore un «Nuovo codice» sulla riga di «%1$s».</string>
+    <string name="collega_altro_dispositivo_consiglio_senza_nome">Se era lo stesso telefono, chiedi a un genitore un «Nuovo codice» sulla riga del dispositivo di prima.</string>
     <!-- (v3.1) Il codice è di un dispositivo di un altro tipo: il server non l'ha consumato. -->
-    <string name="collega_tipo_computer">Questo codice è per un computer, non per questo telefono: chiedi a tuo padre il codice giusto.</string>
-    <string name="collega_tipo_altro">Questo codice non è per questo telefono: chiedi a tuo padre il codice giusto.</string>
+    <string name="collega_tipo_computer">Questo codice è per un computer, non per questo telefono: chiedi a un genitore il codice giusto.</string>
+    <string name="collega_tipo_altro">Questo codice non è per questo telefono: chiedi a un genitore il codice giusto.</string>
     <string name="collega_codice_non_valido">Codice non valido: forse è sbagliato, è scaduto (vale 15 minuti) o è già stato usato. Chiedine uno nuovo al genitore.</string>
     <string name="collega_troppi_tentativi">Troppi codici sbagliati: il server ne accetta di nuovo tra %1$s, anche quello giusto.</string>
     <string name="collega_server_senza_codici">A questo indirizzo il server non riconosce i codici di 6 cifre. Controlla l\'indirizzo: se è giusto, il server va aggiornato.</string>
@@ -787,26 +788,26 @@
     <string name="tema_relax">Relax</string>
     <string name="tema_programmazione">Programmazione</string>
     <string name="tema_stelline">Stelline</string>
-    <!-- (0.13) Le faccende (contratto v3.6): un genitore dà al figlio delle faccende di casa e,
+    <!-- (0.13) Le faccende (contratto v3.6; nei testi "lavori di casa" dalla 0.14, v3.7): un genitore dà al figlio delle faccende di casa e,
          finché non arriva una foto per ognuna, il telefono è bloccato tranne poche app. -->
-    <string name="scheda_faccende">Faccende</string>
-    <string name="faccende_titolo">Faccende</string>
-    <string name="faccende_caricamento">Sto leggendo le faccende…</string>
-    <string name="faccende_server_da_aggiornare">Per le faccende serve aggiornare il server di Pactum.</string>
-    <string name="faccende_vuoto">Nessuna faccenda da fare.</string>
-    <string name="faccende_intro">Le faccende te le dà un genitore. Quando ne hai fatta una, scatta la foto da qui: arriva al genitore e la faccenda è fatta.</string>
-    <string name="faccende_bloccato">Prima le faccende: il telefono è bloccato</string>
-    <string name="faccende_bloccato_spiega">Si sblocca da solo quando è arrivata la foto di ogni faccenda.</string>
+    <string name="scheda_faccende">Lavori di casa</string>
+    <string name="faccende_titolo">Lavori di casa</string>
+    <string name="faccende_caricamento">Sto leggendo i lavori di casa…</string>
+    <string name="faccende_server_da_aggiornare">Per i lavori di casa serve aggiornare il server di Pactum.</string>
+    <string name="faccende_vuoto">Nessun lavoro di casa da fare.</string>
+    <string name="faccende_intro">I lavori di casa te li dà un genitore. Quando ne hai fatto uno, scatta la foto da qui: arriva al genitore e il lavoro è fatto.</string>
+    <string name="faccende_bloccato">Prima i lavori di casa: il telefono è bloccato</string>
+    <string name="faccende_bloccato_spiega">Si sblocca da solo quando è arrivata la foto di ogni lavoro.</string>
     <string name="faccende_usabili">Intanto puoi usare Telefono, SMS, Contatti, Fotocamera, Foto, Wallet, eWeLink, Tinaba e Impostazioni.</string>
-    <string name="faccende_prossimo_alle">Se non le hai fatte, alle %1$s il telefono si blocca</string>
-    <string name="faccende_prossimo_domani">Se non le hai fatte, domani alle %1$s il telefono si blocca</string>
-    <string name="faccende_prossimo_giorno">Se non le hai fatte, %1$s alle %2$s il telefono si blocca</string>
-    <string name="faccende_anticipo">Puoi farle anche prima: se arrivano tutte le foto prima di allora, il blocco non parte.</string>
+    <string name="faccende_prossimo_alle">Se non li hai fatti, alle %1$s il telefono si blocca</string>
+    <string name="faccende_prossimo_domani">Se non li hai fatti, domani alle %1$s il telefono si blocca</string>
+    <string name="faccende_prossimo_giorno">Se non li hai fatti, %1$s alle %2$s il telefono si blocca</string>
+    <string name="faccende_anticipo">Puoi farli anche prima: se arrivano tutte le foto prima di allora, il blocco non parte.</string>
     <string name="faccende_sezione_da_fare">Da fare</string>
-    <string name="faccende_sezione_chiuse">Fatte e annullate</string>
+    <string name="faccende_sezione_chiuse">Fatti e annullati</string>
     <string name="faccende_genitore_senza_nome">Il genitore</string>
-    <string name="faccenda_senza_titolo">Faccenda senza titolo</string>
-    <!-- Sulla barriera, sotto il titolo della faccenda: chi te l'ha data. -->
+    <string name="faccenda_senza_titolo">Lavoro senza titolo</string>
+    <!-- Sulla barriera, sotto il titolo del lavoro: chi te l'ha dato. -->
     <string name="faccenda_da">da %1$s</string>
     <string name="faccenda_data_da">Da %1$s</string>
     <string name="faccenda_nota">Nota: %1$s</string>
@@ -814,64 +815,64 @@
     <string name="faccenda_blocca_alle">Blocca il telefono dalle %1$s</string>
     <string name="faccenda_blocca_domani">Blocca il telefono domani dalle %1$s</string>
     <string name="faccenda_blocca_giorno">Blocca il telefono %1$s dalle %2$s</string>
-    <string name="faccenda_bocciata">%1$s ha bocciato la foto: rifalla e scattane un\'altra.</string>
+    <string name="faccenda_bocciata">%1$s ha bocciato la foto: rifai il lavoro e scattane un\'altra.</string>
     <string name="faccenda_bocciata_con_nota">%1$s ha bocciato la foto: «%2$s»</string>
     <plurals name="faccenda_bocciature">
-        <item quantity="one">Bocciata una volta</item>
-        <item quantity="other">Bocciata %1$d volte</item>
+        <item quantity="one">Bocciato una volta</item>
+        <item quantity="other">Bocciato %1$d volte</item>
     </plurals>
     <string name="faccenda_foto_in_coda">Foto pronta: parte da sola appena c\'è rete</string>
     <string name="faccenda_foto_mandata">Foto mandata</string>
     <string name="faccenda_foto_rifiutata">La foto non è stata accettata: scattane un\'altra.</string>
     <string name="faccenda_scatta">Scatta la foto</string>
     <string name="faccenda_scatta_di_nuovo">Scatta di nuovo</string>
-    <string name="faccenda_stato_fatta">Fatta</string>
-    <string name="faccenda_stato_annullata">Annullata</string>
+    <string name="faccenda_stato_fatta">Fatto</string>
+    <string name="faccenda_stato_annullata">Annullato</string>
     <string name="faccenda_foto_arrivata">Foto arrivata: %1$s</string>
     <string name="faccenda_vedi_foto">Vedi la foto</string>
     <string name="faccenda_foto_non_piu">La foto non c\'è più: si tiene 30 giorni.</string>
-    <string name="faccenda_annullata_da">Annullata da %1$s</string>
-    <string name="faccenda_foto_descrizione">La foto della faccenda</string>
+    <string name="faccenda_annullata_da">Annullato da %1$s</string>
+    <string name="faccenda_foto_descrizione">La foto del lavoro</string>
     <string name="faccenda_foto_non_c_e">Questa foto non c\'è più.</string>
     <string name="faccenda_foto_non_scaricata">Non riesco a scaricare la foto: controlla la connessione e riprova.</string>
     <string name="faccende_foto_pronta">Foto pronta: la mando adesso. Se manca la rete, parte da sola appena torna.</string>
     <string name="faccende_foto_non_riuscita">Non sono riuscito a preparare la foto: scattala di nuovo.</string>
     <string name="faccende_nessuna_fotocamera">Su questo telefono non trovo una fotocamera da aprire.</string>
-    <!-- La barriera delle faccende: un solo pulsante, Apri Pactum, che porta alla pagina Faccende. -->
-    <string name="barriera_faccende_titolo">Prima le faccende</string>
-    <string name="barriera_faccende_testo">Il telefono è bloccato finché non arriva la foto di ogni faccenda. Le foto si scattano da Pactum.</string>
+    <!-- La barriera dei lavori di casa: un solo pulsante, Apri Pactum, che porta alla pagina Lavori di casa. -->
+    <string name="barriera_faccende_titolo">Prima i lavori di casa</string>
+    <string name="barriera_faccende_testo">Il telefono è bloccato finché non arriva la foto di ogni lavoro. Le foto si scattano da Pactum.</string>
     <string name="barriera_faccende_apri">Apri Pactum</string>
     <!-- La copertura sopra una finestrella (picture-in-picture) o uno schermo diviso durante il blocco. -->
     <string name="finestrella_testo">Una finestrella o lo schermo diviso mostra un\'app che durante il blocco non si usa. Chiudila: tocca «Chiudi la finestrella» e trascinala sulla X, oppure chiudi lo schermo diviso.</string>
     <string name="finestrella_aiuto">Se non vedi nessuna finestrella, spegni e riaccendi lo schermo.</string>
     <string name="finestrella_chiudi">Chiudi la finestrella</string>
     <!-- 401 sul blocco: questo telefono non è più collegato, e il blocco è tolto. -->
-    <string name="faccende_scollegato">Questo telefono non è più collegato a Pactum: il blocco delle faccende è tolto. Chiedi al genitore un codice nuovo e inseriscilo nelle Impostazioni.</string>
-    <!-- Prima delle schede, quando c'è un blocco o ci sono faccende: per arrivare al resto. -->
+    <string name="faccende_scollegato">Questo telefono non è più collegato a Pactum: il blocco dei lavori di casa è tolto. Chiedi al genitore un codice nuovo e inseriscilo nelle Impostazioni.</string>
+    <!-- Prima delle schede, quando c'è un blocco o ci sono lavori di casa: per arrivare al resto. -->
     <string name="faccende_poi_prima_regola">Crea la prima regola</string>
     <string name="faccende_poi_permessi">Dai i permessi a Pactum</string>
     <string name="faccende_poi_cosa_vede">Leggi cosa vede il genitore</string>
-    <string name="faccende_torna">Hai delle faccende da fare: torna alle faccende</string>
-    <!-- Con il blocco delle faccende le sessioni non si iniziano. -->
-    <string name="sessione_blocco_faccende">Prima le faccende: le sessioni si iniziano quando le hai fatte.</string>
-    <string name="sessione_esito_blocco_faccende">Prima le faccende: finché non le hai fatte, le sessioni non si iniziano.</string>
-    <!-- Le notifiche delle faccende, col nome vero del genitore. -->
-    <string name="canale_faccende_nome">Faccende</string>
-    <string name="canale_faccende_descrizione">Le faccende che ti dà un genitore, quando il telefono si blocca, le foto bocciate e le faccende annullate.</string>
-    <string name="tipo_faccende">Faccende</string>
-    <string name="notifica_blocco_partito">Prima le faccende: il telefono è bloccato</string>
-    <string name="notifica_blocco_partito_testo">Si sblocca da solo quando è arrivata la foto di ogni faccenda. Le trovi in Pactum.</string>
+    <string name="faccende_torna">Torna ai lavori di casa da fare</string>
+    <!-- Con il blocco dei lavori di casa le sessioni non si iniziano. -->
+    <string name="sessione_blocco_faccende">Prima i lavori di casa: le sessioni si iniziano quando li hai fatti.</string>
+    <string name="sessione_esito_blocco_faccende">Prima i lavori di casa: finché non li hai fatti, le sessioni non si iniziano.</string>
+    <!-- Le notifiche dei lavori di casa, col nome vero del genitore. -->
+    <string name="canale_faccende_nome">Lavori di casa</string>
+    <string name="canale_faccende_descrizione">I lavori di casa che ti dà un genitore, quando il telefono si blocca, le foto bocciate e i lavori annullati.</string>
+    <string name="tipo_faccende">Lavori di casa</string>
+    <string name="notifica_blocco_partito">Prima i lavori di casa: il telefono è bloccato</string>
+    <string name="notifica_blocco_partito_testo">Si sblocca da solo quando è arrivata la foto di ogni lavoro. I lavori li trovi in Pactum.</string>
     <plurals name="notifica_faccende_nuove">
-        <item quantity="one">%1$s ti ha dato una faccenda</item>
-        <item quantity="other">%1$s ti ha dato %2$d faccende</item>
+        <item quantity="one">%1$s ti ha dato un lavoro di casa</item>
+        <item quantity="other">%1$s ti ha dato %2$d lavori di casa</item>
     </plurals>
     <string name="notifica_faccende_blocco_subito">%1$s · blocco da subito</string>
     <string name="notifica_faccende_blocco_alle">%1$s · blocco dalle %2$s</string>
     <string name="notifica_faccende_blocco_domani">%1$s · blocco domani dalle %2$s</string>
     <string name="notifica_faccende_blocco_giorno">%1$s · blocco %2$s dalle %3$s</string>
-    <string name="notifica_faccende_nuove_testo">Quando ne hai fatta una, scatta la foto da Pactum.</string>
+    <string name="notifica_faccende_nuove_testo">Quando ne hai fatto uno, scatta la foto da Pactum.</string>
     <string name="notifica_faccenda_bocciata">%1$s ha bocciato «%2$s»</string>
-    <string name="notifica_faccenda_bocciata_testo">Rifalla e scatta un\'altra foto da Pactum: fino ad allora il telefono resta bloccato.</string>
+    <string name="notifica_faccenda_bocciata_testo">Rifai il lavoro e scatta un\'altra foto da Pactum: fino ad allora il telefono resta bloccato.</string>
     <string name="notifica_faccenda_annullata">%1$s ha annullato «%2$s»</string>
-    <string name="notifica_faccenda_annullata_testo">Questa non la devi più fare.</string>
+    <string name="notifica_faccenda_annullata_testo">Questo lavoro non lo devi più fare.</string>
 </resources>

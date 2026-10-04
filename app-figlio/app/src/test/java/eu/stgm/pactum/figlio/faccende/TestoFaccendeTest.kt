@@ -9,8 +9,8 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /**
- * (0.13) Le parole delle notifiche delle faccende, col nome vero del
- * genitore: "Mamma ti ha dato 3 faccende · blocco dalle 16:00".
+ * (0.13) Le parole delle notifiche dei lavori di casa (0.14), col nome vero
+ * del genitore: "Mamma ti ha dato 3 lavori di casa · blocco dalle 16:00".
  */
 class TestoFaccendeTest {
 
@@ -23,16 +23,16 @@ class TestoFaccendeTest {
         ZonedDateTime.of(2026, 10, giorno, ore, minuti, 0, 0, roma).toInstant().toEpochMilli()
 
     private val parole = ParoleFaccende(
-        nuove = { nome, quante -> if (quante == 1) "$nome ti ha dato una faccenda" else "$nome ti ha dato $quante faccende" },
+        nuove = { nome, quante -> if (quante == 1) "$nome ti ha dato un lavoro di casa" else "$nome ti ha dato $quante lavori di casa" },
         bloccoSubito = "%1\$s · blocco da subito",
         bloccoAlle = "%1\$s · blocco dalle %2\$s",
         bloccoDomani = "%1\$s · blocco domani dalle %2\$s",
         bloccoGiorno = "%1\$s · blocco %2\$s dalle %3\$s",
-        nuoveTesto = "Quando ne hai fatta una, scatta la foto da Pactum.",
+        nuoveTesto = "Quando ne hai fatto uno, scatta la foto da Pactum.",
         bocciata = "%1\$s ha bocciato «%2\$s»",
-        bocciataTesto = "Rifalla e scatta un'altra foto.",
+        bocciataTesto = "Rifai il lavoro e scatta un'altra foto.",
         annullata = "%1\$s ha annullato «%2\$s»",
-        annullataTesto = "Questa non la devi più fare.",
+        annullataTesto = "Questo lavoro non lo devi più fare.",
         genitoreSenzaNome = "Il genitore",
     )
 
@@ -50,32 +50,32 @@ class TestoFaccendeTest {
     }
 
     @Test
-    fun `Mamma ti ha dato 3 faccende - blocco dalle 16`() {
+    fun `Mamma ti ha dato 3 lavori di casa - blocco dalle 16`() {
         val p = payload("""{ "faccenda_ids": [5, 6, 7], "blocco_da": "2026-10-02T14:00:00+00:00", "genitore": { "id": 2, "nome": "Mamma" } }""")
         val (titolo, testo) = TestoFaccende.avvisoNuove(p, listOf("Svuota la lavastoviglie", "Porta fuori il cane"), adesso, roma, parole)!!
-        assertEquals("Mamma ti ha dato 3 faccende · blocco dalle 16:00", titolo)
-        assertEquals("«Svuota la lavastoviglie», «Porta fuori il cane»\nQuando ne hai fatta una, scatta la foto da Pactum.", testo)
+        assertEquals("Mamma ti ha dato 3 lavori di casa · blocco dalle 16:00", titolo)
+        assertEquals("«Svuota la lavastoviglie», «Porta fuori il cane»\nQuando ne hai fatto uno, scatta la foto da Pactum.", testo)
     }
 
     @Test
-    fun `una faccenda, subito, da Papà`() {
+    fun `un lavoro di casa, subito, da Papà`() {
         val p = payload("""{ "faccenda_ids": [5], "blocco_da": "2026-10-02T13:00:00+00:00", "genitore": { "id": 3, "nome": "Papà" } }""")
         val (titolo, testo) = TestoFaccende.avvisoNuove(p, emptyList(), adesso, roma, parole)!!
-        assertEquals("Papà ti ha dato una faccenda · blocco da subito", titolo)
-        assertEquals("Quando ne hai fatta una, scatta la foto da Pactum.", testo)
+        assertEquals("Papà ti ha dato un lavoro di casa · blocco da subito", titolo)
+        assertEquals("Quando ne hai fatto uno, scatta la foto da Pactum.", testo)
     }
 
     @Test
     fun `senza il nome del genitore, e domani`() {
         val p = payload("""{ "faccenda_ids": [5, 6], "blocco_da": "2026-10-03T07:00:00Z" }""")
         assertEquals(
-            "Il genitore ti ha dato 2 faccende · blocco domani dalle 09:00",
+            "Il genitore ti ha dato 2 lavori di casa · blocco domani dalle 09:00",
             TestoFaccende.avvisoNuove(p, emptyList(), adesso, roma, parole)!!.first,
         )
     }
 
     @Test
-    fun `un payload senza le faccende vale il messaggio del server`() {
+    fun `un payload senza i lavori vale il messaggio del server`() {
         assertNull(TestoFaccende.avvisoNuove(payload("""{ "genitore": { "nome": "Mamma" } }"""), emptyList(), adesso, roma, parole))
         assertNull(TestoFaccende.avvisoNuove(payload("""{ "faccenda_ids": [] }"""), emptyList(), adesso, roma, parole))
     }
@@ -87,10 +87,10 @@ class TestoFaccendeTest {
             parole,
         )!!
         assertEquals("Mamma ha bocciato «Svuota la lavastoviglie»", con.first)
-        assertEquals("«anche le pentole»\nRifalla e scatta un'altra foto.", con.second)
+        assertEquals("«anche le pentole»\nRifai il lavoro e scatta un'altra foto.", con.second)
         val senza = TestoFaccende.avvisoBocciata(payload("""{ "faccenda_id": 5, "titolo": "Rifai il letto", "nota": null }"""), parole)!!
         assertEquals("Il genitore ha bocciato «Rifai il letto»", senza.first)
-        assertEquals("Rifalla e scatta un'altra foto.", senza.second)
+        assertEquals("Rifai il lavoro e scatta un'altra foto.", senza.second)
         assertNull(TestoFaccende.avvisoBocciata(payload("""{ "faccenda_id": 5 }"""), parole))
     }
 
@@ -101,11 +101,11 @@ class TestoFaccendeTest {
             parole,
         )!!
         assertEquals("Papà ha annullato «Rifai il letto»", titolo)
-        assertEquals("Questa non la devi più fare.", testo)
+        assertEquals("Questo lavoro non lo devi più fare.", testo)
     }
 
     @Test
-    fun `gli id delle faccende nuove`() {
+    fun `gli id dei lavori nuovi`() {
         assertEquals(listOf(5L, 6L), TestoFaccende.idNuove(payload("""{ "faccenda_ids": [5, 6, "x"] }""")))
         assertEquals(emptyList<Long>(), TestoFaccende.idNuove(payload("""{ }""")))
     }

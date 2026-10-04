@@ -27,7 +27,7 @@ import kotlinx.coroutines.withContext
  *   il worker, col patto.
  * - [daPatto]: il `blocco` e le `faccende` di ogni `GET /api/patto`.
  * - [dopo]: dopo ogni cambio (e a ogni giro, perché il blocco parte anche da
- *   solo all'ora di `prossimo`): l'avviso "Prima le faccende" (che sparisce
+ *   solo all'ora di `prossimo`): l'avviso "Prima i lavori di casa" (che sparisce
  *   quando il blocco finisce), la sveglia per il prossimo blocco, i permessi
  *   tolti durante il blocco.
  *
@@ -208,7 +208,7 @@ object ControlloBlocco {
         }
     }
 
-    /** "Prima le faccende: il telefono è bloccato", una volta per blocco; quando finisce, via dalla tendina. */
+    /** "Prima i lavori di casa: il telefono è bloccato", una volta per blocco; quando finisce, via dalla tendina. */
     private fun annunciaSeServe(app: Context, memoria: MemoriaBlocco, ora: Istante, bloccato: Boolean) {
         if (!bloccato) {
             AvvisiLocali.cancella(app, AvvisiLocali.ID_BLOCCO_FACCENDE)

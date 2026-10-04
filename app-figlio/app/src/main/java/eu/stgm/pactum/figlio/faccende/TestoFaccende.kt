@@ -34,7 +34,7 @@ sealed interface QuandoBlocca {
  * così la logica resta pura e si prova senza Android.
  */
 data class ParoleFaccende(
-    /** (nome del genitore, quante) → "Mamma ti ha dato 3 faccende" / "…una faccenda". */
+    /** (nome del genitore, quante) → "Mamma ti ha dato 3 lavori di casa" / "…un lavoro di casa". */
     val nuove: (String, Int) -> String,
     /** (frase, …) → "… · blocco da subito". */
     val bloccoSubito: String,
@@ -58,7 +58,7 @@ data class ParoleFaccende(
 
 /**
  * (0.13) Le parole delle faccende (logica pura). Il nome del genitore viene
- * dal payload della notifica: "Mamma ti ha dato 3 faccende · blocco dalle 16:00".
+ * dal payload della notifica: "Mamma ti ha dato 3 lavori di casa · blocco dalle 16:00".
  */
 object TestoFaccende {
 

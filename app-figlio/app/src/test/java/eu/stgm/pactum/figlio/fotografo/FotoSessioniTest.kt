@@ -121,6 +121,17 @@ class FotoSessioniTest : Fotografo() {
     }
 
     @Test
+    fun dialogoAvvioAltro() {
+        Mondo.collegato(app)
+        scatta("08-sessioni-dialogo-inizia-altro", "(0.16) Dialogo «Inizia»: cosa resta usabile, con «Cos'altro resta usabile» aperto", pagine = false) {
+            sessioni {
+                tocca("Inizia", 0)
+                toccaNelDialogo("Cos'altro resta usabile")
+            }
+        }
+    }
+
+    @Test
     fun dialogoAvvioSenzaPermesso() {
         Mondo.collegato(app)
         Mondo.permessi(app, sopra = false)

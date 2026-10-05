@@ -227,13 +227,31 @@ class PreavvisiTest {
     // --- categorie e tutto il telefono ---------------------------------------------
 
     @Test
-    fun `una categoria somma le sue app al secondo`() {
+    fun `una categoria somma i minuti interi delle sue app, come il valutatore e Oggi`() {
         val regola = limite(3, social, 60)
-        // Instagram 30:30 + TikTok 25:00 = 55:30: mancano 4 minuti e mezzo.
+        // Instagram 30:30 + TikTok 25:00: 30 + 25 = 55 minuti interi (Oggi dice 55): mancano 5 minuti.
         val preavviso = daDare(listOf(regola), indice(instagram to 30 * min + 30 * sec, tiktok to 25 * min, whatsapp to 40 * min)).single()
         assertEquals(5, preavviso.soglia)
         assertEquals(5, preavviso.minutiMancanti)
         assertEquals(social, preavviso.chiave)
+        // (0.16) Instagram 30:50 + TikTok 24:50 = 55:40 veri, ma 30 + 24 = 54 interi: niente ancora.
+        assertTrue(daDare(listOf(regola), indice(instagram to 30 * min + 50 * sec, tiktok to 24 * min + 50 * sec)).isEmpty())
+        // A 59 minuti interi "manca 1 minuto", anche se i secondi veri sono di più.
+        val uno = daDare(
+            listOf(regola),
+            indice(instagram to 30 * min + 50 * sec, tiktok to 29 * min + 50 * sec),
+            setOf(Preavvisi.chiave(3, giorno, 60, 5)),
+        ).single()
+        assertEquals(1, uno.soglia)
+        assertEquals(1, uno.minutiMancanti)
+    }
+
+    @Test
+    fun `una categoria, il giro dopo al minuto intero dell'app davanti`() {
+        val regola = limite(3, social, 60)
+        // 30:50 + 24:50 = 54 interi: alla soglia dei 5 (55) quando Instagram passa i 31 minuti, fra 10 s.
+        val uso = indice(instagram to 30 * min + 50 * sec, tiktok to 24 * min + 50 * sec)
+        assertEquals(10 * sec, prossima(listOf(regola), uso, listOf(AppDavanti(instagram))))
     }
 
     @Test

@@ -9,6 +9,8 @@ import eu.stgm.pactum.design.VoceMenu
 import eu.stgm.pactum.design.MenuAzioni
 import eu.stgm.pactum.design.RigaToccabile
 import eu.stgm.pactum.design.FilaPulsanti
+import eu.stgm.pactum.design.FoglioDalBasso
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import eu.stgm.pactum.design.Tono
 import eu.stgm.pactum.design.TitoloSezione
 import androidx.compose.foundation.background
@@ -162,6 +164,8 @@ fun RegoleScreen(
     var bloccoTesto by rememberSaveable { mutableStateOf<String?>(null) }
     // (0.15) La proposta del figlio da ritirare ("Ritira la proposta" nel ⋯).
     var daRitirareId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // (0.16) La tua proposta aperta nel foglio dal basso (dalla card della regola).
+    var propostaApertaId by rememberSaveable { mutableStateOf<Long?>(null) }
     // L'ultima copia di ogni regola (e proposta) aperta in un dialogo: se intanto
     // sparisce dal patto (eliminata, rilettura) il dialogo resta e dice perché.
     val viste = remember { HashMap<Long, Regola>() }
@@ -173,6 +177,9 @@ fun RegoleScreen(
     }
     val daRitirare = daRitirareId?.let { id ->
         (statoProposte.inviate + stato.proposteInAttesa.values).firstOrNull { it.id == id } ?: proposteViste[id]
+    }
+    val propostaAperta = propostaApertaId?.let { id ->
+        (stato.proposteInAttesa.values + statoProposte.inviate).firstOrNull { it.id == id } ?: proposteViste[id]
     }
 
     // (0.10) Chiuso il modulo della proposta (o il blocco), il suo esito non si dice più.
@@ -420,6 +427,10 @@ fun RegoleScreen(
                                     daRitirareId = proposta.id
                                 },
                                 onDichiara = { esito -> dichiarare.apri(regola, esito) },
+                                onApriProposta = { proposta ->
+                                    proposteViste[proposta.id] = proposta
+                                    propostaApertaId = proposta.id
+                                },
                             )
                         }
                     }
@@ -531,6 +542,16 @@ fun RegoleScreen(
         )
     }
 
+    // (0.16) La tua proposta in attesa, per intero, con "Ritira".
+    propostaAperta?.let { proposta ->
+        FoglioDalBasso(onChiudi = { propostaApertaId = null }) {
+            CardPropostaTua(proposta, statoProposte.regole.ifEmpty { stato.regole }, statoProposte.contesto, statoProposte.invioInCorso) {
+                propostaApertaId = null
+                daRitirareId = proposta.id
+            }
+        }
+    }
+
     // (0.10) "Ritirare la proposta?": la regola resta com'è.
     daRitirare?.let { proposta ->
         AlertDialog(
@@ -571,6 +592,7 @@ private fun CardRegola(
     onProponi: () -> Unit,
     onRitira: (Proposta) -> Unit,
     onDichiara: (String) -> Unit,
+    onApriProposta: (Proposta) -> Unit,
 ) {
     val voci = buildList {
         add(VoceMenu(stringResource(R.string.azione_modifica), onModifica))
@@ -625,21 +647,42 @@ private fun CardRegola(
             }
             // (0.10) La proposta che aspetta su questa regola, di chiunque sia.
             if (inAttesa != null) {
-                Pillola(
+                // (0.16) La tua proposta si tocca: si apre la card completa (il
+                // confronto, "Ora…" / "Se il genitore accetta…", il tuo perché, "Ritira").
+                val tocco = if (inAttesa.delFiglio) {
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clickable(onClickLabel = stringResource(R.string.regola_vedi_tua_proposta)) { onApriProposta(inAttesa) }
+                } else {
+                    Modifier
+                }
+                Row(modifier = tocco, verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                        Pillola(
+                            if (inAttesa.delFiglio) {
+                                stringResource(R.string.regola_pillola_tua)
+                            } else {
+                                conNomeGenitore(LocalContext.current, inAttesa.nomeGenitore, R.string.regola_pillola_genitore, R.string.regola_pillola_genitore_nome)
+                            },
+                            tono = Tono.Attenzione,
+                        )
+                        Text(
+                            text = testoPropostaInAttesa(inAttesa),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     if (inAttesa.delFiglio) {
-                        stringResource(R.string.regola_pillola_tua)
-                    } else {
-                        conNomeGenitore(LocalContext.current, inAttesa.nomeGenitore, R.string.regola_pillola_genitore, R.string.regola_pillola_genitore_nome)
-                    },
-                    tono = Tono.Attenzione,
-                )
-                Text(
-                    text = testoPropostaInAttesa(inAttesa),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                    }
+                }
+            }
+            // (0.16) Sull'unica regola del patto il perché di "Elimina" che manca.
+            if (!eliminabile) {
+                Nota(stringResource(R.string.regole_unica_regola))
             }
             // (0.15) Vita reale: si dichiara da qui, o si vede com'è andata oggi.
             if (regola.tipo == TipiRegola.VITA_REALE) {

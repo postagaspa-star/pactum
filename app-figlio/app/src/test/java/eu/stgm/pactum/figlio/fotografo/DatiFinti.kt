@@ -37,7 +37,13 @@ import eu.stgm.pactum.figlio.sessione.ModificaSessione
 import eu.stgm.pactum.figlio.sessione.SessioneDefinita
 import eu.stgm.pactum.figlio.sessione.StatiSessione
 import eu.stgm.pactum.figlio.sessione.SvoltaLocale
+import eu.stgm.pactum.figlio.ui.AppDelGiorno
+import eu.stgm.pactum.figlio.ui.CategoriaDelGiorno
 import eu.stgm.pactum.figlio.ui.DichiarazioniViewModel
+import eu.stgm.pactum.figlio.ui.GiornoTempo
+import eu.stgm.pactum.figlio.ui.MedieTempo
+import eu.stgm.pactum.figlio.ui.PeriodoTempo
+import eu.stgm.pactum.figlio.ui.TempiDispositivo
 import eu.stgm.pactum.figlio.ui.FaccendeViewModel
 import eu.stgm.pactum.figlio.ui.OggiViewModel
 import eu.stgm.pactum.figlio.ui.OggiViewModel.RigaRegola
@@ -48,6 +54,7 @@ import eu.stgm.pactum.figlio.ui.RigaDispositivo
 import eu.stgm.pactum.figlio.ui.SessioniViewModel
 import eu.stgm.pactum.figlio.ui.SitiViewModel
 import eu.stgm.pactum.figlio.valutatore.MomentoFascia
+import eu.stgm.pactum.figlio.valutatore.StatoFascia
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -187,8 +194,9 @@ object DatiFinti {
             RigaRegola.Tempo(instagram, "Instagram", minuti = 48, limiteEfficace = 60, bonusOggi = 0),
             RigaRegola.Tempo(tiktok, "TikTok", minuti = 52, limiteEfficace = 45, bonusOggi = 0),
             RigaRegola.Tempo(social, "Social", minuti = 131, limiteEfficace = 135, bonusOggi = 15),
-            RigaRegola.Fascia(notte, MomentoFascia.Prima(minuti = 205, inizio = LocalTime.of(22, 30))),
-            RigaRegola.Fascia(compiti, MomentoFascia.Finita),
+            RigaRegola.Fascia(notte, MomentoFascia.Prima(minuti = 205, inizio = LocalTime.of(22, 30)), StatoFascia.Inizia(LocalTime.of(22, 30))),
+            // (0.16) Una fascia finita con 12 minuti di telefono dentro.
+            RigaRegola.Fascia(compiti, MomentoFascia.Finita, StatoFascia.Fuori(12)),
             RigaRegola.VitaReale(calcio),
             RigaRegola.VitaReale(lettura),
         ),
@@ -207,6 +215,110 @@ object DatiFinti {
             RigaUso("Chrome", "com.android.chrome", 6),
         ),
         minutiTotali = 182,
+        tempi = tempiNormali(),
+    )
+
+    // --- (0.16) Il tempo: 8 giorni e i totali, telefono + computer ---------------
+
+    private fun giornoTempo(
+        indietro: Long,
+        minuti: Int?,
+        app: List<AppDelGiorno> = emptyList(),
+        categorie: List<CategoriaDelGiorno> = emptyList(),
+        sessioni: Int? = null,
+    ) = GiornoTempo(oggi().minusDays(indietro).toString(), minuti, app, categorie, sessioni)
+
+    /** Oggi letto sul telefono: le stesse app della lista di Oggi (182 min). */
+    private fun oggiTelefono() = giornoTempo(
+        0,
+        182,
+        app = listOf(
+            AppDelGiorno("com.zhiliaoapp.musically", "TikTok", 52),
+            AppDelGiorno("com.instagram.android", "Instagram", 48),
+            AppDelGiorno("com.google.android.youtube", "YouTube", 31),
+            AppDelGiorno("com.whatsapp", "WhatsApp", 24),
+            AppDelGiorno("com.spaggiari.classevivastudenti", "ClasseViva Studenti", 12),
+            AppDelGiorno("com.spotify.music", "Spotify", 9),
+            AppDelGiorno("com.android.chrome", "Chrome", 6),
+        ),
+        categorie = listOf(
+            CategoriaDelGiorno("categoria:social", 124, 120),
+            CategoriaDelGiorno("categoria:video", 31),
+            CategoriaDelGiorno("categoria:altro", 18),
+            CategoriaDelGiorno("categoria:musica", 9),
+        ),
+        sessioni = 25,
+    )
+
+    fun telefonoTempo() = TempiDispositivo(
+        id = QUESTO_TELEFONO,
+        nome = "Telefono di Luca",
+        tipo = "telefono",
+        questo = true,
+        giorni = listOf(
+            giornoTempo(7, 135),
+            giornoTempo(6, 210),
+            giornoTempo(5, 95),
+            giornoTempo(4, null),
+            giornoTempo(3, 160),
+            giornoTempo(2, 188),
+            giornoTempo(
+                1,
+                142,
+                app = listOf(
+                    AppDelGiorno("com.zhiliaoapp.musically", "TikTok", 50),
+                    AppDelGiorno("com.instagram.android", "Instagram", 41),
+                    AppDelGiorno("com.google.android.youtube", "YouTube", 25),
+                    AppDelGiorno("com.whatsapp", "WhatsApp", 14),
+                    AppDelGiorno("com.spotify.music", "Spotify", 12),
+                ),
+                categorie = listOf(
+                    CategoriaDelGiorno("categoria:social", 105, 120),
+                    CategoriaDelGiorno("categoria:video", 25),
+                    CategoriaDelGiorno("categoria:musica", 12),
+                ),
+            ),
+            oggiTelefono(),
+        ),
+        // Ultimi 7 giorni: 6 con dati (uno senza), 977 min; il mese 27 giorni su 30.
+        medie = MedieTempo(
+            settimana = PeriodoTempo(minuti = 163, giorni = 6, totale = 977),
+            mese = PeriodoTempo(minuti = 158, giorni = 27, totale = 4271),
+        ),
+        storico = true,
+    )
+
+    fun computerTempo() = TempiDispositivo(
+        id = COMPUTER,
+        nome = "PC di Luca",
+        tipo = "computer",
+        questo = false,
+        giorni = listOf(
+            giornoTempo(7, 60),
+            giornoTempo(6, null),
+            giornoTempo(5, 95),
+            giornoTempo(4, 120),
+            giornoTempo(3, null),
+            giornoTempo(2, 45),
+            giornoTempo(1, 80),
+            giornoTempo(
+                0,
+                35,
+                app = listOf(AppDelGiorno("exe:minecraft.exe", "Minecraft", 25), AppDelGiorno("exe:chrome.exe", "Chrome", 10)),
+            ),
+        ),
+        medie = MedieTempo(
+            settimana = PeriodoTempo(minuti = 75, giorni = 5, totale = 375),
+            mese = PeriodoTempo(minuti = 71, giorni = 21, totale = 1490),
+        ),
+        storico = true,
+    )
+
+    fun tempiNormali() = listOf(telefonoTempo(), computerTempo())
+
+    /** Un server di prima della v3.8: solo oggi, letto sul telefono, senza totali. */
+    fun tempiServerVecchio() = listOf(
+        TempiDispositivo(id = QUESTO_TELEFONO, nome = "Telefono di Luca", tipo = "telefono", questo = true, giorni = listOf(oggiTelefono())),
     )
 
     /** Il primo giorno: niente serie, niente dati, una regola sola, nessun uso. */

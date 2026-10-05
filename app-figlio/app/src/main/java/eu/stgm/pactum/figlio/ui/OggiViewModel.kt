@@ -11,6 +11,7 @@ import eu.stgm.pactum.figlio.bonus.EsitoBonus
 import eu.stgm.pactum.figlio.bonus.RegoleBonus
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
 import eu.stgm.pactum.figlio.dati.Impostazioni
+import eu.stgm.pactum.figlio.dati.LetturaTempi
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.Riepilogo
@@ -19,8 +20,10 @@ import eu.stgm.pactum.figlio.dati.TipiRegola
 import eu.stgm.pactum.figlio.dati.zonaPatto
 import eu.stgm.pactum.figlio.misura.UsageStatsReader
 import eu.stgm.pactum.figlio.misura.UsoContato
+import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.valutatore.MomentoFascia
+import eu.stgm.pactum.figlio.valutatore.StatoFascia
 import eu.stgm.pactum.figlio.valutatore.Valutatore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -60,7 +63,15 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             val bonusOggi: Int,
         ) : RigaRegola
 
-        data class Fascia(override val regola: Regola, val momento: MomentoFascia?) : RigaRegola
+        /**
+         * (0.16) [stato] = com'è andata oggi (rispettata finora, rispettata, i
+         * minuti dentro la fascia…), dalle stesse funzioni del valutatore.
+         */
+        data class Fascia(
+            override val regola: Regola,
+            val momento: MomentoFascia?,
+            val stato: StatoFascia? = null,
+        ) : RigaRegola
 
         data class VitaReale(override val regola: Regola) : RigaRegola
 
@@ -104,6 +115,12 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
         val minutiTotali: Long = 0,
         /** (0.11) I minuti di oggi passati in una Sessione nelle sue app: non contano. */
         val minutiInSessione: Long = 0,
+        /**
+         * (0.16) Il tempo di ogni dispositivo (8 giorni, totali di 7 e 30
+         * giorni), prima questo telefono: per il riquadro di Oggi e la pagina
+         * Tempo. Oggi di questo telefono è quello letto qui.
+         */
+        val tempi: List<TempiDispositivo> = emptyList(),
         val bonusInSospeso: BonusInSospeso? = null,
         /** È aperta la snackbar "Ti sei dato 15 minuti · Aggiungi perché". */
         val finestraBonus: Boolean = false,
@@ -172,7 +189,8 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             val configurazione = impostazioni.leggiConfigurazione()
             val locale = PattoLocale(context)
             val (dalServer, codice) = if (configurazione.completa) {
-                PostinoClient(configurazione).leggiPattoConCodice()
+                // (0.16, v3.8) Con i tempi: gli 8 giorni e i totali, per Oggi e la pagina Tempo.
+                PostinoClient(configurazione).leggiPattoConCodice(conTempi = true)
             } else {
                 null to 0
             }
@@ -194,13 +212,17 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             val oggi = LocalDate.now()
             // (0.11) Senza il tempo passato in una Sessione nelle sue app: non
             // conta, né qui né nella finestra del genitore.
-            val uso = UsoContato.di(context, UsageStatsReader(context).leggiGiorno(oggi))
+            val letta = UsageStatsReader(context).leggiGiorno(oggi)
+            val filtro = CatalogoApp.filtroUso(context)
+            val uso = UsoContato.di(context, letta, filtro)
+            // (0.16) I minuti dentro una fascia, come li conta la sentinella.
+            val usoNellIntervallo = { inizio: Long, fine: Long -> letta.millisNellIntervallo(inizio, fine, filtro) / 60_000 }
             val bonusOggi = patto?.bonusValidiOggi(adesso).orEmpty()
             // (v3) Solo le regole di questo telefono e la vita reale: quelle del
             // computer si misurano sul computer.
             val regole = patto?.regoleDiQuestoDispositivo().orEmpty()
                 .filter { it.attiva }
-                .map { regola -> rigaRegola(regola, bonusOggi, uso.indice::minuti, adesso) }
+                .map { regola -> rigaRegola(regola, bonusOggi, uso.indice::minuti, usoNellIntervallo, adesso) }
 
             val righe = uso.perApp
                 .filter { it.millisPrimoPiano >= 60_000 } // sotto il minuto: rumore
@@ -212,6 +234,26 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 .sortedByDescending { it.minuti }
+            // (0.16) Il tempo come lo vede il genitore: i giorni passati e i
+            // totali dal server, oggi da qui (senza il permesso vale quello del server).
+            val oggiLocale = if (PermessiHelper.haAccessoUso(context)) {
+                GiornoTempo(
+                    giorno = uso.giorno.toString(),
+                    totaleMinuti = uso.totaleMinuti.toInt().coerceIn(0, LetturaTempi.MINUTI_GIORNO),
+                    app = righe.map { AppDelGiorno(it.pacchetto, it.etichetta, it.minuti.toInt()) },
+                    categorie = TempiFiglio.categorieDiOggi(
+                        perApp = uso.perApp.map { it.pacchetto to it.millisPrimoPiano },
+                        categoriaDi = { CatalogoApp.categoriaDiPacchetto(context, it) },
+                        limiti = TempiFiglio.limitiPerChiave(patto?.regoleDiQuestoDispositivo().orEmpty()),
+                    ),
+                    sessioniMinuti = uso.sessioniMinuti?.toInt(),
+                )
+            } else {
+                null
+            }
+            val tempi = TempiFiglio.dispositivi(patto, uso.giorno, oggiLocale) { chiave, nomeServer, tipo ->
+                etichettaChiave(context, chiave, nomeServer, tipo)
+            }
             val sospeso = CassettaBonus(context).leggi()
             val datiFermiAlle = if (fermi) locale.aggiornatoIl() else null
 
@@ -238,6 +280,7 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                     righe = righe,
                     minutiTotali = uso.totaleMinuti,
                     minutiInSessione = uso.sessioniMinuti ?: 0,
+                    tempi = tempi,
                     bonusInSospeso = if (sospeso == null && finestra) aperto else sospeso,
                     finestraBonus = finestra,
                 )
@@ -249,6 +292,7 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
         regola: Regola,
         bonusOggi: Map<String, Int>,
         minutiSu: (String) -> Long,
+        usoNellIntervallo: (Long, Long) -> Long,
         adesso: Long,
     ): RigaRegola = when (regola.tipo) {
         TipiRegola.LIMITE_TEMPO -> {
@@ -267,7 +311,11 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         TipiRegola.FASCIA_ORARIA ->
-            RigaRegola.Fascia(regola, Valutatore.momentoFascia(regola, adesso, ZoneId.systemDefault()))
+            RigaRegola.Fascia(
+                regola,
+                Valutatore.momentoFascia(regola, adesso, ZoneId.systemDefault()),
+                Valutatore.statoFasciaOggi(regola, usoNellIntervallo, adesso, ZoneId.systemDefault()),
+            )
         TipiRegola.VITA_REALE -> RigaRegola.VitaReale(regola)
         else -> RigaRegola.Altra(regola)
     }

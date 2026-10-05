@@ -82,6 +82,14 @@ class FotoRegoleTest : Fotografo() {
     }
 
     @Test
+    fun foglioTuaProposta() {
+        Mondo.collegato(app)
+        scatta("07-regole-foglio-tua-proposta", "(0.16) Toccando «In attesa del genitore»: la tua proposta per intero, con «Ritira»", pagine = false) {
+            regole(proposte = DatiFinti.proposteVuote()) { tocca("In attesa del genitore") }
+        }
+    }
+
+    @Test
     fun menuAperto() {
         Mondo.collegato(app)
         scatta("07-regole-menu", "Il ⋯ di una regola: Modifica · Proponi al genitore · Elimina", pagine = false) {

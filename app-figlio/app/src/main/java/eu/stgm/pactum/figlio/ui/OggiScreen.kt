@@ -60,7 +60,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -85,6 +88,7 @@ import eu.stgm.pactum.figlio.faccende.VistaFaccende
 import eu.stgm.pactum.figlio.permessi.StatoPermessi
 import eu.stgm.pactum.figlio.ui.OggiViewModel.RigaRegola
 import eu.stgm.pactum.figlio.valutatore.MomentoFascia
+import eu.stgm.pactum.figlio.valutatore.StatoFascia
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.ZoneId
@@ -103,7 +107,7 @@ fun OggiScreen(
     onApriImpostazioni: () -> Unit,
     onApriPermessi: () -> Unit,
     onApriLavori: () -> Unit,
-    onApriTutteLeApp: () -> Unit,
+    onApriTempo: () -> Unit,
     vm: OggiViewModel = viewModel(),
     dichiarazioniVm: DichiarazioniViewModel = viewModel(),
 ) {
@@ -298,7 +302,24 @@ fun OggiScreen(
 
             // 4. Le regole di oggi, una riga per regola.
             if (stato.regole.isNotEmpty()) {
-                item(key = "regole-titolo") { TitoloSezione(stringResource(R.string.oggi_sezione_regole)) }
+                item(key = "regole-titolo") {
+                    Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                        TitoloSezione(stringResource(R.string.oggi_sezione_regole))
+                        // (0.16) Il bonus di oggi, una riga sola (non sotto ogni regola).
+                        val bonus = stato.bonus
+                        if (bonus != null && stato.regole.any { it is RigaRegola.Tempo }) {
+                            Nota(
+                                stringResource(
+                                    if (stato.altriDispositivi) R.string.oggi_bonus_tetti_telefono else R.string.oggi_bonus_tetti,
+                                    bonus.giorno.residui,
+                                    bonus.giorno.tetto,
+                                    bonus.settimana.residui,
+                                    bonus.settimana.tetto,
+                                ),
+                            )
+                        }
+                    }
+                }
                 item(key = "regole") {
                     Column {
                         stato.regole.forEachIndexed { indice, riga ->
@@ -317,7 +338,8 @@ fun OggiScreen(
                 }
             }
 
-            // 5. Dove è finito il tempo: il totale e le prime 3 app.
+            // 5. Dove è finito il tempo: il totale, (0.16) gli 8 giorni coi totali
+            // di 7 e 30 giorni, le prime 3 app e "Vedi tutto" (la pagina Tempo).
             item(key = "tempo-titolo") {
                 Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
                     TitoloSezione(
@@ -332,6 +354,10 @@ fun OggiScreen(
                     )
                 }
             }
+            // (0.16) Gli 8 giorni e i totali, come li vede il genitore (server v3.8).
+            stato.tempi.firstOrNull()?.takeIf { it.storico && it.giorni.size > 1 }?.let { questo ->
+                item(key = "tempo-giorni") { TempoInOggi(questo) }
+            }
             // (0.11) Il tempo passato in sessione: c'è, ma non conta. Lo si dice.
             if (stato.minutiInSessione > 0) {
                 item(key = "tempo-sessione") {
@@ -343,17 +369,18 @@ fun OggiScreen(
                 }
             }
             item(key = "tempo-app") {
-                if (stato.righe.isEmpty()) {
-                    if (!stato.caricamento) {
-                        StatoVuoto(stringResource(R.string.oggi_vuoto), icona = Icons.Outlined.CheckCircle)
-                    }
-                } else {
-                    Column {
+                Column {
+                    if (stato.righe.isEmpty()) {
+                        if (!stato.caricamento) {
+                            StatoVuoto(stringResource(R.string.oggi_vuoto), icona = Icons.Outlined.CheckCircle)
+                        }
+                    } else {
                         ElencoApp(stato.righe.take(APP_IN_OGGI))
-                        if (stato.righe.size > APP_IN_OGGI) {
-                            TextButton(onClick = onApriTutteLeApp, contentPadding = PaddingValues(horizontal = 0.dp, vertical = Spazi.s)) {
-                                Text(stringResource(R.string.oggi_vedi_tutte_app, stato.righe.size))
-                            }
+                    }
+                    // (0.16) Sempre: la pagina Tempo ha anche le categorie, gli altri giorni, il computer.
+                    if (!stato.caricamento || stato.tempi.isNotEmpty()) {
+                        TextButton(onClick = onApriTempo, contentPadding = PaddingValues(horizontal = 0.dp, vertical = Spazi.s)) {
+                            Text(stringResource(R.string.oggi_vedi_tutto))
                         }
                     }
                 }
@@ -581,12 +608,19 @@ private fun RigaDellaRegola(
                     text = descrizioneRegola(riga.regola.tipo, riga.regola.parametri),
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                riga.momento?.let {
-                    Text(
-                        text = testoMomento(it),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                // (0.16) Si vede se oggi è rispettata: i minuti dentro la fascia sono
+                // quelli dello sforamento (Valutatore.statoFasciaOggi).
+                val stato = riga.stato
+                if (stato != null) {
+                    StatoDellaFascia(stato)
+                } else {
+                    riga.momento?.let {
+                        Text(
+                            text = testoMomento(it),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             is RigaRegola.VitaReale -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -634,12 +668,28 @@ private fun RigaTempo(
                 text = riga.nome,
                 style = MaterialTheme.typography.bodyLarge,
             )
+            val minutiSuLimite = stringResource(
+                R.string.oggi_minuti_su_limite,
+                testoDurata(riga.minuti),
+                testoDurata(riga.limiteEfficace.toLong()),
+            )
+            // (0.16) Il bonus che ti sei dato oggi su questa regola, piccolo, accanto;
+            // se non ci sta va a capo tutto intero (spazi che non si spezzano).
+            val bonusRegola = if (riga.bonusOggi > 0) {
+                stringResource(R.string.oggi_bonus_regola, riga.bonusOggi).replace(' ', '\u00A0')
+            } else {
+                null
+            }
+            val separatore = stringResource(R.string.elenco_separatore)
+            val piccolo = MaterialTheme.typography.bodySmall.fontSize
             Text(
-                text = stringResource(
-                    R.string.oggi_minuti_su_limite,
-                    testoDurata(riga.minuti),
-                    testoDurata(riga.limiteEfficace.toLong()),
-                ),
+                text = buildAnnotatedString {
+                    append(minutiSuLimite)
+                    if (bonusRegola != null) {
+                        append(separatore)
+                        withStyle(SpanStyle(fontSize = piccolo)) { append(bonusRegola) }
+                    }
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -727,6 +777,43 @@ private fun FoglioBonus(
     }
 }
 
+/**
+ * (0.16) Com'è andata oggi una fascia: una pillola quando si sa (rispettata
+ * finora, rispettata, i minuti dentro, in tono di attenzione), una riga
+ * quando deve ancora cominciare o oggi non c'è.
+ */
+@Composable
+private fun StatoDellaFascia(stato: StatoFascia) {
+    when (stato) {
+        is StatoFascia.Fuori -> Pillola(
+            stringResource(R.string.fascia_fuori, testoDurata(stato.minuti)),
+            tono = Tono.Attenzione,
+        )
+        is StatoFascia.RispettataFinora -> Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spazi.s),
+        ) {
+            Pillola(stringResource(R.string.fascia_rispettata_finora), tono = Tono.Positivo)
+            Text(
+                text = stringResource(R.string.fascia_finisce_alle, orario(stato.fine)),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        StatoFascia.Rispettata -> Pillola(stringResource(R.string.fascia_rispettata), tono = Tono.Positivo)
+        is StatoFascia.Inizia -> Text(
+            text = stringResource(R.string.fascia_inizia_alle, orario(stato.inizio)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        StatoFascia.NonOggi -> Text(
+            text = stringResource(R.string.fascia_oggi_non_c_e),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 private val formatoOraFascia: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
@@ -798,51 +885,4 @@ private fun testoEsitoBonus(
     is EsitoBonus.Scaduto -> context.getString(R.string.bonus_scaduto)
     // Era già partito: niente "non è partito in tempo".
     is EsitoBonus.GiornoCambiato -> context.getString(R.string.bonus_giorno_cambiato)
-}
-
-/**
- * (0.15) Tutte le app di oggi, dalla più usata: la pagina di "Vedi tutte".
- * Una riga per elemento della lista (non un blocco solo: scorre leggera).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TutteLeAppScreen(onChiudi: () -> Unit, vm: OggiViewModel = viewModel()) {
-    val stato by vm.stato.collectAsStateWithLifecycle()
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        stringResource(
-                            if (stato.altriDispositivi) R.string.oggi_sezione_tempo_telefono else R.string.oggi_sezione_tempo,
-                        ),
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onChiudi) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = Spazi.l + Spazi.xs, vertical = Spazi.s),
-        ) {
-            item(key = "totale") {
-                Text(
-                    text = stringResource(R.string.oggi_tempo_totale, testoDurata(stato.minutiTotali)),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(vertical = Spazi.s),
-                )
-            }
-            items(stato.righe) { riga ->
-                Column {
-                    RigaApp(riga)
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                }
-            }
-        }
-    }
 }

@@ -41,7 +41,8 @@ object Segnalazioni {
      * A tutto schermo solo con "Mostra sopra le altre app" ([mostraSopra]),
      * fuori da una chiamata ([inChiamata]: coprirebbe la chiamata) e per un
      * giorno in corso ([giornoPassato]: lo sforamento di ieri visto dopo
-     * mezzanotte è già storia, basta la notifica).
+     * mezzanotte è già storia, basta la notifica). (0.16) [tempiFinitiFatti] =
+     * le chiavi di TempiFiniti già dette oggi, comprese quelle dell'avviso apparso.
      */
     fun decidi(
         sforamenti: List<Sforamento>,
@@ -50,10 +51,22 @@ object Segnalazioni {
         mostraSopra: Boolean,
         inChiamata: Boolean = false,
         giornoPassato: Boolean = false,
+        tempiFinitiFatti: Set<String> = emptySet(),
     ): Decisione {
         val nuovi = nuovi(sforamenti, giornoTelefono, giaSegnalati)
         val schermo = mostraSopra && !inChiamata && !giornoPassato
-        return Decisione(nuovi = nuovi, aTuttoSchermo = if (schermo) nuovi else emptyList())
+        // (0.16, contratto v3.8) Se per quella regola e quel limite oggi l'avviso
+        // del tempo finito è già apparso a tutto schermo, allo sforamento basta
+        // la notifica: niente secondo avviso a tutto schermo.
+        val aTuttoSchermo = if (!schermo) {
+            emptyList()
+        } else {
+            nuovi.filter { s ->
+                val limite = s.limiteEfficace
+                limite == null || TempiFiniti.chiaveSchermo(s.regolaId, giornoTelefono, limite) !in tempiFinitiFatti
+            }
+        }
+        return Decisione(nuovi = nuovi, aTuttoSchermo = aTuttoSchermo)
     }
 
     /**

@@ -46,7 +46,10 @@ class PattoLocale(context: Context) {
             if (lettoCon != null && lettoCon != impostazioni.leggiConfigurazione().impronta) {
                 return@withLock false
             }
-            scrivi(daScrivere)
+            // (0.16, v3.8) I tempi arrivano solo con `?tempi=1` (Oggi, Tempo): una
+            // rilettura senza (la sentinella, il worker) non cancella quelli salvati.
+            val vecchia = if (daScrivere.conTempi) null else leggiFile()
+            scrivi(daScrivere.conTempiDi(vecchia))
             impostazioni.aggiornaIdentita(patto.dispositivo, patto.figlio)
             // (0.11) Ogni patto fresco porta le sessioni svolte e quella in
             // corso: così una sessione torna anche dopo una reinstallazione, e
@@ -85,10 +88,13 @@ class PattoLocale(context: Context) {
     }
 
     suspend fun leggi(): Patto? = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            if (!file.exists()) return@withLock null
-            runCatching { json.decodeFromString(Patto.serializer(), file.readText()) }.getOrNull()
-        }
+        mutex.withLock { leggiFile() }
+    }
+
+    /** La copia su disco, null se non c'è o non si legge. Solo sotto il mutex. */
+    private fun leggiFile(): Patto? {
+        if (!file.exists()) return null
+        return runCatching { json.decodeFromString(Patto.serializer(), file.readText()) }.getOrNull()
     }
 
     /** Quando è arrivata l'ultima copia dal server (epoch ms), null = mai: l'età dei dati. */

@@ -62,7 +62,7 @@ import eu.stgm.pactum.figlio.ui.Scheda
 import eu.stgm.pactum.figlio.ui.SessioniScreen
 import eu.stgm.pactum.figlio.ui.SitiScreen
 import eu.stgm.pactum.figlio.ui.StoricoScreen
-import eu.stgm.pactum.figlio.ui.TutteLeAppScreen
+import eu.stgm.pactum.figlio.ui.TempoScreen
 import eu.stgm.pactum.figlio.ui.rememberBloccoFaccende
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
 import kotlinx.coroutines.Dispatchers
@@ -357,7 +357,7 @@ private fun PactumRoot(
                     onChiudi = { chiudi() },
                     sulleDichiarazioni = paginaInCima == Pagina.STORICO_DICHIARAZIONI,
                 )
-                Pagina.TUTTE_LE_APP -> TutteLeAppScreen(onChiudi = { chiudi() })
+                Pagina.TEMPO -> TempoScreen(onChiudi = { chiudi() })
             }
         }
         return
@@ -419,7 +419,7 @@ private fun PactumRoot(
                         onApriImpostazioni = { apri(Pagina.IMPOSTAZIONI) },
                         onApriPermessi = { apri(Pagina.IMPOSTAZIONI_PERMESSI) },
                         onApriLavori = { vaiA(Scheda.LAVORI) },
-                        onApriTutteLeApp = { apri(Pagina.TUTTE_LE_APP) },
+                        onApriTempo = { apri(Pagina.TEMPO) },
                     )
                     Scheda.REGOLE -> RegoleScreen(
                         onApriImpostazioni = { apri(Pagina.IMPOSTAZIONI) },

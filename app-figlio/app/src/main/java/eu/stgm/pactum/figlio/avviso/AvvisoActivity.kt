@@ -33,6 +33,7 @@ import eu.stgm.pactum.design.BarraUso
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.diagnostica.TempiLog
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.ui.testoDurata
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
@@ -62,6 +63,8 @@ class AvvisoActivity : ComponentActivity() {
         avvisi.value = Avviso.daJson(
             savedInstanceState?.getString(EXTRA_AVVISI) ?: intent?.getStringExtra(EXTRA_AVVISI),
         )
+        // (0.16) Quanto ci ha messo Android ad aprirla, da quando il servizio l'ha chiesta.
+        if (savedInstanceState == null) segnaTempo("avviso-creato", intent)
         if (avvisi.value.isEmpty()) {
             finish()
             return
@@ -75,6 +78,20 @@ class AvvisoActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // (0.16) La prima volta che si vede davvero (una volta per richiesta).
+        segnaTempo("avviso-visibile", intent)
+        intent?.removeExtra(EXTRA_CHIESTO_ALLE)
+    }
+
+    /** (0.16) Una riga di tempo dall'istante della richiesta (TempiLog: solo ms e id di regola). */
+    private fun segnaTempo(evento: String, intent: Intent?) {
+        val chiesto = intent?.getLongExtra(EXTRA_CHIESTO_ALLE, 0L) ?: 0L
+        if (chiesto <= 0L) return
+        TempiLog.riga(evento, TempiLog.da(chiesto), "regole=" + avvisi.value.joinToString(",") { it.regolaId.toString() })
     }
 
     /** Uno sforamento nuovo mentre l'avviso è ancora aperto: si aggiunge, il primo resta. */
@@ -112,6 +129,9 @@ class AvvisoActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_AVVISI = "avvisi"
 
+        /** (0.16) Quando il servizio l'ha chiesta (TempiLog.ora), per misurare l'apertura. */
+        private const val EXTRA_CHIESTO_ALLE = "chiesto_alle"
+
         /**
          * Apre l'avviso sopra qualsiasi app, se "Mostra sopra le altre app" è
          * concesso. False se non è partito: la notifica c'è già comunque.
@@ -124,10 +144,14 @@ class AvvisoActivity : ComponentActivity() {
             val intent = Intent(context, AvvisoActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
                 .putExtra(EXTRA_AVVISI, Avviso.inJson(avvisi))
+                .putExtra(EXTRA_CHIESTO_ALLE, TempiLog.ora())
+            val inizio = TempiLog.ora()
             return try {
                 context.startActivity(intent)
+                TempiLog.riga("avviso-chiesto", TempiLog.da(inizio), "regole=" + avvisi.joinToString(",") { it.regolaId.toString() })
                 true
             } catch (e: RuntimeException) {
+                TempiLog.riga("avviso-rifiutato", TempiLog.da(inizio))
                 false // Android l'ha rifiutato: resta la notifica
             }
         }
@@ -151,13 +175,14 @@ private fun AvvisoScreen(avvisi: List<Avviso>, onHoCapito: () -> Unit, onApriPac
                 verticalArrangement = Arrangement.spacedBy(Spazi.l),
             ) {
                 Text(
-                    text = stringResource(
-                        if (avvisi.all { it.fascia }) {
-                            R.string.notifica_sforamento_fascia_titolo
-                        } else {
-                            R.string.notifica_sforamento_limite_titolo
-                        },
-                    ),
+                    text = when {
+                        avvisi.all { it.fascia } -> stringResource(R.string.notifica_sforamento_fascia_titolo)
+                        // (0.16) Il tempo è finito, non ancora oltre: "Il tempo per Instagram è finito".
+                        avvisi.all { it.finito } -> avvisi.singleOrNull()?.nome
+                            ?.let { stringResource(R.string.tempo_finito_titolo, it) }
+                            ?: stringResource(R.string.tempo_finito_titolo_generico)
+                        else -> stringResource(R.string.notifica_sforamento_limite_titolo)
+                    },
                     style = MaterialTheme.typography.headlineSmall,
                 )
                 avvisi.forEach { SchedaAvviso(it) }
@@ -211,7 +236,18 @@ private fun SchedaAvviso(avviso: Avviso) {
                 }
                 // Come in Oggi: oltre il limite la barra resta piena, l'eccedenza si dice a parole.
                 BarraUso(minuti = usati, limite = limite, massimoDelGiorno = limite)
-                Pillola(stringResource(R.string.oggi_oltre, testoDurata(avviso.minutiOltre.toLong())), tono = Tono.Attenzione)
+                if (avviso.finito) {
+                    // (0.16) A 30 su 30 i 30 minuti sono permessi: niente "oltre", si dice cosa succede dopo.
+                    Text(
+                        text = stringResource(
+                            // Lo sforamento di oggi è già a registro: niente promessa di registro.
+                            if (avviso.giaARegistro) R.string.tempo_finito_testo_gia_a_registro else R.string.tempo_finito_testo,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    Pillola(stringResource(R.string.oggi_oltre, testoDurata(avviso.minutiOltre.toLong())), tono = Tono.Attenzione)
+                }
                 avviso.limite?.let { base ->
                     Text(
                         text = if (avviso.bonus > 0) {

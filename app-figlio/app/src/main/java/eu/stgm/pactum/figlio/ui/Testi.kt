@@ -425,6 +425,13 @@ fun testoDurata(context: Context, minuti: Long): String = when {
     else -> context.getString(R.string.formato_ore_minuti, minuti / 60, minuti % 60)
 }
 
+/** (0.16) Una durata corta, sopra una barra del grafico: "2h31", "3h", "45 min". */
+fun testoDurataBreve(context: Context, minuti: Long): String = when {
+    minuti < 60 -> context.getString(R.string.formato_minuti, minuti)
+    minuti % 60 == 0L -> context.getString(R.string.formato_breve_ore, minuti / 60)
+    else -> context.getString(R.string.formato_breve_ore_minuti, minuti / 60, minuti % 60)
+}
+
 fun oraLocale(istante: Instant): String = formatoOra.format(istante.atZone(ZoneId.systemDefault()))
 
 /** "14:32" se è di oggi, "18/09 14:32" se è più vecchio: l'età dei dati. */

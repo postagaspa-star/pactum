@@ -37,8 +37,10 @@ android {
         // v3.7). 0.15: il riordino dell'interfaccia (4 schede fisse, componenti
         // comuni), comportamento invariato. Nuova funzione = nuovo versionCode,
         // altrimenti l'auto-aggiornamento non la propone.
-        versionCode = 15
-        versionName = "0.15.0"
+        // 0.16 (contratto v3.8): avviso del tempo finito a 30 su 30, fasce con lo
+        // stato, il tempo dei giorni passati e i totali dal server.
+        versionCode = 16
+        versionName = "0.16.0"
     }
 
     signingConfigs {

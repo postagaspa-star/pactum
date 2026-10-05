@@ -50,6 +50,20 @@ sealed interface MomentoFascia {
 }
 
 /**
+ * (0.16) Com'è andata oggi una fascia oraria, per la schermata Oggi: dentro la
+ * fascia c'è stato uso ([Fuori], gli stessi minuti dello sforamento), oppure è
+ * rispettata finora (in corso), rispettata (finita), deve ancora cominciare, o
+ * oggi non c'è.
+ */
+sealed interface StatoFascia {
+    data class Fuori(val minuti: Long) : StatoFascia
+    data class RispettataFinora(val fine: LocalTime) : StatoFascia
+    data object Rispettata : StatoFascia
+    data class Inizia(val inizio: LocalTime) : StatoFascia
+    data object NonOggi : StatoFascia
+}
+
+/**
  * L'uso di oggi indicizzato come lo legge il valutatore: per pacchetto (in
  * minuscolo) e per chiave `categoria:*`, con i minuti arrotondati per app —
  * lo stesso conto di SentinellaPatto e della schermata Oggi, così "48 min su
@@ -232,7 +246,30 @@ object Valutatore {
         usoMinutiIntervallo: (Long, Long) -> Long,
         now: Long,
         zona: ZoneId,
-    ): List<Sforamento> {
+    ): List<Sforamento> = usoNelleFasceOggi(regola, usoMinutiIntervallo, now, zona).map { (giornoAncora, usoTot) ->
+        Sforamento(
+            regolaId = regola.id,
+            tipo = regola.tipo,
+            limiteEfficace = null,
+            minutiOltre = usoTot.toInt(),
+            giornoAncora = giornoAncora,
+        )
+    }
+
+    /**
+     * L'uso dentro una fascia oggi, per occorrenza (giorno di ancoraggio →
+     * minuti), solo le occorrenze sopra la tolleranza: proprio quelle che
+     * diventano sforamenti. La usano il valutatore e (0.16) la schermata Oggi,
+     * così "12 min di telefono dentro la fascia" e lo sforamento sono gli
+     * stessi minuti. Vuota se la regola non è una fascia leggibile.
+     */
+    fun usoNelleFasceOggi(
+        regola: Regola,
+        usoMinutiIntervallo: (Long, Long) -> Long,
+        now: Long,
+        zona: ZoneId,
+    ): List<Pair<String, Long>> {
+        if (regola.tipo != TipiRegola.FASCIA_ORARIA) return emptyList()
         val dalle = ora(regola.parametri, "dalle") ?: return emptyList()
         val alle = ora(regola.parametri, "alle") ?: return emptyList()
         val giorni = stringhe(regola.parametri, "giorni")
@@ -242,15 +279,34 @@ object Valutatore {
             .groupBy { it.giornoAncora }
             .mapNotNull { (giornoAncora, intervalli) ->
                 val usoTot = intervalli.sumOf { usoMinutiIntervallo(it.inizio, it.fine) }
-                if (usoTot < TOLLERANZA_FASCIA_MIN) return@mapNotNull null
-                Sforamento(
-                    regolaId = regola.id,
-                    tipo = regola.tipo,
-                    limiteEfficace = null,
-                    minutiOltre = usoTot.toInt(),
-                    giornoAncora = giornoAncora,
-                )
+                if (usoTot < TOLLERANZA_FASCIA_MIN) null else giornoAncora to usoTot
             }
+    }
+
+    /**
+     * (0.16) Com'è andata oggi una fascia, per la schermata Oggi: dall'uso
+     * dentro la fascia (le stesse occorrenze e la stessa tolleranza degli
+     * sforamenti, [usoNelleFasceOggi]) e da dove sta la fascia adesso
+     * ([momentoFascia]). Null se la regola non è una fascia leggibile.
+     */
+    fun statoFasciaOggi(
+        regola: Regola,
+        usoMinutiIntervallo: (Long, Long) -> Long,
+        now: Long,
+        zona: ZoneId,
+    ): StatoFascia? {
+        val momento = momentoFascia(regola, now, zona) ?: return null
+        val dentro = usoNelleFasceOggi(regola, usoMinutiIntervallo, now, zona).sumOf { it.second }
+        return statoFascia(momento, dentro)
+    }
+
+    /** (0.16) Lo stato a parole da [momento] e dai minuti di telefono dentro la fascia oggi. */
+    fun statoFascia(momento: MomentoFascia, minutiDentro: Long): StatoFascia = when {
+        minutiDentro >= TOLLERANZA_FASCIA_MIN -> StatoFascia.Fuori(minutiDentro)
+        momento is MomentoFascia.InCorso -> StatoFascia.RispettataFinora(momento.fine)
+        momento is MomentoFascia.Prima -> StatoFascia.Inizia(momento.inizio)
+        momento == MomentoFascia.Finita -> StatoFascia.Rispettata
+        else -> StatoFascia.NonOggi
     }
 
     /**

@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import eu.stgm.pactum.figlio.MainActivity
+import eu.stgm.pactum.figlio.diagnostica.TempiLog
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.avviso.Chiamata
 import eu.stgm.pactum.figlio.bonus.ConsegnaBonus
@@ -57,6 +58,10 @@ import eu.stgm.pactum.figlio.sync.BattitoCadenzato
 import eu.stgm.pactum.figlio.sync.ConsegnaEventi
 import eu.stgm.pactum.figlio.sync.Spegnimento
 import eu.stgm.pactum.figlio.sync.SpegnimentoReceiver
+import eu.stgm.pactum.figlio.catalogo.CatalogoApp
+import eu.stgm.pactum.figlio.misura.Ripresa
+import eu.stgm.pactum.figlio.misura.UsageStatsReader
+import eu.stgm.pactum.figlio.valutatore.ProssimoGiro
 import eu.stgm.pactum.figlio.valutatore.SentinellaPatto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -304,6 +309,9 @@ class PactumService : Service() {
             var ultimoGiorno: LocalDate? = null
             while (isActive) {
                 val adesso = System.currentTimeMillis()
+                // (0.16) Lo stesso istante sull'orologio che non si sposta: l'attesa
+                // del giro dopo conta da qui (CadenzaSentinella.resta), non dalla fine del giro.
+                val adessoMono = SystemClock.elapsedRealtime()
                 val zona = ZoneId.systemDefault()
                 val oggi = Instant.ofEpochMilli(adesso).atZone(zona).toLocalDate()
                 val accesoOra = schermo?.isInteractive ?: true
@@ -317,13 +325,24 @@ class PactumService : Service() {
                     }
                 }
                 var attesa = CadenzaSentinella.INTERVALLO_MS
+                // (0.16) Le regole vicine al limite: fino al giro dopo, il controllo leggero.
+                var vicino: ProssimoGiro? = null
                 if (giro.oggi) {
                     // (0.12) A schermo acceso anche i preavvisi "il tempo sta per
                     // finire": il giro dopo arriva appena dopo la prossima soglia
-                    // dell'app davanti, se viene prima del minuto.
+                    // dell'app davanti, se viene prima del minuto. (0.16) E proprio
+                    // quando una regola arriva al limite, o lo supera.
                     protetto {
-                        attesa = CadenzaSentinella.attesa(
-                            SentinellaPatto(applicationContext).valutaConPreavvisi(now = adesso, preavvisi = accesoOra),
+                        val inizio = TempiLog.ora()
+                        // (0.16) E, se una regola è vicina al limite o allo sforamento, fino
+                        // ad allora il controllo leggero ogni pochi secondi (ControlloLeggero).
+                        val prossimo = SentinellaPatto(applicationContext).valutaConPreavvisi(now = adesso, preavvisi = accesoOra)
+                        attesa = CadenzaSentinella.attesa(prossimo)
+                        vicino = prossimo.takeIf { it.vicino && accesoOra }
+                        TempiLog.riga(
+                            "giro",
+                            TempiLog.da(inizio),
+                            "prossimo=${attesa}ms vicine=${prossimo.vicine.size}",
                         )
                     }
                     ultimoGiorno = oggi
@@ -339,13 +358,86 @@ class PactumService : Service() {
                 // Un minuto (o meno, per un preavviso), o meno se nel frattempo lo
                 // schermo si spegne (si guarda subito l'uso fino a lì) o si
                 // riaccende (il primo preavviso dopo lo sblocco non aspetta).
-                spentoAdesso = withTimeoutOrNull(attesa) {
-                    select {
-                        spegnimenti.onReceive { true }
-                        accensioni.onReceive { false }
-                    }
-                } == true
+                // (0.16) O meno se, vicino al limite, arriva davanti un'app della regola.
+                spentoAdesso = aspettaGiro(
+                    restaMs = CadenzaSentinella.resta(adessoMono, attesa, SystemClock.elapsedRealtime()),
+                    vicino = vicino,
+                    dal = adesso,
+                )
             }
+        }
+    }
+
+    /**
+     * (0.16) L'attesa fino al giro dopo ([restaMs] ms). True se nel frattempo lo
+     * schermo si è spento; false allo scadere, a un'accensione, o quando il
+     * controllo leggero vuole subito il giro completo. Con [vicino] (regole a
+     * meno di due minuti dal limite o dallo sforamento, schermo acceso), ogni
+     * ControlloLeggero.PASSO_MS si guardano solo gli eventi da [dal] in poi
+     * (con qualche secondo di margine all'indietro, senza contare due volte lo
+     * stesso evento): se è arrivata davanti un'app che cade in una di quelle
+     * regole, subito il giro completo. Mai il giorno intero. Un errore nel
+     * controllo leggero non ferma il servizio: vale come "fai il giro completo".
+     */
+    private suspend fun aspettaGiro(restaMs: Long, vicino: ProssimoGiro?, dal: Long): Boolean {
+        val fine = SystemClock.elapsedRealtime() + restaMs
+        var davanti = vicino?.davanti.orEmpty()
+        var ultimo = dal
+        var viste = emptySet<Ripresa>()
+        var controlli = 0
+        var ultimoLog: Long? = null
+        while (true) {
+            val resta = fine - SystemClock.elapsedRealtime()
+            if (resta <= 0) return false
+            val schermo = withTimeoutOrNull(ControlloLeggero.passo(resta, vicino != null)) {
+                select {
+                    spegnimenti.onReceive { true }
+                    accensioni.onReceive { false }
+                }
+            }
+            if (schermo != null) return schermo
+            if (vicino == null) return false
+            val inizio = TempiLog.ora()
+            val adesso = System.currentTimeMillis()
+            controlli++
+            var arrivate = 0
+            var errore = false
+            val giro = try {
+                val (da, a) = ControlloLeggero.finestra(ultimo, adesso)
+                val lette = ControlloLeggero.nuove(UsageStatsReader(applicationContext).ripreseTra(da, a), viste, adesso)
+                viste = lette.viste
+                ultimo = adesso
+                val arrivi = ControlloLeggero.arrivi(lette.nuove, davanti)
+                davanti = arrivi.davanti
+                arrivate = arrivi.arrivate.size
+                val filtro by lazy { CatalogoApp.filtroUso(applicationContext) }
+                ControlloLeggero.serveGiro(
+                    arrivate = arrivi.arrivate,
+                    vicine = vicino.vicine,
+                    conta = { filtro(it) },
+                    cade = { chiave, pacchetto ->
+                        ControlloLeggero.cade(chiave, pacchetto) { CatalogoApp.categoriaDiPacchetto(applicationContext, it) }
+                    },
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Il PackageManager o il sistema hanno dato errore: il giro completo
+                // (protetto) al posto di questo controllo, mai il servizio fermo.
+                errore = true
+                true
+            }
+            val mono = SystemClock.elapsedRealtime()
+            if (ControlloLeggero.daLoggare(arrivate > 0 || errore, giro, ultimoLog, mono)) {
+                TempiLog.riga(
+                    "controllo-leggero",
+                    TempiLog.da(inizio),
+                    "controlli=$controlli arrivate=$arrivate giro=" + (if (giro) "si" else "no") + (if (errore) " errore" else ""),
+                )
+                ultimoLog = mono
+                controlli = 0
+            }
+            if (giro) return false
         }
     }
 

@@ -75,6 +75,11 @@ data class Patto(
     // della v3.6: il blocco del telefono resta com'era.
     @SerialName("faccende") val faccendeGrezze: JsonElement? = null,
     @SerialName("blocco") val bloccoGrezzo: JsonElement? = null,
+    // (0.16, v3.8) I tempi di QUESTO telefono, identici a quelli della finestra
+    // del genitore: gli 8 giorni e i totali/medie di 7 e 30 giorni. Grezzi e
+    // letti a parte (LetturaTempi). Assenti = server di prima della v3.8.
+    @SerialName("uso_recente") val usoRecenteGrezzo: JsonElement? = null,
+    @SerialName("medie") val medieGrezze: JsonElement? = null,
     // App-interno (NON dal server): il giorno del patto in cui `bonusOggiPerRegola`
     // è valido, stampato da PattoLocale al salvataggio. Se al momento della
     // valutazione non è più oggi (notte offline), i bonus di "oggi" non valgono.
@@ -245,6 +250,11 @@ data class Dispositivo(
     val tipo: String = "",
     val striscia: List<GiornoStriscia> = emptyList(),
     val revocato: Boolean = false,
+    // (0.16, v3.8) Solo in `dispositivi` di GET /api/patto: i tempi di quel
+    // dispositivo (così il figlio vede anche il computer). Grezzi, letti da
+    // LetturaTempi; assenti = server di prima della v3.8.
+    @SerialName("uso_recente") val usoRecenteGrezzo: JsonElement? = null,
+    @SerialName("medie") val medieGrezze: JsonElement? = null,
 )
 
 /** (v3) Il figlio a cui appartiene questo telefono. */

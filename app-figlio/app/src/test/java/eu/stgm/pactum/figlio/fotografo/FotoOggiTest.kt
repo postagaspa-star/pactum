@@ -175,10 +175,11 @@ class FotoOggiTest : Fotografo() {
     }
 
     @Test
-    fun tutteLeApp() {
+    fun serverVecchio() {
         Mondo.collegato(app)
-        scatta("05-oggi-tutte-le-app", "Oggi, \"Vedi tutte\": la pagina con tutte le app del giorno") {
-            apriPactum(StatiFinti()).also { tocca("Vedi tutte", sottostringa = true) }.comeAperta()
+        val stato = DatiFinti.oggiNormale().copy(tempi = DatiFinti.tempiServerVecchio())
+        scatta("05-oggi-server-vecchio", "(0.16) Oggi con un server di prima della v3.8: il tempo solo di oggi, come prima, e «Vedi tutto»", pagine = true) {
+            apriPactum(StatiFinti(oggi = stato)).comeAperta()
         }
     }
 }

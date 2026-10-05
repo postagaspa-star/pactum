@@ -3,6 +3,7 @@ package eu.stgm.pactum.figlio.avviso
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import eu.stgm.pactum.figlio.valutatore.Sforamento
+import eu.stgm.pactum.figlio.valutatore.TempoFinito
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -30,6 +31,16 @@ data class Avviso(
     @SerialName("minuti_oltre") val minutiOltre: Int = 0,
     val dalle: String? = null,
     val alle: String? = null,
+    /**
+     * (0.16, contratto v3.8) Il tempo è finito: uso == limite efficace, non
+     * ancora oltre. Non è uno sforamento ("30 min su 30 min").
+     */
+    val finito: Boolean = false,
+    /**
+     * (0.16) Tempo finito di nuovo (dopo un bonus) con lo sforamento di oggi
+     * già a registro: andare oltre non aggiunge niente, e l'avviso non lo promette.
+     */
+    @SerialName("gia_a_registro") val giaARegistro: Boolean = false,
 ) {
     val fascia: Boolean get() = tipo == TipiRegola.FASCIA_ORARIA
 
@@ -64,6 +75,19 @@ data class Avviso(
                 minutiOltre = sforamento.minutiOltre,
             )
         }
+
+        /** (0.16) L'avviso del tempo finito: "30 min su 30 min", niente "oltre". */
+        fun daTempoFinito(tempo: TempoFinito, regola: Regola?, nome: String?): Avviso = Avviso(
+            regolaId = tempo.regolaId,
+            tipo = TipiRegola.LIMITE_TEMPO,
+            nome = nome,
+            minutiUsati = tempo.limiteEfficace,
+            limiteEfficace = tempo.limiteEfficace,
+            limite = (regola?.parametri?.get("minuti_al_giorno") as? JsonPrimitive)?.content?.toIntOrNull(),
+            minutiOltre = 0,
+            finito = true,
+            giaARegistro = tempo.giaARegistro,
+        )
 
         /**
          * (0.9) Un avviso nuovo mentre l'altro è ancora aperto: si aggiunge,

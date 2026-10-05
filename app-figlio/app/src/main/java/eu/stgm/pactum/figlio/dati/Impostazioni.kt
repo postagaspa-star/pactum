@@ -85,6 +85,10 @@ class Impostazioni(private val context: Context) {
         // (0.12) I preavvisi "il tempo sta per finire" già dati (Preavvisi.chiave).
         val PREAVVISI_FATTI = stringSetPreferencesKey("preavvisi_fatti")
 
+        // (0.16) I "tempo finito" già detti (TempiFiniti.chiave), e quelli il
+        // cui avviso a tutto schermo è apparso (TempiFiniti.chiaveSchermo).
+        val TEMPI_FINITI = stringSetPreferencesKey("tempi_finiti_fatti")
+
         // Tappa 6 — corazza.
         // Ultimo stato NOTO dei permessi (null = mai osservato): serve a
         // rilevare la REVOCA come transizione (concesso→revocato), non come
@@ -345,6 +349,26 @@ class Impostazioni(private val context: Context) {
                 runCatching { LocalDate.parse(g) }.getOrNull()?.isBefore(soglia) != true
             }
             p[Chiavi.PREAVVISI_FATTI] = (recenti + chiavi).toSet()
+        }
+    }
+
+    // --- (0.16) Dedup del "tempo finito" (contratto v3.8) --------------------
+    // Chiave = "regolaId:giorno:limite" (TempiFiniti.chiave), più ":schermo"
+    // quando l'avviso a tutto schermo è apparso. Si potano come i preavvisi.
+
+    suspend fun leggiTempiFiniti(): Set<String> =
+        context.dataStore.data.first()[Chiavi.TEMPI_FINITI].orEmpty()
+
+    suspend fun registraTempiFiniti(chiavi: Collection<String>, togli: Collection<String> = emptyList()) {
+        if (chiavi.isEmpty() && togli.isEmpty()) return
+        context.dataStore.edit { p ->
+            val soglia = LocalDate.now().minusDays(GIORNI_MEMORIA_SFORAMENTI)
+            val recenti = p[Chiavi.TEMPI_FINITI].orEmpty().filter { chiave ->
+                val g = chiave.split(':').getOrNull(1).orEmpty()
+                runCatching { LocalDate.parse(g) }.getOrNull()?.isBefore(soglia) != true
+            }
+            // (0.16) [togli]: i segni "tolta" dei tempi finiti ridati.
+            p[Chiavi.TEMPI_FINITI] = (recenti + chiavi).toSet() - togli.toSet()
         }
     }
 

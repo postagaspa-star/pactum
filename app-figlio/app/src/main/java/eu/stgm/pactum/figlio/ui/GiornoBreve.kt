@@ -28,3 +28,7 @@ fun giornoBreve(iso: String, oggi: LocalDate, parole: ParoleGiorno): String =
     runCatching { LocalDate.parse(iso) }.getOrNull()
         ?.let { giornoBreve(it, oggi, parole) }
         ?: iso
+
+/** (0.16) Il giorno sempre come "18/09" (i chip e le barre del Tempo); un testo che non è una data resta com'è. */
+fun giornoNumerico(iso: String): String =
+    runCatching { LocalDate.parse(iso).format(FORMATO_GIORNO) }.getOrNull() ?: iso

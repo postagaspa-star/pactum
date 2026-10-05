@@ -84,7 +84,7 @@ class NavigazioneTest {
             Scheda.REGOLE to listOf(Pagina.IMPOSTAZIONI),
             Navigazione.indietro(Scheda.REGOLE, listOf(Pagina.IMPOSTAZIONI, Pagina.COSA_VEDE)),
         )
-        assertEquals(Scheda.OGGI to emptyList<Pagina>(), Navigazione.indietro(Scheda.OGGI, listOf(Pagina.TUTTE_LE_APP)))
+        assertEquals(Scheda.OGGI to emptyList<Pagina>(), Navigazione.indietro(Scheda.OGGI, listOf(Pagina.TEMPO)))
         // Nessuna pagina, scheda diversa da Oggi: si torna a Oggi.
         assertEquals(Scheda.OGGI to emptyList<Pagina>(), Navigazione.indietro(Scheda.SESSIONI, emptyList()))
         assertEquals(Scheda.OGGI to emptyList<Pagina>(), Navigazione.indietro(Scheda.LAVORI, emptyList()))

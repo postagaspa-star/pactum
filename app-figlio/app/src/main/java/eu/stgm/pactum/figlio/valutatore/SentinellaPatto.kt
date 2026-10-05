@@ -27,7 +27,9 @@ import eu.stgm.pactum.figlio.permessi.PermessiHelper
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.sessione.StatoSessione
 import eu.stgm.pactum.figlio.sync.ConsegnaEventi
+import eu.stgm.pactum.figlio.diagnostica.TempiLog
 import eu.stgm.pactum.figlio.ui.etichettaChiave
+import eu.stgm.pactum.figlio.ui.testoDurata
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -80,8 +82,8 @@ class SentinellaPatto(private val context: Context) {
     /** Gli sforamenti appena segnalati e la fotografia del giorno che va con loro. */
     private class Segnalati(val nuovi: List<Sforamento>, val fotografia: Evento)
 
-    /** (0.12) Un giro: gli sforamenti appena segnalati, e fra quanti ms la prossima soglia dei preavvisi. */
-    private class Giro(val segnalati: Segnalati?, val prossimaSoglia: Long?)
+    /** (0.12) Un giro: gli sforamenti appena segnalati, e quando guardare di nuovo. */
+    private class Giro(val segnalati: Segnalati?, val prossimo: ProssimoGiro)
 
     /**
      * Valuta e restituisce gli sforamenti NUOVI (vuota se niente di nuovo).
@@ -114,10 +116,10 @@ class SentinellaPatto(private val context: Context) {
      * regola alla prossima soglia (null = nessuna in vista): il servizio
      * guarda di nuovo appena dopo, così il preavviso non arriva in ritardo.
      */
-    suspend fun valutaConPreavvisi(now: Long = System.currentTimeMillis(), preavvisi: Boolean = true): Long? {
+    suspend fun valutaConPreavvisi(now: Long = System.currentTimeMillis(), preavvisi: Boolean = true): ProssimoGiro {
         val giro = mutex.withLock { segnalaNuovi(null, now, giornoPassato = false, rileggiPatto = true, preavvisi = preavvisi) }
         giro.segnalati?.let { consegna(it) }
-        return giro.prossimaSoglia
+        return giro.prossimo
     }
 
     /** Lo sforamento appena registrato parte subito verso il server, fuori dal mutex. */
@@ -139,25 +141,28 @@ class SentinellaPatto(private val context: Context) {
         preavvisi: Boolean,
     ): Giro {
         if (!PermessiHelper.haAccessoUso(context)) return NIENTE
+        val inizioGiro = TempiLog.ora()
         var patto = PattoLocale(context).leggi() ?: return NIENTE
         // (0.9) Su questo telefono niente limiti a tempo né fasce (solo vita
         // reale, o regole di altri dispositivi): niente da guardare, e niente
         // lettura degli eventi.
         if (!Segnalazioni.daGuardare(patto.regoleDiQuestoDispositivo())) return NIENTE
+        val inizioLettura = TempiLog.ora()
         val lettura = leggi(now, giornata)
+        TempiLog.riga("lettura-uso", TempiLog.da(inizioLettura))
         val giorno = lettura.giorno.toString()
         // (0.12) Prima dei limiti superati, quelli che stanno per esserlo. Un
         // errore qui non salta mai gli sforamenti dello stesso giro.
-        val prossimaSoglia = if (preavvisi && !giornoPassato) {
+        val prossimo = if (preavvisi && !giornoPassato) {
             try {
                 preavvisa(patto, lettura, now, giorno)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                null
+                ProssimoGiro.NIENTE
             }
         } else {
-            null
+            ProssimoGiro.NIENTE
         }
         // Un giorno già finito: i limiti solo se la copia ne sa i bonus
         // (altrimenti uno sforamento potrebbe essere falso); le fasce non hanno bonus.
@@ -165,19 +170,28 @@ class SentinellaPatto(private val context: Context) {
         val impostazioni = Impostazioni(context)
         val giaSegnalati = impostazioni.leggiSforamentiSegnalati()
         var candidati = Segnalazioni.nuovi(valutaContro(patto, lettura, now, soloFasce), giorno, giaSegnalati)
-        if (candidati.isEmpty()) return Giro(null, prossimaSoglia)
+        if (candidati.isEmpty()) return Giro(null, prossimo)
 
         // (0.9) Prima di registrare uno sforamento nuovo, il patto fresco dal
         // server, se c'è rete: una copia rimasta indietro (un bonus appena
         // concesso con la rilettura fallita, una proposta accettata da un altro
         // dispositivo) darebbe uno sforamento falso. Si rivaluta sulla stessa
         // lettura dell'uso. Senza rete si resta sulla copia, come prima.
+        // (0.16, contratto v3.8) Con un'attesa massima di pochi secondi: oltre,
+        // vale la copia locale, come senza rete. L'avviso non aspetta la rete lenta.
         if (rileggiPatto) {
-            rileggi()?.let { fresco ->
-                patto = fresco
-                candidati = Segnalazioni.nuovi(valutaContro(fresco, lettura, now, soloFasce), giorno, giaSegnalati)
+            val inizioRilettura = TempiLog.ora()
+            val fresco = rileggi()
+            TempiLog.riga(
+                "rilettura-patto",
+                TempiLog.da(inizioRilettura),
+                if (fresco != null) "ok" else "copia-locale",
+            )
+            fresco?.let {
+                patto = it
+                candidati = Segnalazioni.nuovi(valutaContro(it, lettura, now, soloFasce), giorno, giaSegnalati)
             }
-            if (candidati.isEmpty()) return Giro(null, prossimaSoglia)
+            if (candidati.isEmpty()) return Giro(null, prossimo)
         }
 
         val decisione = Segnalazioni.decidi(
@@ -187,6 +201,7 @@ class SentinellaPatto(private val context: Context) {
             mostraSopra = PermessiHelper.puoMostrareSopra(context),
             inChiamata = Chiamata.inCorso(context),
             giornoPassato = giornoPassato,
+            tempiFinitiFatti = impostazioni.leggiTempiFiniti(),
         )
         val tuttoSchermo = decisione.aTuttoSchermo.isNotEmpty()
         val dispositivo = impostazioni.leggiIdentita().dispositivo?.id?.takeIf { it > 0 }?.toString()
@@ -213,47 +228,99 @@ class SentinellaPatto(private val context: Context) {
             avvisaGentile(sforamento, regolePerId[sforamento.regolaId], tuttoSchermo, giornoPassato)
         }
         // Stesso dedup della notifica: una volta per regola per giorno.
-        AvvisoActivity.apri(
+        val aperto = AvvisoActivity.apri(
             context,
             decisione.aTuttoSchermo.map { sforamento ->
                 val regola = regolePerId[sforamento.regolaId]
                 Avviso.da(sforamento, regola, nomeBersaglio(regola))
             },
         )
-        return Giro(Segnalati(decisione.nuovi, FotografiaUso.evento(context, lettura.uso)), prossimaSoglia)
+        TempiLog.riga(
+            "sforamento-dal-giro",
+            TempiLog.da(inizioGiro),
+            "regole=" + decisione.nuovi.joinToString(",") { it.regolaId.toString() } +
+                " schermo=" + (if (decisione.aTuttoSchermo.isEmpty()) "no" else if (aperto) "aperto" else "rifiutato"),
+        )
+        return Giro(Segnalati(decisione.nuovi, FotografiaUso.evento(context, lettura.uso)), prossimo)
     }
 
     /**
-     * (0.12) I preavvisi "il tempo sta per finire" di adesso, contro la copia
-     * locale del patto (niente rilettura dal server: una copia indietro di un
-     * bonus dà al massimo un preavviso in anticipo, mai uno sforamento falso).
-     * Come gli sforamenti: prima si segnano come detti, poi si avvisa (anche
-     * se la notifica non parte: mai un giro in tondo). Quelli che non valgono
-     * più si tolgono dalla tendina; a mezzanotte se ne vanno da soli.
-     * Restituisce fra quanti ms l'app davanti porta una regola alla prossima
-     * soglia (Preavvisi.prossimaSoglia).
+     * (0.12) I preavvisi "il tempo sta per finire" e (0.16, contratto v3.8) "il
+     * tempo è finito" di adesso, contro la copia locale del patto (niente
+     * rilettura dal server: una copia indietro di un bonus dà al massimo un
+     * avviso in anticipo, mai uno sforamento falso). Un giro solo
+     * (AvvisiDelTempo), in quest'ordine: prima si segnano le chiavi (mai un
+     * giro in tondo), poi si tolgono le notifiche che non valgono più, poi si
+     * mettono quelle nuove. Le due notifiche di una regola stanno nello
+     * stesso posto della tendina: dopo un bonus, il tempo finito del limite
+     * vecchio se ne va UNA volta, prima del preavviso del limite nuovo.
+     *
+     * "Il tempo è finito": l'avviso a tutto schermo (se si può: "Mostra sopra
+     * le altre app", niente chiamata in corso) e la notifica al posto del
+     * preavviso "manca 1 minuto". Non va al server.
+     *
+     * Restituisce quando guardare di nuovo: fra quanti ms l'app davanti porta
+     * una regola a una soglia, al limite o oltre, e le regole vicine al limite
+     * o allo sforamento (allora, fino al giro dopo, il controllo leggero).
      */
-    private suspend fun preavvisa(patto: Patto, lettura: Lettura, now: Long, giorno: String): Long? {
+    private suspend fun preavvisa(patto: Patto, lettura: Lettura, now: Long, giorno: String): ProssimoGiro {
         val regole = patto.regoleDiQuestoDispositivo().filter { it.attiva && it.tipo == TipiRegola.LIMITE_TEMPO }
         val impostazioni = Impostazioni(context)
-        var fatti = impostazioni.leggiPreavvisiFatti()
         val bonus = bonusOggi(patto, now)
-        val indice = lettura.uso.indice
         // Le app davanti adesso; quelle di una Sessione in corso contano solo dopo la sua fine.
         val davanti = Preavvisi.davanti(lettura.giornata, lettura.filtro, StatoSessione.attivaAdesso(now)?.fine)
-        val nuovi = Preavvisi.daDare(regole, bonus, indice, giorno, fatti, davanti)
-        if (nuovi.isNotEmpty()) {
-            val dette = Preavvisi.chiaviDette(nuovi, giorno)
-            impostazioni.registraPreavvisi(dette)
-            fatti = fatti + dette
-            val regolePerId = patto.regole.associateBy { it.id }
-            val finoAMezzanotte = Preavvisi.finoAFineGiorno(now, lettura.zona)
-            for (preavviso in nuovi) avvisaPreavviso(preavviso, regolePerId[preavviso.regolaId], finoAMezzanotte)
+        val giro = AvvisiDelTempo.giro(
+            regole = regole,
+            bonusOggiPerRegola = bonus,
+            indice = lettura.uso.indice,
+            giorno = giorno,
+            preavvisiFatti = impostazioni.leggiPreavvisiFatti(),
+            tempiFinitiFatti = impostazioni.leggiTempiFiniti(),
+            sforamentiSegnalati = impostazioni.leggiSforamentiSegnalati(),
+            davanti = davanti,
+        )
+        // 1. Le chiavi, prima di avvisare.
+        impostazioni.registraPreavvisi(giro.chiaviPreavvisi)
+        impostazioni.registraTempiFiniti(giro.chiaviTempiFiniti, togli = giro.segniDaCancellare)
+        // 2. Via quello che non vale più…
+        for (regolaId in giro.daTogliere) AvvisiLocali.cancella(context, AvvisiLocali.idPreavviso(regolaId))
+        // 3. …poi il nuovo.
+        val regolePerId = patto.regole.associateBy { it.id }
+        val finoAMezzanotte = Preavvisi.finoAFineGiorno(now, lettura.zona)
+        for (preavviso in giro.preavvisi) avvisaPreavviso(preavviso, regolePerId[preavviso.regolaId], finoAMezzanotte)
+        if (giro.tempiFiniti.isNotEmpty()) avvisaTempiFiniti(giro.tempiFiniti, regolePerId, giorno, finoAMezzanotte)
+        return ProssimoGiro(giro.prossimo, giro.vicine, davanti.map { it.pacchetto }.toSet())
+    }
+
+    /** (0.16) "Il tempo è finito": la notifica di ognuno, e l'avviso a tutto schermo se si può. */
+    private suspend fun avvisaTempiFiniti(
+        nuovi: List<TempoFinito>,
+        regolePerId: Map<Long, Regola>,
+        giorno: String,
+        finoAMezzanotte: Long,
+    ) {
+        val inizio = TempiLog.ora()
+        for (tempo in nuovi) avvisaTempoFinito(tempo, regolePerId[tempo.regolaId], finoAMezzanotte)
+        // (0.16) Un tempo finito ridato (la notifica era stata tolta): solo la
+        // notifica, l'avviso a tutto schermo per questo limite c'è già stato.
+        val aSchermo = nuovi.filter { !it.ridato }
+        val schermo = aSchermo.isNotEmpty() && PermessiHelper.puoMostrareSopra(context) && !Chiamata.inCorso(context)
+        val aperto = schermo && AvvisoActivity.apri(
+            context,
+            aSchermo.map { tempo ->
+                val regola = regolePerId[tempo.regolaId]
+                Avviso.daTempoFinito(tempo, regola, nomeBersaglio(regola))
+            },
+        )
+        if (aperto) {
+            Impostazioni(context).registraTempiFiniti(aSchermo.map { TempiFiniti.chiaveSchermo(it.regolaId, giorno, it.limiteEfficace) })
         }
-        for (regolaId in Preavvisi.daTogliere(regole, bonus, indice, giorno, fatti)) {
-            AvvisiLocali.cancella(context, AvvisiLocali.idPreavviso(regolaId))
-        }
-        return Preavvisi.prossimaSoglia(regole, bonus, indice, giorno, fatti, davanti)
+        TempiLog.riga(
+            "tempo-finito",
+            TempiLog.da(inizio),
+            "regole=" + nuovi.joinToString(",") { it.regolaId.toString() + if (it.ridato) "(ridato)" else "" } +
+                " schermo=" + (if (!schermo) "no" else if (aperto) "aperto" else "rifiutato"),
+        )
     }
 
     /**
@@ -325,11 +392,14 @@ class SentinellaPatto(private val context: Context) {
         )
     }
 
-    /** Il patto fresco dal server, salvato come copia locale; null senza rete o se non è entrato. */
+    /**
+     * Il patto fresco dal server, salvato come copia locale; null senza rete,
+     * se non è entrato o (0.16) se non arriva entro [RILETTURA_MAX_MS].
+     */
     private suspend fun rileggi(): Patto? {
         val configurazione = Impostazioni(context).leggiConfigurazione()
         if (!configurazione.completa) return null
-        val patto = PostinoClient(configurazione).leggiPatto() ?: return null
+        val patto = PostinoClient(configurazione).leggiPattoEntro(RILETTURA_MAX_MS) ?: return null
         return patto.takeIf { PattoLocale(context).salva(it) }
     }
 
@@ -397,6 +467,31 @@ class SentinellaPatto(private val context: Context) {
         )
     }
 
+    /**
+     * (0.16) "Il tempo per Instagram è finito" / "30 min su 30 min. Se continui,
+     * da adesso va a registro come fuori regola." Sul canale dei preavvisi, al
+     * posto del preavviso "manca 1 minuto" (stesso id); allo sforamento la
+     * notifica dello sforamento prende il suo posto. A mezzanotte se ne va.
+     */
+    private fun avvisaTempoFinito(tempo: TempoFinito, regola: Regola?, scadeTra: Long) {
+        val nome = nomeBersaglio(regola) ?: context.getString(R.string.preavviso_bersaglio_ignoto)
+        val limite = testoDurata(context, tempo.limiteEfficace.toLong())
+        AvvisiLocali.avvisa(
+            context,
+            id = AvvisiLocali.idPreavviso(tempo.regolaId),
+            titolo = context.getString(R.string.tempo_finito_titolo, nome),
+            // (0.16) Lo sforamento di oggi è già a registro: niente promessa di registro.
+            testo = context.getString(
+                if (tempo.giaARegistro) R.string.notifica_tempo_finito_testo_gia_a_registro else R.string.notifica_tempo_finito_testo,
+                limite,
+                limite,
+            ),
+            destinazione = MainActivity.DEST_OGGI,
+            canale = AvvisiLocali.CANALE_PREAVVISI,
+            scadeTra = scadeTra,
+        )
+    }
+
     /** Il bersaglio di un limite di tempo in chiaro: "TikTok", "Social", "Tutto il telefono". */
     private fun nomeBersaglio(regola: Regola?): String? {
         if (regola == null) return null
@@ -409,6 +504,9 @@ class SentinellaPatto(private val context: Context) {
 
     private companion object {
         val mutex = Mutex()
-        val NIENTE = Giro(null, null)
+        val NIENTE = Giro(null, ProssimoGiro.NIENTE)
+
+        /** (0.16) La rilettura del patto prima di uno sforamento: al massimo 3 secondi. */
+        const val RILETTURA_MAX_MS = 3_000L
     }
 }

@@ -245,8 +245,14 @@ fun FaccendeScreen(
                     verticalArrangement = Arrangement.spacedBy(Spazi.l),
                 ) {
                     if (stato.scollegato || memoria.scollegato) {
-                        // Questo telefono non è più collegato (401): il blocco è tolto.
-                        item { RigaStato(stringResource(R.string.scollegato)) }
+                        // Questo telefono non è più collegato (401): il blocco è tolto, e lo si dice.
+                        item {
+                            RigaStato(
+                                testo = stringResource(R.string.faccende_scollegato),
+                                azione = onApriImpostazioni?.let { stringResource(R.string.azione_collega) },
+                                onAzione = onApriImpostazioni,
+                            )
+                        }
                     } else if (stato.datiFermi) {
                         // Un'ora salvata nel futuro (l'orologio spostato) non si mostra.
                         item { RigaStato(testoDatiVecchi(listOfNotNull(memoria.sentitoIl, memoria.elencoIl).filter { it <= orologio }.maxOrNull())) }

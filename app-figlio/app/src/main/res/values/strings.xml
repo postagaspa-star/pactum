@@ -133,9 +133,9 @@
     <string name="bonus_piu_minuti">+%1$d min</string>
     <string name="oggi_bonus_gia_dato_solo">Su questa regola oggi ti sei già dato %1$d min.</string>
     <string name="oggi_bonus_in_partenza">+%1$d min in partenza</string>
-    <string name="oggi_bonus_tetti">Bonus di oggi: ancora %1$d min su %2$d · questa settimana %3$d su %4$d.</string>
+    <string name="oggi_bonus_tetti">Bonus di oggi: restano %1$d min su %2$d · settimana %3$d su %4$d</string>
     <!-- (v3) I tetti dei bonus valgono per dispositivo: con altri dispositivi lo si dice. -->
-    <string name="oggi_bonus_tetti_telefono">Bonus su questo telefono: oggi ancora %1$d min su %2$d · questa settimana %3$d su %4$d.</string>
+    <string name="oggi_bonus_tetti_telefono">Bonus su questo telefono: restano %1$d min su %2$d oggi · settimana %3$d su %4$d</string>
     <string name="oggi_bonus_dato">Ti sei dato %1$d minuti su %2$s</string>
     <string name="oggi_bonus_aggiungi_perche">Aggiungi perché</string>
     <string name="oggi_perche_titolo">Perché?</string>
@@ -839,7 +839,7 @@
     <string name="oggi_vai_ai_lavori_breve">Vai</string>
     <string name="oggi_manca_permesso">Da sistemare: manca il permesso «%1$s»</string>
     <string name="oggi_mancano_permessi">Da sistemare: mancano %1$d permessi</string>
-    <string name="oggi_vedi_tutte_app">Vedi tutte (%1$d)</string>
+    <string name="oggi_vedi_tutto">Vedi tutto</string>
     <string name="oggi_segna">Segna</string>
     <string name="oggi_bonus_apri">Più tempo su %1$s</string>
     <string name="oggi_bonus_foglio_titolo">Più tempo su %1$s</string>
@@ -896,4 +896,64 @@
     <string name="legenda_fuori_regola">Fuori regola</string>
     <string name="legenda_senza_dati">Senza dati</string>
     <string name="legenda_oggi">Oggi</string>
+    <!-- (0.16, contratto v3.8) Il tempo che finisce: a 30 su 30 l'avviso, da 31 il fuori regola. -->
+    <string name="tempo_finito_titolo">Il tempo per %1$s è finito</string>
+    <string name="tempo_finito_titolo_generico">Il tempo è finito</string>
+    <string name="tempo_finito_testo">Se continui, da adesso va a registro come fuori regola.</string>
+    <string name="notifica_tempo_finito_testo">%1$s su %2$s. Se continui, da adesso va a registro come fuori regola.</string>
+    <!-- (0.16) Di nuovo a fine tempo dopo un bonus, con lo sforamento di oggi già a registro: niente di nuovo va a registro. -->
+    <string name="tempo_finito_testo_gia_a_registro">Oggi questa regola è già a registro come fuori regola: se continui, non si aggiunge altro.</string>
+    <string name="notifica_tempo_finito_testo_gia_a_registro">%1$s su %2$s. Oggi questa regola è già a registro come fuori regola: se continui, non si aggiunge altro.</string>
+    <!-- (0.16) Le fasce in Oggi: se oggi sono rispettate. -->
+    <string name="fascia_rispettata_finora">Rispettata finora</string>
+    <string name="fascia_finisce_alle">finisce alle %1$s</string>
+    <string name="fascia_rispettata">Rispettata</string>
+    <string name="fascia_fuori">%1$s di telefono dentro la fascia</string>
+    <string name="fascia_inizia_alle">inizia alle %1$s</string>
+    <string name="fascia_oggi_non_c_e">oggi non c\'è</string>
+    <!-- (0.16) Le cose della 0.14 rimesse in vista. -->
+    <string name="regola_vedi_tua_proposta">Vedi la tua proposta</string>
+    <string name="regole_unica_regola">Questa è l\'unica regola del patto: puoi modificarla, ma non eliminarla.</string>
+    <string name="sessione_avvio_sempre">Restano sempre usabili Pactum, la Home, il Telefono e le Impostazioni.</string>
+    <string name="sessione_avvio_altro">Cos\'altro resta usabile</string>
+    <string name="sessione_avvio_aperte">Le pagine web aperte dalle app della sessione, la fotocamera e la scelta dei file restano usabili; le altre app no: se ti servono, aggiungile alla sessione.</string>
+    <string name="sessione_in_corso_app">Puoi usare: %1$s.</string>
+    <string name="faccende_scollegato">Questo telefono non è più collegato al patto: il blocco dei lavori di casa è tolto. Chiedi a un genitore un codice nuovo.</string>
+    <string name="oggi_bonus_regola">+%1$d min di bonus</string>
+    <!-- (0.16, contratto v3.8) Il tempo come lo vede il genitore: in Oggi e nella pagina Tempo. -->
+    <string name="tempo_titolo">Il tempo</string>
+    <string name="tempo_ultimi_7_riga">Ultimi 7 giorni: %1$s</string>
+    <string name="tempo_ultimi_30_riga">Ultimi 30 giorni: %1$s</string>
+    <plurals name="tempo_giorni_con_dati">
+        <item quantity="one">%1$d giorno su %2$d con dati</item>
+        <item quantity="other">%1$d giorni su %2$d con dati</item>
+    </plurals>
+    <string name="tempo_ultimi_7">Ultimi 7 giorni</string>
+    <string name="tempo_ultimi_30">Ultimi 30 giorni</string>
+    <string name="tempo_media_settimana">Media della settimana</string>
+    <string name="tempo_media_mese">Media del mese</string>
+    <plurals name="tempo_media_su_giorni">
+        <item quantity="one">su %1$d giorno</item>
+        <item quantity="other">su %1$d giorni</item>
+    </plurals>
+    <string name="tempo_media_al_giorno">%1$s al giorno</string>
+    <string name="tempo_nota_tra_parentesi">(%1$s)</string>
+    <string name="tempo_chip_oggi">oggi</string>
+    <string name="tempo_etichetta_oggi">Oggi</string>
+    <string name="tempo_etichetta_giorno">Il %1$s</string>
+    <string name="tempo_nessun_dato">Nessun dato ricevuto</string>
+    <string name="tempo_nessun_dato_spiega">Il telefono non ha mandato i dati di questo giorno: non vuol dire zero minuti.</string>
+    <string name="tempo_nessun_dato_spiega_computer">Il computer non ha mandato i dati di questo giorno: non vuol dire zero minuti.</string>
+    <string name="tempo_ultimi_8_giorni">Ultimi 8 giorni</string>
+    <string name="tempo_categorie_vuoto">Nessuna categoria in questo giorno.</string>
+    <string name="tempo_non_categorizzato">Non in categoria</string>
+    <string name="tempo_limite">limite %1$s</string>
+    <string name="tempo_app_titolo">Le app</string>
+    <string name="tempo_programmi_titolo">I programmi</string>
+    <string name="tempo_app_vuoto">Nessuna app in questo giorno.</string>
+    <string name="tempo_programmi_vuoto">Nessun programma in questo giorno.</string>
+    <string name="tempo_giorno_valore">%1$s: %2$s</string>
+    <string name="tempo_giorno_senza_dati">nessun dato</string>
+    <string name="formato_breve_ore">%1$dh</string>
+    <string name="formato_breve_ore_minuti">%1$dh%2$02d</string>
 </resources>

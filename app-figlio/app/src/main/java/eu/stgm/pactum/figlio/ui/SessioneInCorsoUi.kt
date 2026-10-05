@@ -246,7 +246,10 @@ fun SchedaSessioneInCorso(
     modifier: Modifier = Modifier,
     /** La card di Oggi sì, quella di Sessioni no (rememberTermineSessione). */
     ascoltaNotifica: Boolean = true,
+    /** (0.16) "Puoi usare: ClasseViva, Calcolatrice e altre 3." (non in Sessioni, dove la card della sessione le dice). */
+    mostraApp: Boolean = true,
 ) {
+    val context = LocalContext.current
     val termine = rememberTermineSessione(attiva, onTerminata, ascoltaNotifica)
     val mancano = TestoSessioni.minutiMancanti(attiva.fine, adesso)
     CardEvidenza(modifier = modifier, tono = Tono.Neutro) {
@@ -259,6 +262,15 @@ fun SchedaSessioneInCorso(
             },
             style = MaterialTheme.typography.bodyMedium,
         )
+        if (mostraApp) {
+            Text(
+                text = stringResource(
+                    R.string.sessione_in_corso_app,
+                    elencoAppSessione(context, attiva.app.toList(), attiva.nomi, massimo = 2),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
         Spacer(modifier = Modifier.height(Spazi.m))
         OutlinedButton(onClick = { termine.chiedi() }) {
             Text(stringResource(R.string.sessione_termina_conferma), maxLines = 1)

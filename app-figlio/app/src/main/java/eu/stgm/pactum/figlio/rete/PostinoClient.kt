@@ -163,14 +163,27 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
      */
     suspend fun leggiPatto(): Patto? = leggiPattoConCodice().first
 
-    /** Il patto e il codice HTTP della lettura: 401 = questo telefono non è più collegato. */
-    suspend fun leggiPattoConCodice(): Pair<Patto?, Int> {
+    /**
+     * (0.16, contratto v3.8) Il patto con un'attesa massima di [limiteMs] per
+     * tutta la richiesta: la rilettura prima di uno sforamento non deve far
+     * aspettare l'avviso. Oltre, null: vale la copia locale, come senza rete.
+     */
+    suspend fun leggiPattoEntro(limiteMs: Long): Patto? = leggiPattoConCodice(limiteMs).first
+
+    /**
+     * Il patto e il codice HTTP della lettura: 401 = questo telefono non è più
+     * collegato. [limiteMs] = attesa massima per tutta la richiesta (null = i
+     * tempi di sempre). (0.16, v3.8) [conTempi] = anche `uso_recente` e
+     * `medie` (`?tempi=1`): solo per Oggi e la pagina Tempo, mai nei giri
+     * frequenti (la sentinella, il worker), che non ne hanno bisogno.
+     */
+    suspend fun leggiPattoConCodice(limiteMs: Long? = null, conTempi: Boolean = false): Pair<Patto?, Int> {
         // (0.13) Quando è partita e arrivata la domanda (sull'orologio che non
         // si sposta) e l'ora del server: una lettura lenta del patto non deve
         // rimettere un blocco delle faccende tolto da una risposta più fresca,
         // e il blocco programmato parte all'ora del server, non del telefono.
         val partita = Orologio.adesso()
-        val lettura = leggiConData("/api/patto")
+        val lettura = leggiConData(percorsoPatto(conTempi), limiteMs)
         val arrivata = Orologio.adesso()
         val patto = lettura.corpo
             ?.let { decodifica(Patto.serializer(), it) }
@@ -427,12 +440,13 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
     /** (0.13) Una lettura col corpo (null se non 2xx), il codice e l'ora del server della risposta. */
     data class LetturaConData(val corpo: String?, val codice: Int, val dataServer: Long?)
 
-    private suspend fun leggiConData(percorso: String): LetturaConData {
+    private suspend fun leggiConData(percorso: String, limiteMs: Long? = null): LetturaConData {
         if (!configurazione.completa) return LetturaConData(null, 0, null)
         return withContext(Dispatchers.IO) {
             try {
                 val richiesta = richiesta(percorso).get().build()
-                http.newCall(richiesta).execute().use { risposta ->
+                val client = limiteMs?.let { http.newBuilder().callTimeout(it, TimeUnit.MILLISECONDS).build() } ?: http
+                client.newCall(richiesta).execute().use { risposta ->
                     LetturaConData(
                         corpo = if (risposta.isSuccessful) risposta.body?.string() else null,
                         codice = risposta.code,
@@ -503,6 +517,9 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         private val JPEG_MEDIA_TYPE = "image/jpeg".toMediaType()
         private val CORPO_VUOTO = ByteArray(0).toRequestBody(null)
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
+
+        /** (0.16, contratto v3.8) GET /api/patto, con `?tempi=1` solo se servono i tempi. */
+        fun percorsoPatto(conTempi: Boolean): String = if (conTempi) "/api/patto?tempi=1" else "/api/patto"
 
         // Un solo client OkHttp per processo: riusa pool di connessioni e thread.
         private val http: OkHttpClient = OkHttpClient.Builder()

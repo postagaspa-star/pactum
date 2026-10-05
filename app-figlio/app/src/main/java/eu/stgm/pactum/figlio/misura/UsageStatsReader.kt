@@ -9,6 +9,9 @@ import java.time.ZoneId
 
 data class UsoApp(val pacchetto: String, val millisPrimoPiano: Long)
 
+/** (0.16) Un'app venuta davanti ([istante] = l'orario dell'evento ACTIVITY_RESUMED). */
+data class Ripresa(val pacchetto: String, val istante: Long)
+
 /**
  * Calcola il tempo in primo piano per app da queryEvents(), accoppiando
  * ACTIVITY_RESUMED/ACTIVITY_PAUSED per pacchetto. Come da architettura.md:
@@ -49,6 +52,20 @@ class UsageStatsReader(context: Context) {
         zona: ZoneId = ZoneId.systemDefault(),
         adesso: Long = System.currentTimeMillis(),
     ): List<UsoApp> = leggiGiorno(giorno, zona, adesso).perApp
+
+    /**
+     * (0.16) Il controllo leggero (servizio.ControlloLeggero): le app che sono
+     * venute davanti (ACTIVITY_RESUMED) fra [da] e [a), in ordine, col loro
+     * orario. Una finestra di pochi secondi: niente lettura del giorno.
+     */
+    fun ripreseTra(da: Long, a: Long): List<Ripresa> {
+        if (a <= da) return emptyList()
+        val riprese = ArrayList<Ripresa>()
+        scorri(da, a) { tipo, pacchetto, _, istante ->
+            if (tipo == Sessioni.RIPRESA && pacchetto != null) riprese += Ripresa(pacchetto, istante)
+        }
+        return riprese
+    }
 
     /** Gli eventi con istante in [da, a): la fine è esclusa, come dice queryEvents. */
     private fun scorri(da: Long, a: Long, azione: (Int, String?, String?, Long) -> Unit) {

@@ -254,6 +254,8 @@ fun SessioniScreen(
                                 adesso = inCorso.adesso,
                                 // "Termina la sessione" della notifica porta a Oggi: qui non si ascolta.
                                 ascoltaNotifica = false,
+                                // Le app stanno già sulla card della sessione, qui sotto.
+                                mostraApp = false,
                                 onTerminata = {
                                     ambito.launch {
                                         snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
@@ -800,6 +802,7 @@ private fun DialogoAvvio(
     val accessoUso = rememberAccessoUso()
     var scelta by rememberSaveable(sessione.id) { mutableIntStateOf(DurataSessione.SCELTE[1]) }
     var ore by rememberSaveable(sessione.id) { mutableStateOf("") }
+    var altroAperto by rememberSaveable(sessione.id) { mutableStateOf(false) }
     var minuti by rememberSaveable(sessione.id) { mutableStateOf("") }
     val durata = if (scelta == DURATA_ALTRO) DurataSessione.daOreMinuti(ore, minuti) else scelta
     // "Fino alle …" segue l'orologio mentre la finestra è aperta.
@@ -874,6 +877,23 @@ private fun DialogoAvvio(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // (0.16) Cosa resta usabile: la riga corta sempre, il resto dietro "Altro".
+                Text(
+                    text = stringResource(R.string.sessione_avvio_sempre),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (altroAperto) {
+                    Text(
+                        text = stringResource(R.string.sessione_avvio_aperte),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    TextButton(onClick = { altroAperto = true }, contentPadding = PaddingValues(0.dp)) {
+                        Text(stringResource(R.string.sessione_avvio_altro))
+                    }
+                }
                 // Senza questi due permessi la sessione non parte: una riga ciascuno, con "Risolvi".
                 if (!mostraSopra) {
                     RigaStato(

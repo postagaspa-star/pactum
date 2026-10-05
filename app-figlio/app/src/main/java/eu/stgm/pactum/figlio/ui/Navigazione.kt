@@ -15,7 +15,7 @@ enum class Scheda { OGGI, REGOLE, SESSIONI, LAVORI }
  * volta): le Impostazioni (anche aperte sui Permessi), i Siti visitati e
  * "Cosa vedono i tuoi genitori" (dalle Impostazioni), lo Storico delle
  * proposte e delle dichiarazioni (da Regole; anche aperto sulle
- * dichiarazioni) e l'elenco di tutte le app di oggi (da Oggi).
+ * dichiarazioni) e (0.16) il Tempo (da Oggi, "Vedi tutto").
  */
 enum class Pagina {
     IMPOSTAZIONI,
@@ -24,7 +24,7 @@ enum class Pagina {
     COSA_VEDE,
     STORICO,
     STORICO_DICHIARAZIONI,
-    TUTTE_LE_APP,
+    TEMPO,
 }
 
 /**

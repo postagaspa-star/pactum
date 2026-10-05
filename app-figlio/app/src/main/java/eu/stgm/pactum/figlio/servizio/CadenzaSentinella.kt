@@ -1,5 +1,6 @@
 package eu.stgm.pactum.figlio.servizio
 
+import eu.stgm.pactum.figlio.valutatore.ProssimoGiro
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -45,15 +46,35 @@ object CadenzaSentinella {
     /**
      * (0.12) Fra quanto il giro dopo. Di solito un minuto; ma se l'app davanti,
      * restando lì, porta una regola a una soglia del preavviso ("mancano 5
-     * minuti", "manca 1 minuto") prima di allora, si guarda appena dopo la
-     * soglia ([prossimaSoglia] ms, più un secondo di margine): il preavviso
+     * minuti", "manca 1 minuto") o (0.16, contratto v3.8) al suo limite ("il
+     * tempo è finito") o oltre (lo sforamento) prima di allora, si guarda
+     * appena dopo ([prossimaSoglia] ms, più un secondo di margine): l'avviso
      * arriva entro pochi secondi, non fino a un minuto dopo. Mai meno di un
-     * secondo. Senza soglie in vista (o a schermo spento) resta il minuto.
+     * secondo. Senza niente in vista (o a schermo spento) resta il minuto.
      */
     fun attesa(prossimaSoglia: Long?): Long =
         prossimaSoglia?.let { (it + MARGINE_SOGLIA_MS).coerceIn(ATTESA_MINIMA_MS, INTERVALLO_MS) } ?: INTERVALLO_MS
 
+    /**
+     * (0.16) Il giro completo dopo questo: [attesa] della soglia (il momento
+     * esatto dell'app davanti, o il minuto). Vicino al limite, nel frattempo,
+     * il controllo leggero (ControlloLeggero) guarda solo gli ultimi eventi.
+     */
+    fun attesa(prossimo: ProssimoGiro): Long = attesa(prossimo.soglia)
+
+    /**
+     * (0.16) Quanto aspettare ancora, sull'orologio che non si sposta: [attesa]
+     * conta dal momento della lettura dell'uso ([riferimento]), non dalla fine
+     * del giro. Il momento esatto del limite è calcolato sull'uso letto allora,
+     * e il giro può durare (il lucchetto col worker, l'invio di uno
+     * sforamento, le riprove di consegna): partire da dopo lo farebbe arrivare
+     * in ritardo. Mai meno di [ATTESA_MINIMA_MS].
+     */
+    fun resta(riferimento: Long, attesa: Long, adesso: Long): Long =
+        (riferimento + attesa - adesso).coerceAtLeast(ATTESA_MINIMA_MS)
+
     /** Si guarda un secondo dopo la soglia: l'uso letto è già oltre. */
     const val MARGINE_SOGLIA_MS = 1_000L
     const val ATTESA_MINIMA_MS = 1_000L
+
 }

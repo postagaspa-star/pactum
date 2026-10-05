@@ -71,6 +71,29 @@ class FotoSchermiInteriTest : Fotografo() {
     )
 
     @Test
+    fun avvisoTempoFinito() {
+        val finito = Avviso(
+            regolaId = 1, tipo = TipiRegola.LIMITE_TEMPO, nome = "Instagram",
+            minutiUsati = 30, limiteEfficace = 30, limite = 30, minutiOltre = 0, finito = true,
+        )
+        scatta("15-avviso-tempo-finito", "(0.16) Avviso a tutto schermo a 30 su 30: «Il tempo per Instagram è finito»", pagine = false) {
+            avviso(listOf(finito))
+        }
+    }
+
+    @Test
+    fun avvisoTempoFinitoGiaARegistro() {
+        // 30 + 15 di bonus, e lo sforamento di oggi è già a registro (era andato oltre i 30).
+        val finito = Avviso(
+            regolaId = 1, tipo = TipiRegola.LIMITE_TEMPO, nome = "Instagram",
+            minutiUsati = 45, limiteEfficace = 45, limite = 30, minutiOltre = 0, finito = true, giaARegistro = true,
+        )
+        scatta("15-avviso-tempo-finito-gia-a-registro", "(0.16) Avviso a 45 su 45 dopo un bonus, con lo sforamento di oggi già a registro: niente «va a registro»", pagine = false) {
+            avviso(listOf(finito))
+        }
+    }
+
+    @Test
     fun avvisoLimite() {
         scatta("15-avviso-limite", "Avviso a tutto schermo: oltre il limite di Instagram (con 15 min di bonus)", pagine = false) {
             avviso(listOf(avvisoInstagram))

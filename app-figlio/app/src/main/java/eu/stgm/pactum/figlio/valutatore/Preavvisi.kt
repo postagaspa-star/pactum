@@ -39,6 +39,8 @@ data class AppDavanti(val pacchetto: String, val contaTra: Long = 0L)
  * preavviso; quando manca 1 minuto o meno, un secondo. Al secondo, non al
  * minuto: l'uso si conta in millisecondi, con le stesse app dei limiti (niente
  * Home, niente Pactum, niente tempo nelle app di una Sessione in corso).
+ * (0.16) Una categoria invece come la conta il valutatore (e Oggi): la somma
+ * dei minuti interi delle sue app, come il tempo finito (TempiFiniti.mancaUso).
  *
  * Una volta per regola, per giorno, per soglia, per limite: se un bonus alza
  * il limite, le soglie del limite nuovo valgono di nuovo. Mai a limite già
@@ -74,7 +76,9 @@ object Preavvisi {
         val limite = Valutatore.limiteEfficace(regola, bonusOggiPerRegola) ?: return null
         // Già oltre il limite: c'è lo sforamento, non il preavviso.
         if (indice.minuti(chiave) > limite) return null
-        val manca = limite * MINUTO_MS - indice.millis(chiave)
+        // (0.16) Contato come il valutatore (e come Oggi): una categoria a minuti
+        // interi delle sue app, un'app sola e "totale" al secondo.
+        val manca = TempiFiniti.mancaUso(indice, chiave, limite.toLong())
         if (manca <= 0) return null
         return Resto(regola, chiave, limite, manca)
     }
@@ -163,6 +167,13 @@ object Preavvisi {
             val soglia = SOGLIE_MINUTI.firstOrNull {
                 r.mancaMs > it * MINUTO_MS && chiave(regola.id, giorno, r.limite, it) !in giaFatti
             } ?: continue
+            // (0.16) Una categoria a minuti interi: alla soglia quando i minuti
+            // interi delle sue app arrivano a (limite - soglia), come in [daDare].
+            if (TempiFiniti.eCategoria(r.chiave)) {
+                TempiFiniti.attesaMinuti(indice, r.chiave, (r.limite - soglia).toLong(), davanti)
+                    ?.let { prima = minOf(prima ?: Long.MAX_VALUE, it) }
+                continue
+            }
             val allaSoglia = r.mancaMs - soglia * MINUTO_MS
             // Le app davanti che consumano questa chiave già adesso.
             val subito = davanti.count { it.contaTra <= 0 && indice.cade(r.chiave, it.pacchetto) }

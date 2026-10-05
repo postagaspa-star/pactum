@@ -968,8 +968,51 @@ Tutto il resto del contratto resta valido.
 
 - Nessun cambio al database. App 0.15 e programma del computer con server v3.8: non chiedono `tempi=1`, quindi il patto resta com'era; ignorano `totale`. App 0.16 con server v3.7: senza `totale` la riga dei totali non si mostra; senza `uso_recente` nel patto il grafico del figlio si basa sull'uso letto sul telefono (solo questo telefono, senza medie né totali), o si nasconde.
 
+
+## v3.9 — i lavori di casa: modificarli, confermarli, cercarli (05/10/2026, richieste di Andrea)
+
+Andrea: i genitori devono vedere per che ora hanno messo un lavoro di casa e poterlo modificare dopo averlo dato; dopo aver guardato la foto, il pulsante per vederla diventa quello per segnarlo come svolto; nello storico dei lavori una ricerca per nome. Decisione di Andrea (05/10): **"svolto" è la conferma del genitore; lo sblocco resta all'ultima foto**, come prima.
+
+Tutto il resto del contratto resta valido (nomi tecnici invariati: `faccende`, `faccenda_*`).
+
+### L'ora del lavoro (solo app)
+
+Le app mostrano **sempre** l'ora del blocco di ogni lavoro da fare, anche quando il blocco è già partito: "Blocco dalle 16:00" / "Blocco da subito (14:02)" / "Blocco domani dalle 16:00", dal `blocco_da` che c'è già. Niente cambia nel protocollo.
+
+### Modificare un lavoro: `PATCH /api/faccende/{id}` (genitore)
+
+- Corpo: `{ "titolo"?, "nota"?, "blocco_da"? }`, almeno un campo (nessun campo → `422`).
+  - `titolo`, `nota`: stesse regole della creazione; `"nota": null` o `""` toglie la nota.
+  - `blocco_da`: una data con fuso, stesse regole della creazione (passata = subito, cioè l'ora del server; più di 7 giorni avanti → `422`); `null` = subito. Un campo assente resta com'è.
+- Solo una faccenda `da_fare` → altrimenti `409 {"errore": "non_modificabile"}` (fatta, annullata). Una faccenda di un altro figlio o che non c'è → `404 {"detail": "faccenda non trovata"}`. Atomica con la foto: se la foto arriva mentre si modifica, chi arriva secondo trova la faccenda già `fatta` (`409 non_modificabile` per il `PATCH`; la foto vale).
+- Se niente cambia davvero (stessi valori) → `200` con la faccenda, nessuna notifica, niente nella storia.
+- Se qualcosa cambia: nella `storia` una voce `{ "tipo": "modificata", "ts", "genitore", "cambi": { "titolo"?: { "prima", "dopo" }, "nota"?: { "prima", "dopo" }, "blocco_da"?: { "prima", "dopo" } } }` (solo i campi cambiati); notifica al figlio `faccenda_modificata` (`dispositivo_id: null`), `messaggio: "<nome del genitore> ha cambiato «<titolo nuovo>»"` (se è cambiato il titolo: `"<nome del genitore> ha cambiato «<titolo vecchio>» in «<titolo nuovo>»"`), `payload: { "faccenda_id", "titolo", "genitore", "cambi" }`. Risposta `200` con la faccenda.
+- **Il blocco segue `blocco_da`** come sempre (`GET /api/faccende/blocco` lo ricalcola): spostare l'ora più avanti toglie il blocco fino a quell'ora, metterla prima (o subito) lo fa partire. Il telefono, alla notifica `faccenda_modificata`, rilegge subito il blocco, come per le altre notifiche dei lavori.
+
+### "Svolto": la conferma del genitore — `POST /api/faccende/{id}/conferma`
+
+- Solo una faccenda `fatta` (con `foto_ts`), non ancora confermata → altrimenti `409 {"errore": "non_confermabile"}`. Vale anche dopo le 24 ore della bocciatura e anche se la foto è già stata cancellata (30 giorni).
+- La faccenda ha due campi nuovi: **`confermata_ts`** e **`confermata_da`** (`{ "id", "nome" }`), `null` finché nessuno conferma. Nella `storia`: `{ "tipo": "confermata", "ts", "genitore" }`.
+- Una faccenda confermata **non si può più bocciare**: `POST …/boccia` → `409 non_bocciabile`. Atomica con la bocciatura: tra conferma e bocciatura insieme, la seconda riceve il suo `409`.
+- Lo sblocco **non cambia**: è già avvenuto all'arrivo dell'ultima foto. Confermare non blocca e non sblocca niente.
+- Notifica al figlio `faccenda_confermata` (`dispositivo_id: null`), `messaggio: "<nome del genitore> ha confermato «<titolo>»"`, `payload: { "faccenda_id", "titolo", "genitore" }`. Risposta `200` con la faccenda.
+- Nelle app del genitore: dopo che **questo telefono** ha aperto la foto di una faccenda fatta e non confermata, il pulsante "Guarda la foto" diventa **"Segna come svolto"** (la foto resta apribile toccando il lavoro); confermata, la faccenda dice "Confermato da Mamma". Quale foto è stata guardata lo ricorda l'app, non il server (ogni genitore guarda col suo telefono).
+- Database: due colonne nuove in `faccende`, con la copia del database prima della migrazione, come le altre volte.
+
+### Cercare nello storico: `GET /api/faccende?cerca=…`
+
+- Col parametro **`cerca`** (1–80 caratteri dopo aver tolto gli spazi ai bordi; vuoto = come senza) la risposta contiene **tutte** le faccende del figlio di **qualunque data e stato** (non solo gli ultimi 30 giorni) il cui `titolo` contiene il testo, senza distinguere maiuscole, minuscole e accenti; dalla più recente, al massimo **50**; `{ "faccende": [ … ], "altre": true|false }` (`altre` = ce ne sono più di 50).
+- Vale per il genitore (con `figlio_id`, come senza `cerca`) e per il dispositivo (le faccende del suo figlio). Senza `cerca` tutto resta com'era.
+- Le foto delle faccende vecchie possono non esserci più (`foto: false`): le app lo dicono.
+
+### Compatibilità
+
+- App 0.16 con server v3.9: non conoscono `PATCH`, `conferma`, `cerca` (non li chiamano); ignorano `confermata_ts`/`confermata_da`; le notifiche `faccenda_modificata` e `faccenda_confermata` le mostrano col `messaggio` del server, come ogni tipo che non conoscono. Il programma del computer non cambia.
+- App 0.17 con server v3.8: `PATCH`, `conferma` e `cerca` rispondono `404`/`405` o ignorano il parametro → le app nascondono "Modifica" e "Segna come svolto", e per la ricerca dicono "serve aggiornare il server".
+
 ---
-**Versione: v3.8 — 05/10/2026** (richieste di Andrea): `totale` in `medie` (somma degli ultimi 7 e 30 giorni con dati); `uso_recente` e `medie` anche in `GET /api/patto?tempi=1` (questo dispositivo e `dispositivi[]`, solo su richiesta), identici alla finestra; avviso del tempo finito a 30 su 30 sul telefono, `sforamento` invariato da 31. Nessun cambio al database.
+**Versione: v3.9 — 05/10/2026** (richieste di Andrea): `PATCH /api/faccende/{id}` per modificare un lavoro da fare (titolo, nota, ora del blocco; notifica `faccenda_modificata`); `POST /api/faccende/{id}/conferma` ("svolto", `confermata_ts`/`confermata_da`, non più bocciabile, notifica `faccenda_confermata`; lo sblocco resta all'ultima foto); `GET /api/faccende?cerca=` su tutta la storia. Due colonne nuove nel database.
+**v3.8 — 05/10/2026** (richieste di Andrea): `totale` in `medie` (somma degli ultimi 7 e 30 giorni con dati); `uso_recente` e `medie` anche in `GET /api/patto?tempi=1` (questo dispositivo e `dispositivi[]`, solo su richiesta), identici alla finestra; avviso del tempo finito a 30 su 30 sul telefono, `sforamento` invariato da 31. Nessun cambio al database.
 **v3.7 — 04/10/2026** (richieste di Andrea): `sospensione` anche dai telefoni (spento come i computer, anche consegnata in ritardo col suo `ts_device`), battiti ogni ~15 minuti anche in stand-by, avvisi di silenzio senza accuse; nei testi "lavori di casa" al posto di "faccende". Nessun cambio al database.
 **v3.6 — 02/10/2026** (decisioni di Andrea): più genitori (tabella `genitori`, `GET/POST /api/genitori`, codice di 6 cifre, `POST /api/abbina` con `tipo: "genitore"`, revoca, `io` e `genitori` in `GET /api/famiglia`), chi ha fatto cosa nelle risposte, notifiche del genitore lette da ciascuno; le faccende (`/api/faccende`, foto JPEG fino a 4 MB senza dati nascosti tenute 30 giorni, boccia entro 24 ore, annulla, `GET /api/faccende/blocco`, `faccende` e `blocco` in patto e finestra, `faccende_da_fare` e `blocco_attivo` in famiglia, notifiche `nuove_faccende`, `faccenda_fatta`, `faccende_finite`, `faccenda_bocciata`, `faccenda_annullata`); blocco del telefono tranne le app fondamentali e del computer intero finché le faccende non sono fatte; niente sessioni durante il blocco. Copia del database prima della migrazione.
 **v3.5 — 01/10/2026** (decisioni di Andrea): le Sessioni — il figlio crea sessioni (nome + app del telefono, anche `gruppo:apk`), il genitore le approva una volta e approva ogni cambio della lista (`modifica_in_attesa`); il figlio le avvia quando vuole per 1–1440 minuti e le può chiudere prima; nelle app della sessione il tempo non conta, fuori lista conta come sempre; barriera "Esci" sulle app fuori lista; `sessioni`, `sessione_in_corso`, `sessioni_svolte` in `GET /api/patto`, `sessioni`, `sessioni_da_approvare`, `sessioni_svolte` in `GET /api/finestra`, `sessioni_da_approvare` in `GET /api/famiglia`; notifiche `sessione_da_approvare`, `sessione_risposta`, `sessione_eliminata`; `sessioni_minuti` nella fotografia e accanto a `totale_minuti` in `uso_recente`. Due tabelle nuove. In più, per tutto il server: i corpi JSON con `NaN`/`Infinity`, surrogati da soli o interi oltre i 64 bit → `422` prima di ogni endpoint; un intero oltre i 64 bit in un percorso o in una query → `422` (`404` sulle sessioni), mai un `500`; minuti del giorno oltre 1440 non validi.

@@ -184,7 +184,7 @@ def test_fotografie_del_telefono_e_del_computer_non_si_pestano(client, pc):
     per_id = {d["id"]: d for d in finestra["dispositivi"]}
     assert per_id[1]["uso_recente"][-1]["totale_minuti"] == 200
     assert per_id[dispositivo_id]["uso_recente"][-1]["totale_minuti"] == 30
-    assert per_id[dispositivo_id]["medie"]["settimana"] == {"minuti": 30, "giorni": 1}
+    assert per_id[dispositivo_id]["medie"]["settimana"] == {"minuti": 30, "giorni": 1, "totale": 30}
 
 
 # --- spento non e' silente ---

@@ -1292,7 +1292,7 @@ def test_minuti_oltre_un_giorno_non_valgono(client, famiglia):
     finestra = _finestra(client)
     oggi = finestra["uso_recente"][-1]
     assert oggi["totale_minuti"] == 100  # la fotografia assurda non e' diventata la vigente
-    assert finestra["medie"]["settimana"] == {"minuti": 100, "giorni": 1}
+    assert finestra["medie"]["settimana"] == {"minuti": 100, "giorni": 1, "totale": 100}
     eventi(client, FIGLIO, {
         "id": "uso-ieri", "tipo": "uso_giornaliero",
         "dettagli": {"giorno": "2026-07-13", "totale_minuti": 1441,

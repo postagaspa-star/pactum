@@ -111,8 +111,9 @@ def test_dopo_la_migrazione_gli_stessi_numeri_di_prima(avvia):
         "rosso", "rosso", "rosso", "grigio", "rosso", "rosso", "rosso", "verde",
     ]
     assert finestra["riepilogo"] == {"giorni_fuori_regola": 6, "interruzioni": 2}
-    assert finestra["medie"] == {
-        "settimana": {"minuti": 92, "giorni": 6}, "mese": {"minuti": 100, "giorni": 11},
+    assert finestra["medie"] == {  # (v3.8) con il totale: 140+60+0+130+175+45 sugli ultimi 7
+        "settimana": {"minuti": 92, "giorni": 6, "totale": 550},
+        "mese": {"minuti": 100, "giorni": 11, "totale": 1105},
     }
     assert finestra["bonus"]["giorno"] == {"usati": 20, "tetto": 30, "residui": 10}
     assert finestra["bonus"]["settimana"] == {"usati": 35, "tetto": 90, "residui": 55}

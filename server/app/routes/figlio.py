@@ -18,6 +18,7 @@ from ..db import (
     stato_bonus,
 )
 from ..genitori import Firme
+from ..tempi import tempi as tempi_del_dispositivo
 from ..schemas import BattitoIn, BonusIn, EventiIn, EventoIn
 from .dichiarazioni import dichiarazioni_del_figlio, formatta_dichiarazione
 from .faccende import cartella
@@ -219,6 +220,7 @@ def concedi_bonus(
 @router.get("/patto")
 def patto(
     request: Request,
+    tempi: str | None = None,
     chi: Identita = Depends(richiede_dispositivo),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
@@ -245,7 +247,16 @@ def patto(
     anche dopo un riavvio o una reinstallazione.
 
     (v3.6) Le faccende del figlio e il blocco, come GET /api/faccende e GET
-    /api/faccende/blocco: uguali a quelli della finestra del genitore."""
+    /api/faccende/blocco: uguali a quelli della finestra del genitore.
+
+    (v3.8) Con `?tempi=1`: `uso_recente` e `medie` di questo dispositivo e di ciascun
+    dispositivo del figlio, dalle stesse funzioni (tempi.py) e con le stesse regole
+    della finestra: identici, campo per campo, a `dispositivi[].uso_recente` /
+    `.medie` di GET /api/finestra. Senza (o con un valore diverso da "1", mai un 422)
+    la risposta e' quella della v3.7 e le query in piu' non si fanno: il programma del
+    computer legge il patto ogni minuto senza gzip, e i tempi lo farebbero passare da
+    ~3 KB a ~90 KB."""
+    con_tempi = tempi == "1"
     ora = clock.now()
     figlio = famiglia.figlio_o_404(conn, chi.figlio_id)
     dispositivi = famiglia.dispositivi_del_figlio(conn, chi.figlio_id)
@@ -261,6 +272,22 @@ def patto(
         (chi.figlio_id, chi.dispositivo_id),
     ).fetchall()
     quadro = semaforo.quadro(conn, ora, chi.figlio_id, dispositivi)
+    # (v3.8) I tempi di ciascun dispositivo del figlio, come nella finestra: i limiti
+    # accanto ai tempi sono quelli delle limite_tempo ATTIVE di quel dispositivo (anche
+    # di un revocato, come li vede il genitore), in ordine di id come la' — le righe di
+    # `regole` qui sopra sono solo quelle di questo dispositivo, non bastano.
+    tempi_per_id = {}
+    if con_tempi:
+        limiti_del_figlio = conn.execute(
+            "SELECT * FROM regole WHERE figlio_id = ? AND attiva = 1 AND tipo = 'limite_tempo'"
+            " ORDER BY id",
+            (chi.figlio_id,),
+        ).fetchall()
+        giorni = siti.giorni_finestra(ora)
+        tempi_per_id = {
+            d["id"]: tempi_del_dispositivo(conn, ora, giorni, d["id"], limiti_del_figlio)
+            for d in dispositivi
+        }
     # (v2.4) Ogni regola porta il suo semaforo, lo stesso della finestra: il
     # genitore vede la striscia regola per regola, quindi la vede anche il figlio.
     regole = [
@@ -270,7 +297,7 @@ def patto(
     # (v3.5) Le etichette delle app delle sessioni: dalle fotografie dell'uso, lette una volta.
     note = etichette_note(conn, chi.figlio_id)
     firme = Firme(conn)  # (v3.6) chi tra i genitori ha deciso cosa
-    return {
+    risposta = {
         "regole": regole,
         "bonus": stato_bonus(conn, ora, chi.dispositivo_id),
         "bonus_oggi_per_regola": bonus_oggi_per_regola(conn, ora, chi.dispositivo_id),
@@ -314,3 +341,12 @@ def patto(
         "faccende": faccende.faccende_del_figlio(conn, chi.figlio_id, ora, firme, cartella(request)),
         "blocco": faccende.blocco(conn, chi.figlio_id, ora, firme),
     }
+    if con_tempi:
+        # (v3.8) I tempi di questo dispositivo, identici a quelli della finestra, e
+        # quelli di ciascun dispositivo del figlio (cosi' il figlio vede anche il computer).
+        risposta["uso_recente"] = tempi_per_id[questo["id"]]["uso_recente"]
+        risposta["medie"] = tempi_per_id[questo["id"]]["medie"]
+        for voce in risposta["dispositivi"]:
+            voce["uso_recente"] = tempi_per_id[voce["id"]]["uso_recente"]
+            voce["medie"] = tempi_per_id[voce["id"]]["medie"]
+    return risposta

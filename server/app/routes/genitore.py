@@ -12,14 +12,12 @@ quale genitore l'ha mandato."""
 
 import json
 import sqlite3
-from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import clock, faccende, famiglia, semaforo, siti
+from .. import clock, faccende, famiglia, semaforo, siti, tempi
 from ..auth import Identita, richiede_genitore
-from ..config import MINUTI_IN_UN_GIORNO, fuso_patto
 from ..db import accoda_notifica, get_conn, segno_mandato_oggi, stato_bonus
 from ..genitori import Firme, ancora_valido
 from ..schemas import CHIAVE_TOTALE, SegnoIn
@@ -69,141 +67,6 @@ def _eventi_recenti(conn: sqlite3.Connection, dispositivi: list, tipo: str) -> l
     return [_evento_out(e) for e in candidati[:RECENTI]]
 
 
-def _minuti_validi(mappa) -> dict:
-    """Tiene solo le voci {chiave: minuti} con minuti numerici non negativi:
-    una fotografia sporca non deve far crollare la finestra. (v3.5) E non oltre i
-    minuti di un giorno: una voce assurda si lascia cadere."""
-    if not isinstance(mappa, dict):
-        return {}
-    return {
-        chiave: minuti
-        for chiave, minuti in mappa.items()
-        if isinstance(minuti, (int, float))
-        and not isinstance(minuti, bool)
-        and 0 <= minuti <= MINUTI_IN_UN_GIORNO
-    }
-
-
-def _sessioni_minuti(dettagli: dict) -> int | None:
-    """(v3.5) I minuti del giorno non contati perche' passati in una sessione, se la
-    fotografia li dice: un intero da 0 a 1440. Altrimenti null, mai uno zero finto:
-    un telefono 0.10 non li manda, e "non detto" non e' "zero". Un valore sporco si
-    ignora, non fa cadere la fotografia ne' la finestra."""
-    minuti = dettagli.get("sessioni_minuti")
-    if isinstance(minuti, bool) or not isinstance(minuti, int) or not 0 <= minuti <= MINUTI_IN_UN_GIORNO:
-        return None
-    return minuti
-
-
-def _con_limite(voce: dict, limite: dict | None, bonus_regola: dict, giorno: str) -> None:
-    if limite:
-        voce.update(limite)
-        voce["bonus"] = bonus_regola.get((giorno, limite["regola_id"]), 0)
-
-
-def _uso_recente(
-    conn: sqlite3.Connection,
-    dispositivo_id: int | None,
-    giorni: list,
-    limiti: dict,
-    bonus_regola: dict | None = None,
-    limite_totale: dict | None = None,
-) -> list:
-    """(v2.2) I tempi d'uso di TUTTE le app negli 8 giorni della finestra, dalla
-    fotografia uso_giornaliero VIGENTE di ciascun giorno. Un giorno senza
-    fotografia ha totale_minuti null e liste vuote — MAI uno zero finto:
-    "nessun dato ricevuto" e' un'informazione (contratto-api.md).
-    `limiti` = {app_o_categoria: {"limite", "regola_id"}} delle regole
-    limite_tempo ATTIVE: il limite compare SOLO dove la chiave combacia
-    esattamente. E' il limite BASE (minuti_al_giorno): gli eventuali bonus del
-    giorno sono gia' visibili in bonus_giornalieri. (v2.4) Accanto al limite va
-    anche `bonus`, i minuti concessi QUEL giorno su QUELLA regola: senza, il
-    genitore vedrebbe "10 min oltre" in un giorno che per il figlio (limite + bonus)
-    e' dentro la regola. (v3) Tutto di un dispositivo: le sue fotografie, i limiti
-    delle sue regole, i suoi bonus. (v3.3) `limite_totale` = {"limite", "regola_id"}
-    della regola "totale" ATTIVA del dispositivo: va accanto a totale_minuti nella
-    voce del giorno, solo nei giorni con la fotografia. (v3.5) Accanto a totale_minuti
-    anche `sessioni_minuti`, dalla fotografia vigente (null se non lo dice o se la
-    fotografia non c'e')."""
-    bonus_regola = bonus_regola or {}
-    date_iso = [g.isoformat() for g in giorni]
-    segnaposto = ",".join("?" * len(date_iso))
-    vigenti = {
-        r["giorno"]: r
-        for r in conn.execute(
-            "SELECT * FROM uso_giornaliero"
-            f" WHERE dispositivo_id = ? AND giorno IN ({segnaposto})",
-            [dispositivo_id, *date_iso],
-        ).fetchall()
-    }
-
-    voci = []
-    for data in date_iso:
-        riga = vigenti.get(data)
-        if riga is None:
-            voci.append(
-                {"giorno": data, "totale_minuti": None, "sessioni_minuti": None,
-                 "aggiornato_ts": None, "app": [], "categorie": []}
-            )
-            continue
-        dettagli = json.loads(riga["dettagli"])
-        # nomi e uso_categorie sono nati in v2.2: le fotografie vecchie non li
-        # hanno (tolleranza evolutiva) -> fallback sul pacchetto e lista vuota.
-        nomi = dettagli.get("nomi")
-        if not isinstance(nomi, dict):
-            nomi = {}
-        app = []
-        for chiave, minuti in sorted(
-            _minuti_validi(dettagli.get("uso_minuti")).items(),
-            key=lambda voce: (-voce[1], voce[0]),  # minuti decrescenti, poi chiave
-        ):
-            voce = {"chiave": chiave, "nome": nomi.get(chiave) or chiave, "minuti": minuti}
-            _con_limite(voce, limiti.get(chiave), bonus_regola, data)
-            app.append(voce)
-        categorie = []
-        for chiave, minuti in sorted(
-            _minuti_validi(dettagli.get("uso_categorie")).items(),
-            key=lambda voce: (-voce[1], voce[0]),
-        ):
-            voce = {"chiave": chiave, "minuti": minuti}
-            _con_limite(voce, limiti.get(chiave), bonus_regola, data)
-            categorie.append(voce)
-        voce_giorno = {
-            "giorno": data,
-            "totale_minuti": riga["totale_minuti"],
-            "sessioni_minuti": _sessioni_minuti(dettagli),  # (v3.5)
-        }
-        _con_limite(voce_giorno, limite_totale, bonus_regola, data)  # (v3.3) accanto al totale
-        voce_giorno.update({"aggiornato_ts": riga["ts_server"], "app": app, "categorie": categorie})
-        voci.append(voce_giorno)
-    return voci
-
-
-def _medie(conn: sqlite3.Connection, dispositivo_id: int | None, oggi) -> dict:
-    """(S1) Media dei minuti d'uso sui SOLI giorni con una fotografia, su due
-    finestre: settimana (ultimi 7 giorni locali) e mese (ultimi 30). Ogni voce e'
-    {"minuti": intero, "giorni": quanti giorni avevano dati}, oppure None se nella
-    finestra non c'e' nessuna fotografia — MAI uno zero finto. `giorno` in
-    uso_giornaliero e' gia' il giorno LOCALE del patto (contratto-api.md), quindi
-    il confronto stringa e' corretto nel fuso senza conversioni; i giorni assenti
-    non sono righe, cosi' l'AVG non li conta (la regola "solo giorni con dati" e'
-    rispettata per costruzione). Un giorno con totale_minuti=0 e' una fotografia
-    reale (uso zero) e va contato: l'AVG lo include. (v3) Di un dispositivo."""
-    def media(giorni_finestra: int) -> dict | None:
-        inizio = (oggi - timedelta(days=giorni_finestra - 1)).isoformat()
-        r = conn.execute(
-            "SELECT AVG(totale_minuti) AS m, COUNT(*) AS n FROM uso_giornaliero"
-            " WHERE dispositivo_id = ? AND giorno >= ? AND giorno <= ?",
-            (dispositivo_id, inizio, oggi.isoformat()),
-        ).fetchone()
-        n = r["n"]
-        if not n:
-            return None
-        return {"minuti": round(r["m"]), "giorni": n}
-
-    return {"settimana": media(7), "mese": media(30)}
-
-
 def _misure(
     conn: sqlite3.Connection,
     ora: datetime,
@@ -215,49 +78,22 @@ def _misure(
     tempi, siti, medie, bonus, bonus del giorno e silenzio. Senza dispositivo
     (figlio appena creato, o tutti revocati) le stesse forme senza dati: null e
     liste vuote, mai zeri finti."""
-    tz = fuso_patto()
     dispositivo_id = dispositivo["id"] if dispositivo is not None else None
-    limiti = {}  # app_o_categoria -> {"limite", "regola_id"} delle limite_tempo ATTIVE
-    for riga in righe_regole:
-        if riga["tipo"] == "limite_tempo" and riga["attiva"] and riga["dispositivo_id"] == dispositivo_id:
-            parametri = json.loads(riga["parametri"])
-            limiti.setdefault(
-                parametri["app_o_categoria"],
-                {"limite": parametri["minuti_al_giorno"], "regola_id": riga["id"]},
-            )
-    # (v3.3) Il limite sul totale non e' di un'app ne' di una categoria: sta
-    # accanto al totale del giorno, e nessuna voce di uso_minuti lo prende.
-    limite_totale = limiti.pop(CHIAVE_TOTALE, None)
-
-    # Riepilogo bonus per giorno (per tutto il dispositivo, stessa finestra di 8
-    # giorni): dalla tabella bonus autoritativa, coi giorni nel fuso del patto.
-    # (v3.1) Solo i bonus dall'inizio della finestra (col margine di semaforo.py):
-    # quelli piu' vecchi cadrebbero fuori dagli 8 giorni comunque.
-    minuti_per_giorno = defaultdict(int)
-    bonus_regola = defaultdict(int)  # (giorno locale, regola_id) -> minuti
-    for riga in conn.execute(
-        "SELECT minuti, regola_id, ts_server FROM bonus WHERE dispositivo_id = ? AND ts_server >= ?",
-        (dispositivo_id, semaforo.inizio_letture(ora)),
-    ).fetchall():
-        giorno = semaforo.data_locale(riga["ts_server"], tz)
-        minuti_per_giorno[giorno] += riga["minuti"]
-        if riga["regola_id"] is not None:
-            bonus_regola[(giorno, riga["regola_id"])] += riga["minuti"]
-
+    # (v3.8) Tempi, medie e bonus del giorno escono da tempi.py, le stesse funzioni
+    # del patto del figlio: il figlio vede i suoi tempi identici a questi.
+    misure = tempi.tempi(conn, ora, giorni, dispositivo_id, righe_regole)
     return {
         "stato_silenzio": famiglia.stato_silenzio(conn, dispositivo, ora),
-        "uso_recente": _uso_recente(conn, dispositivo_id, giorni, limiti, bonus_regola, limite_totale),
+        "uso_recente": misure["uso_recente"],
         # (v2.3) I siti visitati: il genitore vede QUALI siti, mai cosa ci fa
         # dentro. Stessa funzione di GET /api/patto — il figlio vede la stessa
         # identica lista (tavola rotonda). Non entra nel semaforo: non e' un'infrazione.
         "siti_recenti": siti.siti_recenti(
             conn, ora, dispositivo_id, dispositivo["tipo"] if dispositivo is not None else "telefono"
         ),
-        "medie": _medie(conn, dispositivo_id, ora.astimezone(tz).date()),
+        "medie": misure["medie"],
         "bonus": stato_bonus(conn, ora, dispositivo_id),
-        "bonus_giornalieri": [
-            {"giorno": g.isoformat(), "minuti": minuti_per_giorno[g.isoformat()]} for g in giorni
-        ],
+        "bonus_giornalieri": misure["bonus_giornalieri"],
     }
 
 

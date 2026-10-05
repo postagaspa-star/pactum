@@ -992,6 +992,7 @@ Le app mostrano **sempre** l'ora del blocco di ogni lavoro da fare, anche quando
 ### "Svolto": la conferma del genitore — `POST /api/faccende/{id}/conferma`
 
 - Solo una faccenda `fatta` (con `foto_ts`), non ancora confermata → altrimenti `409 {"errore": "non_confermabile"}`. Vale anche dopo le 24 ore della bocciatura e anche se la foto è già stata cancellata (30 giorni).
+- Corpo facoltativo **`{ "foto_ts": "…" }`**: il `foto_ts` della foto che il genitore ha guardato (l'app lo manda sempre). Se la faccenda ha intanto un `foto_ts` diverso (bocciata da un altro genitore e rifatta con una foto nuova) → `409 {"errore": "foto_cambiata"}` e non si conferma niente: nessuno conferma una foto che non ha visto. Si confronta l'istante (stesso istante con un altro fuso = uguale). Senza `foto_ts` (o `null`) si conferma come prima.
 - La faccenda ha due campi nuovi: **`confermata_ts`** e **`confermata_da`** (`{ "id", "nome" }`), `null` finché nessuno conferma. Nella `storia`: `{ "tipo": "confermata", "ts", "genitore" }`.
 - Una faccenda confermata **non si può più bocciare**: `POST …/boccia` → `409 non_bocciabile`. Atomica con la bocciatura: tra conferma e bocciatura insieme, la seconda riceve il suo `409`.
 - Lo sblocco **non cambia**: è già avvenuto all'arrivo dell'ultima foto. Confermare non blocca e non sblocca niente.
@@ -1004,6 +1005,15 @@ Le app mostrano **sempre** l'ora del blocco di ogni lavoro da fare, anche quando
 - Col parametro **`cerca`** (1–80 caratteri dopo aver tolto gli spazi ai bordi; vuoto = come senza) la risposta contiene **tutte** le faccende del figlio di **qualunque data e stato** (non solo gli ultimi 30 giorni) il cui `titolo` contiene il testo, senza distinguere maiuscole, minuscole e accenti; dalla più recente, al massimo **50**; `{ "faccende": [ … ], "altre": true|false }` (`altre` = ce ne sono più di 50).
 - Vale per il genitore (con `figlio_id`, come senza `cerca`) e per il dispositivo (le faccende del suo figlio). Senza `cerca` tutto resta com'era.
 - Le foto delle faccende vecchie possono non esserci più (`foto: false`): le app lo dicono.
+
+### Precisazioni (scritte costruendo il server v3.9, 05/10/2026)
+
+- **Database**: oltre alle colonne `confermata_ts` e `confermata_genitore_id` (nell'API `confermata_da`), la migrazione ricostruisce la tabella della storia dei lavori per accettare i tipi `modificata` e `confermata` e la colonna `cambi` (stessi id, stesso contatore, stesso indice, sempre in sola aggiunta). Copia `<db>.prima-v3.9-…` prima, tutto in una transazione, una volta sola.
+- **"Stesso valore" per `blocco_da`**: lo stesso istante (anche scritto con un altro fuso) non è un cambio; "subito" (`null` o una data passata) su un lavoro che blocca già lascia l'ora com'è (niente avviso per niente); altrimenti vale la regola della creazione.
+- **Ordine dei controlli del `PATCH`**: prima il corpo (`422`, anche `blocco_da` oltre i 7 giorni), poi `404`, poi `409`.
+- **`cerca` oltre 80 caratteri** → `422`. "Senza accenti" = senza segni sulle lettere e senza maiuscole/minuscole ("ß" vale "ss"); `%` e `_` sono caratteri normali.
+- Le voci di `blocco.da_fare` restano nella forma ridotta di prima (senza i campi nuovi).
+- Un lavoro bocciato è di nuovo `da_fare`, quindi si può modificare.
 
 ### Compatibilità
 

@@ -1,15 +1,15 @@
 {
   "figlio": {
-    "versione_code": 16,
-    "versione_nome": "0.16.0",
+    "versione_code": 17,
+    "versione_nome": "0.17.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.16.0: l'avviso arriva quando il tempo finisce (30 su 30), puntuale; il fuori regola resta da 31. Le fasce orarie dicono se le stai rispettando. In Oggi il tempo degli ultimi 8 giorni e i totali di 7 e 30 giorni, con una pagina Tempo completa. Tornano in vista la tua proposta in attesa, il bonus di oggi e le app della sessione. Da questa versione gli aggiornamenti si installano da soli (Android 12 e successivi)."
+    "note": "v0.17.0: su ogni lavoro di casa si vede sempre da che ora blocca; se un genitore cambia un lavoro ti arriva un avviso e il blocco si aggiorna subito; i lavori confermati dal genitore lo dicono; nello storico dei lavori si cerca per nome. Da questa versione gli aggiornamenti si installano da soli (Android 12 e successivi)."
   },
   "genitore": {
-    "versione_code": 16,
-    "versione_nome": "0.16.0",
+    "versione_code": 17,
+    "versione_nome": "0.17.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.16.0: nel Tempo i totali degli ultimi 7 e 30 giorni e il tempo di ogni giorno sulle barre. Nella Panoramica tornano la sessione in corso, le sessioni, tutte le regole, le strisce di ogni dispositivo e il bonus di oggi. Da questa versione gli aggiornamenti si installano da soli (Android 12 e successivi)."
+    "note": "v0.17.0: su ogni lavoro di casa si vede sempre da che ora blocca; i lavori da fare si possono modificare (titolo, nota, ora); dopo aver guardato la foto la segni come svolta; nello storico dei lavori si cerca per nome. Da questa versione gli aggiornamenti si installano da soli (Android 12 e successivi)."
   },
   "computer": {
     "versione_code": 14,

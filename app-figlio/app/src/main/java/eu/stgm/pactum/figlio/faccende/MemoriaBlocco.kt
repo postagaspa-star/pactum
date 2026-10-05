@@ -274,14 +274,21 @@ data class MemoriaBlocco(
 
 /**
  * (0.13) Cosa è cambiato fra le faccende da fare di prima e quelle di adesso:
- * faccende nuove, bocciature nuove, faccende sparite (fatte o annullate). Se
- * qualcosa è cambiato, le notifiche del server si leggono subito, senza
- * aspettare il giro del quarto d'ora.
+ * faccende nuove, bocciature nuove, faccende sparite (fatte o annullate);
+ * (0.17, contratto v3.9) o cambiate dal genitore (titolo, nota, ora del
+ * blocco). Se qualcosa è cambiato, le notifiche del server si leggono subito,
+ * senza aspettare il giro del quarto d'ora.
  */
 object NovitaFaccende {
     fun cambiate(prima: List<FaccendaDaFare>, dopo: List<FaccendaDaFare>): Boolean {
         val vecchie = prima.associateBy { it.id }
         if (dopo.any { nuova -> vecchie[nuova.id]?.let { nuova.bocciature > it.bocciature } ?: true }) return true
+        if (dopo.any { nuova ->
+                vecchie[nuova.id]?.let { it.titolo != nuova.titolo || it.nota != nuova.nota || it.bloccoDa != nuova.bloccoDa } ?: false
+            }
+        ) {
+            return true
+        }
         val nuoveId = dopo.mapTo(HashSet()) { it.id }
         return prima.any { it.id !in nuoveId }
     }

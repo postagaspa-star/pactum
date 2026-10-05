@@ -47,6 +47,7 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
+import java.net.URLEncoder
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLHandshakeException
@@ -342,6 +343,13 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
 
     /** GET /api/faccende: le da fare e quelle chiuse negli ultimi 30 giorni. */
     suspend fun leggiFaccende(): Pair<String?, Int> = leggiConCodice("/api/faccende")
+
+    /**
+     * (0.17, contratto v3.9) GET /api/faccende?cerca=…: i lavori di qualunque
+     * data e stato col [testo] nel titolo (al massimo 50, `altre` se di più).
+     */
+    suspend fun cercaFaccende(testo: String): Pair<String?, Int> =
+        leggiConCodice("/api/faccende?cerca=" + URLEncoder.encode(testo, "UTF-8").replace("+", "%20"))
 
     /**
      * PUT /api/faccende/{id}/foto, il corpo = il JPEG (non JSON). Mai ritentata

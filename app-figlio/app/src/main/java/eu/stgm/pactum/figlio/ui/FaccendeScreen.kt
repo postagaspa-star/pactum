@@ -33,7 +33,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -78,6 +83,7 @@ import eu.stgm.pactum.figlio.faccende.FotoFaccenda
 import eu.stgm.pactum.figlio.faccende.MemoriaBlocco
 import eu.stgm.pactum.figlio.faccende.Orologio
 import eu.stgm.pactum.figlio.faccende.QuandoBlocca
+import eu.stgm.pactum.figlio.faccende.RicercaFaccende
 import eu.stgm.pactum.figlio.faccende.ScattoInCorso
 import eu.stgm.pactum.figlio.faccende.StatoBlocco
 import eu.stgm.pactum.figlio.faccende.TestoFaccende
@@ -264,7 +270,7 @@ fun FaccendeScreen(
                     // (0.15) Lo stato del blocco, compatto: la card quando il telefono
                     // è bloccato, una riga quando è programmato, niente se non c'è.
                     if (bloccato || (memoria.prossimo != null && daFare.isNotEmpty())) {
-                        item(key = "stato-blocco") { SchedaBlocco(bloccato, memoria, adesso) }
+                        item(key = "stato-blocco") { SchedaBlocco(bloccato, memoria, adesso, daFare) }
                     }
                     if (daFare.isEmpty()) {
                         if (!stato.serverDaAggiornare) {
@@ -283,27 +289,37 @@ fun FaccendeScreen(
                                 faccenda = faccenda,
                                 foto = VistaFaccende.foto(faccenda, coda),
                                 adesso = adesso,
-                                bloccato = bloccato,
                                 occupato = stato.preparazioneInCorso || scattoFaccenda != null,
                                 onScatta = { scatta(faccenda) },
                             )
                         }
                     }
                     // (0.15) Fatti e annullati: chiusi, si aprono quando servono.
-                    if (chiuse.isNotEmpty()) {
+                    // (0.17, contratto v3.9) Dentro, "Cerca un lavoro" su tutta la storia:
+                    // c'è anche senza chiusi negli ultimi 30 giorni (i vecchi si trovano lo stesso).
+                    val conRicerca = memoria.conosciuto && !stato.serverDaAggiornare
+                    if (chiuse.isNotEmpty() || conRicerca || stato.ricerca.attiva) {
                         item(key = "chiuse") {
                             SezioneEspandibile(
                                 titolo = stringResource(R.string.faccende_sezione_chiuse),
-                                conteggio = chiuse.size,
+                                conteggio = chiuse.size.takeIf { it > 0 },
                                 chiave = "faccende-chiuse",
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(Spazi.m)) {
-                                    chiuse.forEach { faccenda ->
-                                        CardChiusa(
-                                            faccenda = faccenda,
-                                            scaricando = stato.scaricamentoInCorso == faccenda.id,
-                                            onVediFoto = { vm.apriFoto(faccenda.id, faccenda.titolo) },
-                                        )
+                                    if (conRicerca || stato.ricerca.attiva) {
+                                        CampoRicerca(stato.ricerca.testo, onCambia = { vm.cerca(it) })
+                                    }
+                                    val vedi = { faccenda: FaccendaLocale -> vm.apriFoto(faccenda.id, faccenda.titolo) }
+                                    if (stato.ricerca.attiva) {
+                                        RisultatiRicerca(stato.ricerca, stato.scaricamentoInCorso, vedi)
+                                    } else {
+                                        chiuse.forEach { faccenda ->
+                                            CardChiusa(
+                                                faccenda = faccenda,
+                                                scaricando = stato.scaricamentoInCorso == faccenda.id,
+                                                onVediFoto = { vedi(faccenda) },
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -339,13 +355,24 @@ fun FaccendeScreen(
  * se i lavori non sono fatti.
  */
 @Composable
-private fun SchedaBlocco(bloccato: Boolean, memoria: MemoriaBlocco, adesso: Long) {
+private fun SchedaBlocco(bloccato: Boolean, memoria: MemoriaBlocco, adesso: Long, daFare: List<FaccendaLocale>) {
     val context = LocalContext.current
     if (bloccato) {
+        // (0.17) Si sblocca con le foto dei lavori che bloccano adesso: se ce ne
+        // sono altri per più tardi, si dice quali (quelli di adesso, per nome).
+        val divisi = VistaFaccende.divisi(daFare, { it.bloccoDa }, adesso, bloccato = true)
+        val spiega = if (divisi.poi.isEmpty()) {
+            stringResource(R.string.faccende_bloccato_spiega)
+        } else {
+            val nomi = divisi.adesso.map { "«" + it.titolo.ifBlank { context.getString(R.string.faccenda_senza_titolo) } + "»" }
+            // "«A», «B» e «C»".
+            val elenco = if (nomi.size > 1) nomi.dropLast(1).joinToString(", ") + " e " + nomi.last() else nomi.joinToString()
+            stringResource(R.string.faccende_bloccato_spiega_alcuni, elenco)
+        }
         CardEvidenza(tono = Tono.Attenzione) {
             Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
                 Text(text = stringResource(R.string.faccende_bloccato), style = MaterialTheme.typography.titleMedium)
-                Text(text = stringResource(R.string.faccende_bloccato_spiega), style = MaterialTheme.typography.bodyMedium)
+                Text(text = spiega, style = MaterialTheme.typography.bodyMedium)
                 Text(text = stringResource(R.string.faccende_usabili), style = MaterialTheme.typography.bodyMedium)
             }
         }
@@ -360,7 +387,6 @@ private fun CardDaFare(
     faccenda: FaccendaLocale,
     foto: VistaFaccende.Foto,
     adesso: Long,
-    bloccato: Boolean,
     occupato: Boolean,
     onScatta: () -> Unit,
 ) {
@@ -375,13 +401,8 @@ private fun CardDaFare(
             faccenda.nota?.let {
                 Text(text = stringResource(R.string.faccenda_nota, it), style = MaterialTheme.typography.bodyMedium)
             }
-            // (0.15) Da quando blocca, solo se il telefono non è già bloccato.
-            if (!bloccato) {
-                Text(
-                    text = testoBloccaDa(context, faccenda.bloccoDa, adesso),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
+            // (0.17, contratto v3.9) Da quando blocca, sempre, anche a blocco partito, in piccolo.
+            Nota(testoBloccaDa(context, faccenda.bloccoDa, faccenda.creataIl, adesso))
             faccenda.ultimaBocciatura?.let { b ->
                 val chi = b.da ?: stringResource(R.string.faccende_genitore_senza_nome)
                 Text(
@@ -425,11 +446,27 @@ private fun CardChiusa(faccenda: FaccendaLocale, scaricando: Boolean, onVediFoto
                     modifier = Modifier.weight(1f),
                 )
                 Pillola(
-                    stringResource(if (faccenda.fatta) R.string.faccenda_stato_fatta else R.string.faccenda_stato_annullata),
+                    stringResource(
+                        when {
+                            faccenda.fatta -> R.string.faccenda_stato_fatta
+                            faccenda.annullata -> R.string.faccenda_stato_annullata
+                            // (0.17) Nei risultati della ricerca ci sono anche quelli da fare.
+                            else -> R.string.faccenda_stato_da_fare
+                        },
+                    ),
                     tono = if (faccenda.fatta) Tono.Positivo else Tono.Neutro,
                 )
             }
             faccenda.genitore?.let { Nota(stringResource(R.string.faccenda_data_da, it)) }
+            // (0.17, contratto v3.9) "Svolto": il genitore l'ha confermato.
+            if (faccenda.fatta && faccenda.confermata) {
+                Text(
+                    text = faccenda.confermataDa?.let { stringResource(R.string.faccenda_confermata_da, it) }
+                        ?: stringResource(R.string.faccenda_confermata),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             if (faccenda.fatta) {
                 faccenda.fotoIl?.let { Nota(stringResource(R.string.faccenda_foto_arrivata, quandoLocale(Instant.ofEpochMilli(it)))) }
                 if (faccenda.foto) {
@@ -439,22 +476,92 @@ private fun CardChiusa(faccenda: FaccendaLocale, scaricando: Boolean, onVediFoto
                 } else if (faccenda.fotoIl != null) {
                     Nota(stringResource(R.string.faccenda_foto_non_piu))
                 }
-            } else {
+            } else if (faccenda.annullata) {
                 faccenda.annullataDa?.let { Nota(stringResource(R.string.faccenda_annullata_da, it)) }
             }
         }
     }
 }
 
+/** (0.17, contratto v3.9) "Cerca un lavoro": una riga, con la X per cancellare. */
+@Composable
+private fun CampoRicerca(testo: String, onCambia: (String) -> Unit) {
+    OutlinedTextField(
+        value = testo,
+        onValueChange = { onCambia(it.take(RicercaFaccende.MASSIMO_CARATTERI)) },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        placeholder = { Text(stringResource(R.string.faccende_cerca)) },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        trailingIcon = {
+            if (testo.isNotEmpty()) {
+                IconButton(onClick = { onCambia("") }) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.faccende_cerca_cancella))
+                }
+            }
+        },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+    )
+}
 
-/** "Blocca il telefono da subito", "…dalle 16:00", "…domani dalle 16:00", "…giovedì dalle 16:00". */
-private fun testoBloccaDa(context: Context, bloccoDa: Long?, adesso: Long): String =
-    when (val quando = TestoFaccende.quandoBlocca(bloccoDa, adesso, ZoneId.systemDefault())) {
-        QuandoBlocca.Subito -> context.getString(R.string.faccenda_blocca_subito)
-        is QuandoBlocca.Oggi -> context.getString(R.string.faccenda_blocca_alle, quando.ora)
-        is QuandoBlocca.Domani -> context.getString(R.string.faccenda_blocca_domani, quando.ora)
-        is QuandoBlocca.Giorno -> context.getString(R.string.faccenda_blocca_giorno, quando.giorno, quando.ora)
-        is QuandoBlocca.Data -> context.getString(R.string.faccenda_blocca_giorno, quando.data, quando.ora)
+/** (0.17) I lavori trovati, o perché non ce ne sono (nessuno, senza rete, server da aggiornare). */
+@Composable
+private fun RisultatiRicerca(
+    ricerca: FaccendeViewModel.Ricerca,
+    scaricando: Long?,
+    onVediFoto: (FaccendaLocale) -> Unit,
+) {
+    if (ricerca.inCorso || ricerca.esito == null) {
+        Nota(stringResource(R.string.faccende_cerca_in_corso))
+    }
+    when (val esito = ricerca.esito) {
+        null -> Unit
+        is RicercaFaccende.Esito.Trovati -> {
+            if (esito.faccende.isEmpty()) {
+                StatoVuoto(stringResource(R.string.faccende_cerca_nessuno, ricerca.cercato.orEmpty()))
+            } else {
+                esito.faccende.forEach { faccenda ->
+                    CardChiusa(
+                        faccenda = faccenda,
+                        scaricando = scaricando == faccenda.id,
+                        onVediFoto = { onVediFoto(faccenda) },
+                    )
+                }
+                if (esito.altre) Nota(stringResource(R.string.faccende_cerca_altre))
+            }
+        }
+        RicercaFaccende.Esito.ServerVecchio -> RigaStato(stringResource(R.string.faccende_cerca_server_vecchio))
+        RicercaFaccende.Esito.SenzaRete -> RigaStato(stringResource(R.string.faccende_cerca_senza_rete))
+        RicercaFaccende.Esito.Scollegato -> RigaStato(stringResource(R.string.faccende_scollegato))
+        RicercaFaccende.Esito.Errore -> RigaStato(stringResource(R.string.faccende_cerca_errore))
+    }
+}
+
+
+/**
+ * "Blocca il telefono dalle 16:00", "…domani dalle 16:00", "…giovedì dalle
+ * 16:00". (0.17, contratto v3.9) Anche già partito: "da subito (dalle 14:02)"
+ * solo se il lavoro è stato dato a blocco subito; uno dato per le 16:00 resta
+ * "dalle 16:00" anche dopo le 16:00 (TestoFaccende.oraLavoro).
+ */
+private fun testoBloccaDa(context: Context, bloccoDa: Long?, creataIl: Long?, adesso: Long): String =
+    when (val ora = TestoFaccende.oraLavoro(bloccoDa, creataIl, adesso, ZoneId.systemDefault())) {
+        is TestoFaccende.OraLavoro.DaSubito -> when (val partito = ora.partito) {
+            is TestoFaccende.Partito.Oggi -> context.getString(R.string.faccenda_blocca_subito_dalle, partito.ora)
+            is TestoFaccende.Partito.Prima -> context.getString(R.string.faccenda_blocca_subito_dal, partito.data)
+            null -> context.getString(R.string.faccenda_blocca_subito)
+        }
+        is TestoFaccende.OraLavoro.AllOra -> when (val partito = ora.partito) {
+            is TestoFaccende.Partito.Oggi -> context.getString(R.string.faccenda_blocca_alle, partito.ora)
+            is TestoFaccende.Partito.Prima -> context.getString(R.string.faccenda_blocca_dal_alle, partito.data, partito.ora)
+        }
+        is TestoFaccende.OraLavoro.Prossimo -> when (val quando = ora.quando) {
+            QuandoBlocca.Subito -> context.getString(R.string.faccenda_blocca_subito)
+            is QuandoBlocca.Oggi -> context.getString(R.string.faccenda_blocca_alle, quando.ora)
+            is QuandoBlocca.Domani -> context.getString(R.string.faccenda_blocca_domani, quando.ora)
+            is QuandoBlocca.Giorno -> context.getString(R.string.faccenda_blocca_giorno, quando.giorno, quando.ora)
+            is QuandoBlocca.Data -> context.getString(R.string.faccenda_blocca_giorno, quando.data, quando.ora)
+        }
     }
 
 /** "Se non le hai fatte, alle 16:00 il telefono si blocca", nei suoi modi. */

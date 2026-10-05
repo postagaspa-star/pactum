@@ -33,8 +33,27 @@ object TipiNotificaFaccende {
     const val FACCENDA_FATTA = "faccenda_fatta"
     const val FACCENDE_FINITE = "faccende_finite"
 
+    /**
+     * (0.17, contratto v3.9) Il genitore ha cambiato un lavoro da fare (titolo,
+     * nota, ora del blocco): il blocco si rilegge subito, l'ora può essere cambiata.
+     */
+    const val FACCENDA_MODIFICATA = "faccenda_modificata"
+
+    /** (0.17, v3.9) Il genitore ha confermato un lavoro fatto ("svolto"): il blocco non cambia. */
+    const val FACCENDA_CONFERMATA = "faccenda_confermata"
+
     /** Quelle che dicono che il blocco può essere cambiato: si richiede subito lo stato. */
-    val CAMBIANO_IL_BLOCCO = setOf(NUOVE_FACCENDE, FACCENDA_BOCCIATA, FACCENDA_ANNULLATA, FACCENDA_FATTA, FACCENDE_FINITE)
+    val CAMBIANO_IL_BLOCCO = setOf(
+        NUOVE_FACCENDE,
+        FACCENDA_BOCCIATA,
+        FACCENDA_ANNULLATA,
+        FACCENDA_FATTA,
+        FACCENDE_FINITE,
+        FACCENDA_MODIFICATA,
+    )
+
+    /** Quelle del canale dei lavori di casa, che aprono la pagina Lavori. */
+    val DEL_FIGLIO = setOf(NUOVE_FACCENDE, FACCENDA_BOCCIATA, FACCENDA_ANNULLATA, FACCENDA_MODIFICATA, FACCENDA_CONFERMATA)
 }
 
 /** L'ultima bocciatura di una foto: quando, la nota e chi (il nome del genitore). */
@@ -73,11 +92,18 @@ data class FaccendaLocale(
     val ultimaBocciatura: Bocciatura? = null,
     val chiusaIl: Long? = null,
     val annullataDa: String? = null,
+    /** (0.17, contratto v3.9) Il genitore l'ha confermata ("svolto"): quando e chi. */
+    val confermataIl: Long? = null,
+    val confermataDa: String? = null,
 ) {
+    val confermata: Boolean get() = confermataIl != null
     val daFare: Boolean get() = stato == StatiFaccenda.DA_FARE
     val fatta: Boolean get() = stato == StatiFaccenda.FATTA
     val annullata: Boolean get() = stato == StatiFaccenda.ANNULLATA
 }
+
+/** (0.17, v3.9) I lavori trovati da una ricerca; [altre] = ce ne sono più di 50 (null = server vecchio). */
+data class RisultatiRicerca(val faccende: List<FaccendaLocale>, val altre: Boolean?)
 
 /**
  * `GET /api/faccende/blocco` letto. [attivo] = c'è almeno una faccenda da
@@ -144,6 +170,8 @@ object LetturaFaccende {
             ultimaBocciatura = bocciatura(o["ultima_bocciatura"]),
             chiusaIl = LetturaSessioni.istante(o["chiusa_ts"]),
             annullataDa = nomeGenitore(o["annullata_da"]),
+            confermataIl = LetturaSessioni.istante(o["confermata_ts"]),
+            confermataDa = nomeGenitore(o["confermata_da"]),
         )
     }
 
@@ -156,6 +184,20 @@ object LetturaFaccende {
         is JsonObject -> faccende(radice["faccende"])
         is JsonArray -> faccende(radice)
         else -> null
+    }
+
+    /**
+     * (0.17, contratto v3.9) La risposta di `GET /api/faccende?cerca=…`:
+     * `{ "faccende": [ … ], "altre": true|false }`. [RisultatiRicerca.altre]
+     * null = la risposta non ha `altre`: un server di prima della v3.9, che
+     * ignora `cerca` e manda gli ultimi 30 giorni (non è una ricerca). Null se
+     * il corpo non si legge.
+     */
+    fun ricerca(corpo: String?): RisultatiRicerca? {
+        val radice = LetturaSessioni.albero(corpo) as? JsonObject ?: return null
+        val faccende = faccende(radice["faccende"]) ?: return null
+        val altre = (radice["altre"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull
+        return RisultatiRicerca(faccende, altre)
     }
 
     /** La faccenda dal corpo di una risposta (la foto appena mandata). */

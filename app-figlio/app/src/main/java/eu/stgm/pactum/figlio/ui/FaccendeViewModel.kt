@@ -8,8 +8,11 @@ import androidx.lifecycle.viewModelScope
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.faccende.ConsegnaFoto
 import eu.stgm.pactum.figlio.faccende.ControlloBlocco
+import eu.stgm.pactum.figlio.faccende.RicercaFaccende
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +45,20 @@ class FaccendeViewModel(application: Application) : AndroidViewModel(application
 
     data class FotoAperta(val faccendaId: Long, val titolo: String, val immagine: Bitmap)
 
+    /**
+     * (0.17, contratto v3.9) La ricerca nei lavori: [testo] = quello scritto;
+     * [cercato] = il testo dell'ultima risposta; [esito] null = niente ancora.
+     */
+    data class Ricerca(
+        val testo: String = "",
+        val inCorso: Boolean = false,
+        val cercato: String? = null,
+        val esito: RicercaFaccende.Esito? = null,
+    ) {
+        /** C'è una ricerca da mostrare al posto dei lavori chiusi. */
+        val attiva: Boolean get() = RicercaFaccende.testo(testo) != null
+    }
+
     data class StatoFaccende(
         val caricamento: Boolean = true,
         val letto: Boolean = false,
@@ -55,10 +72,46 @@ class FaccendeViewModel(application: Application) : AndroidViewModel(application
         val scaricamentoInCorso: Long? = null,
         val fotoAperta: FotoAperta? = null,
         val evento: Evento? = null,
+        val ricerca: Ricerca = Ricerca(),
     )
 
     private val _stato = MutableStateFlow(StatoFaccende())
     val stato: StateFlow<StatoFaccende> = _stato.asStateFlow()
+
+    /** (0.17) Vale solo la risposta all'ultima domanda di ricerca. */
+    private val sequenza = RicercaFaccende.Sequenza()
+    private var ricercaInAttesa: Job? = null
+
+    /**
+     * (0.17, contratto v3.9) "Cerca un lavoro": a ogni lettera si aspetta
+     * RicercaFaccende.ATTESA_MS; se nel frattempo arriva un'altra lettera, la
+     * domanda di prima non parte. Una risposta a una domanda vecchia non conta.
+     */
+    fun cerca(scritto: String) {
+        _stato.update { it.copy(ricerca = it.ricerca.copy(testo = scritto)) }
+        ricercaInAttesa?.cancel()
+        val testo = RicercaFaccende.testo(scritto)
+        if (testo == null) {
+            sequenza.annulla()
+            _stato.update { it.copy(ricerca = Ricerca(testo = scritto)) }
+            return
+        }
+        ricercaInAttesa = viewModelScope.launch {
+            delay(RicercaFaccende.ATTESA_MS)
+            val numero = sequenza.nuova()
+            _stato.update { it.copy(ricerca = it.ricerca.copy(inCorso = true)) }
+            val app = getApplication<Application>()
+            val configurazione = Impostazioni(app).leggiConfigurazione()
+            val esito = if (!configurazione.completa) {
+                RicercaFaccende.Esito.Scollegato
+            } else {
+                val (corpo, codice) = PostinoClient(configurazione).cercaFaccende(testo)
+                RicercaFaccende.esito(corpo, codice)
+            }
+            if (!sequenza.valida(numero)) return@launch
+            _stato.update { it.copy(ricerca = it.ricerca.copy(inCorso = false, cercato = testo, esito = esito)) }
+        }
+    }
 
     fun aggiorna() {
         _stato.update { it.copy(caricamento = true) }

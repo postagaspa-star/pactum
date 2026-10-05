@@ -738,6 +738,8 @@
     <string name="faccende_intro">I lavori di casa te li danno i tuoi genitori. Quando ne hai fatto uno, scatta la foto da qui: arriva a loro e il lavoro è fatto.</string>
     <string name="faccende_bloccato">Prima i lavori di casa: il telefono è bloccato</string>
     <string name="faccende_bloccato_spiega">Si sblocca da solo quando è arrivata la foto di ogni lavoro.</string>
+    <!-- (0.17) Quando alcuni lavori bloccano più tardi: si sblocca con le foto di quelli che bloccano adesso. -->
+    <string name="faccende_bloccato_spiega_alcuni">Si sblocca da solo quando è arrivata la foto di %1$s.</string>
     <string name="faccende_usabili">Intanto puoi usare Telefono, SMS, Contatti, Fotocamera, Foto, Wallet, eWeLink, Tinaba e Impostazioni.</string>
     <string name="faccende_prossimo_alle">Alle %1$s il telefono si blocca, se i lavori non sono fatti</string>
     <string name="faccende_prossimo_domani">Domani alle %1$s il telefono si blocca, se i lavori non sono fatti</string>
@@ -751,6 +753,10 @@
     <string name="faccenda_data_da">Da %1$s</string>
     <string name="faccenda_nota">Nota: %1$s</string>
     <string name="faccenda_blocca_subito">Blocca il telefono da subito</string>
+    <!-- (0.17, contratto v3.9) L'ora del blocco sempre, anche a blocco partito. -->
+    <string name="faccenda_blocca_subito_dalle">Blocca il telefono da subito (dalle %1$s)</string>
+    <string name="faccenda_blocca_subito_dal">Blocca il telefono da subito (dal %1$s)</string>
+    <string name="faccenda_blocca_dal_alle">Blocca il telefono dal %1$s alle %2$s</string>
     <string name="faccenda_blocca_alle">Blocca il telefono dalle %1$s</string>
     <string name="faccenda_blocca_domani">Blocca il telefono domani dalle %1$s</string>
     <string name="faccenda_blocca_giorno">Blocca il telefono %1$s dalle %2$s</string>
@@ -779,7 +785,11 @@
     <string name="faccende_nessuna_fotocamera">Su questo telefono non trovo una fotocamera da aprire.</string>
     <!-- La barriera dei lavori di casa: un solo pulsante, Apri Pactum, che porta alla pagina Lavori di casa. -->
     <string name="barriera_faccende_titolo">Prima i lavori di casa</string>
-    <string name="barriera_faccende_testo">Il telefono è bloccato finché non arriva la foto di ogni lavoro. Le foto si scattano da Pactum.</string>
+    <string name="barriera_faccende_testo">Il telefono è bloccato finché non arriva la foto di ogni lavoro qui sotto. Le foto si scattano da Pactum.</string>
+    <!-- (0.17) I lavori che bloccheranno più tardi, in piccolo sotto quelli che bloccano adesso. -->
+    <string name="barriera_faccende_poi_alle">Poi, dalle %1$s: %2$s</string>
+    <string name="barriera_faccende_poi_domani">Poi, domani dalle %1$s: %2$s</string>
+    <string name="barriera_faccende_poi_giorno">Poi, %1$s dalle %2$s: %3$s</string>
     <string name="barriera_faccende_apri">Apri Pactum</string>
     <!-- La copertura sopra una finestrella (picture-in-picture) o uno schermo diviso durante il blocco. -->
     <string name="finestrella_testo">Una finestrella o lo schermo diviso mostra un\'app che durante il blocco non si usa. Chiudila: tocca «Chiudi la finestrella» e trascinala sulla X, oppure chiudi lo schermo diviso.</string>
@@ -799,7 +809,7 @@
     <string name="canale_faccende_descrizione">I lavori di casa che ti dà un genitore, quando il telefono si blocca, le foto bocciate e i lavori annullati.</string>
     <string name="tipo_faccende">Lavori di casa</string>
     <string name="notifica_blocco_partito">Prima i lavori di casa: il telefono è bloccato</string>
-    <string name="notifica_blocco_partito_testo">Si sblocca da solo quando è arrivata la foto di ogni lavoro. I lavori li trovi in Pactum.</string>
+    <string name="notifica_blocco_partito_testo">Si sblocca da solo quando è arrivata la foto dei lavori che lo bloccano adesso. Li trovi in Pactum.</string>
     <plurals name="notifica_faccende_nuove">
         <item quantity="one">%1$s ti ha dato un lavoro di casa</item>
         <item quantity="other">%1$s ti ha dato %2$d lavori di casa</item>
@@ -920,6 +930,28 @@
     <string name="sessione_in_corso_app">Puoi usare: %1$s.</string>
     <string name="faccende_scollegato">Questo telefono non è più collegato al patto: il blocco dei lavori di casa è tolto. Chiedi a un genitore un codice nuovo.</string>
     <string name="oggi_bonus_regola">+%1$d min di bonus</string>
+    <!-- (0.17, contratto v3.9) I lavori di casa cambiati e confermati, e la ricerca. -->
+    <string name="notifica_faccenda_modificata">%1$s ha cambiato un lavoro di casa</string>
+    <string name="notifica_faccenda_modificata_titolo">«%1$s» (prima «%2$s»)</string>
+    <string name="notifica_faccenda_modificata_blocco_subito">Ora blocca il telefono da subito.</string>
+    <string name="notifica_faccenda_modificata_blocco_alle">Ora blocca il telefono dalle %1$s.</string>
+    <string name="notifica_faccenda_modificata_blocco_domani">Ora blocca il telefono domani dalle %1$s.</string>
+    <string name="notifica_faccenda_modificata_blocco_giorno">Ora blocca il telefono %1$s dalle %2$s.</string>
+    <string name="notifica_faccenda_modificata_nota">Nota: «%1$s»</string>
+    <string name="notifica_faccenda_modificata_nota_tolta">La nota è stata tolta.</string>
+    <string name="notifica_faccenda_confermata">%1$s ha confermato «%2$s»</string>
+    <string name="notifica_faccenda_confermata_testo">Il lavoro è segnato come svolto.</string>
+    <string name="faccenda_confermata_da">Confermato da %1$s</string>
+    <string name="faccenda_confermata">Confermato</string>
+    <string name="faccenda_stato_da_fare">Da fare</string>
+    <string name="faccende_cerca">Cerca un lavoro</string>
+    <string name="faccende_cerca_cancella">Cancella la ricerca</string>
+    <string name="faccende_cerca_in_corso">Cerco…</string>
+    <string name="faccende_cerca_nessuno">Nessun lavoro con «%1$s».</string>
+    <string name="faccende_cerca_altre">Ce ne sono altri: scrivi qualcosa in più per trovarli.</string>
+    <string name="faccende_cerca_senza_rete">Per cercare serve la rete. Riprova quando c\'è.</string>
+    <string name="faccende_cerca_errore">La ricerca non è riuscita. Riprova fra poco.</string>
+    <string name="faccende_cerca_server_vecchio">Per cercare nei lavori di casa serve aggiornare il server di Pactum.</string>
     <!-- (0.16, contratto v3.8) Il tempo come lo vede il genitore: in Oggi e nella pagina Tempo. -->
     <string name="tempo_titolo">Il tempo</string>
     <string name="tempo_ultimi_7_riga">Ultimi 7 giorni: %1$s</string>

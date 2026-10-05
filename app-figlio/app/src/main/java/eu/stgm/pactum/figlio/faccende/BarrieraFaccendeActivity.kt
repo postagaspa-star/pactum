@@ -30,6 +30,11 @@ import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.ui.theme.PactumTheme
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import java.time.ZoneId
 
 /**
  * (0.13) La barriera delle faccende: "Prima i lavori di casa", sopra un'app che
@@ -68,16 +73,24 @@ class BarrieraFaccendeActivity : ComponentActivity() {
                 // Il blocco finisce (l'ultima foto è arrivata, una faccenda
                 // annullata): la barriera se ne va subito.
                 val memoria by StatoBlocco.memoria.collectAsState()
+                // (0.17) L'ora del server, per dire quali lavori bloccano adesso.
+                var ora by remember { mutableStateOf(Orologio.adesso()) }
                 LaunchedEffect(memoria) {
                     while (true) {
-                        if (!memoria.attivoAdesso(Orologio.adesso())) {
+                        ora = Orologio.adesso()
+                        if (!memoria.attivoAdesso(ora)) {
                             finish()
                             return@LaunchedEffect
                         }
                         delay(CONTROLLO_MS)
                     }
                 }
-                SchermataBarrieraFaccende(daFare = memoria.daFare, onApri = { apriPactum() })
+                val adesso = memoria.oraServer(ora)
+                SchermataBarrieraFaccende(
+                    divisi = VistaFaccende.divisi(memoria.daFare, { it.bloccoDa }, adesso, bloccato = true),
+                    adesso = adesso,
+                    onApri = { apriPactum() },
+                )
             }
         }
     }
@@ -164,9 +177,14 @@ class BarrieraFaccendeActivity : ComponentActivity() {
     }
 }
 
-/** Il titolo, l'elenco con chi ha dato ogni faccenda; in basso, sotto il pollice, "Apri Pactum". */
+/**
+ * Il titolo, i lavori che bloccano adesso con chi li ha dati; (0.17) sotto, in
+ * piccolo, quelli che bloccheranno più tardi con la loro ora ("Poi, dalle
+ * 18:00: Letto"); in basso, sotto il pollice, "Apri Pactum".
+ */
 @Composable
-private fun SchermataBarrieraFaccende(daFare: List<FaccendaDaFare>, onApri: () -> Unit) {
+private fun SchermataBarrieraFaccende(divisi: VistaFaccende.Divisi<FaccendaDaFare>, adesso: Long, onApri: () -> Unit) {
+    val context = LocalContext.current
     Scaffold { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             Column(
@@ -184,7 +202,7 @@ private fun SchermataBarrieraFaccende(daFare: List<FaccendaDaFare>, onApri: () -
                     text = stringResource(R.string.barriera_faccende_testo),
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                daFare.forEach { faccenda ->
+                divisi.adesso.forEach { faccenda ->
                     Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
                         Text(
                             text = faccenda.titolo.ifBlank { stringResource(R.string.faccenda_senza_titolo) },
@@ -194,6 +212,17 @@ private fun SchermataBarrieraFaccende(daFare: List<FaccendaDaFare>, onApri: () -
                             Text(
                                 text = stringResource(R.string.faccenda_da, it),
                                 style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                if (divisi.poi.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                        divisi.poi.forEach { faccenda ->
+                            Text(
+                                text = testoPoi(context, faccenda, adesso),
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -214,5 +243,18 @@ private fun SchermataBarrieraFaccende(daFare: List<FaccendaDaFare>, onApri: () -
                 }
             }
         }
+    }
+}
+
+/** (0.17) "Poi, dalle 18:00: Letto", "Poi, domani dalle 9:00: …", "Poi, giovedì dalle 16:00: …". */
+private fun testoPoi(context: Context, faccenda: FaccendaDaFare, adesso: Long): String {
+    val titolo = faccenda.titolo.ifBlank { context.getString(R.string.faccenda_senza_titolo) }
+    return when (val quando = TestoFaccende.quandoBlocca(faccenda.bloccoDa, adesso, ZoneId.systemDefault())) {
+        // Non succede (i lavori di "poi" non sono ancora partiti): il titolo e basta.
+        QuandoBlocca.Subito -> titolo
+        is QuandoBlocca.Oggi -> context.getString(R.string.barriera_faccende_poi_alle, quando.ora, titolo)
+        is QuandoBlocca.Domani -> context.getString(R.string.barriera_faccende_poi_domani, quando.ora, titolo)
+        is QuandoBlocca.Giorno -> context.getString(R.string.barriera_faccende_poi_giorno, quando.giorno, quando.ora, titolo)
+        is QuandoBlocca.Data -> context.getString(R.string.barriera_faccende_poi_giorno, quando.data, quando.ora, titolo)
     }
 }

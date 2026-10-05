@@ -30,6 +30,7 @@ import eu.stgm.pactum.figlio.faccende.FotoInCoda
 import eu.stgm.pactum.figlio.faccende.MemoriaBlocco
 import eu.stgm.pactum.figlio.faccende.MemoriaCodaFoto
 import eu.stgm.pactum.figlio.faccende.Ordine
+import eu.stgm.pactum.figlio.faccende.RicercaFaccende
 import eu.stgm.pactum.figlio.faccende.StatiFaccenda
 import eu.stgm.pactum.figlio.faccende.StatiFoto
 import eu.stgm.pactum.figlio.sessione.AvvioIncerto
@@ -620,6 +621,9 @@ object DatiFinti {
                 fotoIl = adesso - GIORNO,
                 foto = true,
                 chiusaIl = adesso - GIORNO + 10 * MINUTO,
+                // (0.17, contratto v3.9) Confermato dalla mamma: "svolto".
+                confermataIl = adesso - GIORNO + 2 * ORA,
+                confermataDa = "Mamma",
             ),
             FaccendaLocale(
                 id = 56,
@@ -710,6 +714,42 @@ object DatiFinti {
     )
 
     fun faccendeLette() = FaccendeViewModel.StatoFaccende(caricamento = false, letto = true)
+
+    /** (0.17, contratto v3.9) "letto": quattro lavori trovati su tutta la storia, di ogni stato. */
+    fun ricercaLetto(): FaccendeViewModel.StatoFaccende {
+        val adesso = adesso()
+        val trovati = listOf(
+            FaccendaLocale(
+                id = 81, titolo = "Rifare il letto", stato = StatiFaccenda.DA_FARE, creataIl = adesso - 2 * ORA,
+                genitore = "Mamma", bloccoDa = adesso + 2 * ORA,
+            ),
+            FaccendaLocale(
+                id = 74, titolo = "Rifare il letto", stato = StatiFaccenda.FATTA, creataIl = adesso - 6 * GIORNO,
+                genitore = "Mamma", fotoIl = adesso - 6 * GIORNO + ORA, foto = true, chiusaIl = adesso - 6 * GIORNO + ORA,
+                confermataIl = adesso - 6 * GIORNO + 3 * ORA, confermataDa = "Papà",
+            ),
+            FaccendaLocale(
+                id = 40, titolo = "Cambiare le lenzuola del letto", stato = StatiFaccenda.ANNULLATA, creataIl = adesso - 20 * GIORNO,
+                genitore = "Papà", chiusaIl = adesso - 19 * GIORNO, annullataDa = "Papà",
+            ),
+            FaccendaLocale(
+                id = 12, titolo = "Rifare il letto", stato = StatiFaccenda.FATTA, creataIl = adesso - 52 * GIORNO,
+                genitore = "Mamma", fotoIl = adesso - 52 * GIORNO + ORA, foto = false, chiusaIl = adesso - 52 * GIORNO + ORA,
+            ),
+        )
+        return faccendeLette().copy(
+            ricerca = FaccendeViewModel.Ricerca(
+                testo = "letto",
+                cercato = "letto",
+                esito = RicercaFaccende.Esito.Trovati(trovati, altre = false),
+            ),
+        )
+    }
+
+    /** (0.17) La ricerca con un server di prima della v3.9. */
+    fun ricercaServerVecchio() = faccendeLette().copy(
+        ricerca = FaccendeViewModel.Ricerca(testo = "letto", cercato = "letto", esito = RicercaFaccende.Esito.ServerVecchio),
+    )
 
     // --- Diario -------------------------------------------------------------------
 

@@ -49,6 +49,27 @@ object VistaFaccende {
             .sortedWith(compareByDescending<FaccendaLocale> { it.chiusaIl ?: it.creataIl ?: 0L }.thenByDescending { it.id })
     }
 
+    /** (0.17) I lavori da fare divisi: quelli che bloccano adesso e quelli che bloccheranno dopo (dal primo). */
+    data class Divisi<T>(val adesso: List<T>, val poi: List<T>)
+
+    /**
+     * (0.17, contratto v3.9) Quali lavori bloccano ADESSO il telefono: quelli
+     * il cui `blocco_da` è già passato (o fra pochissimo: MemoriaBlocco.TOLLERANZA_MS,
+     * lo stesso ritardo che il blocco tollera), o senza ora (subito). Il blocco
+     * finisce quando è arrivata la foto di QUESTI; gli altri (spostati più
+     * avanti, o dati per più tardi) bloccheranno alla loro ora. Se il telefono
+     * è bloccato ma nessuno risulta partito (un'ora del server diversa), tutti
+     * "adesso": mai una barriera senza lavori. [adesso] = l'ora del server.
+     */
+    fun <T> divisi(lavori: List<T>, bloccoDa: (T) -> Long?, adesso: Long, bloccato: Boolean): Divisi<T> {
+        val (ora, dopo) = lavori.partition { lavoro ->
+            val da = bloccoDa(lavoro)
+            da == null || da <= adesso + MemoriaBlocco.TOLLERANZA_MS
+        }
+        if (bloccato && ora.isEmpty()) return Divisi(lavori, emptyList())
+        return Divisi(ora, dopo.sortedBy { bloccoDa(it) ?: Long.MAX_VALUE })
+    }
+
     /** A che punto è la foto di una faccenda da fare, sul telefono. */
     enum class Foto { NESSUNA, IN_CODA, MANDATA, RIFIUTATA }
 

@@ -54,8 +54,8 @@ object NovitaDalPatto {
     private suspend fun avvisaDentro(context: Context, impostazioni: Impostazioni, postino: PostinoClient) {
         val notifiche = postino.leggiNotifiche() ?: return
         if (notifiche.isEmpty()) return
-        // (0.13) Una faccenda nuova, bocciata o annullata: il blocco si richiede
-        // subito, anche se gli avvisi sono spenti.
+        // (0.13) Una faccenda nuova, bocciata o annullata, (0.17) o cambiata: il
+        // blocco si richiede subito, anche se gli avvisi sono spenti.
         if (notifiche.any { it.tipo in TipiNotificaFaccende.CAMBIANO_IL_BLOCCO }) ControlloBlocco.richiedi()
         if (!AvvisiLocali.puoAvvisare(context)) return
 
@@ -113,19 +113,14 @@ object NovitaDalPatto {
             if (n is NovitaProposta.Ritiro) {
                 n.propostaId?.let { AvvisiLocali.cancella(context, AvvisiLocali.idProposta(it)) }
             }
-            // (0.10) La nuova proposta ha l'id della proposta (per poterla togliere
-            // se viene ritirata); le altre quello della notifica del server.
-            val propostaAnnunciata = if (notifica.tipo == TipiNotifica.NUOVA_PROPOSTA) {
-                (notifica.payload["proposta_id"] as? JsonPrimitive)?.longOrNull
-            } else {
-                null
-            }
             AvvisiLocali.avvisa(
                 context,
-                // Id con offset: l'id grezzo del server collide con la notifica
-                // fissa del testimone (FGS id 1), che verrebbe sostituita.
-                id = propostaAnnunciata?.let { AvvisiLocali.idProposta(it) }
-                    ?: AvvisiLocali.idNotificaServer(notifica.id),
+                // (0.10) La nuova proposta ha l'id della proposta (per poterla togliere
+                // se viene ritirata); (0.17) un lavoro cambiato quello del lavoro (la
+                // modifica nuova sostituisce la vecchia); le altre quello della notifica
+                // del server, con offset: l'id grezzo collide con la notifica fissa del
+                // testimone (FGS id 1), che verrebbe sostituita.
+                id = AvvisiLocali.idPerNotifica(notifica.tipo, notifica.payload, notifica.id),
                 titolo = titolo,
                 testo = testo,
                 destinazione = AvvisiLocali.destinazioneTipo(notifica.tipo),
@@ -166,6 +161,10 @@ object NovitaDalPatto {
             }
             TipiNotificaFaccende.FACCENDA_BOCCIATA -> TestoFaccende.avvisoBocciata(notifica.payload, parole)
             TipiNotificaFaccende.FACCENDA_ANNULLATA -> TestoFaccende.avvisoAnnullata(notifica.payload, parole)
+            // (0.17, contratto v3.9) Cambiato (con la nuova ora del blocco) e confermato.
+            TipiNotificaFaccende.FACCENDA_MODIFICATA ->
+                TestoFaccende.avvisoModificata(notifica.payload, System.currentTimeMillis(), ZoneId.systemDefault(), parole)
+            TipiNotificaFaccende.FACCENDA_CONFERMATA -> TestoFaccende.avvisoConfermata(notifica.payload, parole)
             else -> null
         }
 
@@ -181,6 +180,16 @@ object NovitaDalPatto {
         annullata = context.getString(R.string.notifica_faccenda_annullata),
         annullataTesto = context.getString(R.string.notifica_faccenda_annullata_testo),
         genitoreSenzaNome = context.getString(R.string.faccende_genitore_senza_nome),
+        modificata = context.getString(R.string.notifica_faccenda_modificata),
+        modificataTitolo = context.getString(R.string.notifica_faccenda_modificata_titolo),
+        modificataBloccoSubito = context.getString(R.string.notifica_faccenda_modificata_blocco_subito),
+        modificataBloccoAlle = context.getString(R.string.notifica_faccenda_modificata_blocco_alle),
+        modificataBloccoDomani = context.getString(R.string.notifica_faccenda_modificata_blocco_domani),
+        modificataBloccoGiorno = context.getString(R.string.notifica_faccenda_modificata_blocco_giorno),
+        modificataNota = context.getString(R.string.notifica_faccenda_modificata_nota),
+        modificataNotaTolta = context.getString(R.string.notifica_faccenda_modificata_nota_tolta),
+        confermata = context.getString(R.string.notifica_faccenda_confermata),
+        confermataTesto = context.getString(R.string.notifica_faccenda_confermata_testo),
     )
 
     /**

@@ -58,6 +58,24 @@ class FotoLavoriTest : Fotografo() {
     }
 
     @Test
+    fun ricerca() {
+        prepara(DatiFinti.tuttoFatto(), conCoda = false)
+        scatta("06-lavori-ricerca", "(0.17) \"Fatti e annullati\" aperto, \"Cerca un lavoro\": «letto» su tutta la storia (da fare, confermato, annullato, vecchio senza foto)", pagine = true) {
+            apriPactum(StatiFinti(faccende = DatiFinti.ricercaLetto()), MainActivity.DEST_FACCENDE)
+                .also { tocca("Fatti e annullati", sottostringa = true) }.comeAperta()
+        }
+    }
+
+    @Test
+    fun ricercaServerVecchio() {
+        prepara(DatiFinti.tuttoFatto(), conCoda = false)
+        scatta("06-lavori-ricerca-server-vecchio", "(0.17) La ricerca con un server di prima della v3.9: «serve aggiornare il server»", pagine = false) {
+            apriPactum(StatiFinti(faccende = DatiFinti.ricercaServerVecchio()), MainActivity.DEST_FACCENDE)
+                .also { tocca("Fatti e annullati", sottostringa = true) }.comeAperta()
+        }
+    }
+
+    @Test
     fun senzaRete() {
         prepara(DatiFinti.bloccoAttivo())
         val stato = DatiFinti.faccendeLette().copy(datiFermi = true)

@@ -11,6 +11,9 @@ import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.dati.TipiNotifica
 import eu.stgm.pactum.figlio.faccende.TipiNotificaFaccende
 import eu.stgm.pactum.figlio.permessi.PermessiHelper
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
 /**
  * Gli avvisi locali del figlio: promemoria gentili sugli sforamenti, novità
@@ -80,6 +83,29 @@ object AvvisiLocali {
 
     /** (0.12) L'id del preavviso della regola [regolaId]. */
     fun idPreavviso(regolaId: Long): Int = (BASE_ID_PREAVVISO + (regolaId % 100_000)).toInt()
+
+    /**
+     * (0.17, contratto v3.9) Le notifiche "ha cambiato un lavoro di casa" hanno
+     * l'id del LAVORO: la nuova (16:00 → 18:00, poi 18:00 → 17:00) prende il
+     * posto della vecchia, e in tendina non resta un'ora sbagliata.
+     */
+    private const val BASE_ID_LAVORO_CAMBIATO = 9_100_000L
+
+    fun idLavoroCambiato(faccendaId: Long): Int = (BASE_ID_LAVORO_CAMBIATO + (faccendaId % 100_000)).toInt()
+
+    /**
+     * L'id della notifica locale per una notifica del server: la nuova proposta
+     * con l'id della proposta ([idProposta]), un lavoro cambiato con quello del
+     * lavoro ([idLavoroCambiato]), il resto con quello della notifica del server.
+     */
+    fun idPerNotifica(tipo: String, payload: JsonObject, idServer: Long): Int {
+        fun numero(chiave: String) = (payload[chiave] as? JsonPrimitive)?.longOrNull
+        return when (tipo) {
+            TipiNotifica.NUOVA_PROPOSTA -> numero("proposta_id")?.let { idProposta(it) }
+            TipiNotificaFaccende.FACCENDA_MODIFICATA -> numero("faccenda_id")?.let { idLavoroCambiato(it) }
+            else -> null
+        } ?: idNotificaServer(idServer)
+    }
 
     /** (0.10) L'id della notifica locale che annuncia la proposta [propostaId]. */
     fun idProposta(propostaId: Long): Int = (BASE_ID_PROPOSTA + (propostaId % 100_000)).toInt()
@@ -210,19 +236,14 @@ object AvvisiLocali {
         TipiNotifica.VERDETTO -> context.getString(R.string.tipo_verdetto)
         TipiNotifica.SEGNO -> context.getString(R.string.tipo_segno)
         TipiNotifica.SESSIONE_RISPOSTA -> context.getString(R.string.tipo_sessione)
-        TipiNotificaFaccende.NUOVE_FACCENDE,
-        TipiNotificaFaccende.FACCENDA_BOCCIATA,
-        TipiNotificaFaccende.FACCENDA_ANNULLATA,
-        -> context.getString(R.string.tipo_faccende)
+        in TipiNotificaFaccende.DEL_FIGLIO -> context.getString(R.string.tipo_faccende)
         else -> context.getString(R.string.tipo_novita)
     }
 
     /** (0.13) Il canale di una notifica del server: le faccende nel loro, il resto negli avvisi del patto. */
     fun canaleTipo(tipo: String): String = when (tipo) {
-        TipiNotificaFaccende.NUOVE_FACCENDE,
-        TipiNotificaFaccende.FACCENDA_BOCCIATA,
-        TipiNotificaFaccende.FACCENDA_ANNULLATA,
-        -> CANALE_FACCENDE
+        // (0.17) Anche un lavoro cambiato o confermato (contratto v3.9).
+        in TipiNotificaFaccende.DEL_FIGLIO -> CANALE_FACCENDE
         else -> CANALE_PATTO
     }
 
@@ -241,11 +262,8 @@ object AvvisiLocali {
         -> MainActivity.DEST_PROPOSTE
         TipiNotifica.VERDETTO -> MainActivity.DEST_DIARIO
         TipiNotifica.SESSIONE_RISPOSTA -> MainActivity.DEST_SESSIONI
-        // (0.13) Le faccende (nuove, bocciate, annullate) aprono la loro pagina.
-        TipiNotificaFaccende.NUOVE_FACCENDE,
-        TipiNotificaFaccende.FACCENDA_BOCCIATA,
-        TipiNotificaFaccende.FACCENDA_ANNULLATA,
-        -> MainActivity.DEST_FACCENDE
+        // (0.13) Le faccende (nuove, bocciate, annullate; 0.17 cambiate, confermate) aprono la loro pagina.
+        in TipiNotificaFaccende.DEL_FIGLIO -> MainActivity.DEST_FACCENDE
         else -> MainActivity.DEST_OGGI
     }
 

@@ -39,8 +39,10 @@ android {
         // altrimenti l'auto-aggiornamento non la propone.
         // 0.16 (contratto v3.8): avviso del tempo finito a 30 su 30, fasce con lo
         // stato, il tempo dei giorni passati e i totali dal server.
-        versionCode = 16
-        versionName = "0.16.0"
+        // 0.17 (contratto v3.9): ora del blocco sempre visibile, lavori cambiati
+        // e confermati, ricerca nello storico dei lavori.
+        versionCode = 17
+        versionName = "0.17.0"
     }
 
     signingConfigs {

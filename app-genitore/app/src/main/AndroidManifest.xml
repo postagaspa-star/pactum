@@ -9,6 +9,10 @@
          PackageInstaller. La firma con la stessa chiave e' la garanzia
          d'integrita' (architettura.md). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- (0.16) Aggiornamenti senza tocchi: da Android 12 un'app che aggiorna SE
+         STESSA (stessa firma) puo' installare la versione nuova senza la conferma
+         dell'utente. Se Android la chiede lo stesso, resta la notifica di prima. -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <!-- (0.9) Pactum sempre attivo: servizio in primo piano specialUse (come
          l'app del figlio), svegliato circa ogni minuto da una sveglia di
          Android che tiene sveglio il processore solo il tempo del giro. La

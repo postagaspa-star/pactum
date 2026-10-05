@@ -113,7 +113,16 @@ class Aggiornatore(private val context: Context) {
         // pacchetto diverso invece di installarlo come app nuova.
         val parametri = PackageInstaller.SessionParams(
             PackageInstaller.SessionParams.MODE_FULL_INSTALL,
-        ).apply { setAppPackageName(context.packageName) }
+        ).apply {
+            setAppPackageName(context.packageName)
+            // (0.16) Da Android 12: l'app che aggiorna se stessa non chiede la
+            // conferma (permesso UPDATE_PACKAGES_WITHOUT_USER_ACTION). Se Android
+            // la vuole lo stesso, l'esito è PENDING_USER_ACTION e
+            // AggiornamentoReceiver offre la conferma come prima.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            }
+        }
         var sessionId = -1
         try {
             sessionId = installer.createSession(parametri)

@@ -3,13 +3,13 @@
     "versione_code": 16,
     "versione_nome": "0.16.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.16.0: l'avviso arriva quando il tempo finisce (30 su 30), puntuale; il fuori regola resta da 31. Le fasce orarie dicono se le stai rispettando. In Oggi il tempo degli ultimi 8 giorni e i totali di 7 e 30 giorni, con una pagina Tempo completa. Tornano in vista la tua proposta in attesa, il bonus di oggi e le app della sessione."
+    "note": "v0.16.0: l'avviso arriva quando il tempo finisce (30 su 30), puntuale; il fuori regola resta da 31. Le fasce orarie dicono se le stai rispettando. In Oggi il tempo degli ultimi 8 giorni e i totali di 7 e 30 giorni, con una pagina Tempo completa. Tornano in vista la tua proposta in attesa, il bonus di oggi e le app della sessione. Da questa versione gli aggiornamenti si installano da soli (Android 12 e successivi)."
   },
   "genitore": {
     "versione_code": 16,
     "versione_nome": "0.16.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.16.0: nel Tempo i totali degli ultimi 7 e 30 giorni e il tempo di ogni giorno sulle barre. Nella Panoramica tornano la sessione in corso, le sessioni, tutte le regole, le strisce di ogni dispositivo e il bonus di oggi."
+    "note": "v0.16.0: nel Tempo i totali degli ultimi 7 e 30 giorni e il tempo di ogni giorno sulle barre. Nella Panoramica tornano la sessione in corso, le sessioni, tutte le regole, le strisce di ogni dispositivo e il bonus di oggi. Da questa versione gli aggiornamenti si installano da soli (Android 12 e successivi)."
   },
   "computer": {
     "versione_code": 14,

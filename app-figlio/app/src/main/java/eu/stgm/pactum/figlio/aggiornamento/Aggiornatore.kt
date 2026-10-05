@@ -4,7 +4,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.os.Build
 import eu.stgm.pactum.figlio.BuildConfig
+import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.dati.ConfigurazionePostino
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.InfoVersione
@@ -32,6 +34,9 @@ class Aggiornatore(private val context: Context) {
     suspend fun controlla(configurazione: ConfigurazionePostino, info: InfoVersione?) {
         if (info == null || !configurazione.completa) return
         if (info.versioneCode <= BuildConfig.VERSION_CODE) return
+        // (0.16) L'aggiornamento senza tocchi chiude e riapre l'app: non mentre
+        // il ragazzo la sta usando. Si riprova al giro dopo del worker.
+        if (MainActivity.inPrimoPiano) return
 
         val impostazioni = Impostazioni(context)
         if (impostazioni.leggiVersioneTentata() >= info.versioneCode) return
@@ -53,7 +58,16 @@ class Aggiornatore(private val context: Context) {
         return try {
             val parametri = PackageInstaller.SessionParams(
                 PackageInstaller.SessionParams.MODE_FULL_INSTALL,
-            ).apply { setAppPackageName(context.packageName) }
+            ).apply {
+                setAppPackageName(context.packageName)
+                // (0.16) Da Android 12: l'app che aggiorna se stessa non chiede
+                // la conferma (permesso UPDATE_PACKAGES_WITHOUT_USER_ACTION). Se
+                // Android la vuole lo stesso, l'esito è PENDING_USER_ACTION e
+                // InstallReceiver offre la notifica come prima.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+                }
+            }
             val idSessione = installer.createSession(parametri)
             installer.openSession(idSessione).use { sessione ->
                 apk.inputStream().use { ingresso ->

@@ -47,8 +47,10 @@ android {
         // corta, "Da decidere"), comportamento invariato.
         // v0.16.0 (contratto v3.8): totali degli ultimi 7 e 30 giorni, grafici
         // in core-design, pagine Sessioni e Tutte le regole.
-        versionCode = 16
-        versionName = "0.16.0"
+        // v0.17.0 (contratto v3.9): lavori di casa da modificare, "Segna come
+        // svolto", ricerca nello storico, ora del blocco sempre visibile.
+        versionCode = 17
+        versionName = "0.17.0"
     }
 
     signingConfigs {

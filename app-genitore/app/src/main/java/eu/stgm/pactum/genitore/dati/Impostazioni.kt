@@ -92,6 +92,10 @@ class Impostazioni(private val context: Context) {
         // "Avvisi: ultimo controllo" della Panoramica. Scritto al massimo ogni 10
         // minuti (il dato preciso sta in memoria, Vedetta.ultimoControllo).
         val ULTIMO_CONTROLLO_AVVISI = longPreferencesKey("ultimo_controllo_avvisi")
+
+        // (0.17) Le foto dei lavori di casa aperte su QUESTO telefono ("id|ora della
+        // foto|ms"): dopo, il pulsante diventa "Segna come svolto". Potate dall'app.
+        val FOTO_VISTE = stringSetPreferencesKey("foto_viste")
     }
 
     val configurazione: Flow<ConfigurazionePostino> = context.dataStore.data.map { p ->
@@ -127,6 +131,7 @@ class Impostazioni(private val context: Context) {
                 p.remove(Chiavi.FIGLIO_SCELTO)
                 p.remove(Chiavi.FAMIGLIA_LETTA)
                 p.remove(Chiavi.ULTIMO_CONTROLLO_AVVISI)
+                p.remove(Chiavi.FOTO_VISTE)
             }
             p[Chiavi.SERVER_URL] = urlNuovo
             p[Chiavi.TOKEN] = tokenNuovo
@@ -233,6 +238,14 @@ class Impostazioni(private val context: Context) {
     }
 
     /** (0.9) L'ultimo giro della vedetta andato a buon fine (epoch ms), null = mai (con questo server). */
+    /** (0.17) Le foto dei lavori aperte su questo telefono, come le scrive l'app. */
+    val fotoViste: Flow<Set<String>> = context.dataStore.data.map { p -> p[Chiavi.FOTO_VISTE].orEmpty() }
+
+    /** (0.17) Cambia le foto viste ([cambia] le riceve e dà quelle da tenere), in una scrittura sola. */
+    suspend fun aggiornaFotoViste(cambia: (Set<String>) -> Set<String>) {
+        context.dataStore.edit { p -> p[Chiavi.FOTO_VISTE] = cambia(p[Chiavi.FOTO_VISTE].orEmpty()) }
+    }
+
     val ultimoControlloAvvisi: Flow<Long?> =
         context.dataStore.data.map { p -> p[Chiavi.ULTIMO_CONTROLLO_AVVISI] }
 

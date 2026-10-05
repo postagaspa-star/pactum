@@ -40,6 +40,9 @@ sealed interface Pagina {
 
     /** (0.16) Tutte le regole del figlio scelto, per dispositivo, anche le non più attive. */
     data object TutteLeRegole : Pagina
+
+    /** (0.17) "Cambia il lavoro": un lavoro da fare del figlio scelto. */
+    data class ModificaLavoro(val faccendaId: Long) : Pagina
 }
 
 /** Una voce della pila: una scheda o una pagina. */
@@ -125,6 +128,7 @@ private fun codificaSchermo(schermo: Schermo): String = when (schermo) {
         Pagina.DaiLavori -> "dai"
         Pagina.Sessioni -> "sessioni"
         Pagina.TutteLeRegole -> "regole"
+        is Pagina.ModificaLavoro -> "modifica:${p.faccendaId}"
     }
 }
 
@@ -141,6 +145,7 @@ private fun decodificaSchermo(testo: String): Schermo? {
         "dai" -> Schermo.SuPagina(Pagina.DaiLavori)
         "sessioni" -> Schermo.SuPagina(Pagina.Sessioni)
         "regole" -> Schermo.SuPagina(Pagina.TutteLeRegole)
+        "modifica" -> pezzi.getOrNull(1)?.toLongOrNull()?.let { Schermo.SuPagina(Pagina.ModificaLavoro(it)) }
         else -> null
     }
 }

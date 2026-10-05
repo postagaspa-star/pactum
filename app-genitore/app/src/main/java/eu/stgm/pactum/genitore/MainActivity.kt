@@ -71,6 +71,7 @@ import eu.stgm.pactum.genitore.ui.ProposteViewModel
 import eu.stgm.pactum.genitore.ui.RegolaScreen
 import eu.stgm.pactum.genitore.ui.Scheda
 import eu.stgm.pactum.genitore.ui.Schermo
+import eu.stgm.pactum.genitore.ui.ModificaLavoroScreen
 import eu.stgm.pactum.genitore.ui.SessioniScreen
 import eu.stgm.pactum.genitore.ui.StoricoScreen
 import eu.stgm.pactum.genitore.ui.TutteLeRegoleScreen
@@ -210,6 +211,7 @@ private fun chiaveSchermo(schermo: Schermo): String = when (schermo) {
         Pagina.DaiLavori -> "dai"
         Pagina.Sessioni -> "sessioni"
         Pagina.TutteLeRegole -> "regole"
+        is Pagina.ModificaLavoro -> "modifica-${p.faccendaId}"
     }
 }
 
@@ -428,6 +430,7 @@ private fun GenitoreRoot(
                             Pagina.DaiLavori -> DaiLavoriScreen()
                             Pagina.Sessioni -> SessioniScreen()
                             Pagina.TutteLeRegole -> TutteLeRegoleScreen()
+                            is Pagina.ModificaLavoro -> ModificaLavoroScreen(faccendaId = pagina.faccendaId)
                         }
                     }
                 }

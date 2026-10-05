@@ -11,8 +11,12 @@ import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.StatiFaccenda
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 import java.text.Normalizer
 import java.time.Duration
 import java.time.Instant
@@ -148,15 +152,6 @@ fun statoBlocco(faccende: List<Faccenda>, adesso: Instant, dalServer: BloccoFacc
         prossimo = if (attivo) null else inizi.filterNotNull().filter { it.isAfter(adesso) }.minOrNull(),
         daFare = daFare.size,
     )
-}
-
-/**
- * Da quando blocca UNA faccenda da fare: null = già partito (o subito), altrimenti
- * l'istante futuro. Per le altre faccende null.
- */
-fun bloccoFuturo(faccenda: Faccenda, adesso: Instant): Instant? {
-    if (faccenda.stato != StatiFaccenda.DA_FARE) return null
-    return istanteServer(faccenda.bloccoDa)?.takeIf { it.isAfter(adesso) }
 }
 
 // --- L'ora del blocco scelta dal genitore -----------------------------------------
@@ -509,3 +504,185 @@ fun faccendaDellaNotifica(notifica: Notifica): Long? {
 /** Quante faccende chiude una `faccende_finite` (`faccenda_ids`); null se non si sa. */
 fun quanteFaccendeFinite(notifica: Notifica): Int? =
     (notifica.payload["faccenda_ids"] as? JsonArray)?.size?.takeIf { it > 0 }
+
+// --- (0.17, contratto v3.9) L'ora del blocco di ogni lavoro ---------------------------
+
+/** Da quando blocca un lavoro da fare, come lo si dice: "da subito" o "dalle". */
+sealed interface OraBlocco {
+    /** Il blocco è partito quando il lavoro è stato dato ("Blocco da subito (14:02)"). */
+    data class Subito(val dal: Instant) : OraBlocco
+
+    /** Il blocco parte (o è partito) a un'ora scelta ("Blocco dalle 16:00"). */
+    data class Dalle(val dal: Instant) : OraBlocco
+}
+
+/** Lo scarto entro cui `blocco_da` = `creata_ts` vuol dire "subito" (il server scrive al secondo). */
+val MARGINE_SUBITO: Duration = Duration.ofSeconds(60)
+
+/**
+ * L'ora del blocco di un lavoro da fare, SEMPRE (anche a blocco partito): "subito"
+ * se `blocco_da` coincide con la creazione, altrimenti "dalle". null per un lavoro
+ * non da fare o senza `blocco_da` leggibile.
+ */
+fun oraBlocco(faccenda: Faccenda): OraBlocco? {
+    if (faccenda.stato != StatiFaccenda.DA_FARE) return null
+    val dal = istanteServer(faccenda.bloccoDa) ?: return null
+    val creata = istanteServer(faccenda.creataTs)
+    return if (creata != null && !dal.isAfter(creata.plus(MARGINE_SUBITO))) OraBlocco.Subito(dal) else OraBlocco.Dalle(dal)
+}
+
+// --- (0.17) Modificare un lavoro da fare ------------------------------------------------
+
+/** La scelta del blocco in "Modifica": com'era (non si manda), subito, o dalle un'ora. */
+sealed interface BloccoModificato {
+    data object Invariato : BloccoModificato
+    data object Subito : BloccoModificato
+
+    /** [bloccoDa] = la data col fuso per il server (v. [testoBloccoDa]). */
+    data class Dalle(val bloccoDa: String) : BloccoModificato
+}
+
+/**
+ * Che cosa mandare con PATCH /api/faccende/{id}: solo quello che cambia. [titolo]
+ * e [nota] ripuliti; [nota] "" = togli la nota.
+ */
+data class ModificaFaccenda(
+    val titolo: String? = null,
+    val nota: String? = null,
+    val blocco: BloccoModificato = BloccoModificato.Invariato,
+) {
+    /** true = non cambia niente: non si chiama il server. */
+    val vuota: Boolean get() = titolo == null && nota == null && blocco == BloccoModificato.Invariato
+}
+
+/**
+ * I cambi rispetto al lavoro com'è adesso ([faccenda]): un titolo o una nota uguali
+ * (dopo averli ripuliti come fa il server) non partono; la nota cancellata parte
+ * come "" (il server la toglie).
+ */
+fun cambiDellaModifica(faccenda: Faccenda, titolo: String, nota: String, blocco: BloccoModificato): ModificaFaccenda =
+    cambiDellaModifica(faccenda.titolo, faccenda.nota.orEmpty(), titolo, nota, blocco)
+
+/**
+ * Come sopra, rispetto ai valori con cui la pagina è partita ([titoloPrima],
+ * [notaPrima], salvati con la pagina): ritrovata dopo che Android ha chiuso l'app,
+ * un cambio fatto intanto da un altro genitore non si rimanda indietro.
+ */
+fun cambiDellaModifica(titoloPrima: String, notaPrima: String, titolo: String, nota: String, blocco: BloccoModificato): ModificaFaccenda {
+    val titoloNuovo = ripulisci(titolo)
+    val notaNuova = ripulisci(nota)
+    return ModificaFaccenda(
+        titolo = titoloNuovo.takeIf { it != ripulisci(titoloPrima) },
+        nota = notaNuova.takeIf { it != ripulisci(notaPrima) },
+        blocco = blocco,
+    )
+}
+
+/**
+ * Il corpo di PATCH /api/faccende/{id}: i campi assenti restano com'erano;
+ * `"nota": null` toglie la nota, `"blocco_da": null` vuol dire subito.
+ */
+fun corpoModifica(modifica: ModificaFaccenda): JsonObject = buildJsonObject {
+    modifica.titolo?.let { put("titolo", it) }
+    modifica.nota?.let { if (it.isEmpty()) put("nota", JsonNull) else put("nota", it) }
+    when (val blocco = modifica.blocco) {
+        BloccoModificato.Invariato -> Unit
+        BloccoModificato.Subito -> put("blocco_da", JsonNull)
+        is BloccoModificato.Dalle -> put("blocco_da", blocco.bloccoDa)
+    }
+}
+
+/**
+ * Da dove parte la scelta del blocco in "Modifica": l'istante del blocco se deve
+ * ancora partire ("Dalle" con la sua ora); null se è già partito ("Subito": il
+ * telefono è già bloccato).
+ */
+fun bloccoIniziale(faccenda: Faccenda, adesso: Instant): Instant? =
+    istanteServer(faccenda.bloccoDa)?.takeIf { it.isAfter(adesso) }
+
+// --- (0.17) "Svolto": i pulsanti di un lavoro fatto -------------------------------------
+
+/** Il pulsante principale di un lavoro fatto. */
+enum class PulsanteFatto {
+    /** "Guarda la foto": la foto c'è e questo telefono non l'ha ancora aperta (o il server non sa confermare). */
+    GUARDA_FOTO,
+
+    /** "Segna come svolto": la foto è stata guardata qui, o non c'è più. */
+    SEGNA_SVOLTO,
+
+    /** Niente: confermato senza foto, o il server non sa confermare e la foto non c'è. */
+    NESSUNO,
+}
+
+/**
+ * Che cosa offre un lavoro fatto: il pulsante principale, se si può ancora
+ * bocciare, e se è confermato.
+ */
+data class AzioniFatto(val principale: PulsanteFatto, val boccia: Boolean, val confermato: Boolean)
+
+/**
+ * [vista] = questo telefono ha aperto QUESTA foto (lavoro e ora della foto);
+ * [conConferma] = il server sa confermare (v3.9). Confermato = niente più
+ * "Boccia" (il server direbbe `non_bocciabile`); la foto resta da guardare. Una
+ * foto già cancellata (30 giorni) non si può guardare: si può segnare svolto lo
+ * stesso (il contratto lo permette).
+ */
+fun azioniFatto(faccenda: Faccenda, adesso: Instant, vista: Boolean, conConferma: Boolean): AzioniFatto {
+    if (faccenda.stato != StatiFaccenda.FATTA) return AzioniFatto(PulsanteFatto.NESSUNO, boccia = false, confermato = false)
+    val confermato = faccenda.confermataTs != null
+    val principale = when {
+        confermato || !conConferma -> if (faccenda.foto) PulsanteFatto.GUARDA_FOTO else PulsanteFatto.NESSUNO
+        !faccenda.foto || vista -> PulsanteFatto.SEGNA_SVOLTO
+        else -> PulsanteFatto.GUARDA_FOTO
+    }
+    val boccia = !confermato && bocciabile(faccenda, adesso) is Bocciabile.Si
+    return AzioniFatto(principale, boccia, confermato)
+}
+
+// --- (0.17) Le foto guardate da questo telefono ------------------------------------------
+
+/** Quante foto guardate si ricordano al massimo, e per quanto. */
+const val FOTO_VISTE_MASSIMO = 200
+val FOTO_VISTE_DURATA: Duration = Duration.ofDays(45)
+
+/** Una foto guardata: QUALE foto (lavoro e ora della foto) e quando la si è aperta. */
+data class FotoVista(val chiave: ChiaveFoto, val alle: Instant)
+
+/** Come si scrive nel DataStore: "id|ora della foto|millisecondi". */
+fun codificaFotoVista(vista: FotoVista): String = "${vista.chiave.faccendaId}|${vista.chiave.fotoTs}|${vista.alle.toEpochMilli()}"
+
+/** Il contrario di [codificaFotoVista]; null se la riga non si legge. */
+fun decodificaFotoVista(riga: String): FotoVista? {
+    val pezzi = riga.split('|')
+    if (pezzi.size != 3 || pezzi[1].isEmpty()) return null
+    val id = pezzi[0].toLongOrNull() ?: return null
+    val millis = pezzi[2].toLongOrNull() ?: return null
+    return FotoVista(ChiaveFoto(id, pezzi[1]), Instant.ofEpochMilli(millis))
+}
+
+/**
+ * Le foto guardate da tenere: niente doppioni (vale l'ultima volta), via quelle
+ * più vecchie di [FOTO_VISTE_DURATA] (a 30 giorni la foto sparisce comunque), e al
+ * massimo [FOTO_VISTE_MASSIMO], le più recenti.
+ */
+fun potaFotoViste(viste: Collection<FotoVista>, adesso: Instant): List<FotoVista> {
+    val dal = adesso.minus(FOTO_VISTE_DURATA)
+    return viste
+        .groupBy { it.chiave }
+        .map { (_, stesse) -> stesse.maxBy { it.alle } }
+        .filter { it.alle.isAfter(dal) }
+        .sortedByDescending { it.alle }
+        .take(FOTO_VISTE_MASSIMO)
+}
+
+// --- (0.17) La ricerca nello storico ---------------------------------------------------
+
+/** Quanto si aspetta dopo l'ultima lettera prima di cercare. */
+const val ATTESA_RICERCA_MS = 300L
+
+/** Quanti caratteri al massimo si cercano (contratto v3.9: 1-80 dopo aver tolto gli spazi ai bordi). */
+const val MASSIMO_RICERCA = 80
+
+/** Il testo da cercare come lo vuole il server: senza spazi ai bordi, al massimo 80 caratteri; null = niente da cercare. */
+fun testoDaCercare(testo: String): String? =
+    testo.trim().take(MASSIMO_RICERCA).trim().takeIf { it.isNotEmpty() }

@@ -97,6 +97,8 @@ data class Scenario(
     val dichiarazioni: (figlioId: Long?) -> ServerFinto.Risposta = { ServerFinto.Risposta.SenzaRete },
     val faccende: (figlioId: Long?) -> ServerFinto.Risposta = { ServerFinto.Risposta.SenzaRete },
     val foto: (faccendaId: Long) -> ServerFinto.Risposta = { ServerFinto.Risposta.SenzaRete },
+    /** (0.17, v3.9) GET /api/faccende?…&cerca=…: il figlio e il testo cercato. */
+    val cerca: (figlioId: Long?, testo: String) -> ServerFinto.Risposta = { _, _ -> ServerFinto.Risposta.SenzaRete },
     val sessioni: (figlioId: Long?) -> ServerFinto.Risposta = { ServerFinto.Risposta.SenzaRete },
     val versione: () -> ServerFinto.Risposta = { ServerFinto.Risposta.SenzaRete },
     /** Le scritture (POST/PATCH/DELETE): metodo, percorso → risposta. */
@@ -115,6 +117,10 @@ data class Scenario(
             percorso == "/api/notifiche" -> notifiche()
             percorso == "/api/proposte" -> proposte(figlio)
             percorso == "/api/dichiarazioni" -> dichiarazioni(figlio)
+            percorso == "/api/faccende" && Regex("[?&]cerca=").containsMatchIn(percorsoCompleto) -> cerca(
+                figlio,
+                java.net.URLDecoder.decode(Regex("[?&]cerca=([^&]*)").find(percorsoCompleto)!!.groupValues[1], "UTF-8"),
+            )
             percorso == "/api/faccende" -> faccende(figlio)
             percorso.startsWith("/api/faccende/") && percorso.endsWith("/foto") ->
                 foto(percorso.removePrefix("/api/faccende/").removeSuffix("/foto").toLong())

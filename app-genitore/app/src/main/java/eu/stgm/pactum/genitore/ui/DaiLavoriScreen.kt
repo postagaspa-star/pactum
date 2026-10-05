@@ -55,8 +55,12 @@ import eu.stgm.pactum.design.Caricamento
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.MASSIMO_FACCENDE_PER_VOLTA
+import eu.stgm.pactum.genitore.dati.StatiFaccenda
+import eu.stgm.pactum.genitore.rete.PostinoClient
 import kotlinx.coroutines.delay
+import java.time.Instant
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.ZonedDateTime
 
 // (0.15) "Dai lavori di casa", a pagina intera (prima era un dialogo che con la
@@ -342,5 +346,245 @@ private fun RigaScelta(
             Text(text = testo, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = Spazi.s))
         }
         if (azione != null) TextButton(onClick = onAzione) { Text(azione) }
+    }
+}
+
+// --- (0.17, contratto v3.9) "Cambia il lavoro" ------------------------------------------
+
+/** I rifiuti di "Cambia il lavoro" che si correggono sulla pagina (gli altri la chiudono). */
+private val RIFIUTI_DA_CORREGGERE = setOf(PostinoClient.PARAMETRI_NON_VALIDI, null)
+
+/**
+ * "Cambia il lavoro": la pagina di "Dai lavori di casa" per UN lavoro ancora da
+ * fare. Il titolo, la nota e da quando blocca (Subito / Dalle HH:MM, con la frase
+ * di che cosa succede e che spostare l'ora sposta il blocco). "Salva" manda solo
+ * quello che cambia (PATCH); senza cambi non chiama il server. Se nel frattempo è
+ * arrivata la foto, il lavoro non si cambia più e la pagina lo dice.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ModificaLavoroScreen(
+    faccendaId: Long,
+    vm: FaccendeViewModel = viewModel(),
+    famigliaVm: FamigliaViewModel = viewModel(),
+) {
+    val cornice = LocalCornice.current
+    val stato by vm.stato.collectAsStateWithLifecycle()
+    val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
+    val figlioId = famiglia.figlioId
+    val nomeFiglio = famiglia.figlioScelto?.nome
+    val p = parole()
+
+    LaunchedEffect(figlioId, famiglia.pronta) {
+        if (famiglia.pronta && !stato.di(figlioId)) vm.aggiorna(figlioId)
+    }
+    val elenco = stato.faccende.takeIf { stato.di(figlioId) }
+    val faccenda = elenco?.firstOrNull { it.id == faccendaId }
+
+    // Il modulo parte dal lavoro com'è, una volta sola (poi resta quello scritto, anche ruotando).
+    var caricato by rememberSaveable { mutableStateOf(false) }
+    var titolo by rememberSaveable { mutableStateOf("") }
+    var nota by rememberSaveable { mutableStateOf("") }
+    // I valori con cui la pagina è partita, salvati con lei: "Salva" manda solo
+    // quello che cambia rispetto a QUESTI (non al lavoro riletto dopo).
+    var titoloPrima by rememberSaveable { mutableStateOf("") }
+    var notaPrima by rememberSaveable { mutableStateOf("") }
+    var subito by rememberSaveable { mutableStateOf(true) }
+    var subitoIniziale by rememberSaveable { mutableStateOf(true) }
+    var minutoDelGiorno by rememberSaveable { mutableIntStateOf(oraProposta(LocalTime.now()).toSecondOfDay() / 60) }
+    var minutoIniziale by rememberSaveable { mutableIntStateOf(-1) }
+    var sceltaOra by rememberSaveable { mutableStateOf(false) }
+    var errore by rememberSaveable { mutableStateOf<String?>(null) }
+    var adesso by remember { mutableStateOf(ZonedDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(10_000)
+            adesso = ZonedDateTime.now()
+        }
+    }
+    LaunchedEffect(faccenda?.id) {
+        if (caricato || faccenda == null) return@LaunchedEffect
+        titolo = faccenda.titolo
+        nota = faccenda.nota.orEmpty()
+        titoloPrima = titolo
+        notaPrima = nota
+        val futuro = bloccoIniziale(faccenda, Instant.now())
+        subito = futuro == null
+        subitoIniziale = subito
+        if (futuro != null) {
+            val ora = futuro.atZone(ZoneId.systemDefault()).toLocalTime()
+            minutoDelGiorno = ora.hour * 60 + ora.minute
+            minutoIniziale = minutoDelGiorno
+        }
+        caricato = true
+    }
+
+    // Gli esiti: cambiato (o niente da cambiare) → si torna ai Lavori e lo si dice; un
+    // dato da correggere o la rete restano scritti qui; gli altri chiudono la pagina.
+    LaunchedEffect(stato.evento) {
+        val evento = stato.evento ?: return@LaunchedEffect
+        when (evento) {
+            EventoFaccende.Modificata, EventoFaccende.NessunCambio -> {
+                vm.consumaEvento()
+                famigliaVm.aggiorna()
+                cornice.messaggi.mostra(
+                    p.testo(if (evento == EventoFaccende.Modificata) R.string.modifica_fatto else R.string.modifica_nessun_cambio),
+                )
+                cornice.indietro()
+            }
+            is EventoFaccende.Rifiuto -> if (evento.gesto == GestoFaccende.MODIFICA) {
+                vm.consumaEvento()
+                val nome = famiglia.figli.firstOrNull { it.id == evento.figlioId }?.nome
+                val frase = messaggioRifiutoFaccende(p, evento.codice, evento.gesto, nome)
+                if (evento.codice in RIFIUTI_DA_CORREGGERE) {
+                    errore = frase
+                } else {
+                    cornice.messaggi.mostra(frase)
+                    cornice.indietro()
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    val ora = LocalTime.of(minutoDelGiorno / 60, minutoDelGiorno % 60)
+    // L'ora scelta all'inizio e non toccata: vale com'era (anche "giovedì dalle 16:00").
+    val bloccoInvariato = if (subito) subitoIniziale else (!subitoIniziale && minutoDelGiorno == minutoIniziale)
+    val inizio = if (subito || bloccoInvariato) null else inizioBlocco(ora, adesso)
+    val problemaDelTitolo = problemaTitolo(titolo)
+    val problemaDellaNota = problemaNota(nota)
+    val valido = problemaDelTitolo == null && problemaDellaNota == null
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0.dp),
+        topBar = { BarraPagina(stringResource(R.string.modifica_titolo)) },
+    ) { padding ->
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            when {
+                // Senza collegamento non c'è niente da cambiare: si dice dove si fa.
+                stato.configurazioneMancante -> StatoVuoto(
+                    centrato = true,
+                    titolo = stringResource(R.string.config_mancante_titolo),
+                    testo = stringResource(R.string.faccende_config_mancante),
+                    azione = stringResource(R.string.azione_collega),
+                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                )
+                elenco == null && stato.serverVecchio -> StatoVuoto(stringResource(R.string.faccende_server_vecchio), centrato = true)
+                elenco == null -> Caricamento(testo = stringResource(R.string.faccende_caricamento))
+                // Non c'è più, o non è più da fare (è arrivata la foto, l'hanno tolto).
+                faccenda == null || faccenda.stato != StatiFaccenda.DA_FARE ->
+                    StatoVuoto(stringResource(R.string.modifica_non_trovato), centrato = true)
+                else -> Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(Spazi.l),
+                    verticalArrangement = Arrangement.spacedBy(Spazi.s),
+                ) {
+                    val avviso = testoProblemaTitolo(p, problemaDelTitolo)
+                    OutlinedTextField(
+                        value = titolo,
+                        onValueChange = { titolo = it },
+                        label = { Text(stringResource(R.string.modifica_campo)) },
+                        singleLine = true,
+                        isError = avviso != null,
+                        supportingText = avviso?.let { { Text(it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = nota,
+                        onValueChange = { nota = it },
+                        label = { Text(stringResource(R.string.dai_nota)) },
+                        isError = problemaDellaNota != null,
+                        // Un lavoro solo: niente "vale per tutti i lavori di questa volta".
+                        supportingText = testoProblemaNota(p, problemaDellaNota)?.let { { Text(it) } },
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    SopraTitolo(stringResource(R.string.dai_blocco), modifier = Modifier.padding(top = Spazi.s))
+                    RigaScelta(selezionata = subito, testo = stringResource(R.string.dai_subito), onClick = { subito = true })
+                    RigaScelta(
+                        selezionata = !subito,
+                        testo = testoDalle(p, ora),
+                        onClick = { subito = false },
+                        azione = stringResource(R.string.dai_cambia_ora),
+                        onAzione = { sceltaOra = true },
+                    )
+                    // Che cosa succede: com'è adesso se non si cambia, se no come sarà.
+                    Text(
+                        text = if (bloccoInvariato) {
+                            testoOraBlocco(p, faccenda).orEmpty()
+                        } else {
+                            testoInizioBlocco(p, inizio, nomeFiglio)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (inizio?.domani == true) FontWeight.SemiBold else null,
+                        color = if (inizio?.domani == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = stringResource(R.string.modifica_sposta_blocco),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    errore?.let {
+                        Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    }
+                    Button(
+                        enabled = valido && !stato.invio,
+                        onClick = {
+                            errore = null
+                            val adessoVero = ZonedDateTime.now()
+                            val blocco: BloccoModificato? = when {
+                                bloccoInvariato -> BloccoModificato.Invariato
+                                subito -> BloccoModificato.Subito
+                                else -> when (val controllo = controlloPrimaDiMandare(inizio, ora, adessoVero)) {
+                                    // L'istante vero non è quello mostrato: niente parte, si mostra il nuovo.
+                                    is ControlloInvio.Cambiato -> {
+                                        adesso = adessoVero
+                                        null
+                                    }
+                                    is ControlloInvio.Manda -> controllo.bloccoDa?.let { BloccoModificato.Dalle(it) } ?: BloccoModificato.Subito
+                                }
+                            }
+                            if (blocco != null) {
+                                vm.modifica(figlioId, faccenda, cambiDellaModifica(titoloPrima, notaPrima, titolo, nota, blocco))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = Spazi.s),
+                    ) {
+                        Text(stringResource(R.string.modifica_salva))
+                    }
+                }
+            }
+        }
+    }
+
+    if (sceltaOra) {
+        val statoOra = rememberTimePickerState(
+            initialHour = minutoDelGiorno / 60,
+            initialMinute = minutoDelGiorno % 60,
+            is24Hour = true,
+        )
+        AlertDialog(
+            onDismissRequest = { sceltaOra = false },
+            title = { Text(stringResource(R.string.dai_scegli_ora)) },
+            text = { Box(modifier = Modifier.verticalScroll(rememberScrollState())) { TimePicker(state = statoOra) } },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        minutoDelGiorno = statoOra.hour * 60 + statoOra.minute
+                        subito = false
+                        sceltaOra = false
+                        adesso = ZonedDateTime.now()
+                    },
+                ) {
+                    Text(stringResource(R.string.azione_ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { sceltaOra = false }) { Text(stringResource(R.string.azione_annulla)) }
+            },
+        )
     }
 }

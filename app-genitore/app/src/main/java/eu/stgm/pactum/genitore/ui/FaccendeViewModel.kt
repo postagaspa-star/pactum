@@ -11,7 +11,12 @@ import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.rete.PostinoClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import java.time.Instant
 
 /**
  * (0.13) Le faccende del figlio scelto (contratto v3.6), nello scope dell'attività:
@@ -22,16 +27,47 @@ import kotlinx.coroutines.flow.StateFlow
  */
 class FaccendeViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val impostazioni = Impostazioni(application)
+
     private val gestore = GestoreFaccende(
         ambito = viewModelScope,
         fonte = {
-            Impostazioni(application).leggiConfigurazione().takeIf { it.completa }?.let { PostinoClient(it) }
+            impostazioni.leggiConfigurazione().takeIf { it.completa }?.let { PostinoClient(it) }
         },
         decodifica = { decodificaFoto(it) },
         contestoDecodifica = Dispatchers.Default,
+        fotoGuardata = { chiave -> ricordaFotoVista(chiave) },
+        // L'attesa dopo l'ultima lettera la fa la scheda (sul tempo di Compose).
+        attesaRicerca = 0,
     )
 
     val stato: StateFlow<StatoFaccende<ImageBitmap>> = gestore.stato
+
+    /**
+     * (0.17) Le foto aperte su QUESTO telefono (lavoro e ora della foto): dopo, il
+     * pulsante "Guarda la foto" diventa "Segna come svolto". Stanno nel DataStore,
+     * potate (v. potaFotoViste).
+     */
+    val fotoViste: StateFlow<Set<ChiaveFoto>> = impostazioni.fotoViste
+        .map { righe -> righe.mapNotNull(::decodificaFotoVista).map { it.chiave }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    private fun ricordaFotoVista(chiave: ChiaveFoto) {
+        viewModelScope.launch {
+            impostazioni.aggiornaFotoViste { righe ->
+                val adesso = Instant.now()
+                potaFotoViste(righe.mapNotNull(::decodificaFotoVista) + FotoVista(chiave, adesso), adesso)
+                    .map(::codificaFotoVista)
+                    .toSet()
+            }
+        }
+    }
+
+    fun modifica(figlioId: Long?, faccenda: Faccenda, modifica: ModificaFaccenda) = gestore.modifica(figlioId, faccenda, modifica)
+
+    fun conferma(figlioId: Long?, faccenda: Faccenda, fotoVista: String?) = gestore.conferma(figlioId, faccenda, fotoVista)
+
+    fun cerca(figlioId: Long?, testo: String) = gestore.cerca(figlioId, testo)
 
     fun aggiorna(figlioId: Long?) = gestore.aggiorna(figlioId)
 

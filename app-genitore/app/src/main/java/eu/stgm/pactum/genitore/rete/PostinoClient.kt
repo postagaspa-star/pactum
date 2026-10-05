@@ -41,6 +41,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -205,7 +206,12 @@ sealed interface EsitoGenitori {
 
 /** (0.13) L'esito di GET /api/faccende?figlio_id=n: come [EsitoGenitori]. */
 sealed interface EsitoFaccende {
-    data class Lette(val faccende: List<Faccenda>) : EsitoFaccende
+    /**
+     * [conModifiche] (v3.9) = il server sa modificare e confermare i lavori: le
+     * faccende portano `confermata_ts`. null = non si sa (elenco vuoto): vale quello
+     * che si sapeva (un server vecchio risponde "serve aggiornarlo" e si smette di offrirlo).
+     */
+    data class Lette(val faccende: List<Faccenda>, val conModifiche: Boolean? = true) : EsitoFaccende
     data object ServerVecchio : EsitoFaccende
     data object NonAutorizzato : EsitoFaccende
     data object Fallita : EsitoFaccende
@@ -235,6 +241,38 @@ interface FonteFaccende {
     suspend fun bocciaFaccenda(faccendaId: Long, nota: String?): EsitoScrittura<Faccenda?>
     suspend fun annullaFaccenda(faccendaId: Long): EsitoScrittura<Faccenda?>
     suspend fun scaricaFoto(faccendaId: Long): EsitoFoto
+
+    /** (v3.9) PATCH /api/faccende/{id}: solo i campi in [corpo]. Senza server nuovo: "serve aggiornarlo". */
+    suspend fun modificaFaccenda(faccendaId: Long, corpo: JsonObject): EsitoScrittura<Faccenda?> =
+        EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+
+    /**
+     * (v3.9) POST /api/faccende/{id}/conferma: "svolto". [fotoTs] = la foto che il
+     * genitore ha guardato: se intanto è cambiata il server dice `foto_cambiata`.
+     */
+    suspend fun confermaFaccenda(faccendaId: Long, fotoTs: String?): EsitoScrittura<Faccenda?> =
+        EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+
+    /** (v3.9) GET /api/faccende?figlio_id=…&cerca=…: in tutta la storia del figlio. */
+    suspend fun cercaFaccende(figlioId: Long?, testo: String): EsitoRicercaFaccende = EsitoRicercaFaccende.ServerVecchio
+}
+
+/** (v3.9) L'esito di una ricerca nei lavori di casa. */
+sealed interface EsitoRicercaFaccende {
+    /** Trovati (al massimo 50, dal più recente); [altre] = ce ne sono di più. */
+    data class Trovate(val faccende: List<Faccenda>, val altre: Boolean) : EsitoRicercaFaccende
+
+    /** Il server non conosce `cerca` (lo ignora o non conosce le faccende): serve aggiornarlo. */
+    data object ServerVecchio : EsitoRicercaFaccende
+
+    /** 401: il collegamento di questo telefono non vale più. */
+    data object NonAutorizzato : EsitoRicercaFaccende
+
+    /** Il server non si raggiunge. */
+    data object SenzaRete : EsitoRicercaFaccende
+
+    /** Il server ha risposto con un errore (500, figlio che non c'è, testo non valido…). */
+    data object Errore : EsitoRicercaFaccende
 }
 
 /**
@@ -637,6 +675,31 @@ class PostinoClient(
     }
 
     /**
+     * (v3.9) PATCH /api/faccende/{id}: titolo, nota e ora del blocco di un lavoro
+     * ancora da fare (solo i campi che cambiano). Senza ritentativi, come "Boccia".
+     */
+    override suspend fun modificaFaccenda(faccendaId: Long, corpo: JsonObject): EsitoScrittura<Faccenda?> {
+        val testo = json.encodeToString(JsonObject.serializer(), corpo)
+        val risposta = richiedi("PATCH", "/api/faccende/$faccendaId", testo.toRequestBody(JSON_MEDIA_TYPE), httpCreazioni)
+            ?: return EsitoScrittura.Fallito
+        return interpretaNuovaRotta(risposta.codice, risposta.corpo, Faccenda.serializer())
+    }
+
+    /** (v3.9) POST /api/faccende/{id}/conferma: il genitore lo segna come svolto, per la foto [fotoTs]. */
+    override suspend fun confermaFaccenda(faccendaId: Long, fotoTs: String?): EsitoScrittura<Faccenda?> {
+        val corpo = json.encodeToString(JsonObject.serializer(), corpoConferma(fotoTs))
+        val risposta = richiedi("POST", "/api/faccende/$faccendaId/conferma", corpo.toRequestBody(JSON_MEDIA_TYPE), httpCreazioni)
+            ?: return EsitoScrittura.Fallito
+        return interpretaNuovaRotta(risposta.codice, risposta.corpo, Faccenda.serializer())
+    }
+
+    /** (v3.9) GET /api/faccende?figlio_id=…&cerca=…: i lavori di tutta la storia col titolo che contiene [testo]. */
+    override suspend fun cercaFaccende(figlioId: Long?, testo: String): EsitoRicercaFaccende {
+        val risposta = richiedi("GET", percorsoRicerca(figlioId, testo), null) ?: return EsitoRicercaFaccende.SenzaRete
+        return interpretaRicerca(risposta.codice, risposta.corpo)
+    }
+
+    /**
      * GET /api/faccende/{id}/foto, col token come tutto il resto. La foto arriva
      * in memoria e lì resta: niente file, niente galleria. Oltre [MASSIMO_BYTE_FOTO]
      * non si legge (il server ne tiene al massimo 4 MB).
@@ -923,11 +986,62 @@ class PostinoClient(
             else -> EsitoGenitori.Fallita
         }
 
+        /**
+         * (v3.9) true = le faccende della risposta portano `confermata_ts` (anche
+         * null): il server sa modificarle e confermarle. Un server v3.8 non lo scrive.
+         */
+        internal fun conosceConferma(corpo: String): Boolean {
+            val elenco = (try {
+                json.parseToJsonElement(corpo)
+            } catch (e: SerializationException) {
+                null
+            } as? JsonObject)?.get("faccende") as? JsonArray ?: return false
+            return elenco.any { (it as? JsonObject)?.containsKey("confermata_ts") == true }
+        }
+
+        /** (v3.9) Il percorso della ricerca: il testo ripulito, codificato per l'URL. */
+        internal fun percorsoRicerca(figlioId: Long?, testo: String): String {
+            val cerca = java.net.URLEncoder.encode(testo.trim(), Charsets.UTF_8.name()).replace("+", "%20")
+            return if (figlioId == null) "/api/faccende?cerca=$cerca" else "/api/faccende?figlio_id=$figlioId&cerca=$cerca"
+        }
+
+        /**
+         * (v3.9) La risposta di una ricerca. Un server v3.8 ignora `cerca` e manda
+         * l'elenco normale, senza `altre`: è un server da aggiornare, non un
+         * risultato (non sono i lavori cercati).
+         */
+        internal fun interpretaRicerca(codice: Int, corpo: String?): EsitoRicercaFaccende = when {
+            codice in 200..299 -> {
+                val oggetto = corpo?.let {
+                    try {
+                        json.parseToJsonElement(it) as? JsonObject
+                    } catch (e: SerializationException) {
+                        null
+                    }
+                }
+                when {
+                    oggetto == null -> EsitoRicercaFaccende.Errore
+                    !oggetto.containsKey("altre") -> EsitoRicercaFaccende.ServerVecchio
+                    else -> decodifica(PaccoFaccende.serializer(), corpo)
+                        ?.let { EsitoRicercaFaccende.Trovate(it.faccende, it.altre) }
+                        ?: EsitoRicercaFaccende.Errore
+                }
+            }
+            codice == 405 -> EsitoRicercaFaccende.ServerVecchio
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoRicercaFaccende.ServerVecchio
+            codice == 401 -> EsitoRicercaFaccende.NonAutorizzato
+            else -> EsitoRicercaFaccende.Errore
+        }
+
+        /** (v3.9) Il corpo di POST …/conferma: la foto guardata (o niente, se non si sa). */
+        internal fun corpoConferma(fotoTs: String?): JsonObject =
+            JsonObject(if (fotoTs != null) mapOf("foto_ts" to JsonPrimitive(fotoTs)) else emptyMap())
+
         /** GET /api/faccende dal codice HTTP: come [interpretaGenitori]. */
         internal fun interpretaFaccende(codice: Int, corpo: String?): EsitoFaccende = when {
             codice in 200..299 ->
                 corpo?.let { decodifica(PaccoFaccende.serializer(), it) }
-                    ?.let { EsitoFaccende.Lette(it.faccende) }
+                    ?.let { EsitoFaccende.Lette(it.faccende, conModifiche = if (it.faccende.isEmpty()) null else conosceConferma(corpo)) }
                     ?: EsitoFaccende.Fallita
             codice == 405 -> EsitoFaccende.ServerVecchio
             codice == 404 && rottaSconosciuta(corpo) -> EsitoFaccende.ServerVecchio

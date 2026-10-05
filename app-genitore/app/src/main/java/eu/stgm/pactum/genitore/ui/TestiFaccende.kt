@@ -7,6 +7,7 @@ import eu.stgm.pactum.genitore.dati.MASSIMO_NOTA_FACCENDA
 import eu.stgm.pactum.genitore.dati.MASSIMO_TITOLO_FACCENDA
 import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import eu.stgm.pactum.genitore.dati.Sessione
+import eu.stgm.pactum.genitore.dati.StatiFaccenda
 import eu.stgm.pactum.genitore.dati.TipiDispositivo
 import eu.stgm.pactum.genitore.rete.EsitoAbbinamento
 import eu.stgm.pactum.genitore.rete.PostinoClient
@@ -96,9 +97,17 @@ fun testoFotoDaGuardare(parole: Parole, quante: Int): String? = when {
     else -> parole.testo(R.string.faccende_foto_da_guardare, quante)
 }
 
-/** Quante faccende fatte si possono ancora bocciare adesso: le foto da guardare. */
-fun fotoDaGuardare(faccende: List<Faccenda>, adesso: Instant): Int =
-    faccende.count { bocciabile(it, adesso) is Bocciabile.Si }
+/**
+ * Le foto da guardare: i lavori fatti che si possono ancora bocciare, (0.17) non
+ * già segnati come svolti e non già guardati su questo telefono ([viste]: lavoro e
+ * ora della foto). Quando le hai guardate tutte, la riga sparisce.
+ */
+fun fotoDaGuardare(faccende: List<Faccenda>, adesso: Instant, viste: Set<ChiaveFoto> = emptySet()): Int =
+    faccende.count { f ->
+        bocciabile(f, adesso) is Bocciabile.Si &&
+            f.confermataTs == null &&
+            f.fotoTs?.let { ChiaveFoto(f.id, it) in viste } != true
+    }
 
 /** Che cosa vuol dire dare faccende, col nome del figlio (o "tuo figlio"). */
 fun spiegaFaccende(parole: Parole, nomeFiglio: String?): String =
@@ -113,14 +122,88 @@ fun testoDataDa(parole: Parole, faccenda: Faccenda, io: RiferimentoGenitore?): S
         ChiHaFatto.NonSi -> null
     }
 
-/** "blocca dalle 16:00" per una faccenda il cui blocco deve ancora partire; null se è già partito. */
-fun testoBloccaDalle(
+/** Il giorno della settimana per intero: "giovedì". */
+private val formatoGiornoSettimana: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.ITALIAN)
+private val formatoGiornoMese: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM")
+
+/**
+ * (0.17) L'ora del blocco di un lavoro da fare, sempre (anche a blocco partito):
+ * "Blocco da subito (14:02)", "Blocco dalle 16:00", "Blocco domani dalle 16:00",
+ * "Blocco giovedì dalle 16:00", "Blocco da ieri alle 16:00", "Blocco dal 03/10
+ * alle 16:00". null = non è un lavoro da fare (o il server non dice l'ora).
+ */
+fun testoOraBlocco(
     parole: Parole,
     faccenda: Faccenda,
-    adesso: Instant,
     zona: ZoneId = ZoneId.systemDefault(),
     oggi: LocalDate = LocalDate.now(zona),
-): String? = bloccoFuturo(faccenda, adesso)?.let { parole.testo(R.string.faccenda_blocca, dalleQuando(parole, it, zona, oggi)) }
+): String? = when (val ora = oraBlocco(faccenda)) {
+    null -> null
+    is OraBlocco.Subito -> {
+        val locale = ora.dal.atZone(zona)
+        val quando = if (locale.toLocalDate() == oggi) formatoOraFaccende.format(locale) else testoQuando(parole, ora.dal, zona, oggi)
+        parole.testo(R.string.faccenda_blocco_subito, quando)
+    }
+    is OraBlocco.Dalle -> {
+        val locale = ora.dal.atZone(zona)
+        val giorno = locale.toLocalDate()
+        val alle = formatoOraFaccende.format(locale)
+        when {
+            giorno == oggi -> parole.testo(R.string.faccenda_blocco_dalle, alle)
+            giorno == oggi.plusDays(1) -> parole.testo(R.string.faccenda_blocco_domani, alle)
+            giorno == oggi.minusDays(1) -> parole.testo(R.string.faccenda_blocco_ieri, alle)
+            giorno.isAfter(oggi) && giorno.isBefore(oggi.plusDays(7)) ->
+                parole.testo(R.string.faccenda_blocco_giorno, formatoGiornoSettimana.format(giorno), alle)
+            else -> parole.testo(R.string.faccenda_blocco_data, formatoGiornoMese.format(giorno), alle)
+        }
+    }
+}
+
+/**
+ * (0.17) "Confermato da Mamma · oggi 15:10", "Confermato da te · ieri 09:12";
+ * null se il lavoro non è confermato.
+ */
+fun testoConfermato(
+    parole: Parole,
+    faccenda: Faccenda,
+    io: RiferimentoGenitore?,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String? {
+    if (faccenda.confermataTs == null) return null
+    val chi = when (val c = chiHaFatto(faccenda.confermataDa, io)) {
+        ChiHaFatto.Tu -> parole.testo(R.string.faccenda_confermata_da_te)
+        is ChiHaFatto.Altro -> parole.testo(R.string.faccenda_confermata_da, c.nome)
+        ChiHaFatto.NonSi -> parole.testo(R.string.faccenda_confermata)
+    }
+    val quando = istanteServer(faccenda.confermataTs)?.let { testoQuando(parole, it, zona, oggi) }
+    return listOfNotNull(chi, quando).joinToString(" · ")
+}
+
+/**
+ * (0.17) Lo stato e la data di un lavoro trovato con la ricerca: "Da fare · dato
+ * il 03/10 14:02", "Fatto · foto 03/10 17:12", "Svolto · foto…", "Tolto · 01/10…".
+ */
+fun testoRisultato(
+    parole: Parole,
+    faccenda: Faccenda,
+    zona: ZoneId = ZoneId.systemDefault(),
+    oggi: LocalDate = LocalDate.now(zona),
+): String {
+    fun quando(ts: String?) = istanteServer(ts)?.let { testoQuando(parole, it, zona, oggi) }
+    return when (faccenda.stato) {
+        StatiFaccenda.DA_FARE -> listOfNotNull(
+            parole.testo(R.string.ricerca_stato_da_fare),
+            quando(faccenda.creataTs)?.let { parole.testo(R.string.ricerca_dato, it) },
+        )
+        StatiFaccenda.FATTA -> listOfNotNull(
+            parole.testo(if (faccenda.confermataTs != null) R.string.ricerca_stato_svolto else R.string.ricerca_stato_fatto),
+            quando(faccenda.fotoTs ?: faccenda.chiusaTs)?.let { parole.testo(R.string.ricerca_foto, it) },
+        )
+        StatiFaccenda.ANNULLATA -> listOfNotNull(parole.testo(R.string.ricerca_stato_tolto), quando(faccenda.chiusaTs))
+        else -> listOfNotNull(quando(faccenda.creataTs))
+    }.joinToString(" · ")
+}
 
 /**
  * Le bocciature di una faccenda: quante volte ("Bocciata una volta", "Bocciata 2
@@ -220,7 +303,7 @@ fun testoProblemaNota(parole: Parole, problema: ProblemaTesto?): String? = when 
 }
 
 /** I gesti sulle faccende, per dire il rifiuto giusto. */
-enum class GestoFaccende { DAI, BOCCIA, ANNULLA }
+enum class GestoFaccende { DAI, BOCCIA, ANNULLA, MODIFICA, CONFERMA }
 
 /**
  * Che cosa dire quando il server non prende un gesto sulle faccende, ciascun
@@ -234,10 +317,22 @@ fun messaggioRifiutoFaccende(parole: Parole, codice: String?, gesto: GestoFaccen
             ?: parole.testo(R.string.faccende_errore_troppe_senza_nome)
         CodiciErrore.NON_BOCCIABILE -> parole.testo(R.string.faccende_errore_non_bocciabile)
         CodiciErrore.NON_ANNULLABILE -> parole.testo(R.string.faccende_errore_non_annullabile)
+        CodiciErrore.NON_MODIFICABILE -> parole.testo(R.string.faccende_errore_non_modificabile)
+        CodiciErrore.LAVORO_TOLTO -> parole.testo(R.string.faccende_errore_tolto_nel_frattempo)
+        CodiciErrore.LAVORO_NON_PIU_DA_FARE -> parole.testo(R.string.faccende_errore_non_piu_da_fare)
+        CodiciErrore.NON_CONFERMABILE -> parole.testo(R.string.faccende_errore_non_confermabile)
+        CodiciErrore.FOTO_CAMBIATA -> parole.testo(R.string.faccende_errore_foto_cambiata)
+        CodiciErrore.CONFIGURAZIONE_MANCANTE -> parole.testo(R.string.faccende_errore_config_mancante)
         CodiciErrore.NON_TROVATO -> parole.testo(
             if (gesto == GestoFaccende.DAI) R.string.faccende_errore_figlio_non_trovato else R.string.faccende_errore_non_trovata,
         )
-        CodiciErrore.SERVER_DA_AGGIORNARE -> parole.testo(R.string.faccende_server_vecchio)
+        CodiciErrore.SERVER_DA_AGGIORNARE -> parole.testo(
+            when (gesto) {
+                GestoFaccende.MODIFICA -> R.string.faccende_modifica_server_vecchio
+                GestoFaccende.CONFERMA -> R.string.faccende_conferma_server_vecchio
+                else -> R.string.faccende_server_vecchio
+            },
+        )
         CodiciErrore.COLLEGAMENTO_NON_VALIDO -> parole.testo(R.string.collegamento_non_valido)
         PostinoClient.PARAMETRI_NON_VALIDI -> parole.testo(R.string.faccende_errore_parametri)
         CodiciErrore.ESITO_INCERTO -> parole.testo(R.string.faccende_errore_esito_incerto)

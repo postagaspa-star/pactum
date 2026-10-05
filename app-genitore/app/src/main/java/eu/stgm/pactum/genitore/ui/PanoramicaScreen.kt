@@ -284,7 +284,8 @@ private fun ContenutoPanoramica(
     // blocco non restano fermi dopo la loro fine.
     val adesso = remember(finestra, giro) { Instant.now() }
     val blocco = remember(finestra, adesso) { finestra.faccende?.let { statoBlocco(it, adesso, finestra.blocco) } }
-    val fotoNuove = remember(finestra, adesso) { finestra.faccende?.let { fotoDaGuardare(it, adesso) } ?: 0 }
+    val fotoViste by viewModel<FaccendeViewModel>().fotoViste.collectAsStateWithLifecycle()
+    val fotoNuove = remember(finestra, adesso, fotoViste) { finestra.faccende?.let { fotoDaGuardare(it, adesso, fotoViste) } ?: 0 }
     // (0.16) Le sessioni (la riga in cima se ce n'è una in corso, la riga "Sessioni")
     // e il bonus di oggi per ogni dispositivo con un limite di tempo.
     val sessioni = remember(finestra, adesso) { contoSessioni(finestra, adesso) }

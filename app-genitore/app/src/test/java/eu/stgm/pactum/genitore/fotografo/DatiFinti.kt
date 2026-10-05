@@ -615,7 +615,8 @@ object DatiFinti {
     fun faccendeLuca(): List<Faccenda> = listOf(
         Faccenda(
             id = 101, figlioId = LUCA, titolo = "Svuota la lavastoviglie", nota = "Anche le posate, per favore",
-            stato = "da_fare", bloccoDa = minutiFa(70), creataTs = minutiFa(75), creataDa = MAMMA,
+            // Dato con "Subito": il blocco è partito quando è stato dato.
+            stato = "da_fare", bloccoDa = minutiFa(75), creataTs = minutiFa(75), creataDa = MAMMA,
         ),
         Faccenda(
             id = 102, figlioId = LUCA, titolo = "Metti in ordine la camera",
@@ -632,6 +633,8 @@ object DatiFinti {
             id = 104, figlioId = LUCA, titolo = "Stendi i panni", nota = "Quelli scuri sullo stendino in terrazza",
             stato = "fatta", bloccoDa = giorniFa(2, 16), creataTs = giorniFa(2, 15), creataDa = PAPA,
             fotoTs = giorniFa(2, 17, 12), foto = true, chiusaTs = giorniFa(2, 17, 12),
+            // (0.17) Segnato come svolto da Papà.
+            confermataTs = giorniFa(2, 18, 5), confermataDa = PAPA,
         ),
         Faccenda(
             id = 105, figlioId = LUCA, titolo = "Pulisci la gabbia del criceto",
@@ -646,6 +649,34 @@ object DatiFinti {
     )
 
     fun bloccoLuca() = BloccoFaccende(attivo = true, dal = minutiFa(70))
+
+    /** (0.17) Tutta la storia dei lavori di Luca (la ricerca guarda anche i vecchi, senza più foto). */
+    fun storiaLuca(): List<Faccenda> = faccendeLuca() + listOf(
+        Faccenda(
+            id = 92, figlioId = LUCA, titolo = "Lavatrice: stendi i bianchi",
+            stato = "fatta", bloccoDa = giorniFa(45, 16), creataTs = giorniFa(45, 15), creataDa = MAMMA,
+            fotoTs = giorniFa(45, 17), foto = false, chiusaTs = giorniFa(45, 17),
+        ),
+        Faccenda(
+            id = 90, figlioId = LUCA, titolo = "Lava i piatti dopo cena",
+            stato = "fatta", bloccoDa = giorniFa(62, 21), creataTs = giorniFa(62, 20), creataDa = PAPA,
+            fotoTs = giorniFa(62, 21, 40), foto = false, chiusaTs = giorniFa(62, 21, 40),
+            confermataTs = giorniFa(62, 22), confermataDa = MAMMA,
+        ),
+        Faccenda(
+            id = 91, figlioId = LUCA, titolo = "Lava la bici in garage",
+            stato = "annullata", bloccoDa = giorniFa(80, 15), creataTs = giorniFa(80, 14), creataDa = PAPA,
+            chiusaTs = giorniFa(80, 16), annullataDa = PAPA,
+        ),
+    )
+
+    /** (0.17) La ricerca del server finto: il titolo contiene il testo (maiuscole non contano), dal più recente. */
+    fun cercaNellaStoria(figlioId: Long?, testo: String): PaccoFaccende {
+        val storia = if (figlioId == SARA) emptyList() else storiaLuca()
+        val cercato = testo.trim().lowercase()
+        val trovati = storia.filter { it.titolo.lowercase().contains(cercato) }.sortedByDescending { it.creataTs }
+        return PaccoFaccende(faccende = trovati.take(50), altre = trovati.size > 50)
+    }
 
     // --- Finestre -------------------------------------------------------------------------
 
@@ -986,6 +1017,7 @@ object DatiFinti {
             corpo(PaccoDichiarazioni.serializer(), PaccoDichiarazioni(if (id == SARA) emptyList() else dichiarazioniLuca()))
         },
         faccende = { id -> corpo(PaccoFaccende.serializer(), PaccoFaccende(if (id == SARA) emptyList() else faccendeLuca())) },
+        cerca = { id, testo -> corpo(PaccoFaccende.serializer(), cercaNellaStoria(id, testo)) },
         foto = { ServerFinto.Risposta.Byte(foto) },
         sessioni = { id -> corpo(PaccoSessioni.serializer(), PaccoSessioni(if (id == SARA) emptyList() else sessioniLuca())) },
         versione = { corpo(InfoVersioni.serializer(), InfoVersioni(genitore = InfoApp(14, "0.14.0", "/scarica/pactum-genitore.apk"))) },

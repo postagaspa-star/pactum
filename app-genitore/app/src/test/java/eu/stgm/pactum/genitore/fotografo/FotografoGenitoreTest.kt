@@ -528,10 +528,79 @@ class FotografoGenitoreTest {
             "05-lavori-dialogo_togli", "Dialogo «Togliere…?» su un lavoro da fare", CHIARO_360,
             destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
             gesti = {
-                scorriFino(s(R.string.faccenda_togli), esatto = true)
+                toccaDescrizione(s(R.string.faccenda_azioni, "Svuota la lavastoviglie"))
+                aspetta("menu") { ce(s(R.string.faccenda_togli)) }
                 tocca(R.string.faccenda_togli)
             },
             dopo = { ce(s(R.string.togli_faccenda_lascia)) },
+        )
+        // (0.17) Il ⋯ di un lavoro da fare, e la pagina "Cambia il lavoro".
+        f.scatta(
+            "05-lavori-menu_modifica", "Il ⋯ di un lavoro da fare: «Modifica» e «Togli»", CHIARO_360,
+            destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
+            gesti = { toccaDescrizione(s(R.string.faccenda_azioni, "Svuota la lavastoviglie")) },
+            dopo = { ce(s(R.string.faccenda_modifica)) },
+        )
+        due.forEach { v ->
+            f.scatta(
+                "05-lavori-modifica", "Pagina «Cambia il lavoro» (dal ⋯ di «Svuota la lavastoviglie»)", v,
+                destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
+                pagine = v == CHIARO_360,
+                gesti = {
+                    toccaDescrizione(s(R.string.faccenda_azioni, "Svuota la lavastoviglie"))
+                    aspetta("menu") { ce(s(R.string.faccenda_modifica)) }
+                    tocca(R.string.faccenda_modifica)
+                },
+                dopo = { ce(s(R.string.modifica_salva)) && ce("Anche le posate") },
+            )
+        }
+        // (0.17) Guardata la foto, il pulsante diventa "Segna come svolto"; poi la domanda.
+        val guardaEChiudi: Fotografo.() -> Unit = {
+            scorriFino(s(R.string.faccenda_guarda_foto), esatto = true)
+            tocca(R.string.faccenda_guarda_foto)
+            aspetta("foto") { nonCe(s(R.string.foto_caricamento)) && ce(s(R.string.faccenda_segna_svolto)) }
+            toccaDescrizione(s(R.string.foto_chiudi))
+            aspetta("lista") { nonCe(s(R.string.foto_chiudi)) && ce(s(R.string.faccenda_segna_svolto)) }
+            scorriFino(s(R.string.faccenda_segna_svolto), esatto = true)
+        }
+        due.forEach { v ->
+            f.scatta(
+                "04-lavori-di-casa_segna-svolto", "Lavori di casa dopo aver guardato la foto: «Segna come svolto»", v,
+                destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
+                gesti = guardaEChiudi,
+                dopo = { ce(s(R.string.faccenda_segna_svolto)) },
+            )
+        }
+        f.scatta(
+            "05-lavori-dialogo_svolto", "Dialogo «Segnare… come svolto?»", CHIARO_360,
+            destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
+            gesti = {
+                guardaEChiudi()
+                tocca(R.string.faccenda_segna_svolto)
+            },
+            dopo = { ce("come svolto?") },
+        )
+        // (0.17) La ricerca in tutta la storia: con risultati (anche vecchi) e vuota.
+        due.forEach { v ->
+            f.scatta(
+                "04-lavori-di-casa_ricerca", "Ricerca «lava» nei lavori di casa: risultati di tutta la storia", v,
+                destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
+                pagine = v == CHIARO_360,
+                gesti = {
+                    scorriFino(s(R.string.faccende_fatte), esatto = true)
+                    scrivi(0, "lava")
+                },
+                dopo = { ce("Lavatrice: stendi i bianchi") && nonCe(s(R.string.ricerca_caricamento)) },
+            )
+        }
+        f.scatta(
+            "04-lavori-di-casa_ricerca-vuota", "Ricerca senza risultati", CHIARO_360,
+            destinazione = MainActivity.DEST_FACCENDE, preparazione = luca, pronto = faccendePronte,
+            gesti = {
+                scorriFino(s(R.string.faccende_fatte), esatto = true)
+                scrivi(0, "aspirapolvere")
+            },
+            dopo = { ce("Nessun lavoro con") },
         )
         val fotoAperta: Fotografo.() -> Boolean = {
             ce(s(R.string.foto_chiudi)) || compose.onAllNodes(

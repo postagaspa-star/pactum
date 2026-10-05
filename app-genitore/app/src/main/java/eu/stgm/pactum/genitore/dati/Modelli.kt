@@ -265,6 +265,22 @@ object CodiciErrore {
     const val NON_BOCCIABILE = "non_bocciabile"
     const val NON_ANNULLABILE = "non_annullabile"
 
+    // (v3.9) Modificare e confermare un lavoro.
+    const val NON_MODIFICABILE = "non_modificabile"
+    const val NON_CONFERMABILE = "non_confermabile"
+
+    /** (v3.9) La foto è cambiata dopo quella guardata: non si conferma una foto che nessuno ha visto. */
+    const val FOTO_CAMBIATA = "foto_cambiata"
+
+    /** (0.17) Coniato qui: un lavoro non più modificabile perché nel frattempo è stato tolto. */
+    const val LAVORO_TOLTO = "lavoro_tolto"
+
+    /** (0.17) Coniato qui: un lavoro non più modificabile, e non si sa perché (non è nell'elenco riletto). */
+    const val LAVORO_NON_PIU_DA_FARE = "lavoro_non_piu_da_fare"
+
+    /** (0.17) Coniato qui: manca il collegamento (indirizzo e codice), il gesto non è partito. */
+    const val CONFIGURAZIONE_MANCANTE = "configurazione_mancante"
+
     /**
      * Coniato qui: una creazione è rimasta senza risposta e nemmeno la famiglia si
      * è potuta rileggere. Non si sa se il server l'ha ricevuta: prima di riprovare
@@ -377,6 +393,10 @@ data class Faccenda(
     @SerialName("ultima_bocciatura") val ultimaBocciatura: Bocciatura? = null,
     @SerialName("chiusa_ts") val chiusaTs: String? = null,
     @SerialName("annullata_da") val annullataDa: RiferimentoGenitore? = null,
+    /** (v3.9) Quando un genitore l'ha segnata come svolta ("svolto"); null = non ancora. */
+    @SerialName("confermata_ts") val confermataTs: String? = null,
+    /** (v3.9) Chi l'ha segnata come svolta. */
+    @SerialName("confermata_da") val confermataDa: RiferimentoGenitore? = null,
 )
 
 /** L'ultima bocciatura di una faccenda: quando, perché e chi. */
@@ -406,7 +426,11 @@ data class BloccoFaccende(
 )
 
 @Serializable
-data class PaccoFaccende(val faccende: List<Faccenda> = emptyList())
+data class PaccoFaccende(
+    val faccende: List<Faccenda> = emptyList(),
+    /** (v3.9) Con `cerca`: ci sono più di 50 risultati (ne arrivano 50). */
+    val altre: Boolean = false,
+)
 
 /** Una faccenda nel corpo di POST /api/faccende: il titolo e la nota facoltativa. */
 @Serializable

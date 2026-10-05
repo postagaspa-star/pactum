@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -71,6 +72,8 @@ import eu.stgm.pactum.design.CardEvidenza
 import eu.stgm.pactum.design.Tono
 import eu.stgm.pactum.design.SezioneEspandibile
 import eu.stgm.pactum.design.FilaPulsanti
+import eu.stgm.pactum.design.MenuAzioni
+import eu.stgm.pactum.design.VoceMenu
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Faccenda
 import eu.stgm.pactum.genitore.dati.MASSIMO_NOTA_FACCENDA
@@ -105,6 +108,7 @@ fun LavoriScreen(
 ) {
     val cornice = LocalCornice.current
     val stato by vm.stato.collectAsStateWithLifecycle()
+    val fotoViste by vm.fotoViste.collectAsStateWithLifecycle()
     val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
     val figlioId = famiglia.figlioId
     val nomeFiglio = famiglia.figlioScelto?.nome
@@ -134,6 +138,17 @@ fun LavoriScreen(
 
     var bocciaId by rememberSaveable { mutableStateOf<Long?>(null) }
     var togliId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // (0.17) La domanda di "svolto" non resta aperta cambiando scheda: tornando, si ricontrolla tutto.
+    var svoltoId by remember { mutableStateOf<Long?>(null) }
+    // (0.17) La ricerca nello storico: il testo resta ruotando e cambiando scheda.
+    var cercato by rememberSaveable { mutableStateOf("") }
+    // Si cerca ~300 ms dopo l'ultima lettera (ogni lettera nuova riparte da capo), e
+    // di nuovo cambiando figlio; un testo vuoto chiude subito la ricerca.
+    LaunchedEffect(figlioId, famiglia.pronta, cercato) {
+        if (!famiglia.pronta) return@LaunchedEffect
+        if (cercato.isNotBlank()) delay(ATTESA_RICERCA_MS)
+        vm.cerca(figlioId, cercato)
+    }
 
     // Dalla notifica: la foto di quel lavoro, appena si sa QUALE foto è (l'ora
     // della foto sta nell'elenco: dopo una bocciatura lo stesso lavoro ne ha
@@ -156,6 +171,9 @@ fun LavoriScreen(
             is EventoFaccende.Date -> testoFaccendeDate(p, evento.quante)
             EventoFaccende.Bocciata -> p.testo(R.string.boccia_fatto)
             EventoFaccende.Annullata -> p.testo(R.string.togli_faccenda_fatto)
+            EventoFaccende.Confermata -> p.testo(R.string.svolto_fatto)
+            EventoFaccende.Modificata -> p.testo(R.string.modifica_fatto)
+            EventoFaccende.NessunCambio -> p.testo(R.string.modifica_nessun_cambio)
             is EventoFaccende.Rifiuto -> {
                 val nome = famiglia.figli.firstOrNull { it.id == evento.figlioId }?.nome
                 messaggioRifiutoFaccende(p, evento.codice, evento.gesto, nome)
@@ -165,6 +183,11 @@ fun LavoriScreen(
     }
 
     val faccende = stato.faccende.takeIf { stato.di(figlioId) }
+    val ricerca = stato.ricerca?.takeIf { it.figlioId == figlioId && cercato.isNotBlank() }
+    // Un lavoro per id: dall'elenco o (per i vecchi) dai risultati della ricerca.
+    val trovaLavoro: (Long?) -> Faccenda? = { id ->
+        faccende?.firstOrNull { it.id == id } ?: ricerca?.risultati?.firstOrNull { it.id == id }
+    }
     val senzaBlocco = remember(famiglia.figlioScelto) {
         dispositiviSenzaBlocco(famiglia.figlioScelto?.dispositivi.orEmpty())
     }
@@ -221,9 +244,16 @@ fun LavoriScreen(
                     senzaBlocco = senzaBlocco,
                     adesso = adesso,
                     invio = stato.invio,
+                    conModifiche = stato.conModifiche,
+                    fotoViste = fotoViste,
+                    cercato = cercato,
+                    ricerca = ricerca,
+                    onCerca = { cercato = it.take(MASSIMO_RICERCA) },
                     onDai = { cornice.apri(Pagina.DaiLavori) },
+                    onModifica = { cornice.apri(Pagina.ModificaLavoro(it.id)) },
                     onTogli = { togliId = it.id },
                     onGuardaFoto = { vm.apriFoto(it.id, it.fotoTs) },
+                    onSvolto = { svoltoId = it.id },
                     onBoccia = { bocciaId = it.id },
                 )
             }
@@ -257,16 +287,60 @@ fun LavoriScreen(
     stato.foto?.let { foto ->
         VistaFoto(
             foto = foto,
-            faccenda = faccende?.firstOrNull { it.id == foto.faccendaId },
+            faccenda = trovaLavoro(foto.faccendaId),
+            io = famiglia.io,
             adesso = adesso,
             invio = stato.invio,
+            conConferma = stato.conModifiche,
             onChiudi = vm::chiudiFoto,
             onRiprova = { vm.apriFoto(foto.faccendaId, foto.fotoTs) },
             onBoccia = { bocciaId = it.id },
+            onSvolto = { svoltoId = it.id },
         )
     }
 
-    faccende?.firstOrNull { it.id == bocciaId }?.let { faccenda ->
+    // (0.17) "Segna come svolto": una domanda breve, non si torna indietro. Vale solo
+    // finché la foto guardata è quella di adesso: se l'elenco dice un'altra foto (bocciata
+    // e rifatta), la domanda si chiude. Il server lo ricontrolla comunque (`foto_cambiata`).
+    val daConfermare = trovaLavoro(svoltoId)
+    val ancoraConfermabile = daConfermare != null && azioniFatto(
+        daConfermare,
+        adesso,
+        vista = daConfermare.fotoTs?.let { ChiaveFoto(daConfermare.id, it) in fotoViste } == true,
+        conConferma = stato.conModifiche,
+    ).principale == PulsanteFatto.SEGNA_SVOLTO
+    LaunchedEffect(svoltoId, ancoraConfermabile) {
+        if (svoltoId != null && !ancoraConfermabile) svoltoId = null
+    }
+    daConfermare?.takeIf { ancoraConfermabile }?.let { faccenda ->
+        AlertDialog(
+            onDismissRequest = { svoltoId = null },
+            title = { Text(stringResource(R.string.svolto_titolo, faccenda.titolo)) },
+            text = if (bocciabile(faccenda, adesso) is Bocciabile.Si) {
+                { Text(stringResource(R.string.svolto_testo)) }
+            } else {
+                null
+            },
+            confirmButton = {
+                // Spento mentre un'altra azione sta mandando: il tocco non va perso.
+                Button(
+                    enabled = !stato.invio,
+                    onClick = {
+                        svoltoId = null
+                        // La foto guardata (è quella di adesso: se no il pulsante non c'era).
+                        vm.conferma(figlioId, faccenda, fotoVista = faccenda.fotoTs)
+                    },
+                ) {
+                    Text(stringResource(R.string.faccenda_segna_svolto))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { svoltoId = null }) { Text(stringResource(R.string.azione_annulla)) }
+            },
+        )
+    }
+
+    trovaLavoro(bocciaId)?.let { faccenda ->
         DialogoBoccia(
             faccenda = faccenda,
             nomeFiglio = nomeFiglio,
@@ -289,13 +363,21 @@ private fun ElencoFaccende(
     senzaBlocco: List<DispositivoSenzaBlocco>,
     adesso: Instant,
     invio: Boolean,
+    conModifiche: Boolean,
+    fotoViste: Set<ChiaveFoto>,
+    cercato: String,
+    ricerca: StatoRicerca?,
+    onCerca: (String) -> Unit,
     onDai: () -> Unit,
+    onModifica: (Faccenda) -> Unit,
     onTogli: (Faccenda) -> Unit,
     onGuardaFoto: (Faccenda) -> Unit,
+    onSvolto: (Faccenda) -> Unit,
     onBoccia: (Faccenda) -> Unit,
 ) {
     val p = parole()
     val io = famiglia.io
+    val vista: (Faccenda) -> Boolean = { f -> f.fotoTs?.let { ChiaveFoto(f.id, it) in fotoViste } == true }
     val gruppi = remember(faccende) { faccendeInGruppi(faccende) }
     val blocco = statoBlocco(faccende, adesso)
     LazyColumn(
@@ -351,10 +433,35 @@ private fun ElencoFaccende(
         if (gruppi.daFare.isNotEmpty()) {
             item(key = "da-fare-titolo") { SopraTitolo(stringResource(R.string.faccende_da_fare)) }
             items(gruppi.daFare, key = { "da-fare-${it.id}" }) { faccenda ->
-                RigaDaFare(faccenda, io, adesso, invio, onTogli = { onTogli(faccenda) })
+                RigaDaFare(
+                    faccenda = faccenda,
+                    io = io,
+                    invio = invio,
+                    conModifiche = conModifiche,
+                    onModifica = { onModifica(faccenda) },
+                    onTogli = { onTogli(faccenda) },
+                )
             }
         }
 
+        // (0.17) La ricerca, in cima ai lavori chiusi: cerca in TUTTA la storia.
+        item(key = "cerca") { CampoRicerca(cercato, onCerca) }
+
+        val azioniDi: (Faccenda) -> AzioniFatto = { azioniFatto(it, adesso, vista(it), conModifiche) }
+
+        if (ricerca != null) {
+            // Con una ricerca aperta, i risultati al posto di Fatti e Tolti.
+            risultatiRicerca(
+                ricerca = ricerca,
+                io = io,
+                invio = invio,
+                azioniDi = azioniDi,
+                adesso = adesso,
+                onGuardaFoto = onGuardaFoto,
+                onSvolto = onSvolto,
+                onBoccia = onBoccia,
+            )
+        } else {
         if (gruppi.fatte.isNotEmpty()) {
             item(key = "fatte-titolo") { SopraTitolo(stringResource(R.string.faccende_fatte)) }
             items(gruppi.fatte, key = { "fatta-${it.id}" }) { faccenda ->
@@ -363,7 +470,9 @@ private fun ElencoFaccende(
                     io = io,
                     adesso = adesso,
                     invio = invio,
+                    azioni = azioniDi(faccenda),
                     onGuardaFoto = { onGuardaFoto(faccenda) },
+                    onSvolto = { onSvolto(faccenda) },
                     onBoccia = { onBoccia(faccenda) },
                 )
             }
@@ -380,6 +489,7 @@ private fun ElencoFaccende(
                     gruppi.annullate.forEach { faccenda -> RigaAnnullata(faccenda, io) }
                 }
             }
+        }
         }
 
         item(key = "trenta-giorni") {
@@ -421,51 +531,89 @@ private fun RigaSottovoce(testo: String) {
     )
 }
 
-/** Un lavoro da fare: chi l'ha dato e quando, da quando blocca, le bocciature, e "Togli". */
+/**
+ * Un lavoro da fare: chi l'ha dato e quando, (0.17) l'ora del blocco SEMPRE (anche
+ * a blocco partito), le bocciature, e il ⋯ con "Modifica" e "Togli".
+ */
 @Composable
-private fun RigaDaFare(faccenda: Faccenda, io: RiferimentoGenitore?, adesso: Instant, invio: Boolean, onTogli: () -> Unit) {
+private fun RigaDaFare(
+    faccenda: Faccenda,
+    io: RiferimentoGenitore?,
+    invio: Boolean,
+    conModifiche: Boolean,
+    onModifica: () -> Unit,
+    onTogli: () -> Unit,
+) {
     val p = parole()
     CardNormale {
         Row(verticalAlignment = Alignment.Top) {
             Column(modifier = Modifier.weight(1f)) {
                 TitoloENota(faccenda)
+                testoOraBlocco(p, faccenda)?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(top = Spazi.xs),
+                    )
+                }
                 val data = listOfNotNull(
                     testoDataDa(p, faccenda, io),
                     istanteServer(faccenda.creataTs)?.let { testoQuando(p, it) },
                 ).joinToString(" · ")
                 if (data.isNotEmpty()) RigaSottovoce(data)
-                testoBloccaDalle(p, faccenda, adesso)?.let { RigaSottovoce(it) }
                 righeBocciature(p, faccenda, io).forEach { RigaSottovoce(it) }
             }
-            TextButton(onClick = onTogli, enabled = !invio) {
-                Text(stringResource(R.string.faccenda_togli))
-            }
+            MenuAzioni(
+                voci = listOfNotNull(
+                    VoceMenu(stringResource(R.string.faccenda_modifica), onModifica, abilitata = !invio).takeIf { conModifiche },
+                    VoceMenu(stringResource(R.string.faccenda_togli), onTogli, distruttiva = true, abilitata = !invio),
+                ),
+                descrizione = stringResource(R.string.faccenda_azioni, faccenda.titolo),
+            )
         }
     }
 }
 
-/** Un lavoro fatto: quando è arrivata la foto, chi l'aveva dato, la foto e (entro 24 ore) "Boccia". */
+/**
+ * Un lavoro fatto: quando è arrivata la foto, chi l'aveva dato, e (0.17) il
+ * pulsante giusto: "Guarda la foto" finché questo telefono non l'ha aperta, poi
+ * "Segna come svolto"; confermato, chi l'ha confermato e niente più "Boccia". La
+ * foto si apre anche toccando il lavoro.
+ */
 @Composable
 private fun RigaFatta(
     faccenda: Faccenda,
     io: RiferimentoGenitore?,
     adesso: Instant,
     invio: Boolean,
+    azioni: AzioniFatto,
     onGuardaFoto: () -> Unit,
+    onSvolto: () -> Unit,
     onBoccia: () -> Unit,
+    /** (0.17) Nei risultati della ricerca: lo stato e la data al posto della riga solita. */
+    riassunto: String? = null,
 ) {
     val p = parole()
     val stato = bocciabile(faccenda, adesso)
-    CardNormale {
+    CardNormale(onClick = if (faccenda.foto) onGuardaFoto else null) {
         Column {
             TitoloENota(faccenda)
-            val righe = listOfNotNull(
+            val righe = riassunto ?: listOfNotNull(
                 istanteServer(faccenda.fotoTs ?: faccenda.chiusaTs)?.let { p.testo(R.string.faccenda_foto_arrivata, alleQuando(p, it)) },
                 testoDataDa(p, faccenda, io),
             ).joinToString(" · ")
             if (righe.isNotEmpty()) RigaSottovoce(righe)
             righeBocciature(p, faccenda, io).forEach { RigaSottovoce(it) }
-            if (stato is Bocciabile.Si) {
+            testoConfermato(p, faccenda, io)?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = Spazi.xs),
+                )
+            }
+            if (azioni.boccia && stato is Bocciabile.Si) {
                 Text(
                     text = testoBocciabile(p, stato).orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
@@ -473,20 +621,112 @@ private fun RigaFatta(
                     modifier = Modifier.padding(top = Spazi.xs),
                 )
             }
-            if (faccenda.foto) {
+            if (!faccenda.foto) RigaSottovoce(stringResource(R.string.faccenda_foto_cancellata))
+            if (azioni.principale != PulsanteFatto.NESSUNO || azioni.boccia) {
                 FilaPulsanti(modifier = Modifier.padding(top = Spazi.s)) {
-                    Button(onClick = onGuardaFoto) { Text(stringResource(R.string.faccenda_guarda_foto), maxLines = 1, softWrap = false) }
+                    when (azioni.principale) {
+                        PulsanteFatto.GUARDA_FOTO ->
+                            Button(onClick = onGuardaFoto) { Text(stringResource(R.string.faccenda_guarda_foto), maxLines = 1, softWrap = false) }
+                        PulsanteFatto.SEGNA_SVOLTO ->
+                            Button(onClick = onSvolto, enabled = !invio) {
+                                Text(stringResource(R.string.faccenda_segna_svolto), maxLines = 1, softWrap = false)
+                            }
+                        PulsanteFatto.NESSUNO -> Unit
+                    }
                     // "Boccia" ha lo stesso peso qui e sotto la foto (B37).
-                    if (stato is Bocciabile.Si) {
+                    if (azioni.boccia) {
                         OutlinedButton(onClick = onBoccia, enabled = !invio) {
                             Text(stringResource(R.string.faccenda_boccia), maxLines = 1, softWrap = false)
                         }
                     }
                 }
-            } else {
-                RigaSottovoce(stringResource(R.string.faccenda_foto_cancellata))
             }
         }
+    }
+}
+
+/** (0.17) La barra "Cerca un lavoro", con la X per cancellare. */
+@Composable
+private fun CampoRicerca(testo: String, onCambia: (String) -> Unit) {
+    OutlinedTextField(
+        value = testo,
+        onValueChange = onCambia,
+        placeholder = { Text(stringResource(R.string.ricerca_campo)) },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        trailingIcon = if (testo.isNotEmpty()) {
+            {
+                IconButton(onClick = { onCambia("") }) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.ricerca_cancella))
+                }
+            }
+        } else {
+            null
+        },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/** (0.17) I risultati della ricerca: ogni lavoro con stato e data; i fatti coi loro pulsanti. */
+private fun androidx.compose.foundation.lazy.LazyListScope.risultatiRicerca(
+    ricerca: StatoRicerca,
+    io: RiferimentoGenitore?,
+    invio: Boolean,
+    azioniDi: (Faccenda) -> AzioniFatto,
+    adesso: Instant,
+    onGuardaFoto: (Faccenda) -> Unit,
+    onSvolto: (Faccenda) -> Unit,
+    onBoccia: (Faccenda) -> Unit,
+) {
+    val risultati = ricerca.risultati
+    when {
+        ricerca.problema == ProblemaRicerca.SERVER_VECCHIO ->
+            item(key = "ricerca-server") { RigaStato(stringResource(R.string.ricerca_server_vecchio)) }
+        ricerca.problema == ProblemaRicerca.SENZA_RETE ->
+            item(key = "ricerca-rete") { RigaStato(stringResource(R.string.ricerca_senza_rete)) }
+        ricerca.problema == ProblemaRicerca.ERRORE ->
+            item(key = "ricerca-errore") { RigaStato(stringResource(R.string.ricerca_errore)) }
+        risultati == null ->
+            item(key = "ricerca-caricamento") { Caricamento(testo = stringResource(R.string.ricerca_caricamento), centrato = false) }
+        risultati.isEmpty() && !ricerca.caricamento ->
+            item(key = "ricerca-vuota") { StatoVuoto(stringResource(R.string.ricerca_nessuno, ricerca.testo)) }
+        else -> {
+            items(risultati, key = { "trovato-${it.id}" }) { faccenda ->
+                if (faccenda.stato == eu.stgm.pactum.genitore.dati.StatiFaccenda.FATTA) {
+                    RigaFatta(
+                        faccenda = faccenda,
+                        io = io,
+                        adesso = adesso,
+                        invio = invio,
+                        azioni = azioniDi(faccenda),
+                        onGuardaFoto = { onGuardaFoto(faccenda) },
+                        onSvolto = { onSvolto(faccenda) },
+                        onBoccia = { onBoccia(faccenda) },
+                        riassunto = testoRisultato(parole(), faccenda),
+                    )
+                } else {
+                    RigaTrovata(faccenda)
+                }
+            }
+            if (ricerca.altre) {
+                item(key = "ricerca-altre") {
+                    Text(
+                        text = stringResource(R.string.ricerca_altre),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** (0.17) Un lavoro trovato che non è fatto (da fare o tolto): il titolo, lo stato e la data. */
+@Composable
+private fun RigaTrovata(faccenda: Faccenda) {
+    CardNormale {
+        TitoloENota(faccenda, attenuato = faccenda.stato == eu.stgm.pactum.genitore.dati.StatiFaccenda.ANNULLATA)
+        RigaSottovoce(testoRisultato(parole(), faccenda))
     }
 }
 
@@ -554,11 +794,14 @@ private fun DialogoBoccia(faccenda: Faccenda, nomeFiglio: String?, onBoccia: (St
 private fun VistaFoto(
     foto: FotoAperta<ImageBitmap>,
     faccenda: Faccenda?,
+    io: RiferimentoGenitore?,
     adesso: Instant,
     invio: Boolean,
+    conConferma: Boolean,
     onChiudi: () -> Unit,
     onRiprova: () -> Unit,
     onBoccia: (Faccenda) -> Unit,
+    onSvolto: (Faccenda) -> Unit,
 ) {
     val p = parole()
     Dialog(
@@ -643,23 +886,40 @@ private fun VistaFoto(
                 // adesso: mai bocciare una foto nuova guardando quella vecchia.
                 if (faccenda != null && foto.fotoTs != null && foto.fotoTs == faccenda.fotoTs) {
                     val stato = bocciabile(faccenda, adesso)
+                    // La foto è sullo schermo: è guardata. (0.17) Confermato = niente "Boccia".
+                    val azioni = azioniFatto(faccenda, adesso, vista = true, conConferma = conConferma)
                     Column(modifier = Modifier.fillMaxWidth().padding(Spazi.l)) {
                         istanteServer(faccenda.fotoTs)?.let {
                             Text(text = p.testo(R.string.faccenda_foto_arrivata, alleQuando(p, it)), color = Color.White)
                         }
-                        testoBocciabile(p, stato)?.let {
+                        val sotto = testoConfermato(p, faccenda, io) ?: testoBocciabile(p, stato).takeIf { azioni.boccia || stato is Bocciabile.Scaduta }
+                        sotto?.let {
                             Text(text = it, color = Color.White, modifier = Modifier.padding(top = Spazi.xs))
                         }
-                        if (stato is Bocciabile.Si) {
-                            // Stesso peso della lista (B37): a contorno, bianco sul nero.
-                            OutlinedButton(
-                                onClick = { onBoccia(faccenda) },
-                                enabled = !invio,
-                                border = BorderStroke(1.dp, Color.White),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                modifier = Modifier.fillMaxWidth().padding(top = Spazi.s),
-                            ) {
-                                Text(stringResource(R.string.faccenda_boccia))
+                        val svolto = azioni.principale == PulsanteFatto.SEGNA_SVOLTO
+                        if (svolto || azioni.boccia) {
+                            // In fila se ci stanno, se no uno sotto l'altro (mai un testo tagliato).
+                            FilaPulsanti(modifier = Modifier.fillMaxWidth().padding(top = Spazi.s)) {
+                                if (svolto) {
+                                    Button(
+                                        onClick = { onSvolto(faccenda) },
+                                        enabled = !invio,
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                                    ) {
+                                        Text(stringResource(R.string.faccenda_segna_svolto), maxLines = 1, softWrap = false)
+                                    }
+                                }
+                                if (azioni.boccia) {
+                                    // Stesso peso della lista (B37): a contorno, bianco sul nero.
+                                    OutlinedButton(
+                                        onClick = { onBoccia(faccenda) },
+                                        enabled = !invio,
+                                        border = BorderStroke(1.dp, Color.White),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                    ) {
+                                        Text(stringResource(R.string.faccenda_boccia), maxLines = 1, softWrap = false)
+                                    }
+                                }
                             }
                         }
                     }

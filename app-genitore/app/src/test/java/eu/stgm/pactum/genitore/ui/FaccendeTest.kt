@@ -335,10 +335,25 @@ class FaccendeTest {
     }
 
     @Test
-    fun `blocca dalle, solo per una faccenda che non blocca ancora`() {
-        assertEquals("blocca dalle 16:00", testoBloccaDalle(p, faccenda(bloccoDa = "2026-10-02T14:00:00+00:00"), adesso, roma, oggi))
-        assertNull(testoBloccaDalle(p, faccenda(bloccoDa = "2026-10-02T12:00:00+00:00"), adesso, roma, oggi))
-        assertNull(testoBloccaDalle(p, faccenda(stato = StatiFaccenda.FATTA, bloccoDa = "2026-10-02T14:00:00+00:00"), adesso, roma, oggi))
+    fun `l'ora del blocco si dice sempre, anche a blocco partito (0_17)`() {
+        // Dalle 16:00, ancora da venire e già partito: si dice uguale.
+        assertEquals("Blocco dalle 16:00", testoOraBlocco(p, faccenda(bloccoDa = "2026-10-02T14:00:00+00:00"), roma, oggi))
+        assertEquals("Blocco dalle 14:00", testoOraBlocco(p, faccenda(bloccoDa = "2026-10-02T12:00:00+00:00"), roma, oggi))
+        // Dato con "Subito": l'ora in cui è partito.
+        assertEquals(
+            "Blocco da subito (13:00)",
+            testoOraBlocco(p, faccenda(bloccoDa = "2026-10-02T11:00:00+00:00", creataTs = "2026-10-02T11:00:00+00:00"), roma, oggi),
+        )
+        assertEquals(
+            "Blocco da subito (ieri 13:00)",
+            testoOraBlocco(p, faccenda(bloccoDa = "2026-10-01T11:00:00+00:00", creataTs = "2026-10-01T11:00:00+00:00"), roma, oggi),
+        )
+        assertEquals("Blocco domani dalle 16:00", testoOraBlocco(p, faccenda(bloccoDa = "2026-10-03T14:00:00+00:00"), roma, oggi))
+        assertEquals("Blocco lunedì dalle 16:00", testoOraBlocco(p, faccenda(bloccoDa = "2026-10-05T14:00:00+00:00"), roma, oggi))
+        assertEquals("Blocco da ieri alle 16:00", testoOraBlocco(p, faccenda(bloccoDa = "2026-10-01T14:00:00+00:00", creataTs = "2026-10-01T08:00:00+00:00"), roma, oggi))
+        assertEquals("Blocco dal 28/09 alle 16:00", testoOraBlocco(p, faccenda(bloccoDa = "2026-09-28T14:00:00+00:00", creataTs = "2026-09-28T08:00:00+00:00"), roma, oggi))
+        assertNull(testoOraBlocco(p, faccenda(stato = StatiFaccenda.FATTA, bloccoDa = "2026-10-02T14:00:00+00:00"), roma, oggi))
+        assertNull(testoOraBlocco(p, faccenda(bloccoDa = null), roma, oggi))
     }
 
     // --- le 24 ore per bocciare ------------------------------------------------------
@@ -669,7 +684,7 @@ class FaccendeTest {
             messaggioRifiutoFaccende(p, CodiciErrore.TROPPE_FACCENDE, GestoFaccende.DAI, "Luca"),
         )
         assertEquals(
-            "Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l'ha già bocciato o tolto. Ho riletto l'elenco.",
+            "Non si può bocciare: sono passate 24 ore dalla foto, oppure qualcuno l'ha già bocciato, tolto o segnato come svolto. Ho riletto l'elenco.",
             messaggioRifiutoFaccende(p, CodiciErrore.NON_BOCCIABILE, GestoFaccende.BOCCIA, "Luca"),
         )
         assertEquals(

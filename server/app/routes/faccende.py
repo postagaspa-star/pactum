@@ -22,7 +22,12 @@ torna subito) o annullare una faccenda ancora da fare.
   solo aggiungendo.
 - Notifiche: ai dispositivi del figlio (tutti: dispositivo_id null) quando arrivano
   faccende, quando una foto e' bocciata e quando una faccenda e' annullata; ai genitori
-  per ogni faccenda fatta e quando sono finite tutte."""
+  per ogni faccenda fatta e quando sono finite tutte.
+- (v3.9) Un genitore modifica una faccenda da fare (titolo, nota, ora del blocco:
+  `faccenda_modificata`, e il blocco segue la nuova ora) e conferma una faccenda fatta
+  ("svolto": `faccenda_confermata`; da allora non si boccia piu'). Tutti e due nel
+  lock, come le altre decisioni: con una foto o una bocciatura che arrivano insieme ne
+  passa una sola. GET /api/faccende?cerca= cerca per titolo in tutto lo storico."""
 
 import os
 import sqlite3
@@ -43,9 +48,12 @@ from ..faccende import (
     FotoNonValida,
 )
 from ..genitori import Firme
-from ..schemas import BocciaIn, FaccendeIn
+from ..schemas import BocciaIn, ConfermaFaccendaIn, FaccendeIn, ModificaFaccendaIn
 
 router = APIRouter()
+
+# (v3.9) GET /api/faccende?cerca=: da 1 a 80 caratteri, tolti gli spazi ai bordi.
+LUNGHEZZA_MASSIMA_RICERCA = 80
 
 
 def cartella(request: Request) -> str:
@@ -74,6 +82,20 @@ def _blocco_da(richiesto: str | None, ora: datetime) -> str:
                      "msg": f"blocco_da arriva al massimo a {GIORNI_AVANTI_BLOCCO} giorni da adesso"}],
         )
     return richiesto
+
+
+def _nuovo_blocco_da(richiesto: str | None, attuale: str, ora: datetime) -> str:
+    """(v3.9) Il blocco_da dopo un PATCH che lo manda (gia' controllato: entro 7 giorni).
+    Lo stesso istante di adesso resta com'e', anche se e' gia' passato: un'app che
+    rimanda il modulo intero non sposta il blocco. "Subito" (null o una data passata) su
+    una faccenda che blocca gia' resta com'e': blocca gia' da subito, e l'ora da cui
+    blocca non si perde. Altrimenti come alla creazione: passato o null = adesso."""
+    adesso = clock.iso(ora)
+    if richiesto == attuale:
+        return attuale
+    if (richiesto is None or richiesto <= adesso) and attuale <= adesso:
+        return attuale
+    return _blocco_da(richiesto, ora)
 
 
 # --- il genitore ---
@@ -146,10 +168,10 @@ def boccia(
     chi: Identita = Depends(richiede_genitore),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    """Solo una faccenda fatta con la foto arrivata da meno di 24 ore (409 non_bocciabile
-    altrimenti): torna da fare con blocco_da = adesso (il blocco torna subito), la foto si
-    cancella e il figlio e' avvisato con la nota. La storia tiene la foto e ogni
-    bocciatura."""
+    """Solo una faccenda fatta con la foto arrivata da meno di 24 ore e (v3.9) non ancora
+    confermata (409 non_bocciabile altrimenti): torna da fare con blocco_da = adesso (il
+    blocco torna subito), la foto si cancella e il figlio e' avvisato con la nota. La
+    storia tiene la foto e ogni bocciatura."""
     nota = corpo.nota if corpo is not None else None
     ora = clock.now()
     ts = clock.iso(ora)
@@ -168,6 +190,7 @@ def boccia(
             riga["stato"] != "fatta"
             or riga["foto_ts"] is None
             or ora - datetime.fromisoformat(riga["foto_ts"]) >= timedelta(hours=ORE_BOCCIATURA)
+            or riga["confermata_ts"] is not None  # (v3.9) confermata: "svolto" non si boccia
         ):
             raise HTTPException(status_code=409, detail={"errore": "non_bocciabile"})
         giro = faccende.giro_per_nuove(conn, riga["figlio_id"])
@@ -245,16 +268,157 @@ def annulla(
     return faccende.una(conn, faccenda_id, firme, cartella(request))
 
 
+@router.patch("/faccende/{faccenda_id}")
+def modifica(
+    faccenda_id: int,
+    corpo: ModificaFaccendaIn,
+    request: Request,
+    chi: Identita = Depends(richiede_genitore),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """(v3.9) Titolo, nota e ora del blocco di una faccenda ancora da fare (409
+    non_modificabile se e' fatta o annullata). I campi assenti restano come sono. Se
+    niente cambia davvero: 200 con la faccenda, niente storia e niente avviso. Se cambia
+    qualcosa: una voce 'modificata' coi soli campi cambiati (prima/dopo) e l'avviso al
+    figlio su tutti i suoi dispositivi. Il blocco segue blocco_da da solo (lo calcola chi
+    lo legge): piu' avanti si toglie fino a quell'ora, prima o subito parte."""
+    campi = corpo.model_fields_set
+    ora = clock.now()
+    ts = clock.iso(ora)
+    if "blocco_da" in campi:
+        _blocco_da(corpo.blocco_da, ora)  # piu' di 7 giorni avanti: 422 prima di tutto
+    # BEGIN IMMEDIATE: una foto che arriva mentre si modifica si mette in fila; chi arriva
+    # secondo rilegge: il PATCH trova la faccenda gia' fatta (409), la foto vale.
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        genitori.ancora_valido(conn, chi)
+        riga = faccende.faccenda_o_404(conn, faccenda_id)
+        if riga["stato"] != "da_fare":
+            raise HTTPException(status_code=409, detail={"errore": "non_modificabile"})
+        nuovi = {
+            "titolo": corpo.titolo if "titolo" in campi else riga["titolo"],
+            "nota": corpo.nota if "nota" in campi else riga["nota"],
+            "blocco_da": (
+                _nuovo_blocco_da(corpo.blocco_da, riga["blocco_da"], ora)
+                if "blocco_da" in campi
+                else riga["blocco_da"]
+            ),
+        }
+        cambi = {
+            campo: {"prima": riga[campo], "dopo": valore}
+            for campo, valore in nuovi.items()
+            if valore != riga[campo]
+        }
+        firme = Firme(conn)
+        if not cambi:
+            conn.rollback()
+            return faccende.una(conn, faccenda_id, firme, cartella(request))
+        conn.execute(
+            "UPDATE faccende SET titolo = ?, nota = ?, blocco_da = ? WHERE id = ?",
+            (nuovi["titolo"], nuovi["nota"], nuovi["blocco_da"], faccenda_id),
+        )
+        faccende.registra_storia(conn, faccenda_id, "modificata", ts, chi.genitore_id, cambi=cambi)
+        chi_cambia = firme.di(chi.genitore_id)
+        messaggio = (
+            f"{chi_cambia['nome']} ha cambiato «{riga['titolo']}» in «{nuovi['titolo']}»"
+            if "titolo" in cambi
+            else f"{chi_cambia['nome']} ha cambiato «{nuovi['titolo']}»"
+        )
+        accoda_notifica(
+            conn,
+            "faccenda_modificata",
+            messaggio,
+            {"faccenda_id": faccenda_id, "titolo": nuovi["titolo"], "genitore": chi_cambia, "cambi": cambi},
+            ts,
+            destinatario="figlio",
+            figlio_id=riga["figlio_id"],
+            dispositivo_id=None,  # a tutti i dispositivi: il blocco e' di tutti
+        )
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    return faccende.una(conn, faccenda_id, firme, cartella(request))
+
+
+@router.post("/faccende/{faccenda_id}/conferma")
+def conferma(
+    faccenda_id: int,
+    request: Request,
+    corpo: ConfermaFaccendaIn | None = None,
+    chi: Identita = Depends(richiede_genitore),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """(v3.9) "Svolto": un genitore conferma una faccenda fatta (con la sua foto arrivata)
+    e non ancora confermata (409 non_confermabile altrimenti), anche dopo le 24 ore della
+    bocciatura e anche se il file della foto non c'e' piu'. Da allora non si boccia piu'.
+    Non blocca e non sblocca niente: lo sblocco c'e' gia' stato all'ultima foto.
+
+    Corpo facoltativo `{"foto_ts"}`: la foto che il genitore ha guardato. Se intanto la
+    faccenda ne ha un'altra (bocciata da un altro genitore e rifatta) -> 409
+    foto_cambiata e niente conferma: nessuno conferma una foto che non ha visto. Si
+    confronta l'istante. I controlli: corpo (422), 404, non_confermabile, foto_cambiata."""
+    vista = corpo.foto_ts if corpo is not None else None
+    ts = clock.iso(clock.now())
+    # BEGIN IMMEDIATE: una conferma e una bocciatura insieme si mettono in fila; la
+    # seconda rilegge e riceve il suo 409 (non_bocciabile o non_confermabile).
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        genitori.ancora_valido(conn, chi)
+        riga = faccende.faccenda_o_404(conn, faccenda_id)
+        if riga["stato"] != "fatta" or riga["foto_ts"] is None or riga["confermata_ts"] is not None:
+            raise HTTPException(status_code=409, detail={"errore": "non_confermabile"})
+        if vista is not None and datetime.fromisoformat(vista) != datetime.fromisoformat(riga["foto_ts"]):
+            raise HTTPException(status_code=409, detail={"errore": "foto_cambiata"})
+        conn.execute(
+            "UPDATE faccende SET confermata_ts = ?, confermata_genitore_id = ? WHERE id = ?",
+            (ts, chi.genitore_id, faccenda_id),
+        )
+        faccende.registra_storia(conn, faccenda_id, "confermata", ts, chi.genitore_id)
+        firme = Firme(conn)
+        chi_conferma = firme.di(chi.genitore_id)
+        accoda_notifica(
+            conn,
+            "faccenda_confermata",
+            f"{chi_conferma['nome']} ha confermato «{riga['titolo']}»",
+            {"faccenda_id": faccenda_id, "titolo": riga["titolo"], "genitore": chi_conferma},
+            ts,
+            destinatario="figlio",
+            figlio_id=riga["figlio_id"],
+            dispositivo_id=None,
+        )
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    return faccende.una(conn, faccenda_id, firme, cartella(request))
+
+
 # --- le letture (genitore e dispositivi) ---
 
 @router.get("/faccende")
 def elenca_faccende(
     request: Request,
     figlio_id: int | None = None,
+    cerca: str | None = None,
     chi: Identita = Depends(richiede_patto),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
+    """Le faccende del figlio: le da fare e le chiuse degli ultimi 30 giorni. (v3.9) Con
+    `cerca` (1-80 caratteri tolti gli spazi ai bordi; vuoto = come senza) tutte quelle
+    di qualunque data e stato col titolo che lo contiene, senza maiuscole, minuscole e
+    accenti, al massimo 50, e `altre` se ce n'erano di piu'."""
+    testo = (cerca or "").strip()
+    if len(testo) > LUNGHEZZA_MASSIMA_RICERCA:
+        raise HTTPException(
+            status_code=422,
+            detail=[{"loc": ["query", "cerca"],
+                     "msg": f"cerca arriva al massimo a {LUNGHEZZA_MASSIMA_RICERCA} caratteri"}],
+        )
     figlio = _figlio_di(conn, chi, figlio_id)
+    if testo:
+        trovate, altre = faccende.cerca(conn, figlio, testo, Firme(conn), cartella(request))
+        return {"faccende": trovate, "altre": altre}
     elenco = faccende.faccende_del_figlio(conn, figlio, clock.now(), Firme(conn), cartella(request))
     return {"faccende": elenco}
 

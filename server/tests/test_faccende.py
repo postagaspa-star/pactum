@@ -147,6 +147,7 @@ def test_dare_faccende(client, famiglia):
         "stato": "da_fare", "blocco_da": ORA, "creata_ts": ORA, "creata_da": MAMMA,
         "foto_ts": None, "foto": False, "bocciature": 0, "ultima_bocciatura": None,
         "chiusa_ts": None, "annullata_da": None,
+        "confermata_ts": None, "confermata_da": None,  # (v3.9)
         "storia": [{"tipo": "data", "ts": ORA, "genitore": MAMMA}],
     }
     # l'avviso arriva a tutti i dispositivi di Luca, e a nessun altro

@@ -18,16 +18,21 @@ un figlio, il blocco, i conteggi), le foto e la loro pulizia:
 - all'avvio e una volta al giorno (insieme alla copia notturna, copie.py) si cancellano
   le foto arrivate da piu' di 30 giorni e i file senza una faccenda. `foto_ts` resta:
   "la foto e' arrivata quel giorno" e' storia, il file no;
-- la storia di ogni faccenda (data, foto arrivata, bocciata, annullata) sta in
-  faccende_storia, che si scrive solo aggiungendo: una bocciatura non cancella la foto
-  di prima dalla storia, e una seconda bocciatura non cancella la prima."""
+- la storia di ogni faccenda (data, foto arrivata, bocciata, annullata; dalla v3.9
+  anche modificata, coi cambi, e confermata) sta in faccende_storia, che si scrive solo
+  aggiungendo: una bocciatura non cancella la foto di prima dalla storia, e una seconda
+  bocciatura non cancella la prima;
+- (v3.9) la ricerca nello storico per titolo, senza maiuscole, minuscole e accenti
+  (`piega`, registrata come funzione di SQLite sulla connessione che cerca)."""
 
+import json
 import logging
 import os
 import re
 import secrets
 import sqlite3
 import time
+import unicodedata
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
@@ -44,6 +49,7 @@ GIORNI_CHIUSE = 30  # GET /api/faccende: le chiuse degli ultimi 30 giorni
 ORE_BOCCIATURA = 24  # una foto si boccia entro 24 ore
 GIORNI_AVANTI_BLOCCO = 7  # blocco_da al massimo 7 giorni avanti
 DA_FARE_MASSIME = 20  # per figlio: oltre, 409 troppe_faccende
+RISULTATI_RICERCA = 50  # (v3.9) GET /api/faccende?cerca=: al massimo 50, poi `altre`
 
 NON_TROVATA = "faccenda non trovata"
 FOTO_NON_TROVATA = "foto non trovata"
@@ -255,19 +261,23 @@ def registra_storia(
     ts: str,
     genitore_id: int | None = None,
     nota: str | None = None,
+    cambi: dict | None = None,
 ) -> None:
     """Una riga in piu' nella storia della faccenda: 'data', 'foto', 'bocciata' o
-    'annullata'. Solo aggiunte: la tabella non si cambia e non si cancella."""
+    'annullata'; (v3.9) 'modificata' (coi `cambi`) e 'confermata'. Solo aggiunte: la
+    tabella non si cambia e non si cancella."""
     conn.execute(
-        "INSERT INTO faccende_storia (faccenda_id, tipo, ts, genitore_id, nota) VALUES (?, ?, ?, ?, ?)",
-        (faccenda_id, tipo, ts, genitore_id, nota),
+        "INSERT INTO faccende_storia (faccenda_id, tipo, ts, genitore_id, nota, cambi)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (faccenda_id, tipo, ts, genitore_id, nota,
+         json.dumps(cambi, ensure_ascii=False) if cambi is not None else None),
     )
 
 
 def storie(conn: sqlite3.Connection, ids: list[int], firme: Firme) -> dict[int, list]:
     """La storia di ogni faccenda di `ids`, dalla piu' vecchia, letta in una volta sola:
-    {"tipo", "ts"}, piu' "genitore" dove ha fatto qualcosa un genitore e "nota" sulle
-    bocciature."""
+    {"tipo", "ts"}, piu' "genitore" dove ha fatto qualcosa un genitore, "nota" sulle
+    bocciature e (v3.9) "cambi" sulle modifiche."""
     storia: dict[int, list] = {i: [] for i in ids}
     if not ids:
         return storia
@@ -280,6 +290,8 @@ def storie(conn: sqlite3.Connection, ids: list[int], firme: Firme) -> dict[int, 
             voce["genitore"] = firme.di(r["genitore_id"])
         if r["tipo"] == "bocciata":
             voce["nota"] = r["nota"]
+        if r["tipo"] == "modificata":
+            voce["cambi"] = json.loads(r["cambi"])
         storia[r["faccenda_id"]].append(voce)
     return storia
 
@@ -322,6 +334,9 @@ def formatta(
         "ultima_bocciatura": _ultima_bocciatura(riga, firme),
         "chiusa_ts": riga["chiusa_ts"],
         "annullata_da": firme.di(riga["annullata_genitore_id"]),
+        # (v3.9) "svolto": la conferma di un genitore, null finche' nessuno conferma
+        "confermata_ts": riga["confermata_ts"],
+        "confermata_da": firme.di(riga["confermata_genitore_id"]),
         "storia": storia,
     }
 
@@ -354,6 +369,49 @@ def faccende_del_figlio(
     ).fetchall()
     storia = storie(conn, [r["id"] for r in righe], firme)
     return [formatta(r, firme, cartella, storia[r["id"]]) for r in righe]
+
+
+# (v3.9) Le lettere che Unicode non scompone in base + segno: per la ricerca valgono la
+# lettera semplice (gia' minuscole: `piega` le cerca dopo casefold, che porta Ł a ł).
+_LETTERE_SENZA_SCOMPOSIZIONE = str.maketrans(
+    {"ł": "l", "ø": "o", "đ": "d", "æ": "ae", "œ": "oe", "þ": "th"}
+)
+
+
+def piega(testo: str | None) -> str:
+    """(v3.9) Un testo come lo confronta la ricerca: senza maiuscole (casefold: anche "ß"
+    e' "ss") e senza accenti (le lettere scomposte in base + segni, e i segni si buttano;
+    le poche che non si scompongono, come ł, ø, æ, con una tabella). "Perché" e "PERCHE"
+    diventano tutti e due "perche". Un testo fatto solo di segni diventa vuoto."""
+    scomposto = unicodedata.normalize("NFKD", (testo or "").casefold())
+    senza_segni = "".join(c for c in scomposto if not unicodedata.combining(c))
+    return senza_segni.translate(_LETTERE_SENZA_SCOMPOSIZIONE)
+
+
+def cerca(
+    conn: sqlite3.Connection, figlio_id: int, testo: str, firme: Firme, cartella: str
+) -> tuple[list[dict], bool]:
+    """(v3.9) GET /api/faccende?cerca=: TUTTE le faccende del figlio (qualunque data e
+    stato) il cui titolo contiene `testo`, senza maiuscole, minuscole e accenti; dalla
+    piu' recente come l'elenco (creata_ts, poi id), al massimo 50. Il secondo valore dice
+    se ce n'erano di piu'. Il confronto lo fa SQLite con `piega`, registrata su questa
+    connessione: si leggono solo le righe che servono, non tutta la storia.
+
+    Un testo che piegato non resta niente (solo segni, come U+0301 da solo) non trova
+    niente: in SQLite instr(x, '') e' 1, cioe' "tutto"."""
+    piegato = piega(testo)
+    if not piegato:
+        return [], False
+    conn.create_function("pactum_piega", 1, piega, deterministic=True)
+    righe = conn.execute(
+        "SELECT * FROM faccende WHERE figlio_id = ? AND instr(pactum_piega(titolo), ?) > 0"
+        " ORDER BY creata_ts DESC, id DESC LIMIT ?",
+        (figlio_id, piegato, RISULTATI_RICERCA + 1),
+    ).fetchall()
+    altre = len(righe) > RISULTATI_RICERCA
+    righe = righe[:RISULTATI_RICERCA]
+    storia = storie(conn, [r["id"] for r in righe], firme)
+    return [formatta(r, firme, cartella, storia[r["id"]]) for r in righe], altre
 
 
 def una(conn: sqlite3.Connection, faccenda_id: int, firme: Firme, cartella: str) -> dict:

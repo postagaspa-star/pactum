@@ -446,3 +446,52 @@ class BocciaIn(BaseModel):
     @classmethod
     def _nota(cls, nota: str | None) -> str | None:
         return nota_faccenda(nota)
+
+
+class ConfermaFaccendaIn(BaseModel):
+    """(v3.9) Il corpo facoltativo di POST /api/faccende/{id}/conferma: il `foto_ts` della
+    foto che il genitore ha guardato. Una data col fuso (422 altrimenti), tenuta com'e':
+    la route la confronta per istante con quella della faccenda. null = come senza."""
+
+    foto_ts: str | None = None
+
+    @field_validator("foto_ts")
+    @classmethod
+    def _foto_ts(cls, foto_ts: str | None) -> str | None:
+        if foto_ts is not None:
+            _istante(foto_ts)  # solo il controllo: una data con fuso
+        return foto_ts
+
+
+class ModificaFaccendaIn(BaseModel):
+    """(v3.9) PATCH /api/faccende/{id}: almeno uno dei tre campi. Un campo assente resta
+    com'e' (assente e null si distinguono con model_fields_set): `titolo` con le regole
+    della creazione e mai null; `nota` null o vuota toglie la nota; `blocco_da` una data
+    col fuso, null = subito (i 7 giorni li controlla la route, che conosce l'ora)."""
+
+    titolo: str | None = None
+    nota: str | None = None
+    blocco_da: str | None = None
+
+    @field_validator("titolo")
+    @classmethod
+    def _titolo(cls, titolo: str | None) -> str:
+        if titolo is None:
+            raise ValueError("il titolo non si toglie")
+        return _titolo_faccenda(titolo)
+
+    @field_validator("nota")
+    @classmethod
+    def _nota(cls, nota: str | None) -> str | None:
+        return nota_faccenda(nota)
+
+    @field_validator("blocco_da")
+    @classmethod
+    def _blocco_da(cls, blocco_da: str | None) -> str | None:
+        return None if blocco_da is None else _istante(blocco_da)
+
+    @model_validator(mode="after")
+    def _almeno_un_campo(self):
+        if not self.model_fields_set & {"titolo", "nota", "blocco_da"}:
+            raise ValueError("serve almeno uno tra titolo, nota e blocco_da")
+        return self

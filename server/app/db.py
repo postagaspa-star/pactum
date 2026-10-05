@@ -213,6 +213,20 @@ CREATE TABLE IF NOT EXISTS notifiche_lette_genitori (
 );
 """
 
+# (v3.9) La tabella della storia delle faccende, da sola: la migrazione v3.9 la rifa'
+# (SQLite non cambia un CHECK) con questa stessa definizione.
+TABELLA_FACCENDE_STORIA = """
+CREATE TABLE IF NOT EXISTS faccende_storia (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    faccenda_id INTEGER NOT NULL REFERENCES faccende(id),
+    tipo TEXT NOT NULL CHECK (tipo IN ('data', 'foto', 'bocciata', 'annullata', 'modificata', 'confermata')),
+    ts TEXT NOT NULL,
+    genitore_id INTEGER REFERENCES genitori(id),
+    nota TEXT,
+    cambi TEXT
+);
+"""
+
 # (v3.6) Le faccende (contratto-api.md, "La faccenda"): un genitore le da' al figlio e,
 # da blocco_da e finche' non le ha fatte tutte (una foto per ognuna), i suoi dispositivi
 # sono bloccati. blocco_da e' sempre pieno (UTC, come ogni ts_server). La foto sta in un
@@ -222,6 +236,8 @@ CREATE TABLE IF NOT EXISTS notifiche_lette_genitori (
 # stesso giro, che comincia quando il figlio passa da nessuna faccenda da fare ad
 # almeno una; faccende_finite elenca quelle fatte nel giro che si chiude. Il registro
 # delle faccende e' questa tabella: le righe non si cancellano.
+# (v3.9) confermata_*: la conferma di un genitore ("svolto") di una faccenda fatta; da
+# allora non si boccia piu'. Sui database di prima le colonne arrivano con _migra_v39.
 TABELLA_FACCENDE = """
 CREATE TABLE IF NOT EXISTS faccende (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -239,7 +255,9 @@ CREATE TABLE IF NOT EXISTS faccende (
     bocciata_nota TEXT,
     bocciata_genitore_id INTEGER REFERENCES genitori(id),
     chiusa_ts TEXT,
-    annullata_genitore_id INTEGER REFERENCES genitori(id)
+    annullata_genitore_id INTEGER REFERENCES genitori(id),
+    confermata_ts TEXT,
+    confermata_genitore_id INTEGER REFERENCES genitori(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_faccende_figlio ON faccende (figlio_id, stato);
@@ -248,15 +266,9 @@ CREATE INDEX IF NOT EXISTS idx_faccende_figlio ON faccende (figlio_id, stato);
 -- 'bocciata' (dal genitore, con la nota), 'annullata' (dal genitore). La riga della
 -- faccenda dice com'e' adesso; qui resta tutto quello che e' successo, anche le foto
 -- bocciate e le bocciature di prima. I trigger impediscono di cambiarla o cancellarla.
-CREATE TABLE IF NOT EXISTS faccende_storia (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    faccenda_id INTEGER NOT NULL REFERENCES faccende(id),
-    tipo TEXT NOT NULL CHECK (tipo IN ('data', 'foto', 'bocciata', 'annullata')),
-    ts TEXT NOT NULL,
-    genitore_id INTEGER REFERENCES genitori(id),
-    nota TEXT
-);
-
+-- (v3.9) In piu' 'modificata' (dal genitore, coi cambi in `cambi`, JSON) e 'confermata'
+-- (dal genitore). Sui database di prima la tabella si rifa' con _migra_v39.
+""" + TABELLA_FACCENDE_STORIA + """
 CREATE INDEX IF NOT EXISTS idx_faccende_storia ON faccende_storia (faccenda_id, id);
 
 CREATE TRIGGER IF NOT EXISTS faccende_storia_non_si_cambia BEFORE UPDATE ON faccende_storia
@@ -474,6 +486,20 @@ SUFFISSO_COPIA_V3 = ".prima-v3-"
 SUFFISSO_COPIA_V34 = ".prima-v3.4-"
 # (v3.6) E quella prima della migrazione dei genitori: <db>.prima-v3.6-<data>.
 SUFFISSO_COPIA_V36 = ".prima-v3.6-"
+# (v3.9) E quella prima della migrazione delle faccende: <db>.prima-v3.9-<data>.
+SUFFISSO_COPIA_V39 = ".prima-v3.9-"
+
+# (v3.9) Le colonne della conferma ("svolto") che le faccende di prima non hanno:
+# ALTER TABLE ADD COLUMN, NULL nelle righe che ci sono (nessuno le ha confermate).
+COLONNE_V39 = [
+    ("faccende", "confermata_ts", "TEXT"),
+    ("faccende", "confermata_genitore_id", "INTEGER REFERENCES genitori(id)"),
+]
+# (v3.9) I tipi della storia che la tabella di prima non accetta.
+TIPI_STORIA_V39 = ("modificata", "confermata")
+# (v3.9) Le colonne di TABELLA_FACCENDE_STORIA, nell'ordine: la migrazione copia quelle
+# che la tabella vecchia ha (cambi non c'e' ancora: resta NULL).
+COLONNE_STORIA = ("id", "faccenda_id", "tipo", "ts", "genitore_id", "nota", "cambi")
 
 # (v3.6) Le colonne che i database di prima della v3.6 non hanno: di quale genitore e'
 # una credenziale, e chi ha deciso cosa. ALTER TABLE ADD COLUMN, come per la v3: le
@@ -703,6 +729,9 @@ def _migra(
     _migra_v34(conn, contatore_proposte)
     # (v3.6) I genitori: dopo la v3 (le credenziali) e la v3.4 (le proposte).
     _migra_v36(conn, crea_genitore)
+    # (v3.9) Le faccende: conferma e storia coi tipi nuovi, dopo i genitori (a cui
+    # puntano le colonne nuove).
+    _migra_v39(conn)
 
 
 def _ci_sono_dati(conn: sqlite3.Connection) -> bool:
@@ -1240,6 +1269,113 @@ def _migra_v36(conn: sqlite3.Connection, crea_genitore: bool) -> None:
         conn.execute("PRAGMA foreign_keys=ON")
 
 
+def _mancanze_v39(conn: sqlite3.Connection) -> list:
+    """(v3.9) Le colonne di COLONNE_V39 che mancano alle tabelle che ci sono. Una tabella
+    che non c'e' ancora nasce gia' giusta dallo SCHEMA."""
+    esistenti = _tabelle(conn)
+    return [
+        (tabella, colonna, definizione)
+        for tabella, colonna, definizione in COLONNE_V39
+        if tabella in esistenti and colonna not in _colonne(conn, tabella)
+    ]
+
+
+def _storia_prima_della_v39(conn: sqlite3.Connection) -> bool:
+    """(v3.9) La storia delle faccende c'e' ma non ha ancora la forma della v3.9: la
+    colonna `cambi` e i tipi 'modificata' e 'confermata' nel CHECK."""
+    riga = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'faccende_storia'"
+    ).fetchone()
+    return riga is not None and (
+        "cambi" not in _colonne(conn, "faccende_storia")
+        or any(f"'{tipo}'" not in riga[0] for tipo in TIPI_STORIA_V39)
+    )
+
+
+def _va_migrato_a_v39(conn: sqlite3.Connection) -> bool:
+    """(v3.9) Un database con una storia le cui faccende vanno cambiate (le colonne
+    della conferma, la tabella della storia da rifare): prima si copia (contratto, "v3.9
+    — Svolto": "con la copia del database prima della migrazione"). Un database nuovo
+    o gia' v3.9 no."""
+    return _ci_sono_dati(conn) and (bool(_mancanze_v39(conn)) or _storia_prima_della_v39(conn))
+
+
+def _migra_v39(conn: sqlite3.Connection) -> None:
+    """(v3.9) Le faccende si modificano e si confermano (contratto-api.md, "v3.9"): le
+    due colonne della conferma su `faccende` (NULL nelle righe di prima: nessuno le ha
+    confermate) e la storia con i tipi 'modificata' e 'confermata' e la colonna `cambi`.
+    SQLite non cambia un CHECK: la storia si ricostruisce come le proposte nella v3.4,
+    righe e id tali e quali, col contatore dell'AUTOINCREMENT, l'indice e i trigger che
+    la tengono in sola aggiunta (rifatti sulla tabella nuova dopo la copia delle righe).
+    Tutto in UNA transazione: se qualcosa va storto a meta' il database resta com'era e
+    il prossimo avvio riprova da capo. Sul database gia' v3.9 non fa niente.
+
+    La tabella vecchia se ne va con DROP TABLE, che non fa scattare i trigger: la storia
+    non si cancella, si sposta."""
+    if not (_mancanze_v39(conn) or _storia_prima_della_v39(conn)):
+        return
+    # PRAGMA foreign_keys e legacy_alter_table si cambiano solo fuori da una transazione,
+    # come nella v3.4 (v. _migra_v34 per il perche' di legacy_alter_table).
+    conn.commit()
+    legacy_prima = conn.execute("PRAGMA legacy_alter_table").fetchone()[0]
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("PRAGMA legacy_alter_table=ON")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for tabella, colonna, definizione in _mancanze_v39(conn):  # riletto dentro il lock
+                conn.execute(f"ALTER TABLE {tabella} ADD COLUMN {colonna} {definizione}")
+            if _storia_prima_della_v39(conn):
+                da_rifare = [
+                    r[0]
+                    for r in conn.execute(
+                        "SELECT sql FROM sqlite_master WHERE type IN ('index', 'trigger')"
+                        " AND tbl_name = 'faccende_storia' AND sql IS NOT NULL"
+                        " ORDER BY type = 'trigger', name"
+                    )
+                ]
+                contatore = _contatore(conn, "faccende_storia")
+                vecchie = _colonne(conn, "faccende_storia")
+                # Una colonna che il server non conosce (aggiunta a mano) non passa nella
+                # tabella nuova: lo dice il log, e resta nella copia .prima-v3.9-, come
+                # per le proposte nella v3.4 (_copia_proposte).
+                sconosciute = sorted(vecchie - set(COLONNE_STORIA))
+                if sconosciute:
+                    log.warning(
+                        "MIGRAZIONE v3.9: la tabella faccende_storia ha colonne che il server"
+                        " non conosce (%s): non passano nella tabella nuova, restano solo nella"
+                        " copia di sicurezza .prima-v3.9-.",
+                        ", ".join(sconosciute),
+                    )
+                conn.execute("ALTER TABLE faccende_storia RENAME TO _faccende_storia_v38")
+                conn.execute(TABELLA_FACCENDE_STORIA)
+                elenco = ", ".join(c for c in COLONNE_STORIA if c in vecchie)
+                conn.execute(
+                    f"INSERT INTO faccende_storia ({elenco}) SELECT {elenco} FROM _faccende_storia_v38"
+                    " ORDER BY id"
+                )
+                conn.execute("DROP TABLE _faccende_storia_v38")
+                for sql in da_rifare:
+                    conn.execute(sql)
+                if contatore is not None:
+                    rimesso = conn.execute(
+                        "UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'faccende_storia'",
+                        (contatore,),
+                    ).rowcount
+                    if not rimesso:  # tabella vuota: la copia non ha scritto il contatore
+                        conn.execute(
+                            "INSERT INTO sqlite_sequence (name, seq) VALUES ('faccende_storia', ?)",
+                            (contatore,),
+                        )
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    finally:
+        conn.execute(f"PRAGMA legacy_alter_table={'ON' if legacy_prima else 'OFF'}")
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
 def _sincronizza_credenziali(
     conn: sqlite3.Connection, token_figlio: str | None, token_genitore: str | None
 ) -> None:
@@ -1338,6 +1474,9 @@ def init_db(
         # proposte, dichiarazioni, sessioni): la sua copia, anche lei di prima.
         if _va_migrato_a_v36(conn):
             _copia_prima_della_migrazione(conn, db_path, SUFFISSO_COPIA_V36, "v3.6")
+        # (v3.9) E per le faccende, che cambiano (la conferma, la storia coi tipi nuovi).
+        if _va_migrato_a_v39(conn):
+            _copia_prima_della_migrazione(conn, db_path, SUFFISSO_COPIA_V39, "v3.9")
         # Tutto lo schema in una transazione: una scrittura sola su disco invece di
         # una per tabella (su Windows ogni transazione e' un file di journal in piu').
         # (v3.5) Le sessioni sono solo tabelle nuove, che nascono qui (CREATE TABLE IF

@@ -45,8 +45,10 @@ android {
         // al posto di "faccende".
         // v0.15.0: il riordino dell'interfaccia (4 schede fisse, una Panoramica
         // corta, "Da decidere"), comportamento invariato.
-        versionCode = 15
-        versionName = "0.15.0"
+        // v0.16.0 (contratto v3.8): totali degli ultimi 7 e 30 giorni, grafici
+        // in core-design, pagine Sessioni e Tutte le regole.
+        versionCode = 16
+        versionName = "0.16.0"
     }
 
     signingConfigs {

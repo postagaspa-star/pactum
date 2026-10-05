@@ -51,6 +51,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.stgm.pactum.design.AnelloCategorie
+import eu.stgm.pactum.design.BarreGiorni
+import eu.stgm.pactum.design.BloccoMedie
+import eu.stgm.pactum.design.CellaMedia
+import eu.stgm.pactum.design.GiornoGrafico
+import eu.stgm.pactum.design.LegendaCategorie
 import eu.stgm.pactum.design.BarraUso
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.design.RigaStato
@@ -63,6 +69,7 @@ import eu.stgm.pactum.design.Tono
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.BonusGiorno
 import eu.stgm.pactum.genitore.dati.Finestra
+import eu.stgm.pactum.genitore.dati.MediaPeriodo
 import eu.stgm.pactum.genitore.dati.Medie
 import eu.stgm.pactum.genitore.dati.SitiGiorno
 import eu.stgm.pactum.genitore.dati.StatoBonus
@@ -670,7 +677,8 @@ private fun SelettoreGiorni(
 @Composable
 private fun SchedaGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
     // Con la fetta "resto" (non categorizzato) la legenda somma sempre al totale.
-    val fette = fetteConResto(giorno.categorie, giorno.totaleMinuti)
+    val fette = fetteDelGiorno(giorno)
+    val p = parole()
     CardEvidenza(tono = Tono.Neutro) {
         Column {
             TotaleGiorno(giorno = giorno, oggi = oggi, computer = computer)
@@ -688,7 +696,11 @@ private fun SchedaGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    LegendaCategorie(fette)
+                    LegendaCategorie(
+                        fette = fette,
+                        durata = { testoDurata(p, it.toLong()) },
+                        limite = { p.testo(R.string.tempo_limite, testoDurata(p, it.toLong())) },
+                    )
                 }
             }
         }
@@ -777,14 +789,22 @@ private fun SchedaOttoGiorni(giorni: List<UsoGiorno>, selezionato: String, medie
         Column {
             SopraTitolo(stringResource(R.string.grafico_ultimi_giorni))
             Spacer(modifier = Modifier.height(Spazi.m))
-            BarreGiorni(giorni = giorni, selezionato = selezionato)
+            // (0.16) Ogni barra porta sopra il suo tempo: il totale di ogni giorno
+            // si legge guardando (e TalkBack lo dice giorno per giorno).
+            val p = parole()
+            BarreGiorni(
+                giorni = giorniGrafico(giorni),
+                selezionato = selezionato,
+                valore = { testoDurataBreve(p, it.toLong()) },
+                descrizione = { descrizioneGiorno(p, it) },
+            )
             // Le medie settimanale/mensile: nascoste se il server non le manda
             // (campo o sotto-oggetto null = niente da mostrare, mai uno zero finto).
             if (medie != null && (medie.settimana != null || medie.mese != null)) {
                 Spacer(modifier = Modifier.height(Spazi.l))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(Spazi.l))
-                BloccoMedie(medie)
+                BloccoMedie(celleTempi(parole(), medie))
             }
         }
     }
@@ -865,3 +885,51 @@ private fun StrisciaBonus(giorni: List<BonusGiorno>) {
         }
     }
 }
+
+/** I giorni della settimana e del mese (v3.8: ultimi 7 e ultimi 30, oggi compreso). */
+const val GIORNI_TOTALE_SETTIMANA = 7
+const val GIORNI_TOTALE_MESE = 30
+
+/**
+ * (0.16) I numeri sotto le barre, come celle del grafico (core-design). Con il
+ * `totale` del server (v3.8): "ULTIMI 7 GIORNI" / "ULTIMI 30 GIORNI" col totale
+ * in grande, "giorni con dati: 6 su 7" quando non tutti i giorni avevano dati (i
+ * giorni senza dati non sono zero), e la media più piccola sotto. Senza `totale`
+ * (server prima della v3.8) le medie di prima, e basta. Un periodo senza dati
+ * (null) non ha cella: mai uno zero finto.
+ */
+fun celleTempi(p: Parole, medie: Medie): List<CellaMedia> = listOfNotNull(
+    medie.settimana?.let { cellaTempo(p, it, GIORNI_TOTALE_SETTIMANA, R.string.tempo_ultimi_7, R.string.media_settimana) },
+    medie.mese?.let { cellaTempo(p, it, GIORNI_TOTALE_MESE, R.string.tempo_ultimi_30, R.string.media_mese) },
+)
+
+private fun cellaTempo(p: Parole, periodo: MediaPeriodo, giorniFinestra: Int, titoloTotale: Int, titoloMedia: Int): CellaMedia {
+    val totale = periodo.totale
+    return if (totale == null) {
+        CellaMedia(
+            etichetta = p.testo(titoloMedia),
+            valore = testoDurata(p, periodo.minuti.toLong()),
+            sotto = listOf(p.testo(R.string.media_su_giorni, periodo.giorni)),
+        )
+    } else {
+        CellaMedia(
+            etichetta = p.testo(titoloTotale),
+            valore = testoDurata(p, totale.coerceAtLeast(0).toLong()),
+            sotto = listOfNotNull(
+                p.testo(R.string.tempo_giorni_con_dati, periodo.giorni, giorniFinestra)
+                    .takeIf { periodo.giorni < giorniFinestra },
+                // La durata non si spezza a metà ("3 h 33" / "min"): va a capo intera.
+                p.testo(R.string.tempo_media_al_giorno, testoDurata(p, periodo.minuti.toLong()).replace(' ', '\u00A0')),
+            ),
+            grande = true,
+        )
+    }
+}
+
+/** La frase di un giorno del grafico per TalkBack: "03/10: 3 h 5 min", o senza dati. */
+fun descrizioneGiorno(p: Parole, giorno: GiornoGrafico): String =
+    p.testo(
+        R.string.grafico_giorno_valore,
+        giornoBreve(giorno.giorno),
+        giorno.minuti?.let { testoDurata(p, it.toLong()) } ?: p.testo(R.string.stato_regola_senza_dati),
+    )

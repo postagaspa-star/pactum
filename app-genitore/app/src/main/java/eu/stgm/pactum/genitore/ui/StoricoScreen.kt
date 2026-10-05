@@ -109,14 +109,11 @@ private fun ContenutoStorico(
     val regolePerId = remember(finestra) { finestra.regole.associateBy { it.id } }
     val dispositivi = remember(finestra) { dispositiviDellaFinestra(finestra) }
     val piuDispositivi = finestraPerDispositivo(finestra) && dispositivi.size > 1
-    val scollegati = remember(finestra) { dispositiviScollegati(finestra) }
     val nomi = remember(finestra) { nomiDelleApp(finestra) }
     // (0.11) Le sessioni: quelle fatte negli 8 giorni (raccontate rispetto ad
     // adesso: una "in corso" letta prima della fine prevista è finita), quelle
     // approvate, e il nome del telefono quando il figlio ne ha più d'uno.
     val svolte = remember(finestra) { sessioniSvolteRaccontate(finestra.sessioniSvolte, Instant.now()) }
-    val approvate = remember(finestra) { sessioniApprovate(finestra.sessioni, scollegati) }
-    val nonPiuValide = remember(finestra) { sessioniNonPiuValide(finestra.sessioni, scollegati) }
     val conPiuTelefoni = remember(finestra) { piuTelefoni(finestra) }
     val telefonoDi: (Long?) -> String? = { id -> if (conPiuTelefoni) nomeDispositivo(id, dispositivi) else null }
     val chiuse = proposte?.let { proposteChiuse(it.proposte) }.orEmpty()
@@ -142,12 +139,13 @@ private fun ContenutoStorico(
             }
         }
 
-        // 2. Le sessioni (solo se il server le conosce e c'è qualcosa da dire).
-        if (svolte.isNotEmpty() || approvate.isNotEmpty() || nonPiuValide.isNotEmpty()) {
+        // 2. Le sessioni fatte (la storia). (0.16) Le approvate e le non più valide
+        // sono lo stato di adesso: stanno nella pagina Sessioni.
+        if (svolte.isNotEmpty()) {
             sezioneSessioni(
                 svolte = svolte,
-                approvate = approvate,
-                nonPiuValide = nonPiuValide,
+                approvate = emptyList(),
+                nonPiuValide = emptyList(),
                 nomiFinestra = nomi,
                 telefono = telefonoDi,
                 tutteLeSvolte = tutteLeSvolte,

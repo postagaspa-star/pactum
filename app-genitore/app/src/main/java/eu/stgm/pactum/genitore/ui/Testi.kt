@@ -330,6 +330,16 @@ fun testoDurata(parole: Parole, minuti: Long): String = when {
     else -> parole.testo(R.string.formato_ore_minuti, minuti / 60, minuti % 60)
 }
 
+/**
+ * (0.16) Una durata scritta corta, per stare sopra una barra del grafico:
+ * "2h31", "3h", "45 min". Per esteso la dice [testoDurata].
+ */
+fun testoDurataBreve(parole: Parole, minuti: Long): String = when {
+    minuti < 60 -> parole.testo(R.string.formato_minuti, minuti)
+    minuti % 60 == 0L -> parole.testo(R.string.formato_breve_ore, minuti / 60)
+    else -> parole.testo(R.string.formato_breve_ore_minuti, minuti / 60, minuti % 60)
+}
+
 /** Un giorno ISO del contratto ("2026-07-15") come "15/07"; il grezzo se malformato. */
 fun giornoBreve(giornoIso: String): String = try {
     LocalDate.parse(giornoIso).format(formatoGiornoBreve)

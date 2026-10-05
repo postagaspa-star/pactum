@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -74,6 +75,7 @@ import eu.stgm.pactum.genitore.dati.EventoFinestra
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Impostazioni
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import eu.stgm.pactum.genitore.dati.StatoBonus
 import eu.stgm.pactum.genitore.sync.Vedetta
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
@@ -118,11 +120,14 @@ fun PanoramicaScreen(
     // di sapere di quale figlio (famiglia pronta): mai una finestra di un figlio
     // sotto il nome di un altro.
     val cicloVita = LocalLifecycleOwner.current.lifecycle
+    // (0.16) Quanti giri di rilettura: ogni giro rilegge anche l'orologio della pagina.
+    var giro by remember { mutableIntStateOf(0) }
     LaunchedEffect(cicloVita, figlioId, famiglia.pronta) {
         if (!famiglia.pronta) return@LaunchedEffect
         cicloVita.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 vm.aggiorna(figlioId)
+                giro++
                 delay(INTERVALLO_RILETTURA_MS)
             }
         }
@@ -194,6 +199,7 @@ fun PanoramicaScreen(
 
                 else -> ContenutoPanoramica(
                     finestra = finestra,
+                    giro = giro,
                     famiglia = famiglia,
                     errore = stato.errore,
                     ricevutaAlle = stato.ricevutaAlle,
@@ -217,6 +223,7 @@ fun PanoramicaScreen(
 @Composable
 private fun ContenutoPanoramica(
     finestra: Finestra,
+    giro: Int,
     famiglia: FamigliaViewModel.StatoFamiglia,
     errore: Boolean,
     ricevutaAlle: Instant?,
@@ -272,9 +279,18 @@ private fun ContenutoPanoramica(
         inRete = Vedetta.reteDisponibile(context)
         onPauseOrDispose { }
     }
-    val adesso = remember(finestra) { Instant.now() }
-    val blocco = remember(finestra) { finestra.faccende?.let { statoBlocco(it, adesso, finestra.blocco) } }
-    val fotoNuove = remember(finestra) { finestra.faccende?.let { fotoDaGuardare(it, adesso) } ?: 0 }
+    // (0.16) "Adesso" si rilegge a ogni giro di rilettura (ogni minuto), non solo
+    // quando arriva una finestra nuova: senza rete la riga "In sessione" e il
+    // blocco non restano fermi dopo la loro fine.
+    val adesso = remember(finestra, giro) { Instant.now() }
+    val blocco = remember(finestra, adesso) { finestra.faccende?.let { statoBlocco(it, adesso, finestra.blocco) } }
+    val fotoNuove = remember(finestra, adesso) { finestra.faccende?.let { fotoDaGuardare(it, adesso) } ?: 0 }
+    // (0.16) Le sessioni (la riga in cima se ce n'è una in corso, la riga "Sessioni")
+    // e il bonus di oggi per ogni dispositivo con un limite di tempo.
+    val sessioni = remember(finestra, adesso) { contoSessioni(finestra, adesso) }
+    val bonus = remember(finestra) {
+        dispositivi.mapNotNull { d -> bonusDaMostrare(d, finestra.regole, perDispositivo)?.let { d to it } }
+    }
     val righe = righeInCima(
         daDecidere = daDecidere,
         blocco = blocco.takeIf { figlio != null },
@@ -286,6 +302,7 @@ private fun ContenutoPanoramica(
         inRete = inRete,
         errore = errore,
         ricevutaAlle = ricevutaAlle,
+        sessioniInCorso = sessioni.inCorso,
     )
 
     var tuttiDaGuardare by rememberSaveable { mutableStateOf(false) }
@@ -337,6 +354,8 @@ private fun ContenutoPanoramica(
                     invioSegno = invioSegno,
                     onMandaSegno = onMandaSegno,
                     onApriRegola = { cornice.apri(Pagina.Regola(it.id)) },
+                    onTutteLeRegole = { cornice.apri(Pagina.TutteLeRegole) },
+                    bonus = bonus,
                 )
             }
         }
@@ -378,7 +397,16 @@ private fun ContenutoPanoramica(
             }
         }
 
-        // --- Lo storico -------------------------------------------------------------------------
+        // --- (0.16) Le sessioni e lo storico ---------------------------------------------------
+        if (!sessioni.nessuna) {
+            item(key = "sessioni") {
+                RigaToccabile(
+                    titolo = stringResource(R.string.sezione_sessioni),
+                    sottotitolo = riassuntoSessioni(sessioni),
+                    onClick = { cornice.apri(Pagina.Sessioni) },
+                )
+            }
+        }
         item(key = "storico") {
             RigaToccabile(titolo = stringResource(R.string.sezione_storico), onClick = { cornice.apri(Pagina.Storico) })
         }
@@ -402,8 +430,14 @@ private fun RigaInCimaVista(riga: RigaInCima) {
             testo = listOfNotNull(
                 testoStatoBlocco(p, riga.stato),
                 riga.stato.daFare.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.riga_lavori_da_fare, it, it) },
+                riga.fotoDaGuardare.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.riga_blocco_foto, it, it) },
             ).joinToString(" · "),
             onClick = { cornice.vaiAScheda(Scheda.LAVORI) },
+        )
+        is RigaInCima.SessioneInCorso -> RigaStato(
+            testo = testoRigaSessione(p, riga.sessione),
+            tono = Tono.Positivo,
+            onClick = { cornice.apri(Pagina.Sessioni) },
         )
         is RigaInCima.FotoDaGuardare -> RigaStato(
             testo = pluralStringResource(R.plurals.riga_foto_da_guardare, riga.quante, riga.quante),
@@ -457,6 +491,8 @@ private fun CardPatto(
     invioSegno: Boolean,
     onMandaSegno: () -> Unit,
     onApriRegola: (RegolaFinestra) -> Unit,
+    onTutteLeRegole: () -> Unit,
+    bonus: List<Pair<VistaDispositivo, StatoBonus>>,
 ) {
     CardEvidenza(tono = Tono.Positivo) {
         Column {
@@ -520,6 +556,14 @@ private fun CardPatto(
                 )
                 RegoleDiOggi(regoleDiOggi, dispositivi, onApriRegola)
             }
+            // (0.16) L'elenco completo (anche le regole non più attive e quelle dei
+            // dispositivi scollegati) sta in una pagina sua.
+            RigaVersoTutteLeRegole(onTutteLeRegole)
+
+            // (0.16) Il bonus di oggi, una riga piccola per dispositivo con limiti di
+            // tempo: con un dispositivo solo qui; con più dispositivi sotto la sua
+            // striscia, più giù.
+            if (strisceDispositivi.isEmpty()) bonus.forEach { (_, stato) -> RigaBonus(stato) }
 
             // (v3) Con più dispositivi, il "5 su 7" di ciascuno in una riga.
             if (strisceDispositivi.isNotEmpty()) {
@@ -527,7 +571,8 @@ private fun CardPatto(
                     color = LocalContentColor.current.copy(alpha = 0.25f),
                     modifier = Modifier.padding(vertical = Spazi.s),
                 )
-                strisceDispositivi.forEach { RigaSuDispositivo(it) }
+                val bonusPerId = bonus.associate { (d, stato) -> d.id to stato }
+                strisceDispositivi.forEach { RigaSuDispositivo(it, bonusPerId[it.id].takeIf { _ -> !it.revocato }) }
             }
 
             // Il gesto non poliziesco: un riconoscimento a testo fisso, uno al
@@ -630,15 +675,38 @@ internal fun IntestazioneGruppo(gruppo: GruppoRegole) {
     }
 }
 
-/** Il "5 su 7" di un dispositivo, in una riga, quando i dispositivi che contano sono più d'uno. */
+/** (0.16) "Tutte le regole ›" dentro la card del patto: apre la pagina con l'elenco completo. */
 @Composable
-private fun RigaSuDispositivo(dispositivo: VistaDispositivo) {
+private fun RigaVersoTutteLeRegole(onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(vertical = Spazi.xs),
+    ) {
+        Text(
+            text = stringResource(R.string.tutte_le_regole),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+    }
+}
+
+/**
+ * Il "5 su 7" di un dispositivo, in una riga, quando i dispositivi che contano
+ * sono più d'uno; (0.16) sotto, la sua striscia piccola degli 8 giorni.
+ */
+@Composable
+private fun RigaSuDispositivo(dispositivo: VistaDispositivo, bonus: StatoBonus? = null) {
     val giorni = giorniDaQuadretti(dispositivo.striscia)
     val (mantenuti, conDati) = contaGiorni(giorni)
     val nome = nomeDelDispositivo(dispositivo)
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.xs),
+        modifier = Modifier.fillMaxWidth().padding(top = Spazi.xs),
     ) {
         IconaDispositivo(dispositivo.tipo, tinta = LocalContentColor.current)
         Text(
@@ -655,6 +723,32 @@ private fun RigaSuDispositivo(dispositivo: VistaDispositivo) {
             style = MaterialTheme.typography.labelLarge,
         )
     }
+    if (giorni.isNotEmpty()) {
+        StrisciaGiorni(
+            giorni = giorni,
+            lato = 20.dp,
+            mostraNumero = false,
+            descrizione = descrizioneStriscia(giorni, R.plurals.striscia_descrizione_dispositivo),
+            modifier = Modifier.padding(top = Spazi.xs, bottom = Spazi.xs),
+        )
+    }
+    if (bonus != null) RigaBonus(bonus)
+}
+
+/** (0.16) "Bonus: restano 15 min su 30 oggi · 75 su 90 in settimana", piccola. */
+@Composable
+private fun RigaBonus(stato: StatoBonus) {
+    Text(
+        text = stringResource(
+            R.string.patto_bonus,
+            stato.giorno.residui,
+            stato.giorno.tetto,
+            stato.settimana.residui,
+            stato.settimana.tetto,
+        ),
+        style = MaterialTheme.typography.labelMedium,
+        modifier = Modifier.padding(top = Spazi.xs, bottom = Spazi.xs),
+    )
 }
 
 /**
@@ -773,7 +867,7 @@ internal fun RigaDaGuardare(
         GenereVoce.INTERRUZIONE -> descrizioneBuco(voce.evento.dettagli)
     }
     Column(modifier = Modifier.fillMaxWidth()) {
-        val sopra = listOfNotNull(dispositivo, testoGiorno(parole(), voce.giorno, LocalDate.now(FUSO_PATTO)))
+        val sopra = listOfNotNull(dispositivo, quandoDaGuardare(parole(), voce, LocalDate.now(FUSO_PATTO)))
         SopraTitolo(sopra.joinToString(" · "))
         Text(text = titolo, style = MaterialTheme.typography.bodyLarge)
     }
@@ -797,3 +891,23 @@ internal fun dispositivoDellaRegola(evento: EventoFinestra, regolePerId: Map<Lon
 
 private fun campoLong(oggetto: JsonObject, nome: String): Long? =
     (oggetto[nome] as? JsonPrimitive)?.content?.toLongOrNull()
+
+/** (0.16) "In sessione 📚 «Studio» fino alle 17:00" (senza la fine prevista: da quando). */
+private fun testoRigaSessione(p: Parole, sessione: SessioneRaccontata): String {
+    val nome = nomeSessioneTraVirgolette(p, sessione.svolta.nome)
+    val fine = sessione.finePrevista
+    return if (fine != null) {
+        p.testo(R.string.riga_sessione_in_corso, nome, finoAlle(p, fine))
+    } else {
+        p.testo(R.string.riga_sessione_in_corso_senza_fine, nome, iniziataQuando(p, sessione.inizio))
+    }
+}
+
+/** (0.16) Il sottotitolo della riga "Sessioni": "una in corso · 3 approvate · 2 fatte negli ultimi 8 giorni". */
+@Composable
+private fun riassuntoSessioni(conto: ContoSessioni): String = listOfNotNull(
+    conto.inCorso.size.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.sessioni_riassunto_in_corso, it, it) },
+    conto.approvate.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.sessioni_riassunto_approvate, it, it) },
+    conto.fatte.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.sessioni_riassunto_fatte, it, it) },
+    conto.nonPiuValide.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.sessioni_riassunto_non_valide, it, it) },
+).joinToString(" · ")

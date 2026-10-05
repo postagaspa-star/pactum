@@ -501,6 +501,9 @@ data class MediaPeriodo(
     // esiste). I default coprono un JSON parziale senza far saltare la decodifica.
     val minuti: Int = 0,
     val giorni: Int = 0,
+    // (v3.8) La SOMMA dei minuti degli stessi giorni della media (ultimi 7 o 30,
+    // oggi compreso). null = server prima della v3.8: niente riga dei totali.
+    val totale: Int? = null,
 )
 
 // --- Uso recente (v2.2) ------------------------------------------------------

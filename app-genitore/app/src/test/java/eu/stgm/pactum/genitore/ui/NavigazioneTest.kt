@@ -172,6 +172,8 @@ class NavigazioneTest {
             .apri(Pagina.Regola(42))
             .apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO))
             .apri(Pagina.Storico)
+            .apri(Pagina.Sessioni)
+            .apri(Pagina.TutteLeRegole)
         assertEquals(pila, decodificaNavigazione(codificaNavigazione(pila)))
         assertEquals(
             Navigazione(listOf(tempo, Schermo.SuPagina(Pagina.Impostazioni()))),

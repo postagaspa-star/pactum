@@ -52,55 +52,9 @@ private val SchemaChiaro = lightColorScheme(
 
 // Nessuno schema scuro: Pactum va solo su fondo chiaro (scelta di Andrea).
 
-// Spazi, forme, tipografia e colori del patto (`ColoriPatto`) sono in
-// core-design, identici nelle due app. Qui resta solo ciò che è del genitore:
-// la palette blu e i colori delle categorie d'uso.
-
-/**
- * I colori delle CATEGORIE d'uso: servono solo a dire "questa fetta è quella",
- * non hanno significato di patto — un blu qui non promuove e un ocra non
- * condanna. Perciò sono desaturati e di famiglia coerente con l'app (blu,
- * verde, ocra, terracotta, grigio-blu): niente fluo, niente semaforo.
- *
- * Il terracotta del patto (`ColoriPatto.FuoriRegola`) NON compare qui: vive
- * solo nella striscia degli 8 giorni, così una fetta grande non si confonde mai
- * con una regola infranta.
- */
-object Categorie {
-    // Cinque tinte tenute lontane a mano sulla ruota: blu 210°, terracotta 18°,
-    // verde 100°, ocra 42°, grigio-blu 213° quasi scarico. Le due calde
-    // (terracotta e ocra) sono le più a rischio di confondersi in un pallino da
-    // 11 dp: stanno a 24° l'una dall'altra e a chiarezza diversa, apposta.
-    val Social = Color(0xFF3F6FA6)
-    val Video = Color(0xFF9A5A40)
-    val Giochi = Color(0xFF608E49)
-    val Musica = Color(0xFFAA893C)
-    val Altro = Color(0xFF7E8894)
-
-    /** Per le chiavi fuori convenzione: stessa famiglia, scelte in modo stabile. */
-    val Riserva = listOf(
-        Color(0xFF3F8A85),
-        Color(0xFF85628A),
-        Color(0xFF5B67A0),
-        Color(0xFF8F5A6B),
-    )
-}
-
-/**
- * Il colore di una chiave di categoria del contratto ("categoria:social").
- * Una chiave sconosciuta prende un colore di riserva sempre uguale a sé stesso
- * (dipende solo dal nome): la stessa categoria non cambia tinta tra un
- * aggiornamento e l'altro.
- */
-fun coloreCategoria(chiave: String): Color =
-    when (chiave.removePrefix("categoria:").lowercase()) {
-        "social" -> Categorie.Social
-        "video" -> Categorie.Video
-        "giochi" -> Categorie.Giochi
-        "musica" -> Categorie.Musica
-        "altro" -> Categorie.Altro
-        else -> Categorie.Riserva[(chiave.hashCode() and Int.MAX_VALUE) % Categorie.Riserva.size]
-    }
+// Spazi, forme, tipografia, colori del patto (`ColoriPatto`) e (0.16) colori
+// delle categorie d'uso (`ColoriCategorie`) sono in core-design, identici nelle
+// due app. Qui resta solo ciò che è del genitore: la palette blu.
 
 /** Pactum va sempre su fondo chiaro: la finestra è un referto, si legge su carta
  *  bianca. Su fondo nero i colori del patto perdono il loro significato e l'app

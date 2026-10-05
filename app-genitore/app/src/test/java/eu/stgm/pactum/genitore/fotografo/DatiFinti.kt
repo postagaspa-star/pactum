@@ -253,6 +253,24 @@ object DatiFinti {
         )
     }
 
+    /**
+     * (0.16) Le medie e i totali come li calcola il server (v3.8) dagli STESSI
+     * giorni delle barre: la settimana sono gli ultimi 7 degli 8 giorni (oggi
+     * compreso), il mese quei 7 più l'ottavo e i 22 giorni ancora prima ([prima],
+     * dal più vecchio; null = senza fotografia). Così le foto tornano coi conti.
+     */
+    fun medieDa(uso: List<UsoGiorno>, prima: List<Int?>): Medie {
+        require(prima.size == 22) { "servono i 22 giorni prima degli 8" }
+        fun periodo(minuti: List<Int?>): MediaPeriodo? {
+            val conDati = minuti.filterNotNull()
+            if (conDati.isEmpty()) return null
+            val totale = conDati.sum()
+            return MediaPeriodo(minuti = Math.round(totale.toDouble() / conDati.size).toInt(), giorni = conDati.size, totale = totale)
+        }
+        val otto = uso.map { it.totaleMinuti }
+        return Medie(settimana = periodo(otto.takeLast(7)), mese = periodo(prima + otto))
+    }
+
     fun usoTelLuca(): List<UsoGiorno> {
         val fattori = listOf(1.0, 0.9, 1.35, 0.8, 0.0, 1.1, 1.4, 0.75)
         return giorni8().mapIndexed { i, giorno ->
@@ -364,7 +382,7 @@ object DatiFinti {
             striscia = strisciaTelLuca(),
             usoRecente = usoTelLuca(),
             sitiRecenti = sitiTelLuca(),
-            medie = Medie(MediaPeriodo(171, 7), MediaPeriodo(158, 28)),
+            medie = medieDa(usoTelLuca(), prima = listOf(150, 172, null, 165, 140, 188, 160, 155, 170, 149, 162, 175, 158, 143, 166, 171, null, 152, 160, 168, 145, 159)),
             bonus = bonus(15, 30),
             bonusGiornalieri = bonusGiornalieri(0, 15, 0, 0, 0, 0, 15, 15),
         ),
@@ -374,7 +392,7 @@ object DatiFinti {
             striscia = strisciaPcLuca(),
             usoRecente = usoPcLuca(),
             sitiRecenti = sitiPcLuca(),
-            medie = Medie(MediaPeriodo(162, 5), MediaPeriodo(140, 21)),
+            medie = medieDa(usoPcLuca(), prima = listOf(120, null, 135, 110, null, 142, 128, null, 117, 133, 125, null, 140, 112, 130, null, 121, 138, null, 126, 119, 131)),
             bonus = bonus(0, 0),
             bonusGiornalieri = bonusGiornalieri(0, 0, 0, 0, 0, 0, 0, 0),
         ),
@@ -670,7 +688,7 @@ object DatiFinti {
             striscia = strisciaSara(),
             usoRecente = usoTelSara(),
             sitiRecenti = null,
-            medie = Medie(MediaPeriodo(118, 6), MediaPeriodo(125, 27)),
+            medie = medieDa(usoTelSara(), prima = listOf(118, 130, 112, null, 125, 121, 135, 109, 127, 116, 122, 131, 114, 128, null, 119, 126, 133, 110, 124, 120, 129)),
             bonus = bonus(15, 15),
             bonusGiornalieri = bonusGiornalieri(0, 0, 0, 0, 0, 0, 0, 15),
         ),
@@ -744,7 +762,8 @@ object DatiFinti {
             bonusGiornalieri = luca.bonusGiornalieri,
             statoSilenzio = luca.statoSilenzio,
             usoRecente = luca.usoRecente,
-            medie = luca.medie,
+            // Un server 0.7 non conosce il `totale` della v3.8: solo le medie.
+            medie = luca.medie?.let { Medie(it.settimana?.copy(totale = null), it.mese?.copy(totale = null)) },
             sitiRecenti = luca.sitiRecenti,
             striscia = luca.striscia,
             riepilogo = luca.riepilogo,

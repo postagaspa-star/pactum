@@ -468,7 +468,7 @@ internal fun LazyListScope.sezioneSessioni(
 
 /** Una sessione fatta, in una riga; una in corso nel blu dell'app, così si nota. */
 @Composable
-private fun RigaSessioneSvolta(sessione: SessioneRaccontata, telefono: String?) {
+internal fun RigaSessioneSvolta(sessione: SessioneRaccontata, telefono: String?) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.xs)) {
         if (telefono != null) {
             SopraTitolo(telefono, modifier = Modifier.padding(bottom = Spazi.xs))
@@ -491,7 +491,7 @@ private fun RigaSessioneSvolta(sessione: SessioneRaccontata, telefono: String?) 
  * Mamma" (può essere il no a un cambio, non per forza il sì).
  */
 @Composable
-private fun RigaSessioneApprovata(
+internal fun RigaSessioneApprovata(
     sessione: Sessione,
     nomiFinestra: Map<String, String>,
     telefono: String?,
@@ -525,7 +525,7 @@ private fun RigaSessioneApprovata(
 
 /** Una sessione di un telefono scollegato: non si avvia più, e non c'è niente da decidere. */
 @Composable
-private fun RigaSessioneNonPiuValida(sessione: Sessione, telefono: String?) {
+internal fun RigaSessioneNonPiuValida(sessione: Sessione, telefono: String?) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spazi.xs)) {
         if (telefono != null) {
             SopraTitolo(telefono, modifier = Modifier.padding(bottom = Spazi.xs))

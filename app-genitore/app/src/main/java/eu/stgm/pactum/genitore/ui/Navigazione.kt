@@ -34,6 +34,12 @@ sealed interface Pagina {
 
     /** "Dai lavori di casa", a pagina intera. */
     data object DaiLavori : Pagina
+
+    /** (0.16) Le sessioni del figlio scelto: in corso, approvate, fatte, non più valide. */
+    data object Sessioni : Pagina
+
+    /** (0.16) Tutte le regole del figlio scelto, per dispositivo, anche le non più attive. */
+    data object TutteLeRegole : Pagina
 }
 
 /** Una voce della pila: una scheda o una pagina. */
@@ -117,6 +123,8 @@ private fun codificaSchermo(schermo: Schermo): String = when (schermo) {
         Pagina.Storico -> "storico"
         is Pagina.Regola -> "regola:${p.regolaId}"
         Pagina.DaiLavori -> "dai"
+        Pagina.Sessioni -> "sessioni"
+        Pagina.TutteLeRegole -> "regole"
     }
 }
 
@@ -131,6 +139,8 @@ private fun decodificaSchermo(testo: String): Schermo? {
         "storico" -> Schermo.SuPagina(Pagina.Storico)
         "regola" -> pezzi.getOrNull(1)?.toLongOrNull()?.let { Schermo.SuPagina(Pagina.Regola(it)) }
         "dai" -> Schermo.SuPagina(Pagina.DaiLavori)
+        "sessioni" -> Schermo.SuPagina(Pagina.Sessioni)
+        "regole" -> Schermo.SuPagina(Pagina.TutteLeRegole)
         else -> null
     }
 }

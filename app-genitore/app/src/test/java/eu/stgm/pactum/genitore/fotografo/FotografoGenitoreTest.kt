@@ -222,6 +222,29 @@ class FotografoGenitoreTest {
                 dopo = { ce(s(R.string.storico_regole)) && nonCe(s(R.string.storico_caricamento)) },
             )
         }
+        // (0.16) Le sessioni e tutte le regole, in pagine loro (dalla Panoramica).
+        due.forEach { v ->
+            f.scatta(
+                "13-sessioni_normale", "Sessioni di Luca: in corso, approvate, fatte negli ultimi 8 giorni", v,
+                preparazione = luca, pagine = v == CHIARO_360, pronto = panoramicaPronta,
+                gesti = {
+                    scorriFino(s(R.string.sezione_sessioni), esatto = true)
+                    tocca(s(R.string.sezione_sessioni), esatto = true)
+                },
+                dopo = { ce(s(R.string.sessioni_approvate_titolo)) && nonCe(s(R.string.sessioni_caricamento)) },
+            )
+        }
+        due.forEach { v ->
+            f.scatta(
+                "14-tutte-le-regole_normale", "Tutte le regole di Luca, per dispositivo, con la striscia di ciascuna", v,
+                preparazione = luca, pagine = v == CHIARO_360, pronto = panoramicaPronta,
+                gesti = {
+                    scorriFino(s(R.string.tutte_le_regole), esatto = true)
+                    tocca(s(R.string.tutte_le_regole), esatto = true)
+                },
+                dopo = { ce("TikTok: al massimo") && nonCe(s(R.string.tutte_le_regole_caricamento)) && nonCe(s(R.string.patto_ultimi_giorni)) },
+            )
+        }
         due.forEach { v ->
             f.scatta(
                 "12-regola_dettaglio", "Dettaglio della regola «TikTok» (aperto dalla card del patto)", v,

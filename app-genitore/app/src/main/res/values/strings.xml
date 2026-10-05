@@ -479,6 +479,13 @@
     <string name="media_settimana">MEDIA SETTIMANA</string>
     <string name="media_mese">MEDIA MESE</string>
     <string name="media_su_giorni">su %1$d giorni</string>
+    <string name="tempo_ultimi_7">ULTIMI 7 GIORNI</string>
+    <string name="tempo_ultimi_30">ULTIMI 30 GIORNI</string>
+    <string name="tempo_giorni_con_dati">giorni con dati: %1$d su %2$d</string>
+    <string name="tempo_media_al_giorno">media al giorno: %1$s</string>
+    <string name="grafico_giorno_valore">%1$s: %2$s</string>
+    <string name="formato_breve_ore">%1$dh</string>
+    <string name="formato_breve_ore_minuti">%1$dh%2$02d</string>
 
     <!-- Digest giornaliero -->
     <string name="impostazioni_digest_titolo">Riassunto della sera</string>
@@ -717,6 +724,46 @@
     <string name="sessione_niente_da_decidere">Non c\'è più niente da decidere: è già stata decisa, o tuo figlio l\'ha eliminata.</string>
     <!-- Nella Panoramica: le sessioni fatte negli 8 giorni, e quelle approvate -->
     <string name="sezione_sessioni">Sessioni</string>
+    <!-- (0.16) La pagina Sessioni e la sua riga nella Panoramica -->
+    <string name="sessioni_caricamento">Sto leggendo le sessioni…</string>
+    <string name="sessioni_in_corso_titolo">In corso</string>
+    <string name="sessioni_approvate_titolo">Approvate</string>
+    <string name="sessioni_fatte_titolo">Fatte negli ultimi 8 giorni</string>
+    <string name="sessioni_non_piu_valide_titolo">Non più valide</string>
+    <string name="sessioni_nessuna_approvata">Nessuna sessione approvata.</string>
+    <string name="sessioni_nessuna">Nessuna sessione, per ora.</string>
+    <plurals name="sessioni_riassunto_in_corso">
+        <item quantity="one">una in corso</item>
+        <item quantity="other">%1$d in corso</item>
+    </plurals>
+    <plurals name="sessioni_riassunto_approvate">
+        <item quantity="one">1 approvata</item>
+        <item quantity="other">%1$d approvate</item>
+    </plurals>
+    <plurals name="sessioni_riassunto_fatte">
+        <item quantity="one">1 fatta negli ultimi 8 giorni</item>
+        <item quantity="other">%1$d fatte negli ultimi 8 giorni</item>
+    </plurals>
+    <plurals name="sessioni_riassunto_non_valide">
+        <item quantity="one">1 non più valida</item>
+        <item quantity="other">%1$d non più valide</item>
+    </plurals>
+    <string name="riga_sessione_in_corso">In sessione %1$s %2$s</string>
+    <string name="riga_sessione_in_corso_senza_fine">In sessione %1$s, %2$s</string>
+    <!-- (0.16) Tutte le regole, a pagina intera -->
+    <string name="tutte_le_regole">Tutte le regole</string>
+    <string name="tutte_le_regole_caricamento">Sto leggendo le regole…</string>
+    <string name="regole_nessuna_sul_dispositivo">Nessuna regola su questo dispositivo.</string>
+    <plurals name="striscia_descrizione_dispositivo">
+        <item quantity="one">%1$d giorno su %2$d dentro le regole di questo dispositivo</item>
+        <item quantity="other">%1$d giorni su %2$d dentro le regole di questo dispositivo</item>
+    </plurals>
+    <!-- (0.16) Il bonus di oggi nella card del patto -->
+    <string name="patto_bonus">Bonus: restano %1$d min su %2$d oggi · %3$d su %4$d in settimana</string>
+    <plurals name="riga_blocco_foto">
+        <item quantity="one">1 foto da guardare</item>
+        <item quantity="other">%1$d foto da guardare</item>
+    </plurals>
     <string name="sessioni_nessuna_svolta">Nessuna sessione negli ultimi 8 giorni.</string>
     <plurals name="sessioni_altre">
         <item quantity="one">Mostra un\'altra sessione</item>

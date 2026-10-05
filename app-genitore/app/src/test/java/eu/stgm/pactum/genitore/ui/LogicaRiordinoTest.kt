@@ -73,7 +73,8 @@ class LogicaRiordinoTest {
         assertEquals(
             listOf(
                 RigaInCima.DaDecidere(3),
-                RigaInCima.Blocco(attivo),
+                // (0.16) Le foto ancora bocciabili si dicono anche col blocco.
+                RigaInCima.Blocco(attivo, fotoDaGuardare = 1),
                 RigaInCima.Silenzioso(silenzioso),
                 RigaInCima.AvvisiSpenti,
                 RigaInCima.DatiVecchi(null),
@@ -83,9 +84,10 @@ class LogicaRiordinoTest {
     }
 
     @Test
-    fun `il blocco in arrivo e una riga, le foto da guardare solo senza un blocco`() {
+    fun `il blocco in arrivo e una riga con le foto da guardare, le foto da sole senza un blocco`() {
         val inArrivo = StatoBlocco(attivo = false, dal = null, prossimo = adesso.plusSeconds(3600), daFare = 1)
-        assertEquals(listOf(RigaInCima.Blocco(inArrivo)), righe(blocco = inArrivo, foto = 2))
+        assertEquals(listOf(RigaInCima.Blocco(inArrivo, fotoDaGuardare = 2)), righe(blocco = inArrivo, foto = 2))
+        assertEquals(listOf(RigaInCima.Blocco(inArrivo)), righe(blocco = inArrivo, foto = 0))
         assertEquals(listOf(RigaInCima.FotoDaGuardare(2)), righe(blocco = StatoBlocco(false, null, null, 0), foto = 2))
     }
 

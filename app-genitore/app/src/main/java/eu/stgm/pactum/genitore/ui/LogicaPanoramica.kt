@@ -4,7 +4,12 @@ import eu.stgm.pactum.genitore.dati.Dichiarazione
 import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Proposta
+import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.StatiDichiarazione
+import eu.stgm.pactum.genitore.dati.StatoBonus
+import eu.stgm.pactum.genitore.dati.TipiRegola
+import java.time.LocalDate
+import java.time.ZoneId
 import androidx.compose.ui.geometry.Offset
 import java.time.Instant
 
@@ -23,8 +28,15 @@ sealed interface RigaInCima {
     /** Quante richieste del figlio aspettano il genitore (→ Da decidere). */
     data class DaDecidere(val quante: Int) : RigaInCima
 
-    /** Il blocco dei lavori di casa: attivo, o in arrivo (→ Lavori). */
-    data class Blocco(val stato: StatoBlocco) : RigaInCima
+    /**
+     * Il blocco dei lavori di casa: attivo, o in arrivo (→ Lavori). (0.16) Con le
+     * foto che si possono ancora bocciare, se ce ne sono: non spariscono più
+     * sotto il blocco.
+     */
+    data class Blocco(val stato: StatoBlocco, val fotoDaGuardare: Int = 0) : RigaInCima
+
+    /** (0.16) Una sessione in corso adesso (→ Sessioni). */
+    data class SessioneInCorso(val sessione: SessioneRaccontata) : RigaInCima
 
     /** Foto di lavori fatti che si possono ancora bocciare, senza un blocco (→ Lavori). */
     data class FotoDaGuardare(val quante: Int) : RigaInCima
@@ -63,12 +75,15 @@ fun righeInCima(
     inRete: Boolean,
     errore: Boolean,
     ricevutaAlle: Instant?,
+    sessioniInCorso: List<SessioneRaccontata> = emptyList(),
 ): List<RigaInCima> = buildList {
     if (daDecidere > 0) add(RigaInCima.DaDecidere(daDecidere))
     when {
-        blocco != null && (blocco.attivo || blocco.prossimo != null) -> add(RigaInCima.Blocco(blocco))
+        blocco != null && (blocco.attivo || blocco.prossimo != null) ->
+            add(RigaInCima.Blocco(blocco, fotoDaGuardare.coerceAtLeast(0)))
         fotoDaGuardare > 0 -> add(RigaInCima.FotoDaGuardare(fotoDaGuardare))
     }
+    sessioniInCorso.forEach { add(RigaInCima.SessioneInCorso(it)) }
     silenziosi.forEach { add(RigaInCima.Silenzioso(it)) }
     when {
         !avvisiAccesi -> add(RigaInCima.AvvisiSpenti)
@@ -87,6 +102,81 @@ fun chiaveRiga(riga: RigaInCima): String = when (riga) {
     RigaInCima.AvvisiSpenti -> "riga-avvisi"
     is RigaInCima.AvvisiInRitardo -> "riga-avvisi"
     is RigaInCima.DatiVecchi -> "riga-dati-vecchi"
+    is RigaInCima.SessioneInCorso -> "riga-sessione-${riga.sessione.svolta.id}"
+}
+
+// --- (0.16) Le sessioni, il bonus, "Da guardare insieme" --------------------------------
+
+/**
+ * Le sessioni del figlio in breve, per la riga "Sessioni" della Panoramica e per
+ * la pagina: quelle in corso adesso, quante approvate, quante fatte negli 8 giorni
+ * della finestra (chiuse), quante non più valide (telefono scollegato).
+ */
+data class ContoSessioni(
+    val inCorso: List<SessioneRaccontata>,
+    val approvate: Int,
+    val fatte: Int,
+    val nonPiuValide: Int,
+) {
+    val nessuna: Boolean get() = inCorso.isEmpty() && approvate == 0 && fatte == 0 && nonPiuValide == 0
+}
+
+fun contoSessioni(finestra: Finestra, adesso: Instant): ContoSessioni {
+    val scollegati = dispositiviScollegati(finestra)
+    val (inCorso, fatte) = sessioniInCorsoEFatte(finestra, adesso)
+    return ContoSessioni(
+        inCorso = inCorso,
+        approvate = sessioniApprovate(finestra.sessioni, scollegati).size,
+        fatte = fatte.size,
+        nonPiuValide = sessioniNonPiuValide(finestra.sessioni, scollegati).size,
+    )
+}
+
+/**
+ * Le sessioni fatte negli 8 giorni divise in quelle in corso adesso e quelle
+ * finite (raccontate rispetto ad [adesso]). Una "in corso" di un dispositivo
+ * scollegato non è in corso: la revoca non chiude la sessione aperta, e la
+ * finestra la darebbe in corso fino alla fine prevista. Non è nemmeno "fatta":
+ * non si sa com'è finita, quindi non si racconta.
+ */
+fun sessioniInCorsoEFatte(finestra: Finestra, adesso: Instant): Pair<List<SessioneRaccontata>, List<SessioneRaccontata>> {
+    val scollegati = dispositiviScollegati(finestra)
+    val (inCorso, fatte) = sessioniSvolteRaccontate(finestra.sessioniSvolte, adesso)
+        .partition { it.fine == FineSessione.IN_CORSO }
+    return inCorso.filterNot { it.svolta.dispositivoId?.let { id -> id in scollegati } == true } to fatte
+}
+
+/**
+ * Il bonus da dire per [dispositivo] nella card del patto: solo se ha un limite
+ * di tempo attivo (il bonus allunga solo quelli) e non è scollegato. Su un server
+ * 0.7 ([perDispositivo] false) le regole sono tutte dell'unico telefono.
+ */
+fun bonusDaMostrare(dispositivo: VistaDispositivo, regole: List<RegolaFinestra>, perDispositivo: Boolean): StatoBonus? {
+    if (dispositivo.revocato) return null
+    val conLimite = regole.any { regola ->
+        regola.attiva && regola.tipo == TipiRegola.LIMITE_TEMPO &&
+            (!perDispositivo || (regola.dispositivoId ?: regola.dispositivo?.id) == dispositivo.id)
+    }
+    return dispositivo.bonus.takeIf { conLimite }
+}
+
+/**
+ * Quando mettere accanto a una voce di "Da guardare insieme": per un'interruzione
+ * il giorno con l'ora ("ieri 15:10"), come nella 0.14; per un fuori regola (o un
+ * giorno dichiarato) basta il giorno ("ieri", "01/10").
+ */
+fun quandoDaGuardare(
+    parole: Parole,
+    voce: VoceDaGuardare,
+    oggi: LocalDate,
+    zona: ZoneId = ZoneId.systemDefault(),
+): String {
+    val istante = istanteServer(voce.evento.tsServer)
+    return if (voce.genere == GenereVoce.INTERRUZIONE && !voce.giornoDichiarato && istante != null) {
+        testoQuando(parole, istante, zona, oggi)
+    } else {
+        testoGiorno(parole, voce.giorno, oggi)
+    }
 }
 
 // --- Quante cose aspettano il genitore -----------------------------------------------

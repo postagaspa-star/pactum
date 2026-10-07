@@ -1020,8 +1020,590 @@ Le app mostrano **sempre** l'ora del blocco di ogni lavoro da fare, anche quando
 - App 0.16 con server v3.9: non conoscono `PATCH`, `conferma`, `cerca` (non li chiamano); ignorano `confermata_ts`/`confermata_da`; le notifiche `faccenda_modificata` e `faccenda_confermata` le mostrano col `messaggio` del server, come ogni tipo che non conoscono. Il programma del computer non cambia.
 - App 0.17 con server v3.8: `PATCH`, `conferma` e `cerca` rispondono `404`/`405` o ignorano il parametro → le app nascondono "Modifica" e "Segna come svolto", e per la ricerca dicono "serve aggiornare il server".
 
+## v4.0 — lavori approvati, il computer che non resta chiuso, la Sessione Studio (07/10/2026, decisioni di Andrea)
+
+Tre novità e una precisazione.
+
+1. **I lavori di casa si sbloccano solo con l'approvazione.** Mandare la foto non basta più: telefono e computer restano bloccati finché **un** genitore (uno qualsiasi) non approva la foto di ogni lavoro che blocca. Non c'è scadenza: se nessuno approva, resta bloccato. Approvare è la conferma della v3.9 («svolto»), che da adesso sblocca.
+2. **Il programma del computer non resta chiuso.** Un'attività pianificata di Windows lo riapre da sola; uno spegnimento annullato non lo lascia chiuso; all'avvio non rimette un blocco vecchio prima di aver sentito il server.
+3. **La Sessione Studio.** Dal lunedì al venerdì alle 15:00 parte da sola, senza eccezioni, anche senza rete. Telefono e computer lasciano usare solo app, programmi e siti di una lista approvata. Si chiude solo dopo le 16:00 **e** dopo almeno un'ora di attività cronometrata col timer dell'app del telefono; chiudendo, il figlio scrive cosa ha fatto. Durante lo Studio il blocco dei lavori aspetta.
+4. **Fasce orarie:** un uso di meno di un minuto dentro una fascia non è uno sforamento (parte D).
+
+Lo Studio è la seconda cosa di Pactum che limita per un orario (dopo i lavori di casa), ed è la **prima** che, sul computer, copre dei **siti**: il patto etico della v2.3 (`:286`) qui viene emendato in modo esplicito (v. «Lo Studio e i siti»). Come sempre: chi la rompe (ferma Pactum, toglie un permesso, chiude il programma del computer) lo può fare, ma resta nel registro e i genitori lo vedono.
+
+Tutto il resto del contratto resta valido. I nomi tecnici non cambiano: `faccende`, `faccenda_*`, `conferma`, `da_fare`.
+
+### A. I lavori di casa si sbloccano quando un genitore approva
+
+#### La regola
+
+- Un lavoro è **aperto** in due casi:
+  - è `da_fare`;
+  - è `fatta`, ma la sua foto (arrivata dalla v4.0) **non è ancora stata approvata** (v. `da_approvare`).
+- Un lavoro aperto **blocca** dal suo `blocco_da`. Il blocco del figlio è attivo se almeno un lavoro aperto blocca. Vale su tutti i suoi dispositivi, come dalla v3.6.
+- **Approvare = la conferma della v3.9** (`POST /api/faccende/{id}/conferma`). Basta un genitore qualsiasi.
+- **Nessuna scadenza.** Se nessuno approva, il blocco resta. Il server non approva mai da solo.
+- **Lavoro fatto in anticipo.** Il figlio manda la foto prima di `blocco_da` e a quell'ora nessuno l'ha ancora approvata: il lavoro blocca da `blocco_da` finché un genitore non approva. Se un genitore approva prima dell'ora, il blocco non parte.
+
+#### Quali lavori chiedono l'approvazione: `faccende_approvazione_dal`
+
+- La regola nuova vale **solo per le foto arrivate dalla v4.0 in poi**. Le foto arrivate prima hanno già sbloccato (regola v3.6–v3.9) e **non tornano a bloccare**.
+- Al primo avvio della v4.0 il server scrive, una volta sola, la riga `faccende_approvazione_dal` nella tabella `patto`: l'ora di quell'avvio, in UTC. Non cambia più.
+- Un lavoro `fatta` **chiede l'approvazione** se `foto_ts >= faccende_approvazione_dal` e `confermata_ts` è `null`.
+- Un lavoro `fatta` con la foto arrivata **prima** resta come nella v3.9: sbloccato, confermabile (resta un riconoscimento), bocciabile entro 24 ore. Nessuna riga vecchia si riscrive: riempire `confermata_ts` a posteriori falserebbe il registro.
+- **Niente colonne nuove** sulla tabella `faccende`: la riga in `patto` basta, e l'informazione «questo lavoro va approvato» si ricava da `foto_ts`, `confermata_ts` e quella data.
+
+#### Il campo `da_approvare`
+
+- Ovunque compare una faccenda (non nelle voci ridotte del `blocco`) c'è in più **`da_approvare`**: `true` se `stato = "fatta"`, `confermata_ts = null` e `foto_ts >= faccende_approvazione_dal`; `false` negli altri casi. Il server lo calcola, non è salvato.
+
+#### Il calcolo del blocco (e di `rimandato`)
+
+`GET /api/faccende/blocco` (e il `blocco` dentro patto, finestra e `GET /api/faccende`) diventa:
+
+```json
+{ "attivo": true, "dal": "…", "prossimo": null, "rimandato": false,
+  "studio": { "in_corso": false, "id": null, "inizio_ts": null },
+  "da_fare": [
+    { "id": 5, "titolo": "Svuota la lavastoviglie", "nota": null, "blocco_da": "…",
+      "creata_da": { "id": 2, "nome": "Mamma" }, "bocciature": 0, "ultima_bocciatura": null,
+      "stato": "fatta", "foto_ts": "2026-10-07T13:10:00+00:00" } ] }
+```
+
+- **`attivo`**: c'è almeno un lavoro **aperto** (`da_fare`, oppure `da_approvare`) con `blocco_da` già passato.
+  - `attivo` **non** tiene conto dello Studio. Dice soltanto che il blocco è dovuto. Così un'app vecchia, che lo Studio non lo conosce, resta più stretta (bloccata) e mai più larga.
+- **`dal`**: il più vecchio di quei `blocco_da`.
+- **`prossimo`**: se non è attivo, il `blocco_da` futuro più vicino tra i lavori aperti (`null` se `attivo`). Serve a partire da soli all'ora giusta anche senza rete; conta anche una foto mandata in anticipo e non approvata.
+- **`da_fare`**: **tutti i lavori aperti** (da fare e da approvare), dal più vecchio. Il nome resta quello di prima perché le app e i programmi vecchi lo leggono così. Ogni voce ha la forma ridotta di prima **più** due campi:
+  - **`stato`** ∈ `"da_fare"` | `"fatta"`;
+  - **`foto_ts`**: `null` per un lavoro da fare, l'ora della foto per uno che aspetta l'approvazione.
+  - Le app e i programmi che non li conoscono li ignorano (tolleranza evolutiva) e restano bloccati come prima.
+- **`rimandato`** (nuovo): `true` quando `attivo` è vero **e** c'è una Sessione Studio in corso del figlio. Il blocco aspetta la fine dello Studio (v. parte C). `attivo` resta vero: un dispositivo che perde la rete durante lo Studio sa che, alla fine, deve bloccare.
+- **`studio`** (nuovo): `{ "in_corso": bool, "id": n|null, "inizio_ts": "…"|null }` della Sessione Studio in corso. Il computer la legge da qui per sapere quando lo Studio finisce.
+- Funziona come prima anche col token del genitore (`figlio_id`).
+
+#### La foto: `PUT /api/faccende/{id}/foto` (cambia)
+
+- Controlli, ordine e risposte come nella v3.6/v3.9.
+- Il lavoro diventa `fatta`. **Il blocco non cambia**: la foto non sblocca più, aspetta l'approvazione.
+- Una foto mandata non si sostituisce: su un lavoro `fatta` → `409 {"errore": "non_da_fare"}` come prima. Per rifare una foto serve prima una bocciatura.
+- Notifica ai genitori `faccenda_fatta` (`payload` invariato: `{ "faccenda_id", "titolo" }`):
+  - `messaggio: "<figlio> ha mandato la foto di «<titolo>»: aspetta la vostra approvazione"`.
+  - **Un solo avviso aperto per lavoro**: una `faccenda_fatta` nuova sullo stesso lavoro prende il posto della precedente che un genitore non ha ancora letto (la vecchia si segna come letta per tutti), come per `sessione_da_approvare` (v3.5). Anche un'approvazione o una bocciatura segnano l'avviso come letto per tutti i genitori.
+- `faccende_finite` **non parte più qui**: si sposta all'ultima approvazione (v. sotto).
+
+#### Approvare: `POST /api/faccende/{id}/conferma` (cambia)
+
+- Corpo, controlli e errori sono quelli della v3.9: `non_confermabile`, `foto_cambiata`. Restano `confermata_ts`, `confermata_da` e la voce `confermata` nella storia. È atomica con la bocciatura e con un'altra approvazione.
+- **Per un lavoro `da_approvare` il `foto_ts` nel corpo è obbligatorio**: senza → `422`. Nessuno approva una foto che non ha visto. Un `foto_ts` diverso da quello del lavoro (bocciato da un altro genitore e rifatto) → `409 {"errore": "foto_cambiata"}`.
+  - Per un lavoro **di prima della v4.0** (foto vecchia, già sbloccato) `foto_ts` resta facoltativo, come nella v3.9.
+- **Effetto su un lavoro `da_approvare`:** smette di essere aperto. Se era l'ultimo che bloccava, **il blocco finisce**:
+  - il telefono che riceve la notifica si sblocca subito;
+  - gli altri dispositivi si sbloccano alla loro prossima domanda, entro un minuto.
+- I controlli, in quest'ordine: **corpo malformato** (`422`: i tipi dei campi); **`404`** (lavoro non trovato); **`foto_ts` mancante** su un lavoro `da_approvare` (`422`) — questo controllo viene **dopo** il `404`, perché per sapere che un lavoro è `da_approvare` bisogna prima averlo trovato; **`non_confermabile`**; **`foto_cambiata`**.
+- **Approvazione ripetuta (idempotente).** Se la risposta si perde e l'app riprova, una seconda approvazione **dello stesso genitore, con lo stesso `foto_ts`, su un lavoro che lui ha già approvato** → `200` con il lavoro, **senza** notifiche nuove e senza un secondo sblocco. Così «Approva» toccato con la rete che balla non diventa un `non_confermabile` mentre telefono e computer sono già sbloccati. (Un altro genitore che approva un lavoro già approvato riceve `non_confermabile` come nella v3.9: lì non è un doppione, è una seconda decisione.)
+- Notifica al figlio `faccenda_confermata` (`dispositivo_id: null`):
+  - `messaggio: "<genitore> ha approvato «<titolo>»"`; **se il blocco era attivo e non rimandato** e adesso finisce, in coda `": telefono e computer sbloccati"`; **se il blocco era rimandato dallo Studio** (`rimandato`), in coda `": il blocco non partirà a fine Studio"` (niente sblocco annunciato, perché niente era coperto);
+  - `payload: { "faccenda_id", "titolo", "genitore", "sblocca": true|false }`.
+- Notifica ai genitori `faccenda_confermata` (per loro un tipo nuovo), stessa forma, **già letta per chi ha approvato**: serve all'altro genitore per non approvare due volte.
+- **`faccende_finite`** (ai genitori) parte quando un'approvazione chiude il giro, cioè quando non resta nessun lavoro da fare né da approvare:
+  - `messaggio: "<figlio> ha i lavori di casa tutti approvati"`, più `": telefono e computer sbloccati"` **solo se** il lavoro appena approvato bloccava già **e non era rimandato dallo Studio**;
+  - `payload: { "faccenda_ids" }` (le faccende confermate del giro).
+- **Annulla** e **modifica** restano solo per un lavoro `da_fare` (`non_annullabile`, `non_modificabile`). Un lavoro con la foto si approva o si boccia.
+
+#### Bocciare (cambia)
+
+- Un lavoro **`da_approvare`** si boccia **senza limite di tempo**, finché nessuno l'ha approvato (cade il tetto delle 24 ore in attesa). Mai dopo l'approvazione (`non_bocciabile`, come v3.9).
+- Un lavoro **di prima della v4.0** (foto vecchia): si boccia entro 24 ore, come prima.
+- L'effetto è quello della v3.6: il lavoro torna `da_fare` con `blocco_da` = adesso (il blocco riparte subito, oppure resta `rimandato` se il figlio è in Studio); la foto si cancella.
+
+#### Le foto da approvare non si cancellano
+
+Una frase sola, uguale qui e nel ritocco a `:839`:
+
+- La foto di un lavoro `da_approvare` **non si cancella**: nessuno approva una foto che non può più guardare.
+- La foto di un lavoro **approvato** si cancella **30 giorni dopo l'approvazione** (`confermata_ts`).
+- Le foto di **prima della v4.0** si cancellano 30 giorni dopo l'arrivo, come prima.
+- **Bocciare** cancella la foto subito (effetto v3.6): non c'è un «30 giorni dopo la bocciatura».
+
+#### `GET /api/faccende` (cambia)
+
+- I lavori `da_approvare` compaiono sempre, come le `da_fare`, anche oltre i 30 giorni (finché aspettano).
+- In più **`blocco`**, uguale a `GET /api/faccende/blocco`: la scheda Lavori dell'app del genitore non lo calcola più da sola.
+
+#### Il giro
+
+- Il giro resta aperto finché il figlio ha un lavoro aperto, anche solo da approvare. Una bocciatura dopo le foto resta quindi nello stesso giro.
+- `faccende_finite` parte quando nel giro non resta nessun lavoro da fare né da approvare (cioè all'ultima approvazione).
+
+#### Dove si vedono
+
+- `GET /api/famiglia`, per ogni figlio, in più: `faccende_da_approvare` (quante) e `blocco_rimandato`. `blocco_attivo` è `blocco.attivo`. `faccende_da_fare` resta il numero dei soli `da_fare` (il tetto di 20 conta solo quelli).
+- `GET /api/finestra`, in più: `faccende_da_approvare`.
+
+#### Il telefono (0.18)
+
+- Segue `attivo` del server: **nessuno sblocco locale**. Alla notifica `faccenda_confermata` (aggiunta a `CAMBIANO_IL_BLOCCO`) rilegge subito il blocco.
+- La pagina dei lavori e la barriera mostrano due gruppi:
+  - **«Da fare»**, con «Scatta la foto»;
+  - **«Aspettano l'approvazione»**: «Foto mandata alle 16:10 · aspetta che un genitore la approvi», senza «Scatta la foto».
+- Testo della barriera: «Si sblocca quando un genitore ha approvato la foto di ogni lavoro».
+- Una foto in coda «mandata» resta tale finché il lavoro è tra gli aperti, non più solo per 24 ore.
+- **La coda delle foto non butta mai una foto ancora da mandare.** Nella v4.0 un lavoro resta aperto finché non è approvato, quindi più di 30 lavori aperti insieme potrebbero riempire la coda (tetto di 30, `CodaFoto`). Quando serve posto, la coda toglie **prima** le foto già mandate (quelle che aspettano solo l'approvazione), **mai** una foto scattata e non ancora consegnata. (In più il tetto di 20 lavori che si possono dare, `troppe_faccende`, resta sui soli `da_fare`: i lavori già fotografati e in attesa non lo riempiono.)
+
+#### Il computer (0.18)
+
+- Segue `attivo` e l'elenco come prima; copre tutti gli schermi.
+- L'elenco mostra, accanto a un lavoro con `foto_ts`, «foto mandata, aspetta l'approvazione».
+- La frase della copertura: «Si sblocca da solo quando un genitore ha approvato la foto di ogni lavoro».
+
+#### L'app del genitore (0.18)
+
+- **Lavori:** un gruppo **«Da approvare»** in cima; **«Approva»** compare dopo che questo telefono ha aperto la foto (come «Segna come svolto» della v3.9); **«Boccia»** resta finché il lavoro non è approvato.
+- **Domanda prima di approvare:** «Approvi «<titolo>»? Non si potrà più bocciare.» Se è l'ultimo che blocca: «…Telefono e computer di Luca si sbloccano.»
+- **Stato del blocco:** sempre quello del server (`blocco` di `GET /api/faccende`), mai ricalcolato dall'elenco. «Bloccato dalle 16:00 · 1 foto da approvare» / «Il blocco parte a fine Studio».
+- **Panoramica:** «N foto da approvare»; contano anche nel numero di «Da decidere».
+- Notifica `faccenda_fatta`: «…tocca per vedere la foto e approvarla».
+
+### B. Il programma del computer non resta chiuso
+
+Quasi tutto è comportamento del programma del computer dalla 0.18: il server accetta già un `motivo` qualsiasi nella `ripresa` e un `sotto_tipo` qualsiasi nella `manomissione`. **Una sola cosa cambia nel server**, la rete di sicurezza qui sotto, perché i segnali del PC non bastano quando il programma non riparte più.
+
+#### La rete di sicurezza lato server (il computer che sparisce durante un blocco o uno Studio)
+
+Il guardiano, l'eseguibile, l'attività pianificata, `programma_chiuso` e `chiuso_durante_studio` nascono **tutti dal programma stesso al suo prossimo avvio**. Se il programma non riparte più — il figlio lo chiude dal Task Manager e poi **rinomina o sposta `Pactum.exe`** (ha pieni diritti sulla sua cartella profilo, `%LOCALAPPDATA%\Pactum`), così l'attività lancia un percorso che non esiste e non parte niente — nessuno di quei segnali arriva mai. Serve una rilevazione che **non dipenda dal riavvio del PC**:
+
+- Il server conosce già lo stato del computer: era `spento: false` ed era **in blocco o in Studio** (lo sa da `GET /api/faccende/blocco` e dallo Studio in corso). Se da quel computer **smette di arrivare il battito** per più della finestra attesa (battito ogni ~15 minuti: soglia del silenzio, 45 minuti) **senza** un evento pulito di `sospensione`/spegnimento, il server scrive da solo una `manomissione` `{ "sotto_tipo": "computer_sparito", "durante": "blocco" | "studio", "dal": <ultimo battito>, "ts_server": <adesso> }` e avvisa i genitori. È distinta dallo spegnimento normale della sera, che manda `sospensione` `spegnimento` (→ `spento: true`, nessuna accusa).
+- **Limite noto, scritto:** il server non può distinguere con certezza un programma ucciso da una lunga assenza di rete del PC (tutti e due smettono di battere senza `sospensione`). Perciò il testo ai genitori non accusa («Il computer di Luca non risponde durante il blocco/lo Studio: può essere senza rete, oppure Pactum è stato fermato»). Resta però un avviso **attivo e puntato**, non il silenzio generico.
+- L'eseguibile vive in una cartella scrivibile dal figlio: **spostare, rinominare o cancellare `Pactum.exe` è trattato come il caso "programma assente"** (l'attività punta a un percorso fisso, quello scritto all'ultimo avvio; se non c'è, non parte niente, e la rete di sicurezza qui sopra lo coglie). È un **limite noto**: un'installazione nella cartella utente è modificabile dal figlio, e la garanzia vera contro un Pactum ucciso e nascosto è questo controllo lato server, non un segnale del PC.
+
+#### Il guardiano: un'attività pianificata di utente
+
+- A ogni avvio il programma **crea**, o **ripara** se è cambiata, un'attività dell'Utilità di pianificazione per l'account Windows dove gira:
+  - nome **«Pactum»**, nella cartella principale, **visibile**; descrizione «Riapre Pactum se si chiude»;
+  - **nessun diritto di amministratore** (l'account del figlio è standard: un account standard crea attività per sé);
+  - parte **all'accesso dell'utente e poi ogni minuto**, senza fine; azione: `"<percorso>" --guardiano`;
+  - **nessun limite di durata** (di base Windows ferma un'attività dopo 72 ore); parte e resta accesa anche a batteria; «se è già in esecuzione non avviarne un'altra»; priorità normale;
+  - gira solo quando il figlio ha fatto l'accesso.
+- La voce di avvio di Windows (`HKCU\…\Run`) resta come riserva.
+- **`--guardiano`** (opzione nuova, da aggiungere accanto a `--avvio`):
+  - se Pactum è già vivo su quell'account, esce subito **senza aprire niente**;
+  - se non lo è, parte come all'avvio di Windows (senza finestra).
+- **`--avvio` e `--guardiano` escono in silenzio** quando un'istanza c'è già. Oggi un secondo avvio chiama sempre `ChiediApertura` e apre la finestra (`Program.cs:181-185`): per il guardiano, ogni minuto si aprirebbe la finestra. Solo un avvio **a mano** (doppio clic, senza opzioni) chiede all'istanza viva di mostrarsi, come oggi.
+- **Niente comportamenti da programma malevolo** (Bitdefender ha già messo in quarantena un exe che si auto-copiava): nessuna copia dell'eseguibile, nessuna iniezione, nessuna attività nascosta o con un nome finto, nessun secondo processo che sorveglia il primo, nessun servizio. La 0.18 si prova sul PC di casa con Bitdefender acceso prima del rilascio.
+- **Attività tolta o disattivata** (il figlio la può togliere, è sua): il programma la ricrea e manda una `manomissione` `{ "sotto_tipo": "guardiano_assente", "stato": "mancante" | "disattivata" }`, una volta ogni volta che la trova tolta; se non riesce a crearla, `{ "sotto_tipo": "guardiano_assente", "stato": "non_creata", "errore": "<codice>" }`, al massimo una volta al giorno. Il controllo all'avvio e ogni 15 minuti.
+- **Nessuna istanza chiude un'altra istanza** (correzione: la bozza diceva «se parte una versione più alta, la vecchia si chiude», ma per farlo ci vorrebbe proprio quel segnale di chiusura che la riga sotto vieta — è il buco del vecchio evento `.Esci`, e qualunque processo dell'account lo imiterebbe). Quindi: **niente chiusura comandata, nemmeno per l'aggiornamento**, e **niente versione registrata in HKCU** (l'account è del figlio, che lì può scrivere una versione finta).
+  - Un avvio **a mano** di una versione più alta, con una più bassa viva, mostra: «È aperta una versione più vecchia di Pactum. Chiudila dal menu (icona vicino all'orologio → Chiudi Pactum) e riapri questo entro un minuto», poi esce. Dalla 0.18 la domanda di «Chiudi Pactum» dice anche che Pactum si riapre da solo entro un minuto (lo fa l'attività).
+  - **Procedura di aggiornamento dalla 0.18 (per chi installa):** 1) scompattare lo zip in una cartella **nuova**, mai sopra quella in uso (i file dell'exe in uso sono bloccati, e l'attività riaprirebbe il vecchio entro 60 s); 2) **fuori da blocco e Studio**, «Chiudi Pactum» dal menu (manda `programma_chiuso` volontario, come oggi); 3) aprire il nuovo `Pactum.exe` entro 60 secondi; 4) il nuovo riscrive la voce Run e l'attività col suo percorso. Dalla **0.14 alla 0.18** (nessuna attività ancora): chiudere la 0.14 dal menu, scompattare, aprire la 0.18.
+
+#### Il mutex occupato da un altro processo
+
+Oggi un secondo avvio esce subito se il mutex `Local\Pactum.Computer…` è già preso (`Istanza.cs`, `Program.cs:179-185`). Basta una riga di PowerShell che tiene quel mutex: il guardiano parte ogni minuto e ogni volta esce senza dire niente, e per il server il PC risulta spento. Il repo è **pubblico**, quindi i nomi degli eventi e il protocollo sono noti: la risposta non può essere un semplice evento che chiunque fa scattare.
+
+- **La prima istanza ascolta subito.** Appena preso il mutex, e **prima di ogni altro lavoro** (interfaccia, voce Run, attività, motore — oggi invece `Istanza.Ascolta()` è dentro il costruttore di `ContestoPactum`, dopo `AssicuraUi`, `RegistraAvvio` e il costruttore del motore), la prima istanza crea l'evento di risposta e si mette in ascolto su un filo del pool. Risponde senza aprire la finestra.
+- **`--guardiano` non si fida del solo mutex.** Trovato il mutex preso, chiede e aspetta **2 secondi**; se nessuno risponde, **riprova una volta dopo 10 secondi**. Questo evita l'accusa falsa all'accesso lento: al login la voce Run e l'attività partono insieme, e col disco freddo e l'antivirus la prima istanza può metterci più di 2 secondi a essere pronta.
+- **Chi risponde deve essere davvero Pactum.** Il guardiano **non** manda `istanza_occupata` se chi tiene il mutex è un processo `Pactum.exe` (si controlla il nome del file del processo che tiene la finestra/l'evento di risposta). Un falso risponditore (uno script che imita l'evento) non è `Pactum.exe`: contro quello il guardiano **parte lo stesso** e manda `istanza_occupata`. **Limite noto:** un figlio con pieni diritti sul profilo potrebbe nominare `Pactum.exe` un suo programma; la garanzia vera contro un Pactum che non gira resta la **rete di sicurezza lato server** (il battito del computer: se il guardiano crede vivo ma il server non riceve battito, scatta «computer sparito»).
+- **Se parte lo stesso** (nessuno ha risposto alle due prove e nessun processo `Pactum.exe` tiene il mutex): l'istanza partita prende un **secondo mutex fisso** (`Local\Pactum.Computer.Riserva`, **senza suffisso suo**) e da lì risponde **anch'essa** alle richieste dei guardiani dei minuti dopo, così non ne nasce uno nuovo ogni minuto. Manda `manomissione` `{ "sotto_tipo": "istanza_occupata" }` **una volta sola per accensione**, non a ogni minuto. Un guardiano che trova viva un'istanza di Pactum esce **sempre** in silenzio: due Pactum vivi insieme non ci sono mai.
+- **Nessun segnale fa chiudere Pactum.** Resta tolto il vecchio evento `.Esci` (0.13): chiunque, nello stesso account, potrebbe farlo scattare. Chi vuole chiudere Pactum usa il menu (lascia traccia) o il Task Manager.
+
+#### Uno spegnimento che non avviene
+
+- **Alla fine della sessione di Windows** il programma fa la sua contabilità come oggi (sospensione, sforamenti, fotografie, entro 2,5 secondi). Ma **non si chiude da solo**: lo chiude Windows, se lo spegnimento va avanti. Correzione sul codice: oggi l'uscita **non** è in `SessionEnding` (`SuFineSessione`, che fa solo i conti) ma in **`SessionEnded`** (`SuSessioneFinita` → `Esci` → `ExitThread`, `ContestoPactum.cs:456-464`). In `SuSessioneFinita` si **toglie `Esci`**: si fa la contabilità (`FineSessione` con `soloSeMancante`, come oggi) e si resta vivi finché Windows chiude il processo.
+- **La prova dell'annullamento è il messaggio di Windows.** Lo spegnimento annullato lo dice `WM_ENDSESSION` con `fEndSession = FALSE` (letto nella finestra nascosta del programma): è la prova vera. Il **timer di 60 secondi** resta solo come **riserva** (uno spegnimento forzato non manda `SessionEnding`, quindi il timer deve poter partire anche dal primo dei due eventi, `SessionEnding` **o** `SessionEnded`). Quando l'annullamento è accertato — dal messaggio o dal timer — il programma:
+  - manda `ripresa` `{ "motivo": "spegnimento_annullato", "avvio_sistema_ts": ms }` (per il server è un segno di vita: il computer torna `spento: false`);
+  - **azzera il segno «fine sessione già fatta»**: un `SessionEnding`/`SessionEnded` che arriva dopo rifà la contabilità e **rimanda la `sospensione`**. Senza questo, se lo spegnimento è solo rimandato (un'altra app tiene aperta la schermata «queste app impediscono l'arresto») e poi avviene davvero, il computer resterebbe `spento: false` e muto, e dopo 45 minuti `silente`: un computer spento che risulta acceso.
+  - ricontrolla blocco e Studio e torna a coprire se serve.
+- **Se il programma era stato chiuso ma Windows no** (riconosciuto al riavvio, nello stesso avvio di Windows, leggendo `HKLM\…\Control\Windows\ShutdownTime` in sola lettura, come oggi per `chiuso_durante_blocco`):
+  - dopo una chiusura **`spegnimento`** non seguita da uno spegnimento pulito: `ripresa` `{ "motivo": "spegnimento_annullato", "dal": ms }`, e se era in blocco o Studio una `manomissione` `{ "sotto_tipo": "programma_chiuso", "dal", "al", "causa": "spegnimento_annullato" }`;
+  - dopo una chiusura **`disconnessione`** (uscita dall'account o cambio utente, **non** uno spegnimento annullato): al rientro nello stesso avvio si manda `ripresa` `{ "motivo": "accesso" }` (come oggi), e se era in blocco o Studio una `manomissione` `{ "sotto_tipo": "programma_chiuso", "dal", "al", "causa": "disconnessione" }`. (La bozza chiamava tutti e due «spegnimento_annullato»: una disconnessione non lo è.)
+  - la `manomissione` `programma_chiuso` parte **solo se** il programma era chiuso **durante un blocco o uno Studio** (come oggi `BloccatoFaccende`, esteso allo Studio). Fuori dal blocco e dallo Studio non è una manomissione: il registro dichiara, senza accusare, che Windows non si è spento.
+  - se in quel momento era coperto, in più `chiuso_durante_blocco` o `chiuso_durante_studio`.
+
+#### All'avvio: prima il server, poi la copia
+
+- Prima di coprire con lo stato salvato (blocco e Studio), il programma chiede `GET /api/faccende/blocco` e aspetta al massimo **5 secondi**:
+  - risposta `200` → vale quella, e si salva;
+  - nessuna rete all'avvio, errore di rete, `5xx` o tempo scaduto → vale la **copia salvata**: bloccato resta bloccato, in Studio resta in Studio;
+  - `401` e `404`/`405` → come dice la v3.6.
+- In quei 5 secondi non copre niente (oggi copre subito dalla copia, `Motore.cs:145,739`). Lo stato generico (`stato_blocco_perso`) segue la stessa regola.
+
+#### La copertura non si chiude da fuori
+
+- Nessuna richiesta di chiusura chiude una finestra di copertura (del blocco o dello Studio). Fa eccezione solo lo spegnimento di Windows. Una copertura che manca si rifà entro un secondo (`FinestraBlocco.cs:268-277`, che oggi rifà solo quando ne manca una e lascia in lista quelle chiuse da fuori: da correggere).
+
+#### Tornare alla 0.14 o togliere Pactum dal computer
+
+- **Prima si toglie l'attività «Pactum»** dall'Utilità di pianificazione dell'account del figlio (Libreria → Pactum → Elimina, oppure `schtasks /delete /tn Pactum /f`). La 0.14 ignora le opzioni che non conosce (`Program.cs:56-80`): per lei `--guardiano` è un avvio a mano, quindi se l'attività resta, ogni minuto **aprirebbe la finestra di Pactum** davanti al figlio mentre studia o gioca.
+
+#### Eventi del computer, nuovi o cambiati
+
+- `ripresa` con `motivo`: `spegnimento_annullato` (nuovo) e `accesso` (già esistente, usato ora anche dopo una disconnessione in blocco/Studio).
+- `manomissione` con `sotto_tipo`: `guardiano_assente` (con `stato`), `istanza_occupata`, `programma_chiuso` (con `causa`: `spegnimento_annullato` o `disconnessione`), `chiuso_durante_studio` (stesse condizioni di `chiuso_durante_blocco`), **`computer_sparito`** (con `durante`: `blocco`/`studio`), **scritto dal server** (non dal PC) quando il computer smette di battere in blocco/Studio senza una `sospensione` pulita.
+
+### C. La Sessione Studio
+
+Lo **Studio** è un periodo in cui, su tutti i dispositivi del figlio con Pactum dalla 0.18 (telefoni e computer), restano usabili solo le app e i programmi della sua lista approvata. A differenza delle sessioni della v3.5: è **del figlio** (non di un dispositivo), vale anche sui computer, **parte da sola**, non ha una durata, parte anche senza rete, e **non si chiude liberamente**. Le sessioni della v3.5 restano come sono.
+
+#### La configurazione
+
+Una per figlio.
+
+```json
+{ "stato": "approvata", "versione": 4,
+  "approvata": {
+    "giorni": ["lun", "mar", "mer", "gio", "ven"],
+    "inizio": "15:00", "chiusura_minima": "16:00", "minuti_minimi": 60,
+    "telefono": { "app": ["eu.spaggiari.classevivafamiglia", "gruppo:apk"],
+                  "nomi": { "eu.spaggiari.classevivafamiglia": "ClasseViva" } },
+    "computer": { "programmi": ["exe:winword.exe", "sito:classeviva.it"],
+                  "nomi": { "exe:winword.exe": "Word" },
+                  "firme": { "exe:winword.exe": "Microsoft Corporation" } },
+    "orari_dal": "2026-10-08", "approvata_ts": "…", "decisa_da": { "id": 2, "nome": "Mamma" } },
+  "in_attesa": null, "motivazione": null }
+```
+
+- **`stato`** ∈ `nessuna` (mai proposta) · `in_attesa` (prima proposta, da decidere) · `approvata` · `rifiutata` (prima proposta rifiutata, niente di approvato).
+- **`approvata`**: il contenuto in vigore (`null` finché nessuno approva). **`in_attesa`**: il contenuto **completo** proposto (`null` se non c'è), più `richiesta_ts` e `da: { "id", "nome", "tipo" }` (il dispositivo che ha proposto per ultimo). **`versione`**: cresce a ogni proposta e a ogni decisione. **`motivazione`**: l'ultimo rifiuto (≤ 500 caratteri).
+- **Finché non c'è niente di approvato, lo Studio non parte**, né da solo né a mano.
+- **Regole dei campi:**
+  - `giorni`: da 1 a 7 tra `lun mar mer gio ven sab dom`; i doppioni si tolgono. Almeno un giorno (lo Studio parte «senza eccezioni»: un giorno vuoto lo spegnerebbe, e qui non è permesso).
+  - `inizio` e `chiusura_minima`: `"HH:MM"` nel fuso del patto, con `chiusura_minima >= inizio` nello stesso giorno (lo Studio non scavalca la mezzanotte con i suoi orari).
+  - **Studio chiudibile in giornata:** `max(chiusura_minima, inizio + minuti_minimi) ≤ 23:30`, altrimenti `422 {"errore": "orari_impossibili"}`. Senza questo si potrebbe approvare uno Studio che non si può chiudere prima di mezzanotte (per esempio inizio 23:00 con 120 minuti): finirebbe per forza come `non_chiuso`, con un'accusa automatica su una cosa che il figlio non poteva fare.
+  - `minuti_minimi`: un intero vero da 10 a 600.
+  - `telefono.app`: da 0 a 200 chiavi, con le regole di `app` delle sessioni (pacchetti Android e `gruppo:apk`; `exe:`, `sito:`, `categoria:*`, `totale` → `422`).
+  - `computer.programmi`: da 0 a 200 chiavi `exe:<nome>` o `sito:<dominio>`, con le regole delle chiavi del computer (v3). **Un `exe:` di un browser → `422 {"errore": "browser_nella_lista"}`**: nei browser si elencano i **siti**, mai il browser come programma (altrimenti aprirebbe tutti i siti). Sono browser almeno: `chrome.exe`, `msedge.exe`, `firefox.exe`, `brave.exe`, `opera.exe`, `opera_gx.exe`, `vivaldi.exe`, `arc.exe`, `chromium.exe`, `iexplore.exe`, `waterfox.exe`, `librewolf.exe`, `tor.exe` (elenco nel server, ampliabile): non solo i quattro di cui il programma sa leggere la barra. `categoria:*`, `totale` e pacchetti → `422`.
+  - `nomi`: come nelle sessioni. Le etichette che si leggono sono quelle viste nell'uso (anche per `exe:`); per `sito:` è il dominio.
+  - Una lista vuota vuol dire «solo le app sempre usabili».
+- **Prima proposta:** i campi che mancano prendono i valori di partenza: `lun`–`ven`, `15:00`, `16:00`, `60`, liste vuote.
+- **Quando vale una decisione:**
+  - giorni, `inizio`, `chiusura_minima` e `minuti_minimi` approvati valgono **dal giorno dopo** l'approvazione (`orari_dal`, fuso del patto), **anche alla prima approvazione**: un dispositivo offline non può sapere di un'approvazione fatta alle 14:50;
+  - le **liste** approvate valgono **dalla partenza successiva** (quando lo Studio seguente comincia; quello in corso tiene le sue liste congelate).
+
+#### Proporre, ritirare, approvare
+
+- **`PATCH /api/studio/config`** (dispositivo) `{ "giorni"?, "inizio"?, "chiusura_minima"?, "minuti_minimi"?, "telefono"?: { "app", "nomi"? }, "computer"?: { "programmi", "nomi"?, "firme"? } }`
+  - Almeno un campo; nessun campo → `422`. `telefono` e `computer` si sostituiscono interi (le etichette delle chiavi tolte cadono).
+  - I campi che mancano si prendono dalla **proposta in attesa, se c'è**, altrimenti da quella approvata: così il telefono propone i suoi orari e la sua lista, il computer la sua, e i due cambi non si cancellano a vicenda (diverso dalle sessioni, che sostituiscono tutto).
+  - Senza niente di approvato: la proposta cambia, `stato` → `in_attesa`, `motivazione: null`. Con una configurazione approvata: quella resta, nasce o si aggiorna `in_attesa`.
+  - Un `PATCH` il cui risultato è esattamente quella approvata **ritira** il cambio: `in_attesa: null`, nessun avviso nuovo, e l'avviso aperto si segna come letto.
+  - Ogni `PATCH` aumenta la `versione`. Notifica ai genitori `studio_da_approvare`. `409 dispositivo_revocato` come sempre. Risposta `200` con la configurazione.
+  - **`PATCH` e `DELETE` della proposta sono atomici** (`BEGIN IMMEDIATE`): l'unione con la proposta `in_attesa` (leggere e poi riscrivere) si fa **dentro** la transazione. Altrimenti telefono e computer che propongono nello stesso istante leggerebbero tutti e due `in_attesa` e l'ultima scrittura cancellerebbe la lista dell'altro.
+- **`DELETE /api/studio/config/proposta`** (dispositivo): ritira la proposta in attesa; senza proposta → `409 {"errore": "niente_da_ritirare"}`. L'avviso aperto si chiude. `200` con la configurazione.
+- **`POST /api/studio/config/risposta`** (genitore) `{ "esito": "approva" | "rifiuta", "versione": n, "motivazione"?, "figlio_id"? }`
+  - `versione` è quella che il genitore ha sullo schermo, un intero vero (mancante → `422`). `figlio_id` facoltativo (senza, il figlio con l'`id` più basso; inesistente → `404`). Ogni scrittura ricontrolla la revoca (v3.6).
+  - Controlli, in quest'ordine: figlio (`404`), niente in attesa (`409 niente_da_decidere`), `versione` diversa (`409 richiesta_cambiata` con la configurazione di adesso). È atomica.
+  - **`approva`:** la proposta diventa quella approvata; si aggiunge una riga a `studio_versioni`. `orari_dal` passa al giorno dopo **solo se** giorni, orari o minimo sono cambiati (le liste no). `motivazione: null`.
+  - **`rifiuta`:** la proposta sparisce con la sua `motivazione`; se non c'era niente di approvato, `stato: "rifiutata"`.
+  - Notifica al figlio `studio_risposta`. Risposta `200` con la configurazione.
+- **`GET /api/studio/versioni`** (dispositivo e genitore) → `{ "versioni": [ … ] }`: tutte le configurazioni approvate, dalla più recente, ciascuna con `versione`, il contenuto, `orari_dal`, `approvata_ts` e `decisa_da`.
+
+#### Le partenze automatiche (le decide il server)
+
+- **La partenza del giorno D** è l'istante in cui, nel fuso del patto, nel giorno D sono le ore `inizio`.
+  - Vale solo se D è tra i `giorni` degli orari in vigore quel giorno (l'ultima approvazione con `orari_dal` ≤ D).
+  - Porta con sé `chiudibile_dal` (D alle `chiusura_minima`) e `minuti_minimi` di quel giorno.
+  - Se l'ora non esiste per il cambio dell'ora, vale la prima ora valida dopo; se esiste due volte, la prima.
+- **Nessun processo in sottofondo** (come le sessioni). A **ogni** richiesta che riguarda il figlio, prima di rispondere, il server guarda le partenze passate (dopo la prima approvazione, non più vecchie di **48 ore**). Le richieste: `GET /api/patto`, `GET /api/faccende/blocco`, ogni `/api/studio/…`, l'avvio di una sessione, il `POST /api/battito` (anche del computer), e per il genitore `GET /api/finestra` e `GET /api/famiglia`.
+- **Prima si legge, poi (solo se serve) si scrive.** Il server controlla **in sola lettura** se c'è una partenza passata non ancora elaborata (o una mezzanotte da chiudere). Solo in quel caso apre `BEGIN IMMEDIATE`, ricontrolla e scrive. Le letture normali **non** prendono il lucchetto di scrittura: altrimenti ogni `GET` (il patto ogni minuto dal computer, il blocco ogni 30-60 secondi, finestra e famiglia dei genitori) si metterebbe in fila dietro alle scritture lente come le foto, e il computer all'avvio, con una lettura in errore per database bloccato (`5xx`), applicherebbe la copia vecchia.
+- **Ogni partenza si elabora una volta sola.** Una tabella `studio_partenze` (`figlio_id`, `giorno`, `studio_id`, chiave primaria `(figlio_id, giorno)`) segna ogni partenza trattata, sia che abbia creato uno Studio sia che sia entrata in uno aperto sia che sia stata **saltata**. Gli indici unici su `studio_svolte` (uno aperto per figlio, un automatico per `(figlio, giorno)`) non bastano: una partenza può essere assorbita da uno Studio a mano, e un automatico può diventare manuale (uscendo dall'indice parziale), quindi serve il segno esplicito. Per ogni partenza non ancora segnata:
+  - se a quell'istante uno Studio del figlio era aperto, la partenza **entra in quello Studio** (diventa una sua `partenza`) e non nasce niente;
+  - altrimenti nasce lo **Studio automatico di D**, con `inizio_ts` = l'istante della partenza (non l'ora della richiesta);
+  - se **nasce già oltre la sua mezzanotte** (server stato giù a lungo), nasce e **si chiude nella stessa transazione** come `non_chiuso` (v. «La chiusura a mezzanotte»): niente `studio_iniziato`, solo `studio_non_chiuso`.
+  - una partenza già segmentata in `studio_partenze` **non si rielabora** (salvo il caso della chiusura tardiva del figlio con `T` prima della partenza, v. «La chiusura del figlio»).
+- **Mai due:** al massimo uno Studio automatico per figlio per giorno e al massimo uno Studio aperto per figlio, anche sotto richieste concorrenti.
+- **Lo Studio parte solo** se il figlio ha almeno un **telefono** non revocato con l'app **dalla 0.18** (modello `conosce_le_faccende`, letto dall'ultimo `versione_app` del battito): altrimenti nessuno potrebbe chiuderlo.
+  - Una partenza elaborata **senza** telefono 0.18 si **segna come saltata** in `studio_partenze` e **non si rielabora**: lo Studio di quel giorno non nasce più, nemmeno se il telefono si aggiorna dopo (così non nasce uno Studio alle 15:20 che chiude a posteriori una sessione delle 15:00).
+  - A ogni partenza **saltata** per questo motivo il server manda ai genitori una notifica **attiva** `studio_non_partito` («Lo Studio di Luca non può partire: il telefono non è aggiornato alla 0.18»), **un solo avviso aperto** per figlio: tenere il telefono alla 0.17 diventa visibile e ripetuto, non solo una card passiva nella panoramica.
+- **`prossime_partenze`** è l'elenco che il server manda ai dispositivi per partire da soli anche senza rete:
+
+```json
+"prossime_partenze": [ { "giorno": "2026-10-08", "inizio_ts": "2026-10-08T13:00:00+00:00",
+                         "chiudibile_dal": "2026-10-08T14:00:00+00:00", "minuti_minimi": 60 } ]
+```
+
+  - le partenze da oggi (compresa quella di oggi, anche se già passata) ai prossimi **14 giorni**, già calcolate col fuso, col cambio dell'ora e con `orari_dal`;
+  - **è `[]`** (e `studio.in_corso` è `null`) **quando il figlio non ha un telefono non revocato dalla 0.18**. In quel caso **né il telefono né il computer partono da soli**, nemmeno coi conti oltre i 14 giorni: senza un telefono 0.18 il server non creerà mai lo Studio, e un computer 0.18 che partisse da solo resterebbe coperto fino a mezzanotte senza che nessuno possa chiuderlo. I dispositivi partono **solo** con le partenze dell'ultima risposta ricevuta, e un elenco vuoto vuol dire «nessuna partenza».
+
+#### Lo Studio svolto
+
+```json
+{ "id": 41, "origine": "automatica", "giorno": "2026-10-08", "chiave": null,
+  "inizio_ts": "2026-10-08T13:00:00+00:00", "avviato_da": null,
+  "partenze": [ { "giorno": "2026-10-08", "inizio_ts": "…", "chiudibile_dal": "…", "minuti_minimi": 60 } ],
+  "conta_dal": "2026-10-08T13:00:00+00:00", "chiudibile_dal": "2026-10-08T14:00:00+00:00",
+  "minuti_minimi": 60, "minuti_attivita": 42, "minuti_alla_chiusura": null, "chiudibile": false,
+  "tratti": [ { "id": "…", "dispositivo_id": 1, "tipo": "compiti", "parola": null, "faccenda_id": null,
+                "inizio": 1791291600000, "fine": 1791293400000, "ora_agganciata": true,
+                "secondi": 1800, "secondi_contati": 1800, "minuti": 30, "esito": "finito", "conta": true } ],
+  "sessione_chiusa": null,
+  "fine_ts": null, "chiusura": null, "chiusa_da": null, "dichiarazione": null, "motivo": null,
+  "in_corso": true }
+```
+
+- **`origine`** ∈ `automatica · manuale`. `giorno`: il giorno locale di `inizio_ts`. `chiave`: quella dell'avvio a mano (`null` per l'automatico). `avviato_da`: il dispositivo dell'avvio a mano.
+- **`partenze`**: le partenze automatiche cadute dentro questo Studio, compresa quella che l'ha fatto nascere.
+- **Le condizioni di chiusura** si calcolano dall'**ultima** partenza P dentro lo Studio (fino a adesso, o fino alla chiusura):
+  - `conta_dal` = P, oppure `inizio_ts` se non ce n'è nessuna (avvio a mano senza partenze);
+  - `chiudibile_dal` = quello di P, oppure `null` (a mano, nessuna partenza: niente vincolo d'orario);
+  - `minuti_minimi` = quello di P, oppure quello approvato al momento dell'avvio a mano.
+  - Così uno Studio a mano aperto alle 14:00 che assorbe la partenza delle 15:00 prende `conta_dal = 15:00` e `chiudibile_dal = 16:00`: **il tempo di prima delle 15:00 non conta per lui** e vale il vincolo delle 16:00.
+- **`minuti_attivita`**: i minuti di attività che contano fino a adesso (v. «I tratti»: è la durata dell'**unione** dei tratti validi, tagliata a `[conta_dal, adesso o fine dello Studio]`, divisa per 60 per difetto). È «tempo col timer acceso dichiarato dal figlio», **non** attività verificata (v. «Cosa misura il timer»).
+- **`minuti_alla_chiusura`**: `null` finché lo Studio è aperto; alla chiusura diventa il valore di `minuti_attivita` **congelato in quel momento**. È il numero delle condizioni, della notifica e dello storico: i tratti che arrivano **dopo** la chiusura restano nel registro con `conta: false` e non cambiano questo numero (così la notifica «65 min» e lo storico coincidono sempre).
+- **`chiudibile`**: `true` se `ora del server ≥ chiudibile_dal` (o `chiudibile_dal` è `null`) **e** `minuti_attivita ≥ minuti_minimi`.
+- **`chiusura`** ∈ `null` (in corso) · `figlio` · `genitore` · `non_chiuso` (chiuso da solo a mezzanotte). `chiusa_da`: il dispositivo `{ "id", "nome", "tipo" }` o il genitore `{ "id", "nome" }` (`null` per `non_chiuso`). `dichiarazione`: il testo del figlio. `dichiarazione_ts`: quando il figlio l'ha scritta (serve alla chiusura tardiva, v. sotto). `motivo`: quello del genitore. `sessione_chiusa`: `{ "id", "nome" }` della sessione normale chiusa all'inizio, o `null`.
+- Uno Studio chiuso **non si riscrive mai**, con **una sola eccezione**: un `non_chiuso` di mezzanotte cede a una chiusura del figlio valida, consegnata dopo, avvenuta prima di quella mezzanotte (v. «La chiusura a mezzanotte»). Uno Studio che non c'è, o è di un altro figlio → `404 {"detail": "studio non trovato"}`.
+
+#### I tratti di attività (il timer)
+
+Il timer è nell'app del telefono, solo durante uno Studio. Cronometra **tratti di durata libera e mescolabili** (es. 10 min lavori di casa + 30 min compiti + 40 min allenamento): conta il **totale**, non un numero di pomodori fissi. Ne gira **uno alla volta**.
+
+- Ogni tratto ha un **tipo** ∈ `compiti · lavori_di_casa · altro`:
+  - `altro` = attività lontana dai dispositivi, con una **`parola`** obbligatoria (1–30 caratteri, regole dei nomi), es. «allenamento»; `parola` facoltativa per gli altri;
+  - `faccenda_id` facoltativo, **solo** con `lavori_di_casa`; se non è un lavoro del figlio vale `null`.
+- La **durata** (`secondi`) si misura con **l'orologio che non si sposta** (`elapsedRealtime`). Un **riavvio del telefono** chiude il tratto in corso **all'ultimo punto salvato** (il suo `secondi` arriva fino a lì); diventa `interrotto` ma **conta** lo stesso (`elapsedRealtime` si azzera al riavvio, quindi il tratto non può continuare oltre).
+- **Forma di un tratto mandato dal telefono:** `{ "id": "<uuid>", "tipo", "parola"?, "faccenda_id"?, "inizio": ms?, "fine": ms, "ora_agganciata": bool, "secondi": n, "esito" }`.
+  - `esito` ∈ `in_corso · finito · interrotto`. `secondi`: la durata misurata (da 1; `in_corso` può averlo parziale).
+  - **`fine`** (e, per un tratto `in_corso`, **`inizio`**) è l'**ora del server agganciata** all'orologio che non si sposta nella stessa accensione (`MemoriaBlocco.oraServer`). Senza aggancio (riavvio senza rete) è l'orologio del telefono più lo scarto misurato, con **`ora_agganciata: false`**. Per un tratto finito `fine` non è `null`; per uno `in_corso` `fine` è `null` e l'inizio è `inizio` (così il server lo sa anche senza `fine`, che con `fine - secondi` non potrebbe calcolare).
+- **Quando lo manda il telefono:** quando comincia (`in_corso`, se ha rete), quando finisce (`finito` o `interrotto`); senza rete, solo alla fine.
+- **`POST /api/studio/tratti`** `{ "tratti": [ … ] }`, da 1 a 50 per volta. **Solo dai telefoni**; da un computer → `422 {"errore": "solo_dal_telefono"}`. `id` è la chiave di idempotenza (`INSERT OR IGNORE`, come gli eventi).
+  - Un `id` nuovo si scrive; un `in_corso` passa **una volta sola** a un esito finale; lo stesso esito ripetuto non è un errore; un esito diverso su un tratto già finito si ignora.
+  - Risposta `200`: `{ "ricevuti", "nuovi", "aggiornati", "ignorati", "tratti": [ … ] }`.
+- **Le ore** seguono le tutele (non nel futuro, non più di 48 ore prima dell'arrivo). Una `fine` entro 2 minuti dall'arrivo vale l'arrivo. Un tratto con ore fuori dalle tutele resta nel registro con `conta: false`. Il server **non calcola la sovrapposizione** fra tratti con `ora_agganciata` diversa sulla stessa accensione (dopo un riavvio senza rete l'orologio del telefono può essere indietro, e due tratti sembrerebbero sovrapposti): così il figlio non perde il suo tempo per colpa dell'orologio.
+- **A quale Studio appartiene un tratto:** quello con cui si **sovrappone di più** (non solo «dove finisce»). Fuori da ogni Studio resta nel registro senza Studio e non conta.
+- **`secondi_contati`** di un tratto = la parte dei suoi secondi che cade dentro `[conta_dal, fine dello Studio o adesso]`. Un tratto cominciato **prima** di `conta_dal` conta solo per la parte dopo (così il tempo di prima delle 15:00 di uno Studio a mano che assorbe la partenza **non conta**, come ha deciso Andrea); un tratto che sfora la chiusura o la mezzanotte conta solo fino a lì. Il telefono chiude un tratto in corso **alla mezzanotte del patto** (con l'ora agganciata) come `interrotto`; il server comunque **taglia** ogni tratto alla fine dello Studio.
+- **`conta: true`** si decide **una volta sola**, quando il tratto arriva al suo **esito finale** (`finito`/`interrotto`), e non cambia più. Vale se:
+  1. ha un esito finale (una `fine` e dei `secondi`);
+  2. `secondi_contati > 0` (cioè almeno un secondo cade in `[conta_dal, fine dello Studio]`);
+  3. le sue ore sono dentro le tutele;
+  4. per la parte comune, non si **sovrappone** a un altro tratto del figlio già contato (la parte comune si conta una volta sola — v. `minuti_attivita`). Con due telefoni l'ordine è quello d'**arrivo degli esiti finali** (`ts_server` dell'esito).
+- **`minuti_attivita`** dello Studio = durata dell'**unione** degli intervalli `[fine − secondi, fine]` dei tratti validi del figlio, tagliata a `[conta_dal, fine dello Studio o adesso]`, divisa per 60 per difetto. Due tratti sovrapposti contano **una volta sola** per la parte comune (così «il totale è l'unione» della parte E, e non si scarta un intero tratto perché sfora di due minuti). Non c'è soglia per il singolo tratto.
+- **Cosa misura il timer (scritto chiaro, per il figlio e per i genitori):** i «minuti di attività» sono **minuti col timer acceso dichiarati dal figlio**, **non** attività verificata. Un tratto `altro` o `lavori_di_casa` matura anche a schermo spento, col telefono nel cassetto; la **dichiarazione** di fine è una responsabilità del figlio. Pactum non vede i dispositivi dove non è installato, quindi non può sapere se il figlio ha davvero fatto quello che dichiara: è un **limite noto**, non un difetto da coprire. Anche i tratti `compiti` maturano a schermo spento: i compiti si fanno anche su carta (scelta del 07/10).
+
+#### `GET /api/studio`
+
+- Vale per il dispositivo e per il genitore (`?figlio_id=`; senza, il primo figlio). → `{ "config", "in_corso", "prossime_partenze", "recenti" }`.
+  - `in_corso`: lo Studio aperto (con `tratti` e liste) oppure `null`.
+  - `recenti`: gli Studi che toccano le ultime 48 ore, dal più recente (al telefono servono a riconoscere gli Studi fatti senza rete).
+- **`GET /api/studio/svolte?figlio_id=…&prima_di=<id>`** → `{ "svolte": [ … ], "altre": bool }`, dal più recente, 20 per volta. Identico per figlio e genitore.
+
+#### Avvio a mano: `POST /api/studio/avvia`
+
+`{ "chiave": "<uuid>", "ts_device": ms? }` (dispositivo). Risposta `201` con lo Studio (stessa `chiave` già vista → `200` con lo stesso Studio).
+
+- Valgono le stesse regole della configurazione approvata, **ma senza `chiudibile_dal`** (niente vincolo delle 16:00), a meno che lo Studio non assorba poi una partenza automatica.
+- **L'inizio** (`I`) è `ts_device` con le tutele della chiusura delle sessioni (conta solo se cade più di 2 minuti prima dell'arrivo e non più di 48 ore prima; mai nel futuro; altrimenti vale l'arrivo). Un `ts_device` **oltre le 48 ore** → `409 {"errore": "avvio_scaduto"}`, e **non nasce niente** (senza questo, le tutele metterebbero l'inizio all'arrivo e il figlio entrerebbe in Studio adesso per un avvio di giorni prima).
+- Niente di approvato → `409 {"errore": "studio_non_approvato"}`.
+- **Le liste** con cui nasce lo Studio a mano sono quelle dell'**ultima versione approvata prima di `I`** (non quelle all'arrivo).
+- **Troppo tardi:** se da `I` a mezzanotte mancano meno di `minuti_minimi` → `409 {"errore": "troppo_tardi"}` (non si apre uno Studio che non si potrà chiudere prima di mezzanotte).
+- **Blocco dei lavori attivo** → `409 {"errore": "blocco_faccende"}`: lo Studio a mano non serve a rinviare un blocco già partito. Vale sia per un avvio con la rete, sia per uno consegnato in ritardo il cui `I` **cade quando il blocco era già attivo** (ricostruibile dai dati del server): riceve `409` lo stesso, non viene accettato per fiducia. **Lo Studio automatico resta l'unica partenza ammessa col blocco attivo.** (Lato telefono: v. «Il telefono» — l'avvio a mano **offline** è rifiutato dal telefono stesso se la sua copia del blocco è attiva o lo diventerà all'inizio dichiarato.)
+- **Se `I` cade dentro uno Studio del figlio, aperto o chiuso** (`inizio_ts ≤ I < fine_ts`): non nasce niente → `200` con quello Studio, e il dispositivo lo **adotta** (se è chiuso, chiude il suo).
+- **Se uno Studio aperto è cominciato dopo `I`, nello stesso giorno locale:** il server sposta indietro l'inizio di quello aperto a `I`, lo segna `manuale` con questa `chiave`, e la partenza automatica diventa una sua `partenza`.
+- **Se `I` è di un giorno locale precedente:** lo Studio a mano nasce **già chiuso** alla sua mezzanotte (`non_chiuso`), e lo Studio aperto di oggi **non si tocca** (non si sposta il `giorno` di uno Studio che a quella mezzanotte avrebbe già dovuto chiudersi).
+- `chiave`: da 1 a 64 caratteri. Niente notifica (come le sessioni). `409 dispositivo_revocato` come sempre.
+
+#### La chiusura del figlio: `POST /api/studio/{id}/chiudi` (e senza id)
+
+`{ "chiave": "<uuid>", "ts_device": ms?, "dichiarazione": "…", "tratti"?: [ … ] }`, **solo dal telefono**, anche senza rete (consegnata dopo). **Dal computer lo Studio non si chiude** (v. «Il computer»): `POST /api/studio/{id}/chiudi` col token di un computer → `422 {"errore": "solo_dal_telefono"}`.
+
+- **Chiusura senza id.** Uno Studio automatico partito sul telefono senza rete non ha ancora un `id` del server (lo crea il server più tardi). Per questo c'è anche **`POST /api/studio/chiudi`** (senza id nel percorso), con nel corpo, al posto dell'`id`, `studio: { "giorno": "YYYY-MM-DD" }` (lo Studio che contiene la partenza di quel giorno) **oppure** `studio: { "chiave" }` (uno Studio avviato a mano). Il server trova (o crea, se la partenza è dentro le 48 ore) lo Studio e fa gli **stessi controlli** di `POST /api/studio/{id}/chiudi`, che resta per chi conosce l'`id`. Nella coda del telefono, l'`avvia` di uno Studio parte **sempre prima** della sua `chiudi`.
+- **I tratti nel corpo** si registrano **prima** dei controlli, nella stessa transazione, anche se la chiusura poi è rifiutata. Chiudere dal telefono ferma prima il tratto in corso (esito `finito`, `fine = T`) e lo manda qui.
+- **L'ora della chiusura** T è `ts_device` con le tutele della v3.5 (più di 2 minuti prima dell'arrivo, non prima dell'inizio, non nel futuro, non oltre 48 ore prima; altrimenti l'arrivo).
+- Controlli, in quest'ordine:
+  1. corpo (`422`): `chiave`/`studio` mancante, oppure `dichiarazione` che dopo aver tolto gli spazi ai bordi non è tra **10 e 1000** caratteri (regole della nota di un lavoro);
+  2. `404` (studio non trovato); stessa `chiave` già applicata → `200` con lo Studio;
+  3. già chiuso → `409 {"errore": "gia_chiuso", "studio": {…}}`;
+  4. T prima di `chiudibile_dal` → `409 {"errore": "troppo_presto", "chiudibile_dal": "…", "studio": {…}}`;
+  5. minuti di attività (fino a T) sotto `minuti_minimi` → `409 {"errore": "attivita_insufficiente", "minuti": n, "minimi": n, "studio": {…}}`.
+- Le condizioni si calcolano **a T**, con le partenze dentro lo Studio fino a T.
+- **Una chiusura fatta senza rete prima di una partenza assorbita.** Nella stessa transazione, ogni partenza `P` dello Studio con `P > T` **si toglie** dalle sue `partenze` e si **rielabora** come se a `P` non ci fosse uno Studio aperto: nasce lo Studio automatico di quel giorno con `inizio_ts = P` (con `studio_iniziato` e la chiusura delle sessioni in corso a `P`), e i tratti che finiscono dopo `T` passano al nuovo Studio. Senza questa regola la partenza resterebbe attaccata a uno Studio chiuso e i tratti di quelle ore non conterebbero, mentre i dispositivi sono in Studio.
+- È atomica. `chiusura: "figlio"`, `fine_ts` = T, `dichiarazione_ts` = T. `minuti_alla_chiusura` congelato. Notifica ai genitori `studio_chiuso`. Risposta `200` con lo Studio chiuso.
+
+#### La chiusura del genitore: `POST /api/studio/{id}/chiudi`
+
+`{ "figlio_id"?, "motivo" }` col token del genitore: il genitore chiude lo Studio **senza condizioni** (visita medica, malattia, telefono rotto…). Il figlio **non** può chiudere il suo Studio in questo modo.
+
+- **`motivo` obbligatorio**, da 3 a 300 caratteri dopo aver tolto gli spazi ai bordi (regole di una nota): senza → `422`. Resta nel registro (Andrea: «con un motivo»). Nell'app del genitore «Chiudi lo Studio» chiede il motivo e il pulsante si attiva solo quando c'è.
+- `chiusura: "genitore"`, `fine_ts` = adesso. **Un tratto in corso non si tocca:** il suo esito finale vale quando arriva (tagliato al `fine_ts` dello Studio). Così, se il telefono manda poi il tratto `finito` con i suoi secondi veri, quel tempo resta nel registro invece di essere buttato come `interrotto` senza secondi.
+- Già chiuso → `409 {"errore": "gia_chiuso", "studio": {…}}`. Atomica con la chiusura del figlio (chi arriva secondo riceve `gia_chiuso`).
+- **Una chiusura del figlio con `T` prima del `fine_ts` del genitore, consegnata dopo:** non cambia la chiusura (resta `genitore`), ma la sua **dichiarazione si salva** sullo Studio (`dichiarazione`, con `dichiarazione_ts = T`) e i genitori la ricevono. La risposta è `200` con lo Studio, non `gia_chiuso`.
+- Notifica `studio_chiuso` al figlio (`dispositivo_id: null`) e agli altri genitori (già letta per chi ha chiuso).
+
+#### La chiusura a mezzanotte («non chiuso»)
+
+- Lo Studio **non ha fine automatica**, tranne a **mezzanotte**: uno Studio aperto alle 00:00 (fuso del patto) del giorno dopo il suo `giorno` si chiude da solo come **`non_chiuso`**, `fine_ts` = quella mezzanotte.
+- Lo calcola il server **quando legge** (come lo scadere delle sessioni), in `BEGIN IMMEDIATE`, senza processi in sottofondo. Nella **stessa richiesta** il server applica **prima** le chiusure consegnate (del figlio) e **poi** le chiusure di mezzanotte. I tratti entro la mezzanotte restano nel registro; la `dichiarazione` resta `null` (il figlio non l'ha chiuso), `minuti_alla_chiusura` è il totale a mezzanotte.
+- **`non_chiuso` è l'unica chiusura che cede.** Se entro 48 ore da `T` arriva una **chiusura del figlio valida a `T`** (con `T` prima della mezzanotte dello Studio e le condizioni rispettate a `T`), lo Studio passa, **una volta sola**, da `non_chiuso` a `figlio`, con `fine_ts = T`, la `dichiarazione` e `dichiarazione_ts = T`. È l'unico passaggio che il trigger di «uno Studio chiuso non si riscrive» permette. L'avviso `studio_non_chiuso` si segna come **letto per tutti**, e parte `studio_chiuso` con in coda «(chiusa senza rete alle 16:40, arrivata dopo)». Senza questo, una chiusura regolare fatta senza rete prima di mezzanotte e consegnata il mattino dopo riceverebbe `409 gia_chiuso`, con un «non chiuso» falso e la dichiarazione persa.
+- **Niente doppio avviso.** Uno Studio creato in ritardo e già oltre la sua mezzanotte nasce e si chiude nella stessa transazione: parte **solo** `studio_non_chiuso`, **non** `studio_iniziato` (non ha senso «Luca è in Studio dalle 15:00» per uno Studio di ieri già finito). Uno Studio **a mano senza rete** che a mezzanotte era già tale: la chiusura di mezzanotte **non manda** `studio_non_chiuso` se dall'inizio a mezzanotte mancava meno del minimo (non era chiudibile: non è una colpa).
+- Notifica ai genitori `studio_non_chiuso` con i minuti di attività fatti. Il figlio, al mattino dopo, non resta in Studio: lo Studio del giorno prima è chiuso e quello nuovo parte alle 15:00.
+- **Un genitore può chiudere lo Studio** (`chiusura: "genitore"`); anche una sua chiusura, consegnata prima, prevale sul `non_chiuso` di mezzanotte (vince chi ha chiuso prima, non chi arriva prima).
+
+#### Studio e lavori di casa (il calcolo di `rimandato`)
+
+- Durante lo Studio **il blocco dei lavori aspetta**: `blocco.attivo` resta vero se è dovuto, `blocco.rimandato` è vero, e telefono e computer applicano lo **Studio**, non il blocco.
+- Ogni dispositivo decide da sé: copre per il blocco quando `attivo` (o all'ora di `prossimo`) **e**, secondo la sua memoria, **non** è in Studio. `rimandato` del server è l'informazione per i genitori e per i testi.
+- Le **foto** dei lavori si scattano anche durante lo Studio (la fotocamera aperta da Pactum resta usabile).
+- Un lavoro dato durante lo Studio arriva come sempre (`nuove_faccende`); anche il suo blocco aspetta.
+- **Alla fine dello Studio** (chiuso dal figlio, dal genitore o a mezzanotte), se restano lavori aperti che bloccano, **il blocco parte allora**, con l'avviso «Prima i lavori di casa» del telefono.
+- Questo **ribalta la v3.6 per lo Studio** (lì «se il blocco parte durante una sessione vince la barriera del blocco»): per le sessioni normali resta così, per lo Studio no.
+- **Conseguenza (scelta di Andrea, rischio detto una volta).** Finché lo Studio è aperto il blocco dei lavori **non si applica**, fino alla chiusura o a mezzanotte. In un giorno con lista Studio ampia, uno Studio lasciato aperto trasforma tutto il pomeriggio e la sera in «modalità Studio», più larga della barriera del blocco: è il modo per schivare il blocco dei lavori per ore. Perciò **la lista Studio approvata va tenuta stretta**, e questo va detto ai genitori. Andrea l'ha confermato sapendo il rischio; la chiusura a mezzanotte lo limita alla giornata.
+
+#### Studio e sessioni
+
+- **Si chiudono solo le sessioni in corso all'istante `inizio_ts` dello Studio** (iniziate prima e non ancora finite a quell'istante), sui telefoni del figlio dalla 0.18: `chiusura: "terminata"` (valore che esiste già, nessun cambio al CHECK di `sessioni_svolte`), `fine_ts` = `inizio_ts`. Le sessioni iniziate **dopo la fine** dello Studio non si toccano. (Senza questo, uno Studio creato a posteriori chiuderebbe una sessione nata ore dopo, con durata zero.) Lo Studio lo registra in `sessione_chiusa`.
+- Le sessioni dei telefoni **0.17 non vengono chiuse** dallo Studio (le chiude solo chi conosce lo Studio).
+- **Durante lo Studio** `POST /api/sessioni/{id}/avvia` → `409 {"errore": "studio_in_corso"}`, solo per i telefoni dalla 0.18, controllato **prima** di `blocco_faccende`.
+
+#### Cosa conta durante lo Studio (lo calcolano telefono e computer)
+
+- Come per le sessioni (v3.5): il tempo nelle app, nei programmi e nei siti **della lista dello Studio** **non conta** per limiti, categorie, totale e fasce orarie. Fuori lista conta sempre.
+- `sessioni_minuti` della fotografia `uso_giornaliero` comprende anche i minuti dello Studio; dalla 0.18 lo manda anche il computer.
+
+#### Lo Studio e i siti (emendamento al patto etico della v2.3)
+
+La v2.3 (`:286`) dice che non esiste e non esisterà nessun endpoint per bloccare, filtrare o limitare un sito. Dalla v4.0 c'è **un'eccezione sola, scritta qui**: durante lo Studio il programma del computer copre i siti che non sono nella lista. I suoi confini:
+
+- la lista è un elenco di siti **permessi**; la propone il figlio e la approva un genitore. Nessun genitore può scrivere da solo un sito da bloccare;
+- vale solo durante lo Studio e solo sul computer. Fuori dallo Studio niente cambia;
+- non si legge niente di nuovo: lo stesso dominio registrabile della v3, mai l'indirizzo completo né il contenuto;
+- non nasce nessun registro dei siti coperti: il genitore non vede quali siti sono stati coperti né quante volte, come per la barriera delle sessioni;
+- sul **telefono** lo Studio non guarda i siti: un browser nella lista delle app apre tutti i siti.
+
+#### Il telefono (0.18)
+
+- **Partenza.** All'`inizio_ts` di ogni `prossime_partenze` lo Studio parte da solo, anche senza rete, a schermo spento e dopo un riavvio, con una sveglia esatta. L'ora è quella del server agganciata all'orologio che non si sposta (come il blocco); dopo un riavvio senza rete vale l'orologio del telefono. 5 minuti prima: notifica «Tra 5 minuti parte lo Studio».
+- **Oltre i 14 giorni senza rete** il telefono calcola le partenze dalla configurazione, nel fuso del patto.
+- **In corso** quando lo dice il server (`in_corso`), quando è passata una partenza dopo l'ultima risposta del server senza una chiusura nota dopo di lei, o con uno Studio a mano. **Finisce** quando il server lo dà chiuso, con una chiusura fatta sul telefono, a **mezzanotte** (si chiude da solo come `non_chiuso`), o con un `401`. Una risposta di `GET /api/patto` senza il campo `studio` (server più vecchio della v4.0) spegne lo Studio.
+- **Rilettura dello stato.** Il telefono rilegge `GET /api/studio` almeno **ogni minuto** durante lo Studio, e **subito** alle notifiche `studio_chiuso` (chiusura del genitore) e `studio_risposta` (un insieme **`CAMBIANO_LO_STUDIO`**, come `faccenda_confermata` per il blocco). Senza questo, uno Studio chiuso dal genitore alle 15:20 per la visita medica resterebbe in Studio sul telefono fino al giro dopo.
+- **Alla partenza, anche senza rete, il telefono chiude in locale la sua sessione normale in corso** (`terminata`, `fine` = inizio dello Studio) e ne consegna la chiusura come oggi: altrimenti senza rete terrebbe due barriere insieme (sessione e Studio).
+- **Avvio a mano offline col blocco in arrivo:** il telefono **rifiuta** un avvio a mano fatto senza rete se la sua copia del blocco è attiva, o lo diventerà all'inizio dichiarato (lo stesso `409 blocco_faccende` del server): lo Studio automatico resta l'unica partenza ammessa col blocco attivo.
+- **La barriera.** Ogni app fuori dalla lista si copre entro pochi secondi: «Sei in Studio», la lista, **Esci** (porta alla Home). Sempre usabili: quelle della barriera delle **sessioni** (Pactum, Home, tastiera, interfaccia di sistema, Telefono, chiamate ed emergenze, Impostazioni) più la **fotocamera** quando la apre Pactum per la foto di un lavoro. Lo Studio non si annuncia: parte e basta; la pagina d'inizio la apre il servizio. Senza «Mostra sopra le altre app» o l'accesso all'uso, lo Studio vale lo stesso e il telefono manda le manomissioni di sempre.
+- **Notifica fissa:** «Studio dalle 15:00 · 42 min su 60 · si chiude dopo le 16:00».
+- **Timer.** «Comincia un'attività» chiede il tipo (`compiti` / `lavori di casa` / `altro`) e, per `altro`, la parola. Il tempo si conta con l'orologio che non si sposta; un riavvio del telefono chiude il tratto in corso (interrotto, conta fino all'ultimo punto salvato) e, a mezzanotte, il telefono chiude il tratto in corso lì.
+- **Chiudere.** «Chiudi lo Studio» compare solo quando le condizioni ci sono. **Con la rete** segue `chiudibile` e `minuti_attivita` del server; **senza rete** usa l'ultimo valore del server più i tratti locali arrivati dopo. Chiede «Cosa hai fatto?» (10–1000 caratteri) e mostra il riepilogo dei tratti. Chiude subito sul telefono e manda la chiusura; se il server la rifiuta, lo Studio torna col motivo («Per il server sono le 15:20» / «Mancano 15 minuti») e il testo resta come bozza. Con **due telefoni**, «Chiudi lo Studio» non si decide dai soli tratti locali: segue i `minuti_attivita` del server (l'altro telefono può averne mandati già abbastanza).
+- **Chiusura senza rete:** vale solo se l'ora del server è agganciata nella **stessa accensione**; dopo un riavvio senza rete, per chiudere serve la rete.
+- **Manomissioni durante lo Studio:** Pactum fermato a mano → `fermato_durante_studio` `{ "dal", "al", "minuti" }` (regole di `fermato_durante_blocco`); permessi tolti → `permesso_revocato` con in più `"durante": "studio"`.
+
+#### Il computer (0.18)
+
+- **Partenza.** Parte da solo alle stesse partenze, che legge dal patto salvato, anche senza rete; l'ora è quella del server agganciata. 5 minuti prima un fumetto avvisa.
+- **In corso / finisce:** con le regole del telefono, **ma la chiusura la sa solo dal server** (`studio.in_corso` di `GET /api/faccende/blocco`, chiesto ogni 30 secondi in Studio e almeno ogni minuto fuori). Senza rete lo Studio continua. Vale la regola dei 5 secondi all'avvio.
+- **La copertura (dello schermo, non per finestra).** Se su uno schermo è visibile (non ridotta a icona) almeno una finestra di un programma fuori lista, o un browser su un sito fuori lista o mai letto, **quello schermo si copre per intero tranne la barra delle applicazioni**: la copertura prende l'area di lavoro, sempre in primo piano, e dice «Sei in Studio» con la lista. Gli schermi senza finestre fuori lista restano liberi. La copertura sparisce appena quella finestra è ridotta a icona o chiusa, cosa che il figlio fa dalla barra rimasta libera. Il programma non chiude e non tocca le altre app. (Correzione: la bozza copriva «ogni finestra con un riquadro sopra di lei» e «il riquadro prende il primo piano» — la copertura per finestra del Progetto 1, che i due giudici hanno scartato perché fragile, DPI, finestre spostate, riquadri da riallineare; e diversa da quello che la decisione dice alla famiglia.)
+- **Sempre usabili:** Pactum; il desktop, la barra, Start ed Esplora file (`explorer.exe`); le Impostazioni; le finestre di sistema (permessi, blocco schermo). **Gestione attività è coperta.** La **ricerca di Start / barra** e i suoi risultati web **aprono il browser**, quindi ricadono nelle regole dei siti dello Studio (coperti se fuori lista). Fermare Pactum dalle Impostazioni resta possibile (limite già noto), ma genera `fermato_durante_studio` / `permesso_revocato` con `durante: studio`: queste vie lasciano traccia.
+- **I browser:** un `exe:` di un browser è rifiutato alla configurazione (`422`, elenco ampio in parte C), quindi non apre tutti i siti. Chrome, Edge, Firefox e Brave sono usabili **solo** sui siti `sito:` della lista; il dominio si legge come nella v3 dalla barra della finestra in primo piano. Una scheda nuova o una pagina interna del browser è usabile finché da lì non parte una navigazione. **Un browser che il programma non sa leggere** (Opera, Vivaldi, Tor…) durante lo Studio è **sempre coperto**, come un sito mai letto.
+  - **Durante lo Studio, una barra che non si legge copre.** Fuori dallo Studio resta la regola della v3 (vale l'ultimo sito letto). Durante lo Studio, invece, una finestra di browser il cui sito **non si legge adesso** — schermo intero/F11, cursore nella barra mentre si scrive, lettura fallita — **si copre** finché la lettura non torna a mostrare un sito della lista. Così non si apre un sito in lista per poi premere F11 (o tenere il cursore nella barra) e navigare altrove. Una scheda nuova o una pagina interna del browser resta usabile finché da lì non parte una navigazione. (Scelta tecnica del 07/10: il fallback «ultimo letto» era una proposta dei progettisti, non una decisione di Andrea.)
+  - **Programmi firmati: si controlla anche la firma.** La lista `exe:` riconosce il programma dal **nome del file**, e il figlio, con pieni diritti sui suoi file, potrebbe rinominare `gioco.exe` in `winword.exe`. Perciò la configurazione del computer ha in più **`firme`** (facoltativo): `{ "exe:winword.exe": "Microsoft Corporation" }`, il soggetto (CN) del certificato con cui è firmato l'eseguibile, proposto dal **computer** quando il figlio sceglie un programma dai programmi visti (il programma legge la firma Authenticode del file che ha visto girare). Durante lo Studio, per una voce con firma, conta solo un processo il cui file ha una **firma valida con quel soggetto**; altrimenti si copre. Le voci senza firma (programmi non firmati) si riconoscono dal solo nome: **limite noto**, e conviene preferire programmi firmati. Regole del server: le chiavi di `firme` devono essere voci `exe:` della stessa lista (le altre si lasciano cadere), valori da 1 a 200 caratteri. L'app del genitore mostra «firmato da Microsoft Corporation» accanto al programma.
+- **Limiti dello Studio (scritti, non corretti):** l'audio di una finestra coperta **continua** e le notifiche di Windows restano (la copertura prende lo schermo, non l'audio né le notifiche). È un limite accettato anche per lo Studio, non solo per il blocco.
+- **La finestra di Pactum:** mostra lo Studio (tratti in sola lettura) e lo **stato** («dalle 15:00 · 42 min su 60 · si chiude dopo le 16:00») con scritto **«Si chiude dal telefono»**; propone la lista del computer dai programmi e dai siti visti negli ultimi 30 giorni; «Chiudi Pactum» sparisce durante lo Studio. **Dal computer lo Studio non si chiude** (decisione di Andrea): niente pulsante «Chiudi lo Studio».
+- **Lavori:** il blocco aspetta e parte a fine Studio. Chiuso durante lo Studio → `chiuso_durante_studio` al riavvio.
+- **Un secondo account Windows, o «Cambia utente» (limite noto).** Studio e blocco valgono solo sull'account del figlio dove gira il programma (il guardiano è un'attività di **quell'utente**). Un altro account standard sullo stesso PC non ha guardiano né copertura: là il figlio navigherebbe libero, e il server vedrebbe solo il computer del figlio andare «spento» (→ la rete di sicurezza lato server, parte B, lo coglie come «computer sparito» durante blocco/Studio). Va detto ad Andrea e al padre che, senza un account amministratore che impedisca di creare o usare altri account, un secondo account aggira sia il blocco sia lo Studio.
+
+#### L'app del genitore (0.18)
+
+- **Configurazione da approvare:** una card con orari, giorni, minimo di minuti, le due liste (con cosa è stato aggiunto e cosa tolto rispetto all'approvata), «i nuovi orari valgono da domani»; Approva e Rifiuta con la `versione` vista. La configurazione non va **mai** dentro `sessioni[]`.
+- **Panoramica (lo Studio di oggi):** «Studio dalle 15:00 · 42 min su 60 · si chiude dopo le 16:00»; poi «chiuso alle 17:40» con la dichiarazione; «Il blocco dei lavori parte a fine Studio» quando `rimandato`. «Chiudi lo Studio» con una domanda e un **motivo obbligatorio** (il pulsante si attiva solo quando c'è).
+- I «minuti di attività» si mostrano come **minuti col timer acceso dichiarati dal figlio**, non come attività verificata: il testo lo dice («42 min dichiarati col timer»), così il genitore sa cosa legge (v. «Cosa misura il timer»).
+- **Storico, per ogni Studio:** l'inizio (da solo, o a mano da quale dispositivo); i tratti con tipo, parola, lavoro e minuti (compresi gli interrotti); la chiusura (ora, chi, dichiarazione o motivo, oppure «non chiuso»); più le versioni approvate con chi le ha approvate.
+- **Versioni dei dispositivi:** se un dispositivo del figlio è più vecchio della 0.18, l'app dice che lì lo Studio non c'è e il blocco dei lavori non aspetta.
+
+#### Notifiche
+
+- **`studio_da_approvare`** ai genitori (`dispositivo_id: null`): «<figlio> chiede di approvare lo Studio» / «…di cambiare lo Studio». `payload: { "versione", "cambio": bool, "da": { dispositivo } }`. **Un solo avviso aperto**: uno nuovo, una decisione o un ritiro chiudono il precedente (come le sessioni).
+- **`studio_risposta`** al figlio (`dispositivo_id: null`): «<genitore> ha approvato lo Studio» / «…non ha approvato…», con in coda **«(i nuovi orari valgono da domani)» solo se** sono cambiati giorni, orari o minimo; **«(la nuova lista vale dal prossimo Studio)» se** sono cambiate le liste. `payload: { "esito", "versione", "cambio", "orari_dal", "genitore" }`.
+- **`studio_non_partito`** ai genitori (`dispositivo_id: null`), a ogni partenza saltata perché manca un telefono 0.18: «Lo Studio di <figlio> non è partito: il telefono non è aggiornato alla 0.18». **Un solo avviso aperto** per figlio.
+- **`studio_iniziato`** ai genitori (`dispositivo_id: null`), all'inizio di uno Studio: «Luca è in Studio dalle 15:00». `payload: { "studio_id", "origine", "inizio_ts" }`. **Non parte** per uno Studio che nasce **già chiuso** (creato in ritardo oltre la sua mezzanotte): in quel caso c'è solo `studio_non_chiuso`.
+- **`studio_chiuso`**: alla chiusura del **figlio**, ai genitori: «<figlio> ha chiuso lo Studio alle 16:40 (dalle 15:00): 65 min — compiti (matematica), lavori di casa, allenamento. «<dichiarazione, ≤ 200 caratteri>»» (se chiusa senza rete e arrivata dopo, in coda «(chiusa senza rete alle 16:40)»); alla chiusura del **genitore**, al figlio e agli altri genitori: «<genitore> ha chiuso lo Studio» + «: <motivo>». `payload: { "studio_id", "fine_ts", "chiusura", "tratti": [ { "tipo", "parola", "minuti" } ], "minuti_attivita", "dichiarazione", "motivo" }`.
+- **`studio_non_chiuso`** ai genitori, alla chiusura di mezzanotte: «Lo Studio di Luca non è stato chiuso: 40 min di attività». `payload: { "studio_id", "fine_ts", "minuti_attivita" }`.
+- **Testi del blocco coerenti con lo Studio:** `faccenda_confermata` e `faccende_finite` dicono «telefono e computer sbloccati» **solo se** il blocco era attivo **e non rimandato**; se era rimandato dallo Studio, niente sblocco annunciato (v. parte A).
+
+#### Dove si vede
+
+- **`GET /api/patto`** (dispositivo), in più `studio`: `{ "config", "in_corso", "prossime_partenze" }`. Lo storico non c'è (sta in `GET /api/studio/svolte`): il patto lo legge ogni minuto anche il computer, e deve restare leggero (`?tempi=1` resta solo per i tempi della v3.8).
+- **`GET /api/faccende/blocco`**: `studio` e `rimandato` (v. parte A).
+- **`GET /api/finestra`**, in più: `studio` (come nel patto), `studio_svolte` (quelle che toccano gli 8 giorni, dal più recente, ≤ 50), `studio_da_approvare` (0 o 1).
+- **`GET /api/famiglia`**, per ogni figlio in più: `studio_da_approvare`, `studio_in_corso`, `faccende_da_approvare`, `blocco_rimandato`.
+
+### D. Fasce orarie: meno di un minuto non è uno sforamento (precisazione)
+
+Era già così sul telefono e sul computer; ora è scritto. Nessun cambio di codice.
+
+- Una `fascia_oraria` è sforata quando il tempo d'uso dentro un'occorrenza arriva a **un minuto intero** (60 secondi). Si contano le stesse app del totale.
+- **Sotto i 60 secondi:** niente `sforamento`, niente avviso, e «Oggi» dice «rispettata».
+- **Limite noto, lasciato così:** in una fascia che scavalca la mezzanotte i minuti si sommano **dopo** l'arrotondamento per difetto di ogni pezzo, ciascuno nel suo giorno. Per esempio 59 secondi prima della mezzanotte e 59 dopo non fanno un minuto: restano zero. È il comportamento di oggi (`SentinellaPatto.kt:387-389`, `Giornata.cs:86-97`), accettato.
+- Vale per telefono e computer.
+
+### E. Casi limite
+
+- **Mezzanotte.** Uno Studio aperto si chiude da solo come `non_chiuso` a mezzanotte (fuso del patto): il mattino dopo il telefono non è in Studio. Il **telefono** chiude il tratto in corso a quella mezzanotte (interrotto); il server comunque taglia ogni tratto alla fine dello Studio. Gli orari non scavalcano la mezzanotte. `non_chiuso` **cede** a una chiusura del figlio valida consegnata dopo con `T` prima di mezzanotte (v. «La chiusura a mezzanotte»).
+- **Fuso.** Sempre il fuso del patto, non quello del telefono: in viaggio lo Studio parte alle 15:00 di casa.
+- **Cambio dell'ora.** `prossime_partenze` è già calcolato dal server; per le ore che non esistono o esistono due volte v. «Le partenze automatiche».
+- **Orologio del telefono cambiato.** Partenze e chiusure si decidono sull'ora del server agganciata; senza rete dopo un riavvio vale l'orologio del telefono, e resta `cambio_ora` nel registro. Il server ricontrolla tutto: una chiusura con un'ora nel futuro vale all'arrivo (quindi `troppo_presto`, lo Studio torna). I tratti usano `elapsedRealtime`, che l'orologio non sposta.
+- **Senza rete per ore.** Telefono e computer partono, cronometrano, coprono. Tratti e chiusure partono dopo e valgono col loro momento (entro 48 ore). Il server crea lo Studio alla prima richiesta, con l'inizio alle 15:00.
+- **Telefono spento alle 15:00.** Il server crea lo Studio lo stesso (basta una richiesta qualsiasi, anche del computer o del genitore). Il telefono, riacceso prima di una chiusura nota, è in Studio da quell'istante.
+- **Computer acceso senza telefono.** Il computer parte in Studio alla partenza (la legge dal patto), ma **non può chiuderlo**: mostra solo lo stato, la chiusura serve il telefono (o il genitore). Lo Studio automatico nasce solo se il figlio ha un telefono 0.18: perciò `prossime_partenze` è `[]` quando non c'è, e **il computer non parte da solo** (niente Studio che nessuno può chiudere). Un figlio col **solo** computer non entra mai in Studio.
+- **Nessun telefono 0.18 (o tenuto alla 0.17 apposta).** `prossime_partenze` è `[]`: né telefono né computer partono da soli. A ogni partenza prevista ma saltata il server manda ai genitori `studio_non_partito` (un solo avviso aperto). Tenere il telefono vecchio diventa visibile e ripetuto, non una card passiva.
+- **Secondo account Windows / Cambia utente.** Studio e blocco valgono solo sull'account del figlio. Un altro account non è coperto; il server vede il computer del figlio andare «spento» e la rete di sicurezza (parte B) lo coglie come «computer sparito» se era in blocco/Studio. Limite noto: senza un amministratore che impedisca altri account, un secondo account aggira tutto.
+- **Spegnimento annullato ma poi avvenuto.** Un'altra app tiene la schermata «queste app impediscono l'arresto»: Pactum dopo 60 s manda `ripresa spegnimento_annullato`, ma azzera il segno «fine sessione già fatta»; quando lo spegnimento avviene davvero, il `SessionEnding`/`SessionEnded` successivo rimanda la `sospensione` (il computer non resta «acceso e muto»).
+- **Sessione normale in corso alle 15:00.** Si chiude `terminata` all'inizio dello Studio (con `sessione_chiusa` scritto sullo Studio). Durante lo Studio non se ne avviano (`studio_in_corso`).
+- **Lavori scaduti o dati durante lo Studio.** Il blocco aspetta (`rimandato`) e parte alla chiusura (o a mezzanotte), se restano lavori aperti che bloccano. Una bocciatura durante lo Studio riporta il lavoro a `da_fare` col blocco subito, ma aspetta lo Studio.
+- **Avvio a mano.** Col blocco attivo e la rete → `409 blocco_faccende`. Prima delle 15:00 → alle 15:00 assorbe la partenza, prende il vincolo delle 16:00 e `conta_dal` = 15:00 (il tempo di prima non conta). Senza rete → v. `avvia`.
+- **Configurazione cambiata durante lo Studio.** Le liste valgono dalla prossima partenza; orari, giorni e minimo dal giorno dopo. Lo Studio aperto tiene le condizioni delle sue partenze. Un dispositivo offline si allinea quando sente il server.
+- **Riavvio durante un tratto.** Il tratto in corso si chiude all'ultimo punto salvato (`interrotto`), e conta fino a lì. Il tempo usa `elapsedRealtime`: un riavvio lo azzera, quindi il tratto non può continuare oltre il riavvio.
+- **Due telefoni.** La barriera c'è su tutti. I tratti dei due telefoni vanno tutti al server; i `minuti_attivita` sono la durata dell'**unione** degli intervalli validi, quindi la parte comune di due tratti sovrapposti conta una volta sola (non si scarta un intero tratto). «Chiudi lo Studio» segue i `minuti_attivita` del server, non i soli tratti locali. Limite noto: un telefono-Pactum può fare da «segnatempo» nel cassetto mentre il figlio usa un dispositivo che Pactum non conosce (v. «Cosa misura il timer»).
+- **Prima approvazione.** Lo Studio parte dal giorno dopo l'approvazione.
+- **Server spento più di 48 ore.** Le partenze più vecchie non creano Studi; tratti e chiusure di quei giorni restano senza Studio o ricevono `404` (il telefono li toglie e lo dice). Il genitore vede il buco. Una partenza dentro le 48 ore ma già oltre la sua mezzanotte nasce **e** si chiude `non_chiuso` nella stessa transazione (solo `studio_non_chiuso`, niente `studio_iniziato`).
+
+### F. Database e migrazione
+
+- **Nessuna tabella che c'è già cambia.** I lavori approvati usano la sola riga `faccende_approvazione_dal` in `patto` (`INSERT OR IGNORE`, scritta una volta al primo avvio). Lo Studio è **tabelle nuove** (`CREATE TABLE IF NOT EXISTS`):
+  - **`studio_config`**: una riga per figlio;
+  - **`studio_versioni`**: le configurazioni approvate, in sola aggiunta;
+  - **`studio_svolte`**: indice unico su (`figlio_id`) `WHERE fine_ts IS NULL` (una aperta per figlio) e unico su (`figlio_id`, `giorno`) per le `automatica`; una riga chiusa non cambia più (trigger), **con l'unica eccezione** del passaggio `non_chiuso` → `figlio` (il trigger permette solo quello);
+  - **`studio_tratti`**: `id` del telefono, in sola aggiunta; cambia solo da `in_corso` a un esito finale (trigger);
+  - **`studio_partenze`** (`figlio_id`, `giorno`, `studio_id`, chiave primaria `(figlio_id, giorno)`): ogni partenza trattata vi è scritta una volta sola — crei uno Studio, entri in uno aperto o sia saltata (nessun telefono 0.18). La valutazione legge **prima**, senza transazione, se c'è una partenza passata non ancora qui dentro, e apre `BEGIN IMMEDIATE` solo in quel caso.
+- Una riga `studio_ultimo_giro` in `patto` segna l'ultima volta che la v4.0 ha valutato le partenze: serve a riconoscere, al ritorno dalla v3.9, che nel frattempo ha girato un server che lo Studio non lo conosce.
+- **Cosa fa partire la migrazione:** `_va_migrato_a_v40` = ci sono dati **e** manca la riga `faccende_approvazione_dal`. La copia `.prima-v4.0-<data>` si fa in `init_db` **prima** dello schema, col codice di oggi; se non riesce, il server **non parte**; una copia vecchia si riusa solo se i dati sono ancora quelli. La riga `faccende_approvazione_dal`, una `studio_config` approvata (versione 1) per **ogni figlio che c'è** e la riga 1 di `studio_versioni` si scrivono **nella stessa transazione**, al commit finale di `init_db`.
+- **Configurazione iniziale alla migrazione:** la `studio_config` del figlio nasce con i valori decisi dalla famiglia — `lun`–`ven`, `15:00`, `16:00`, `60` min, **liste vuote** — `stato: "approvata"` (versione 1), `orari_dal` = il **giorno dopo** quell'avvio (fuso del patto), `decisa_da: null` (l'app la mostra come «Decisa dalla famiglia all'aggiornamento»). Un figlio **creato dopo** la migrazione (`POST /api/figli`) nasce con `stato: "nessuna"` (niente Studio finché non lo propone e un genitore approva).
+- *(La nota «con le liste vuote lo Studio copre tutto fuori dalle app sempre usabili, e le liste vanno proposte dal figlio e approvate da un genitore prima che lo Studio sia utile» va nelle **note di `versioni.json`**, che la famiglia legge all'aggiornamento, non solo nel contratto.)*
+- **Tornare al server v3.9** si fa in due modi:
+  - **(a) Rimettere l'immagine v3.9 senza toccare il database** (il modo consigliato: la v4.0 aggiunge solo tabelle nuove e una riga, quindi la v3.9 ci gira — `init_db` fa `CREATE IF NOT EXISTS`, il patto si legge per chiave). Un server v3.9 però sblocca all'arrivo delle foto e non conosce `studio`. Perciò, **prima di tornare alla v4.0** dopo il modo (a), al primo avvio la v4.0: 1) riconosce dal confronto fra `studio_ultimo_giro` e i battiti arrivati dopo che nel frattempo ha girato un server senza Studio; 2) in quel caso **porta `faccende_approvazione_dal` ad adesso** (così le foto arrivate e già sbloccate dalla v3.9 **non tornano a bloccare a posteriori**, come ha deciso Andrea) e **non crea** Studi per le partenze cadute fra `studio_ultimo_giro` e adesso.
+  - **(b) Rimettere la copia `.prima-v4.0-<data>`** (si perde tutto quello che è successo dopo). Dopo il modo (b) la riga `faccende_approvazione_dal` non c'è, e nasce di nuovo al primo avvio della v4.0 con l'ora di quell'avvio.
+  - In nessun caso una foto già sbloccata torna a bloccare: è la decisione di Andrea «niente blocchi a posteriori per le foto vecchie».
+
+### G. Compatibilità
+
+- **App del figlio 0.17 con server v4.0:** segue `attivo`, quindi resta **bloccata fino all'approvazione**; i lavori da approvare sono in `blocco.da_fare` (ignora `stato`/`foto_ts`), così la **barriera** li mostra sempre. **Però, aprendo la pagina dei lavori**, per fino a un minuto un lavoro `da_approvare` (stato `fatta`) sparisce dai «da fare» e compare tra i «Fatti» (la pagina usa l'elenco di `GET /api/faccende`, `VistaFaccende.daFare`, più fresco del blocco), e la scheda del blocco resta senza elenco: può sembrare un errore, ma la barriera lo mostra sempre. Dopo 24 ore o una reinstallazione può tornare «Scatta la foto», e la foto nuova riceve `409 non_da_fare`, che la 0.17 butta in silenzio. Non conosce lo Studio: durante lo Studio, se ci sono lavori aperti che bloccano, resta bloccata (più stretta); le sue sessioni **non** vengono chiuse dallo Studio e partono (niente `studio_in_corso` sotto la 0.18). I tipi nuovi di notifica li mostra col `messaggio`.
+- **App del genitore 0.17 con server v4.0:** «Segna come svolto» approva e sblocca, ma la domanda dice solo «non si potrà più bocciare»; la notifica della foto dice ancora «…ha fatto «X»: tocca per vedere la foto», **senza parlare di approvazione** (il testo lo scrive l'app, non il server); dopo 24 ore la foto sparisce dal conteggio della Panoramica (`fotoDaGuardare` conta solo 24 ore); la scheda Lavori, che calcola il blocco da sola, può dire «nessun blocco» mentre il figlio è bloccato (la Panoramica, che usa `blocco` del server, è giusta); «Boccia» sparisce dopo 24 ore; durante lo Studio la Panoramica dice «Blocco attivo» (non sa del rinvio); **non può chiudere lo Studio né approvarne la configurazione**, che arriva come «Novità». Perciò: **tutti i genitori vanno portati alla 0.18** (v. ordine di rilascio).
+- **App del genitore 0.16:** non ha la conferma e non può approvare.
+- **App del genitore 0.18 con un server più vecchio della v4.0:** lo riconosce dalla risposta di `GET /api/faccende` **senza il campo `blocco`** (che la v4.0 aggiunge): in quel caso usa i testi della v3.9 («Segna come svolto», senza promettere lo sblocco) e **non mostra lo Studio**. Altrimenti direbbe «Telefono e computer si sbloccano» mentre su un server v3.9 la conferma non sblocca.
+- **Programma del computer 0.13/0.14 (quello installato):** resta coperto fino all'approvazione, perché i lavori da approvare sono in `da_fare` (ignora `stato`/`foto_ts`); ma dice ancora «si sblocca con la foto». Non conosce lo Studio (niente copertura dello Studio, il blocco dei lavori non aspetta) né il guardiano. Si aggiorna solo reinstallando a mano la 0.18.
+- **App 0.18 con server v3.9:** `/api/studio*` → `404`/`405` → «per lo Studio serve aggiornare il server»; senza `faccende_approvazione_dal` e senza i campi nuovi del blocco, i lavori si comportano come nella v3.9 (sblocco alla foto).
+- **Versioni:** figlio e genitore **0.18** (codice 18); programma del computer **0.18** (codice 18, dopo lo 0.14 installato).
+- **Ordine di rilascio (decisione di Andrea):** prima il **server** sul NAS (APK e `pactum-computer.zip` in `server/apk`, poi la ricostruzione dell'immagine); **subito dopo, su ogni telefono dei genitori: Impostazioni → Controlla aggiornamenti, fino alla 0.18, prima delle 15:00 del giorno dopo** (un genitore 0.17 approva i lavori ma non lo Studio né la configurazione; da quel momento lo Studio parte con le liste vuote finché un genitore 0.18 non le approva); poi le **app del figlio** si aggiornano da sole; poi il **programma del computer** reinstallato a mano. *(Caveat: con il server v4.0 e tutti i genitori ancora alla 0.16, nessuno può approvare e il blocco resta; un genitore alla 0.17 può già approvare i lavori, quindi la finestra è breve.)* Mettere la stessa avvertenza nelle note di `versioni.json`.
+
+### H. Cosa cambia nelle sezioni di prima
+
+Queste regole delle versioni precedenti diventano, dalla v4.0, così (il numero è la riga del contratto v3.9 a cui si riferiscono):
+
+- **`:42`** (sforamento `fascia_oraria`): «(v4.0) Per le `fascia_oraria` lo sforamento c'è solo da **60 secondi** d'uso dentro l'occorrenza; sotto, niente sforamento. V. v4.0 parte D.»
+- **`:286`** (patto etico dei siti, primo punto «Il genitore vede, non blocca»): «(v4.0) Con **un'eccezione**, decisa da Andrea: durante la **Sessione Studio** il programma del computer copre i siti che non sono nella lista approvata (proposta dal figlio, approvata da un genitore). Fuori dallo Studio nessun sito si copre e un genitore da solo non copre nessun sito. V. v4.0, «Lo Studio e i siti».»
+- **`:694`** (v3.6, «Si sblocca **appena arriva l'ultima foto**»): «(dalla v4.0: quando un genitore **approva** la foto dell'ultimo lavoro; mandare la foto non sblocca più — v. v4.0 parte A)».
+- **`:763`** (boccia «da **meno di 24 ore**»): «(v4.0: un lavoro **da approvare** si boccia senza limite di tempo, finché nessuno l'ha approvato; le 24 ore restano solo per le foto di prima della v4.0)».
+- **`:778`** (foto → `faccende_finite` «…telefono e computer sbloccati»): «(v4.0: la foto non sblocca più; `faccenda_fatta` dice «aspetta l'approvazione» e `faccende_finite` parte all'**ultima approvazione**)».
+- **`:786`** (`blocco.attivo` = almeno una `da_fare` con `blocco_da` passato): «(v4.0: contano anche i lavori **da approvare** — `fatta` non confermati con foto dalla v4.0; `blocco.da_fare` li porta con `stato`/`foto_ts`, più `rimandato` e `studio`)».
+- **`:799-800`** (sessioni e faccende: col blocco `avvia` → `409 blocco_faccende`; «se il blocco parte durante una sessione, vince la barriera del blocco»): «(v4.0: durante la **Sessione Studio** vale il contrario — il blocco dei lavori **aspetta** (`rimandato`) e parte a fine Studio; e durante lo Studio non si avviano sessioni, `409 studio_in_corso`, prima di `blocco_faccende`)».
+- **`:806`** (telefono: «il blocco resta finché il server non l'ha ricevuta»): «(v4.0: e finché un genitore non ha **approvato** la foto)».
+- **`:816`** (computer: «Si sblocca da solo quando dal telefono hai mandato la foto di ogni faccenda»): «(v4.0: la frase diventa «Si sblocca da solo quando un genitore ha **approvato** la foto di ogni lavoro»)».
+- **`:819-820`** (computer: `chiuso_durante_blocco` al riavvio): «(v4.0: anche `chiuso_durante_studio`, stesse condizioni; e, per uno spegnimento annullato, `programma_chiuso` con `causa: "spegnimento_annullato"` solo se chiuso in blocco o in Studio, più `ripresa` `spegnimento_annullato`)».
+- **`:839`** (pulizia: le foto si tengono 30 giorni): «(v4.0: la foto di un lavoro `da_approvare` **non si cancella**; quella di un lavoro **approvato** si cancella 30 giorni dopo l'approvazione (`confermata_ts`); le foto di prima della v4.0 30 giorni dopo l'arrivo, come prima; **bocciare** la cancella subito. V. v4.0 «Le foto da approvare non si cancellano».)».
+- **`:868`** (il giro di `faccende_finite` e «telefono e computer sbloccati» all'ultima foto): «(v4.0: il giro si chiude all'**ultima approvazione**, e `faccende_finite` parte allora)».
+- **`:994`-`:998`** (v3.9 conferma: «Lo sblocco **non cambia**… Confermare non blocca e non sblocca niente»): «(fino alla v3.9; **dalla v4.0 approvare = confermare, e sblocca**: per un lavoro `da_approvare` il `foto_ts` nel corpo è obbligatorio, 422 senza. V. v4.0 parte A)».
+- **`:1015`** (le voci di `blocco.da_fare` restano nella forma ridotta, senza i campi nuovi): «(v4.0: ogni voce ha in più `stato` e `foto_ts`; le app vecchie li ignorano)».
+- **`:420`-`:421`** (eventi dei computer `sospensione`/`ripresa`, motivi di `ripresa`): «(v4.0: `ripresa` ha anche `motivo: "spegnimento_annullato"`; dopo una disconnessione in blocco/Studio resta `motivo: "accesso"`)».
+- **`:424`-`:425`** (manomissione dei computer, `sotto_tipo`): «(v4.0: anche `guardiano_assente` (con `stato`), `istanza_occupata`, `programma_chiuso` con `causa` (`spegnimento_annullato` o `disconnessione`), `chiuso_durante_studio`, e `computer_sparito` **scritto dal server** quando il computer smette di battere in blocco/Studio senza una `sospensione` pulita)».
+
 ---
-**Versione: v3.9 — 05/10/2026** (richieste di Andrea): `PATCH /api/faccende/{id}` per modificare un lavoro da fare (titolo, nota, ora del blocco; notifica `faccenda_modificata`); `POST /api/faccende/{id}/conferma` ("svolto", `confermata_ts`/`confermata_da`, non più bocciabile, notifica `faccenda_confermata`; lo sblocco resta all'ultima foto); `GET /api/faccende?cerca=` su tutta la storia. Due colonne nuove nel database.
+**Versione: v4.0 — 07/10/2026** (decisioni di Andrea): i lavori di casa si sbloccano solo quando un genitore li approva (`POST /api/faccende/{id}/conferma` sblocca, idempotente per lo stesso genitore/`foto_ts`; i lavori da approvare restano in `blocco.da_fare` con `stato`/`foto_ts`; campo `da_approvare`; `foto_ts` obbligatorio dopo il 404 — 422 senza; bocciatura senza scadenza finché non approvato; foto del `da_approvare` tenute, quella approvata cancellata 30 giorni dopo l'approvazione; `faccenda_fatta` «foto da approvare» con un solo avviso aperto per lavoro; `faccende_finite` all'ultima approvazione; «sbloccati» solo se il blocco era attivo e non rimandato; `faccenda_confermata` al figlio e ai genitori; `faccende_da_approvare` in finestra e famiglia; `faccende_approvazione_dal` in `patto` per i lavori di prima, nessuna colonna nuova; il telefono non sblocca più localmente). Il programma del computer non resta chiuso: attività pianificata di utente «Pactum» ogni minuto con `--guardiano` (esce in silenzio se un'istanza c'è già; contro il mutex occupato ascolta subito in `Main`, chiede, riprova dopo 10 s, non accusa se chi tiene il mutex è un processo `Pactum.exe`, e se parte prende il mutex `.Riserva` e manda `manomissione istanza_occupata` una volta per accensione); **nessuna istanza chiude un'altra** (aggiornamento chiudendo dal menu), nessuna versione in HKCU; spegnimento annullato provato da `WM_ENDSESSION fEndSession=FALSE` (timer di 60 s di riserva, niente uscita in `SessionEnded`, segno «fine sessione» azzerato), `ripresa spegnimento_annullato`/`accesso`, `manomissione programma_chiuso` con `causa` (`spegnimento_annullato`/`disconnessione`) solo in blocco o Studio; all'avvio sente il server fino a 5 s prima di coprire; `manomissione guardiano_assente`, `chiuso_durante_studio`, e **`computer_sparito` scritta dal server** quando il computer smette di battere in blocco/Studio senza `sospensione` pulita (rete di sicurezza contro un Pactum ucciso che non riparte). La Sessione Studio (`/api/studio`): configurazione per figlio proposta dal figlio e approvata da un genitore (`studio_versioni`, orari/giorni/minimo dal giorno dopo, liste dalla partenza successiva, guardia `orari_impossibili`), partenze automatiche lun–ven alle 15:00 decise dal server con `prossime_partenze` anche senza rete (telefono 0.18 obbligatorio, altrimenti `prossime_partenze` `[]` e `studio_non_partito` ai genitori; tabella `studio_partenze`, ogni partenza una volta sola, lettura prima e `BEGIN IMMEDIATE` solo se serve), avvio a mano (`avvio_scaduto`/`troppo_tardi`/`blocco_faccende` anche in ritardo), tratti di attività di durata libera (`compiti`/`lavori_di_casa`/`altro`) cronometrati con `elapsedRealtime`, con `secondi_contati` e `minuti_attivita` come **unione** tagliata a `[conta_dal, fine]`, `conta` deciso una volta sola, `minuti_alla_chiusura` congelato; chiusura dal **solo telefono** (anche senza id: `giorno`/`chiave`) dopo le 16:00 e il minimo con dichiarazione (10–1000), chiusura del genitore con **motivo obbligatorio**, chiusura automatica a mezzanotte (`non_chiuso`, che cede a una chiusura tardiva valida del figlio); copertura **dello schermo** (barra libera), browser rifiutati in lista (elenco ampio) e non leggibili coperti, durante lo Studio una barra degli indirizzi che non si legge copre, `firme` dei programmi firmati controllate; `rimandato` e `studio` nel blocco; sessioni normali chiuse `terminata` all'`inizio_ts` e `409 studio_in_corso` durante; emendamento al patto etico dei siti sul computer. Fasce: soglia di 60 secondi scritta. Solo tabelle nuove e righe in `patto`; copia del database prima per sicurezza.
+**v3.9 — 05/10/2026** (richieste di Andrea): `PATCH /api/faccende/{id}` per modificare un lavoro da fare (titolo, nota, ora del blocco; notifica `faccenda_modificata`); `POST /api/faccende/{id}/conferma` ("svolto", `confermata_ts`/`confermata_da`, non più bocciabile, notifica `faccenda_confermata`; lo sblocco resta all'ultima foto); `GET /api/faccende?cerca=` su tutta la storia. Due colonne nuove nel database.
 **v3.8 — 05/10/2026** (richieste di Andrea): `totale` in `medie` (somma degli ultimi 7 e 30 giorni con dati); `uso_recente` e `medie` anche in `GET /api/patto?tempi=1` (questo dispositivo e `dispositivi[]`, solo su richiesta), identici alla finestra; avviso del tempo finito a 30 su 30 sul telefono, `sforamento` invariato da 31. Nessun cambio al database.
 **v3.7 — 04/10/2026** (richieste di Andrea): `sospensione` anche dai telefoni (spento come i computer, anche consegnata in ritardo col suo `ts_device`), battiti ogni ~15 minuti anche in stand-by, avvisi di silenzio senza accuse; nei testi "lavori di casa" al posto di "faccende". Nessun cambio al database.
 **v3.6 — 02/10/2026** (decisioni di Andrea): più genitori (tabella `genitori`, `GET/POST /api/genitori`, codice di 6 cifre, `POST /api/abbina` con `tipo: "genitore"`, revoca, `io` e `genitori` in `GET /api/famiglia`), chi ha fatto cosa nelle risposte, notifiche del genitore lette da ciascuno; le faccende (`/api/faccende`, foto JPEG fino a 4 MB senza dati nascosti tenute 30 giorni, boccia entro 24 ore, annulla, `GET /api/faccende/blocco`, `faccende` e `blocco` in patto e finestra, `faccende_da_fare` e `blocco_attivo` in famiglia, notifiche `nuove_faccende`, `faccenda_fatta`, `faccende_finite`, `faccenda_bocciata`, `faccenda_annullata`); blocco del telefono tranne le app fondamentali e del computer intero finché le faccende non sono fatte; niente sessioni durante il blocco. Copia del database prima della migrazione.

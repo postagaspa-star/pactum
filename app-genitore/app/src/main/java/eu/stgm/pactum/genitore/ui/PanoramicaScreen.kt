@@ -106,9 +106,11 @@ fun PanoramicaScreen(
     famigliaVm: FamigliaViewModel = viewModel(),
     proposteVm: ProposteViewModel = viewModel(),
     verdettiVm: VerdettiViewModel = viewModel(),
+    studioVm: StudioViewModel = viewModel(),
 ) {
     val cornice = LocalCornice.current
     val stato by vm.stato.collectAsStateWithLifecycle()
+    val statoStudio by studioVm.stato.collectAsStateWithLifecycle()
     val famiglia by famigliaVm.stato.collectAsStateWithLifecycle()
     val proposte by proposteVm.stato.collectAsStateWithLifecycle()
     val verdetti by verdettiVm.stato.collectAsStateWithLifecycle()
@@ -146,6 +148,16 @@ fun PanoramicaScreen(
         // Consumato subito; la frase la mostra la radice (non si perde cambiando scheda).
         vm.consumaEsitoSegno()
         cornice.messaggi.mostra(messaggio)
+    }
+
+    // (0.18) L'esito di "Chiudi lo Studio": una frase, e si rileggono finestra e famiglia.
+    val paroleStudio = parole()
+    LaunchedEffect(statoStudio.evento) {
+        val evento = statoStudio.evento ?: return@LaunchedEffect
+        studioVm.consumaEvento()
+        famigliaVm.aggiorna()
+        if (famiglia.pronta) vm.aggiorna(figlioId)
+        cornice.messaggi.mostra(messaggioEventoStudio(paroleStudio, evento))
     }
 
     // (0.10) Ogni finestra nuova si dice al ViewModel delle proposte: quando anche
@@ -210,10 +222,13 @@ fun PanoramicaScreen(
                         sessioniDecise = stato.sessioniDecise,
                         lettaAlle = stato.lettaAlle,
                         dichiarazioni = verdetti.dichiarazioni.takeIf { verdetti.di(figlioId) },
+                        studioDecisaVersione = statoStudio.decise[figlioId],
                     ),
                     segnoSpento = segnoGiaMandato(finestra.segnoOggi, stato.segnoMandatoIl, LocalDate.now()),
                     invioSegno = stato.invioSegno,
                     onMandaSegno = { vm.mandaSegno(figlioId) },
+                    invioStudio = statoStudio.invio,
+                    onChiudiStudio = { studioId, motivo -> studioVm.chiudi(figlioId, studioId, motivo) },
                 )
             }
         }
@@ -231,6 +246,8 @@ private fun ContenutoPanoramica(
     segnoSpento: Boolean,
     invioSegno: Boolean,
     onMandaSegno: () -> Unit,
+    invioStudio: Boolean = false,
+    onChiudiStudio: (studioId: Long, motivo: String) -> Unit = { _, _ -> },
 ) {
     val cornice = LocalCornice.current
     val figlio = famiglia.figlioScelto.takeIf { !famiglia.serverVecchio }
@@ -286,6 +303,9 @@ private fun ContenutoPanoramica(
     val blocco = remember(finestra, adesso) { finestra.faccende?.let { statoBlocco(it, adesso, finestra.blocco) } }
     val fotoViste by viewModel<FaccendeViewModel>().fotoViste.collectAsStateWithLifecycle()
     val fotoNuove = remember(finestra, adesso, fotoViste) { finestra.faccende?.let { fotoDaGuardare(it, adesso, fotoViste) } ?: 0 }
+    // (0.18, contratto v4.0) Le foto che aspettano l'approvazione: tutte, anche quelle
+    // già guardate qui (finché nessuno approva, il lavoro blocca).
+    val fotoApprovare = remember(finestra) { finestra.faccende?.let(::fotoDaApprovare) ?: finestra.faccendeDaApprovare ?: 0 }
     // (0.16) Le sessioni (la riga in cima se ce n'è una in corso, la riga "Sessioni")
     // e il bonus di oggi per ogni dispositivo con un limite di tempo.
     val sessioni = remember(finestra, adesso) { contoSessioni(finestra, adesso) }
@@ -304,9 +324,17 @@ private fun ContenutoPanoramica(
         errore = errore,
         ricevutaAlle = ricevutaAlle,
         sessioniInCorso = sessioni.inCorso,
+        fotoDaApprovare = if (figlio != null) fotoApprovare else 0,
     )
 
     var tuttiDaGuardare by rememberSaveable { mutableStateOf(false) }
+
+    // (0.18, contratto v4.0) Lo Studio di oggi: solo con un server che lo conosce.
+    val studioOggi = remember(finestra, adesso) {
+        studioDiOggi(finestra.studio, finestra.studioSvolte, LocalDate.now(FUSO_PATTO), adesso).takeIf { figlio != null }
+    }
+    val senzaStudio = remember(figlio) { dispositiviSenzaStudio(figlio?.dispositivi.orEmpty()) }
+    var studioDaChiudere by rememberSaveable { mutableStateOf<Long?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -316,6 +344,26 @@ private fun ContenutoPanoramica(
         sceltaDelFiglio(famiglia)
 
         items(righe, key = ::chiaveRiga) { riga -> RigaInCimaVista(riga) }
+
+        // (0.18) Lo Studio di oggi: in corso (con "Chiudi lo Studio"), chiuso, quello di
+        // ieri non chiuso, o quando parte. Senza niente di questo, una riga più giù.
+        val cardStudio = studioOggi?.takeIf {
+            it is StudioDiOggi.InCorso || it is StudioDiOggi.Chiuso || it is StudioDiOggi.NonChiusoIeri || it is StudioDiOggi.Parte
+        }
+        if (cardStudio != null) {
+            item(key = "studio-di-oggi") {
+                CardStudioDiOggi(
+                    oggi = cardStudio,
+                    nomeFiglio = figlio?.nome,
+                    io = famiglia.io,
+                    adesso = adesso,
+                    senzaStudio = senzaStudio,
+                    invio = invioStudio,
+                    onChiudi = { studioDaChiudere = it.id },
+                    onApri = { cornice.apri(Pagina.Studio) },
+                )
+            }
+        }
 
         if (senzaDispositivi) {
             item(key = "senza-dispositivi") {
@@ -408,9 +456,39 @@ private fun ContenutoPanoramica(
                 )
             }
         }
+        // (0.18) Senza uno Studio di oggi da raccontare: una riga verso la sua pagina.
+        if (studioOggi != null && cardStudio == null) {
+            item(key = "studio") {
+                RigaToccabile(
+                    titolo = stringResource(R.string.studio_titolo),
+                    sottotitolo = when {
+                        studioOggi == StudioDiOggi.NonApprovato -> nomeDaScrivere(figlio?.nome)
+                            ?.let { stringResource(R.string.studio_non_approvato, it) }
+                            ?: stringResource(R.string.studio_non_approvato_senza_nome)
+                        figlio != null && !haTelefonoConStudio(figlio.dispositivi) -> nomeDaScrivere(figlio.nome)
+                            ?.let { stringResource(R.string.studio_senza_telefono, it) }
+                            ?: stringResource(R.string.studio_senza_telefono_senza_nome)
+                        else -> stringResource(R.string.studio_niente_oggi)
+                    },
+                    onClick = { cornice.apri(Pagina.Studio) },
+                )
+            }
+        }
         item(key = "storico") {
             RigaToccabile(titolo = stringResource(R.string.sezione_storico), onClick = { cornice.apri(Pagina.Storico) })
         }
+    }
+
+    studioDaChiudere?.let { id ->
+        DialogoChiudiStudio(
+            nomeFiglio = figlio?.nome,
+            studioId = id,
+            onChiudi = { motivo ->
+                studioDaChiudere = null
+                onChiudiStudio(id, motivo)
+            },
+            onAnnulla = { studioDaChiudere = null },
+        )
     }
 }
 
@@ -427,12 +505,18 @@ private fun RigaInCimaVista(riga: RigaInCima) {
             onClick = { cornice.vaiAScheda(Scheda.DA_DECIDERE) },
         )
         is RigaInCima.Blocco -> RigaStato(
-            tono = if (riga.stato.attivo) Tono.Attenzione else Tono.Neutro,
+            // (0.18) Rimandato dallo Studio: il blocco è dovuto ma non è sul telefono adesso.
+            tono = if (riga.stato.attivo && !riga.stato.rimandato) Tono.Attenzione else Tono.Neutro,
             testo = listOfNotNull(
-                testoStatoBlocco(p, riga.stato),
+                testoStatoBlocco(p, riga.stato, perPanoramica = true),
                 riga.stato.daFare.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.riga_lavori_da_fare, it, it) },
+                riga.fotoDaApprovare.takeIf { it > 0 }?.let { p.testo(R.string.foto_da_approvare_n, it) },
                 riga.fotoDaGuardare.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.riga_blocco_foto, it, it) },
             ).joinToString(" · "),
+            onClick = { cornice.vaiAScheda(Scheda.LAVORI) },
+        )
+        is RigaInCima.FotoDaApprovare -> RigaStato(
+            testo = testoQuanteDaApprovare(p, riga.quante).orEmpty(),
             onClick = { cornice.vaiAScheda(Scheda.LAVORI) },
         )
         is RigaInCima.SessioneInCorso -> RigaStato(

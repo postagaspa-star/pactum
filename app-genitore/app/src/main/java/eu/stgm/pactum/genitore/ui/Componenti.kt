@@ -106,9 +106,11 @@ fun daDecidereDelScelto(
     finestraVm: FinestraViewModel = viewModel(),
     proposteVm: ProposteViewModel = viewModel(),
     verdettiVm: VerdettiViewModel = viewModel(),
+    studioVm: StudioViewModel = viewModel(),
 ): Int? {
     val figlio = famiglia.figlioScelto ?: return null
     val statoFinestra by finestraVm.stato.collectAsStateWithLifecycle()
+    val statoStudio by studioVm.stato.collectAsStateWithLifecycle()
     val proposte by proposteVm.stato.collectAsStateWithLifecycle()
     val verdetti by verdettiVm.stato.collectAsStateWithLifecycle()
     val dichiarazioni = verdetti.dichiarazioni.takeIf { verdetti.di(figlio.id) }
@@ -120,6 +122,7 @@ fun daDecidereDelScelto(
             sessioniDecise = statoFinestra.sessioniDecise,
             lettaAlle = statoFinestra.lettaAlle,
             dichiarazioni = dichiarazioni,
+            studioDecisaVersione = statoStudio.decise[figlio.id],
         )
     } else {
         quanteDaDecidere(figlio) + (dichiarazioni?.let(::dichiarazioniInAttesa) ?: 0)

@@ -53,6 +53,8 @@ class Cornice(
     val indietro: () -> Unit = {},
     /** Via tutte le pagine: si torna alla Panoramica (dopo il primo collegamento). */
     val allaPanoramica: () -> Unit = {},
+    /** (0.18) I Lavori del figlio scelto, con la foto di questo lavoro aperta (da "Da decidere"). */
+    val apriFoto: (faccendaId: Long) -> Unit = {},
 )
 
 val LocalCornice = staticCompositionLocalOf { Cornice() }

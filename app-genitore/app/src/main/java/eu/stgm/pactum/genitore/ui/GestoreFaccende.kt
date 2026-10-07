@@ -1,5 +1,6 @@
 package eu.stgm.pactum.genitore.ui
 
+import eu.stgm.pactum.genitore.dati.BloccoFaccende
 import eu.stgm.pactum.genitore.dati.CodiciErrore
 import eu.stgm.pactum.genitore.dati.CorpoFaccenda
 import eu.stgm.pactum.genitore.dati.CorpoNuoveFaccende
@@ -43,6 +44,12 @@ sealed interface EventoFaccende {
 
     /** (0.17) Il lavoro è segnato come svolto. */
     data object Confermata : EventoFaccende
+
+    /**
+     * (0.18, contratto v4.0) La foto è approvata; [effetto] = che cosa la domanda
+     * aveva detto del blocco (si sblocca, non parte a fine Studio, niente).
+     */
+    data class Approvata(val effetto: EffettoApprovazione) : EventoFaccende
 
     /** Un gesto che il server non ha preso (o la rete caduta: [codice] null), e su quale figlio. */
     data class Rifiuto(val codice: String?, val gesto: GestoFaccende, val figlioId: Long?) : EventoFaccende
@@ -111,6 +118,17 @@ data class StatoFaccende<I>(
     val conModifiche: Boolean = true,
     /** (0.17) La ricerca nello storico, se se ne sta facendo una. */
     val ricerca: StatoRicerca? = null,
+    /**
+     * (0.18, contratto v4.0) Il blocco del server, arrivato con l'elenco: lo stato
+     * del blocco si dice SEMPRE da qui, mai ricalcolato. null = server più vecchio
+     * della v4.0 (o elenco non ancora letto).
+     */
+    val blocco: BloccoFaccende? = null,
+    /**
+     * (0.18) Il server conosce i lavori approvati e lo Studio (l'ultimo elenco aveva
+     * il `blocco`). false = server più vecchio: i testi della v3.9.
+     */
+    val conApprovazione: Boolean = false,
 ) {
     /** true = questi dati sono del figlio [id]. */
     fun di(id: Long?): Boolean = richiesta && figlioId == id
@@ -139,7 +157,7 @@ class GestoreFaccende<I : Any>(
     /** (0.17) Quanto si aspetta dopo l'ultima lettera prima di cercare. */
     private val attesaRicerca: Long = ATTESA_RICERCA_MS,
 ) {
-    private data class Ricordate(val faccende: List<Faccenda>, val alle: Instant)
+    private data class Ricordate(val faccende: List<Faccenda>, val alle: Instant, val blocco: BloccoFaccende? = null)
 
     private val _stato = MutableStateFlow(StatoFaccende<I>())
     val stato: StateFlow<StatoFaccende<I>> = _stato.asStateFlow()
@@ -168,10 +186,12 @@ class GestoreFaccende<I : Any>(
                 caricamento = true,
                 faccende = ricordata?.faccende,
                 ricevutaAlle = ricordata?.alle,
+                blocco = ricordata?.blocco,
                 collegamentoNonValido = prima.collegamentoNonValido,
                 // (0.17) Quello che si sa del server non cambia col figlio: un server
                 // vecchio resta vecchio finché un elenco non dice il contrario.
                 conModifiche = prima.conModifiche,
+                conApprovazione = prima.conApprovazione,
                 // Un gesto in volo resta in volo, e la foto aperta resta aperta.
                 invio = prima.invio,
                 evento = prima.evento,
@@ -190,12 +210,15 @@ class GestoreFaccende<I : Any>(
             when (val esito = postino.leggiFaccende(figlioId)) {
                 is EsitoFaccende.Lette -> {
                     val adesso = orologio()
-                    ricordate[figlioId] = Ricordate(esito.faccende, adesso)
+                    ricordate[figlioId] = Ricordate(esito.faccende, adesso, esito.blocco)
                     dimenticaFotoCambiate(esito.faccende)
                     _stato.value = _stato.value.copy(
                         caricamento = false,
                         faccende = esito.faccende,
                         conModifiche = esito.conModifiche ?: _stato.value.conModifiche,
+                        // (0.18) Il blocco del server; senza, il server è più vecchio della v4.0.
+                        blocco = esito.blocco,
+                        conApprovazione = esito.blocco != null,
                         serverVecchio = false,
                         configurazioneMancante = false,
                         collegamentoNonValido = false,
@@ -207,6 +230,8 @@ class GestoreFaccende<I : Any>(
                 EsitoFaccende.ServerVecchio -> _stato.value = _stato.value.copy(
                     caricamento = false,
                     faccende = emptyList(),
+                    blocco = null,
+                    conApprovazione = false,
                     serverVecchio = true,
                     configurazioneMancante = false,
                     errore = false,
@@ -330,14 +355,38 @@ class GestoreFaccende<I : Any>(
      * `foto_cambiata` e non conferma niente. Lo sblocco non cambia (è già avvenuto
      * all'ultima foto); dopo, il lavoro non si può più bocciare.
      */
-    fun conferma(figlioId: Long?, faccenda: Faccenda, fotoVista: String?) = gesto(figlioId, GestoFaccende.CONFERMA) { postino ->
+    fun conferma(
+        figlioId: Long?,
+        faccenda: Faccenda,
+        fotoVista: String?,
+        effetto: EffettoApprovazione = EffettoApprovazione.NESSUNO,
+    ) {
+        // (0.18, v4.0) Per una foto da approvare `foto_ts` è obbligatorio: senza la foto
+        // guardata non si approva niente (il server direbbe 422).
+        val daApprovare = daApprovare(faccenda)
+        if (daApprovare && fotoVista == null) return
+        confermaFatta(figlioId, faccenda, fotoVista, if (daApprovare) EventoFaccende.Approvata(effetto) else EventoFaccende.Confermata)
+    }
+
+    private fun confermaFatta(figlioId: Long?, faccenda: Faccenda, fotoVista: String?, riuscita: EventoFaccende) {
+        val tipo = if (riuscita is EventoFaccende.Approvata) GestoFaccende.APPROVA else GestoFaccende.CONFERMA
+        gesto(figlioId, tipo) { postino ->
         when (val esito = postino.confermaFaccenda(faccenda.id, fotoVista)) {
-            is EsitoScrittura.Riuscito -> EventoFaccende.Confermata
+            // (correzione 0.18) Lo sblocco promesso dalla domanda si dice solo se il blocco,
+            // riletto subito dopo, non è più attivo: l'orologio di questo telefono o un
+            // elenco di un minuto prima possono aver sbagliato la previsione.
+            is EsitoScrittura.Riuscito -> if (riuscita is EventoFaccende.Approvata && riuscita.effetto != EffettoApprovazione.NESSUNO) {
+                val dopo = (postino.leggiFaccende(figlioId) as? EsitoFaccende.Lette)?.blocco
+                EventoFaccende.Approvata(effettoConfermato(riuscita.effetto, dopo))
+            } else {
+                riuscita
+            }
             is EsitoScrittura.Rifiutato -> {
                 if (esito.errore == CodiciErrore.SERVER_DA_AGGIORNARE) senzaModifiche()
-                EventoFaccende.Rifiuto(esito.errore, GestoFaccende.CONFERMA, figlioId)
+                EventoFaccende.Rifiuto(esito.errore, tipo, figlioId)
             }
-            EsitoScrittura.Fallito -> EventoFaccende.Rifiuto(null, GestoFaccende.CONFERMA, figlioId)
+            EsitoScrittura.Fallito -> EventoFaccende.Rifiuto(null, tipo, figlioId)
+        }
         }
     }
 

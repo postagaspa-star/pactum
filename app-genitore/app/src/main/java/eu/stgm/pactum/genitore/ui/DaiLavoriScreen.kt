@@ -264,7 +264,7 @@ fun DaiLavoriScreen(
                 )
                 // Che cosa succede, prima del tocco: domani si dice in evidenza.
                 Text(
-                    text = testoInizioBlocco(p, inizio, nomeFiglio),
+                    text = testoInizioBlocco(p, inizio, nomeFiglio, stato.conApprovazione, inStudio(stato.blocco.takeIf { stato.di(figlioId) })),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (inizio?.domani == true) FontWeight.SemiBold else null,
                     color = if (inizio?.domani == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -516,7 +516,7 @@ fun ModificaLavoroScreen(
                         text = if (bloccoInvariato) {
                             testoOraBlocco(p, faccenda).orEmpty()
                         } else {
-                            testoInizioBlocco(p, inizio, nomeFiglio)
+                            testoInizioBlocco(p, inizio, nomeFiglio, stato.conApprovazione, inStudio(stato.blocco.takeIf { stato.di(figlioId) }))
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = if (inizio?.domani == true) FontWeight.SemiBold else null,

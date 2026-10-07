@@ -100,6 +100,10 @@ data class Scenario(
     /** (0.17, v3.9) GET /api/faccende?…&cerca=…: il figlio e il testo cercato. */
     val cerca: (figlioId: Long?, testo: String) -> ServerFinto.Risposta = { _, _ -> ServerFinto.Risposta.SenzaRete },
     val sessioni: (figlioId: Long?) -> ServerFinto.Risposta = { ServerFinto.Risposta.SenzaRete },
+    /** (0.18, v4.0) GET /api/studio, /api/studio/versioni e /api/studio/svolte (con `prima_di`). */
+    val studio: (figlioId: Long?) -> ServerFinto.Risposta = { ServerFinto.Risposta.Errore(404) },
+    val studioVersioni: (figlioId: Long?) -> ServerFinto.Risposta = { ServerFinto.Risposta.Errore(404) },
+    val studioSvolte: (figlioId: Long?, primaDi: Long?) -> ServerFinto.Risposta = { _, _ -> ServerFinto.Risposta.Errore(404) },
     val versione: () -> ServerFinto.Risposta = { ServerFinto.Risposta.SenzaRete },
     /** Le scritture (POST/PATCH/DELETE): metodo, percorso → risposta. */
     val scritture: (metodo: String, percorso: String) -> ServerFinto.Risposta = { _, _ ->
@@ -125,6 +129,10 @@ data class Scenario(
             percorso.startsWith("/api/faccende/") && percorso.endsWith("/foto") ->
                 foto(percorso.removePrefix("/api/faccende/").removeSuffix("/foto").toLong())
             percorso == "/api/sessioni" -> sessioni(figlio)
+            percorso == "/api/studio" -> studio(figlio)
+            percorso == "/api/studio/versioni" -> studioVersioni(figlio)
+            percorso == "/api/studio/svolte" ->
+                studioSvolte(figlio, Regex("prima_di=(\\d+)").find(percorsoCompleto)?.groupValues?.get(1)?.toLongOrNull())
             percorso == "/api/versione" -> versione()
             else -> ServerFinto.Risposta.Errore(404)
         }

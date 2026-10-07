@@ -424,8 +424,17 @@ fun descrizioneBuco(
         zona,
         oggi,
     )
-    return when (sottoTipo) {
+    val durante = campo(dettagli, "durante")
+    val testo = when (sottoTipo) {
+        // (0.18, contratto v4.0, parte B) Il programma chiuso da uno spegnimento che
+        // poi non è avvenuto, o dall'uscita dall'account, durante blocco o Studio.
         "programma_chiuso" -> when {
+            campo(dettagli, "causa") == "spegnimento_annullato" -> intervallo
+                ?.let { parole.testo(R.string.manomissione_chiuso_spegnimento_annullato, it) }
+                ?: parole.testo(R.string.manomissione_chiuso_spegnimento_annullato_senza_ora)
+            campo(dettagli, "causa") == "disconnessione" -> intervallo
+                ?.let { parole.testo(R.string.manomissione_chiuso_disconnessione, it) }
+                ?: parole.testo(R.string.manomissione_chiuso_disconnessione_senza_ora)
             intervallo != null ->
                 parole.testo(R.string.manomissione_programma_chiuso_quando, intervallo)
             campo(dettagli, "volontario")?.toBooleanStrictOrNull() == true ->
@@ -446,8 +455,37 @@ fun descrizioneBuco(
             TipoPermesso.ALTRO -> parole.testo(R.string.manomissione_permesso_generico)
             TipoPermesso.USO, null -> descrizioneBuco(parole, sottoTipo)
         }
+        // (0.18, v4.0) Scritta dal server: il computer ha smesso di battere durante
+        // il blocco o lo Studio. Non si accusa: può essere solo senza rete.
+        "computer_sparito" -> parole.testo(
+            when (durante) {
+                "blocco" -> R.string.manomissione_computer_sparito_blocco
+                "studio" -> R.string.manomissione_computer_sparito_studio
+                else -> R.string.manomissione_computer_sparito
+            },
+        )
+        // (0.18) Pactum fermato a mano sul telefono durante lo Studio, da quando a quando.
+        "fermato_durante_studio" -> intervallo
+            ?.let { parole.testo(R.string.manomissione_fermato_durante_studio_quando, it) }
+            ?: parole.testo(R.string.manomissione_fermato_durante_studio)
+        // (0.18, v4.0) Il computer ha trovato rovinato o sparito il suo promemoria del blocco
+        // o dello Studio: è rimasto chiuso lo stesso e lo dice.
+        "stato_blocco_perso" -> parole.testo(R.string.manomissione_stato_blocco_perso)
+        "stato_studio_perso" -> parole.testo(R.string.manomissione_stato_studio_perso)
+        // (0.18) L'attività che riapre Pactum sul computer: tolta o spenta (rimessa), o non creata.
+        // (correzione 0.18) "disattivata" è spenta, non tolta: la parte B li distingue.
+        "guardiano_assente" -> parole.testo(
+            when (campo(dettagli, "stato")) {
+                "non_creata" -> R.string.manomissione_guardiano_non_creato
+                "disattivata" -> R.string.manomissione_guardiano_spento
+                else -> R.string.manomissione_guardiano_tolto
+            },
+        )
         else -> descrizioneBuco(parole, sottoTipo)
     }
+    // (0.18) Un permesso tolto (o altro) durante lo Studio: lo si dice.
+    val diceGiaLoStudio = sottoTipo in setOf("computer_sparito", "fermato_durante_studio", "chiuso_durante_studio", "stato_studio_perso")
+    return if (durante == "studio" && !diceGiaLoStudio) parole.testo(R.string.manomissione_durante_studio, testo) else testo
 }
 
 /** (0.13) Quale permesso ha perso il telefono del figlio, dal campo `permesso` dei dettagli. */
@@ -530,6 +568,14 @@ fun descrizioneBuco(parole: Parole, sottoTipo: String?): String = when (sottoTip
     "siti_non_leggibili" -> parole.testo(R.string.manomissione_siti_non_leggibili)
     // (0.13) Il programma del computer chiuso mentre le faccende lo bloccavano.
     "chiuso_durante_blocco" -> parole.testo(R.string.manomissione_chiuso_durante_blocco)
+    // (0.18, contratto v4.0) Lo Studio e il computer che non resta chiuso.
+    "chiuso_durante_studio" -> parole.testo(R.string.manomissione_chiuso_durante_studio)
+    "fermato_durante_studio" -> parole.testo(R.string.manomissione_fermato_durante_studio)
+    "computer_sparito" -> parole.testo(R.string.manomissione_computer_sparito)
+    "guardiano_assente" -> parole.testo(R.string.manomissione_guardiano_tolto)
+    "istanza_occupata" -> parole.testo(R.string.manomissione_istanza_occupata)
+    "stato_blocco_perso" -> parole.testo(R.string.manomissione_stato_blocco_perso)
+    "stato_studio_perso" -> parole.testo(R.string.manomissione_stato_studio_perso)
     // (0.15) Senza sotto-tipo niente "Anomalia: ?": solo "Anomalia".
     else -> sottoTipo?.let { parole.testo(R.string.manomissione_generica, it) } ?: parole.testo(R.string.tipo_manomissione)
 }
@@ -1730,6 +1776,13 @@ private fun etichettaTipoNotifica(tipo: String): Int = when (tipo) {
     // (0.13) Le faccende (contratto v3.6): al genitore arrivano la foto e la fine.
     TipiNotificaFaccende.FACCENDA_FATTA -> R.string.tipo_faccenda_fatta
     TipiNotificaFaccende.FACCENDE_FINITE -> R.string.tipo_faccende_finite
+    // (0.18, contratto v4.0) Un lavoro approvato da un altro genitore, e lo Studio.
+    TipiNotificaFaccende.FACCENDA_CONFERMATA -> R.string.tipo_faccenda_confermata
+    TipiNotificaStudio.DA_APPROVARE -> R.string.tipo_studio_da_approvare
+    TipiNotificaStudio.NON_PARTITO -> R.string.tipo_studio_non_partito
+    TipiNotificaStudio.INIZIATO -> R.string.tipo_studio_iniziato
+    TipiNotificaStudio.CHIUSO -> R.string.tipo_studio_chiuso
+    TipiNotificaStudio.NON_CHIUSO -> R.string.tipo_studio_non_chiuso
     // (v3) Il computer che si spegne e si riaccende: non sono interruzioni.
     "sospensione" -> R.string.tipo_computer_spento
     "ripresa" -> R.string.tipo_computer_acceso
@@ -1839,6 +1892,19 @@ private fun fraseNotifica(
         TipiNotificaFaccende.FACCENDA_FATTA -> {
             val faccenda = campo(payload, "titolo")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
             val nome = nomeFiglioDi(notifica, figli)
+            // (0.18, contratto v4.0) Dalla v4.0 la foto aspetta l'approvazione: il server
+            // lo scrive nel suo messaggio ("…aspetta la vostra approvazione"), e il testo
+            // lo dice ("tocca per vedere la foto e approvarla"). Un server più vecchio no:
+            // allora i testi di prima, senza promettere niente.
+            if (fotoDaApprovareNelMessaggio(notifica.messaggio)) {
+                val testo = when {
+                    nellaTendina && nome != null -> parole.testo(R.string.notifica_faccenda_da_approvare, nome, faccenda)
+                    nellaTendina -> parole.testo(R.string.notifica_faccenda_da_approvare_senza_nome, faccenda)
+                    nome != null -> parole.testo(R.string.notifica_faccenda_da_approvare_lista, nome, faccenda)
+                    else -> parole.testo(R.string.notifica_faccenda_da_approvare_lista_senza_nome, faccenda)
+                }
+                return TestoNotifica(parole.testo(R.string.tipo_faccenda_da_approvare), testo)
+            }
             val testo = when {
                 nellaTendina && nome != null -> parole.testo(R.string.notifica_faccenda_fatta, nome, faccenda)
                 nellaTendina -> parole.testo(R.string.notifica_faccenda_fatta_senza_nome, faccenda)

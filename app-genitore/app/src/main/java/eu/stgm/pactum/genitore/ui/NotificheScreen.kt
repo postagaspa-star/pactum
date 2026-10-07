@@ -300,8 +300,10 @@ private fun iconaTipo(notifica: Notifica, figli: List<Figlio>): Painter = when (
     // (0.11) Le sessioni: sono del telefono.
     "sessione_da_approvare", "sessione_eliminata" -> painterResource(R.drawable.ic_dispositivo_telefono)
     // (0.13) I lavori di casa.
-    TipiNotificaFaccende.FACCENDA_FATTA, TipiNotificaFaccende.FACCENDE_FINITE ->
+    TipiNotificaFaccende.FACCENDA_FATTA, TipiNotificaFaccende.FACCENDE_FINITE, TipiNotificaFaccende.FACCENDA_CONFERMATA ->
         painterResource(R.drawable.ic_scheda_lavori)
+    // (0.18) La configurazione dello Studio si decide in "Da decidere".
+    TipiNotificaStudio.DA_APPROVARE -> painterResource(R.drawable.ic_scheda_turno)
     else -> painterResource(R.drawable.ic_notifica_binocolo)
 }
 

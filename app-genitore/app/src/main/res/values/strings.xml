@@ -994,6 +994,11 @@
     <string name="boccia_testo">Il lavoro torna da fare e il blocco riparte subito. %1$s legge il perché, se lo scrivi.</string>
     <string name="boccia_testo_senza_nome">Il lavoro torna da fare e il blocco riparte subito. Tuo figlio legge il perché, se lo scrivi.</string>
     <string name="boccia_fatto">Bocciato: il lavoro è di nuovo da fare.</string>
+    <!-- (correzione 0.18) Bocciare durante lo Studio: il blocco aspetta la fine dello Studio -->
+    <string name="boccia_testo_studio">Il lavoro torna da fare. %1$s ora è in Studio: il blocco parte a fine Studio. %1$s legge il perché, se lo scrivi.</string>
+    <string name="boccia_testo_studio_senza_nome">Il lavoro torna da fare. Tuo figlio ora è in Studio: il blocco parte a fine Studio. Legge il perché, se lo scrivi.</string>
+    <!-- (correzione 0.18) La foto è cambiata mentre la domanda "Boccia" era aperta -->
+    <string name="boccia_foto_cambiata">La foto è cambiata: guardala di nuovo prima di bocciarla.</string>
     <string name="togli_faccenda_titolo">Togliere «%1$s»?</string>
     <string name="togli_faccenda_testo">Non sarà più da fare. Se era l\'ultimo che bloccava, il blocco finisce.</string>
     <string name="togli_faccenda_conferma">Togli</string>
@@ -1176,4 +1181,191 @@
     <string name="famiglia_nessun_figlio">Nessun figlio ancora.</string>
     <!-- Come funziona Pactum: chi è l'arbitro delle regole di vita reale -->
     <string name="intro_arbitro">Le regole di vita reale (per esempio «Camminare un\'ora») non si misurano col telefono: le conferma l\'arbitro, la persona che tuo figlio ha scelto per verificarle. Quando dice di avercela fatta, puoi confermare tu, anche per conto dell\'arbitro, o dire che non è andata così.</string>
+
+    <!-- (0.18, contratto v4.0) Lavori di casa: si sbloccano quando un genitore approva la foto -->
+    <string name="blocco_rimandato">Il blocco parte a fine Studio</string>
+    <string name="blocco_rimandato_panoramica">Il blocco dei lavori parte a fine Studio</string>
+    <string name="foto_da_approvare_una">Una foto da approvare</string>
+    <string name="foto_da_approvare_n">%1$d foto da approvare</string>
+    <string name="faccende_da_approvare">DA APPROVARE</string>
+    <string name="faccende_da_approvare_spiega">Finché un genitore non approva la foto, il lavoro resta aperto: dalla sua ora blocca telefono e computer.</string>
+    <string name="faccenda_approva">Approva</string>
+    <string name="approva_titolo">Approvi «%1$s»?</string>
+    <string name="approva_testo">Non si potrà più bocciare.</string>
+    <string name="approva_testo_sblocca">Non si potrà più bocciare. Telefono e computer di %1$s si sbloccano.</string>
+    <string name="approva_testo_sblocca_senza_nome">Non si potrà più bocciare. Telefono e computer di tuo figlio si sbloccano.</string>
+    <string name="approva_testo_non_parte">Non si potrà più bocciare. Il blocco di %1$s non partirà a fine Studio.</string>
+    <string name="approva_testo_non_parte_senza_nome">Non si potrà più bocciare. Il blocco non partirà a fine Studio.</string>
+    <string name="approva_fatto">Approvato.</string>
+    <string name="approva_fatto_sblocca">Approvato: telefono e computer si sbloccano.</string>
+    <string name="approva_fatto_non_parte">Approvato: il blocco non partirà a fine Studio.</string>
+    <string name="faccenda_boccia_senza_scadenza">Puoi bocciarlo finché nessuno lo approva.</string>
+    <string name="faccende_errore_non_approvabile">Non si può approvare: un altro genitore l\'ha già approvato o bocciato. Ho riletto l\'elenco.</string>
+    <string name="faccende_errore_foto_cambiata_approva">La foto è cambiata: guardala di nuovo prima di approvarla.</string>
+    <string name="ricerca_stato_da_approvare">Da approvare</string>
+    <string name="faccenda_approvato_da">Approvato da %1$s</string>
+    <string name="faccenda_approvato_da_te">Approvato da te</string>
+    <string name="faccenda_approvato">Approvato</string>
+    <string name="faccende_spiega_approvazione">Finché un genitore non ha approvato la foto di ogni lavoro di %1$s, telefono e computer restano bloccati, tranne poche app fondamentali sul telefono.</string>
+    <string name="faccende_spiega_approvazione_senza_nome">Finché un genitore non ha approvato la foto di ogni lavoro, telefono e computer di tuo figlio restano bloccati, tranne poche app fondamentali sul telefono.</string>
+    <string name="dai_succede_subito_approvazione">Il blocco parte appena li dai: telefono e computer di %1$s restano bloccati finché un genitore non approva la foto di ogni lavoro.</string>
+    <string name="dai_succede_subito_approvazione_senza_nome">Il blocco parte appena li dai: telefono e computer di tuo figlio restano bloccati finché un genitore non approva la foto di ogni lavoro.</string>
+    <!-- (correzione 0.18) Con un'ora, dalla v4.0: non basta farli prima, serve l'approvazione prima dell'ora -->
+    <string name="dai_succede_oggi_approvazione">Il blocco parte oggi, %2$s, alle %1$s, se a quell\'ora un genitore non ha ancora approvato la foto di ogni lavoro. Può mandare le foto anche prima: il blocco non parte se le approvate prima.</string>
+    <string name="dai_succede_domani_approvazione">Le %1$s di oggi sono già passate: il blocco parte domani, %2$s, alle %1$s, se a quell\'ora un genitore non ha ancora approvato la foto di ogni lavoro. Può mandare le foto anche prima: il blocco non parte se le approvate prima.</string>
+    <!-- (correzione 0.18) Dare lavori durante lo Studio: il blocco aspetta la fine dello Studio -->
+    <string name="dai_succede_subito_approvazione_studio">%1$s ora è in Studio: il blocco parte a fine Studio. Poi telefono e computer restano bloccati finché un genitore non approva la foto di ogni lavoro.</string>
+    <string name="dai_succede_subito_approvazione_studio_senza_nome">Tuo figlio ora è in Studio: il blocco parte a fine Studio. Poi telefono e computer restano bloccati finché un genitore non approva la foto di ogni lavoro.</string>
+    <string name="dai_succede_aggiunta_studio">%1$s Se a quell\'ora è ancora in Studio, il blocco parte a fine Studio.</string>
+    <string name="faccende_foto_approvazione">Le foto da approvare restano finché qualcuno le approva o le boccia; quelle approvate si cancellano 30 giorni dopo. Si vedono solo qui: non vanno nella galleria.</string>
+    <!-- (0.18) Le notifiche dei lavori approvati -->
+    <string name="tipo_faccenda_da_approvare">Foto da approvare</string>
+    <string name="tipo_faccenda_confermata">Lavoro approvato</string>
+    <string name="notifica_faccenda_da_approvare">%1$s ha mandato la foto di «%2$s»: tocca per vedere la foto e approvarla.</string>
+    <string name="notifica_faccenda_da_approvare_senza_nome">Tuo figlio ha mandato la foto di «%1$s»: tocca per vedere la foto e approvarla.</string>
+    <string name="notifica_faccenda_da_approvare_lista">%1$s ha mandato la foto di «%2$s»: aspetta l\'approvazione.</string>
+    <string name="notifica_faccenda_da_approvare_lista_senza_nome">Tuo figlio ha mandato la foto di «%1$s»: aspetta l\'approvazione.</string>
+
+    <!-- (0.18) Anomalie nuove: il computer che non resta chiuso (v4.0, parte B) e lo Studio -->
+    <string name="manomissione_computer_sparito">Il computer non risponde: può essere senza rete, oppure Pactum è stato fermato.</string>
+    <string name="manomissione_computer_sparito_blocco">Il computer non risponde durante il blocco dei lavori di casa: può essere senza rete, oppure Pactum è stato fermato.</string>
+    <string name="manomissione_computer_sparito_studio">Il computer non risponde durante lo Studio: può essere senza rete, oppure Pactum è stato fermato.</string>
+    <string name="manomissione_chiuso_durante_studio">Pactum è stato chiuso sul computer durante lo Studio</string>
+    <string name="manomissione_fermato_durante_studio">Pactum è stato fermato a mano sul telefono durante lo Studio</string>
+    <string name="manomissione_fermato_durante_studio_quando">Pactum è stato fermato a mano sul telefono durante lo Studio (%1$s)</string>
+    <string name="manomissione_guardiano_tolto">Sul computer era stata tolta l\'attività che riapre Pactum: Pactum l\'ha rimessa</string>
+    <!-- (correzione 0.18) guardiano_assente con stato "disattivata": spenta, non tolta (parte B) -->
+    <string name="manomissione_guardiano_spento">Sul computer era stata spenta l\'attività che riapre Pactum: Pactum l\'ha riaccesa</string>
+    <string name="manomissione_guardiano_non_creato">Sul computer Pactum non è riuscito a creare l\'attività che lo riapre se si chiude</string>
+    <!-- (0.18) Il computer ha perso il suo promemoria: resta chiuso lo stesso -->
+    <string name="manomissione_stato_blocco_perso">Sul computer era sparito il promemoria del blocco dei lavori di casa: Pactum è rimasto chiuso lo stesso</string>
+    <string name="manomissione_stato_studio_perso">Sul computer era sparito il promemoria dello Studio: Pactum ha tenuto lo Studio aperto lo stesso</string>
+    <string name="manomissione_istanza_occupata">Sul computer un altro programma provava a fermare Pactum all\'avvio: Pactum è partito lo stesso</string>
+    <string name="manomissione_chiuso_spegnimento_annullato">Pactum si è chiuso per uno spegnimento del computer che poi non è avvenuto (%1$s)</string>
+    <string name="manomissione_chiuso_spegnimento_annullato_senza_ora">Pactum si è chiuso per uno spegnimento del computer che poi non è avvenuto</string>
+    <string name="manomissione_chiuso_disconnessione">Pactum si è chiuso con l\'uscita dall\'account sul computer (%1$s)</string>
+    <string name="manomissione_chiuso_disconnessione_senza_ora">Pactum si è chiuso con l\'uscita dall\'account sul computer</string>
+    <string name="manomissione_durante_studio">%1$s, durante lo Studio</string>
+
+    <!-- (0.18, contratto v4.0, parte C) La Sessione Studio -->
+    <string name="studio_titolo">Sessione Studio</string>
+    <string name="studio_di_oggi">LO STUDIO DI OGGI</string>
+    <string name="studio_stato">Studio dalle %1$s · %2$d min dichiarati col timer su %3$d</string>
+    <string name="studio_stato_senza_minimo">Studio dalle %1$s · %2$d min dichiarati col timer</string>
+    <string name="studio_stato_chiude_dopo">%1$s · si chiude dopo le %2$s</string>
+    <string name="studio_chiudibile">%1$s lo può già chiudere dal suo telefono.</string>
+    <string name="studio_chiudibile_senza_nome">Lo può già chiudere dal suo telefono.</string>
+    <string name="studio_chiuso_figlio">Studio dalle %1$s, chiuso alle %2$s da %3$s · %4$d min dichiarati col timer</string>
+    <string name="studio_chiuso_figlio_senza_nome">Studio dalle %1$s, chiuso alle %2$s · %3$d min dichiarati col timer</string>
+    <string name="studio_chiuso_genitore">Studio dalle %1$s, chiuso alle %2$s da %3$s · %4$d min dichiarati col timer</string>
+    <string name="studio_chiuso_da_te">Studio dalle %1$s, chiuso alle %2$s da te · %3$d min dichiarati col timer</string>
+    <string name="studio_non_chiuso">Studio dalle %1$s, non chiuso · %2$d min dichiarati col timer</string>
+    <string name="studio_ieri_non_chiuso">Lo Studio di ieri non è stato chiuso: %1$d min dichiarati col timer.</string>
+    <string name="studio_dichiarazione">Cosa ha fatto: «%1$s»</string>
+    <string name="studio_motivo">Motivo: «%1$s»</string>
+    <string name="studio_parte_alle">Oggi lo Studio parte alle %1$s.</string>
+    <string name="studio_niente_oggi">Oggi niente Studio.</string>
+    <string name="studio_non_approvato">Lo Studio non è ancora approvato: %1$s lo propone dal suo telefono, poi un genitore lo approva.</string>
+    <string name="studio_non_approvato_senza_nome">Lo Studio non è ancora approvato: tuo figlio lo propone dal suo telefono, poi un genitore lo approva.</string>
+    <string name="studio_senza_telefono">Lo Studio non parte: serve un telefono di %1$s con Pactum 0.18 o più nuovo.</string>
+    <string name="studio_senza_telefono_senza_nome">Lo Studio non parte: serve un telefono di tuo figlio con Pactum 0.18 o più nuovo.</string>
+    <string name="studio_minuti_spiega">I minuti sono quelli col timer acceso dichiarati da %1$s: Pactum non può sapere se ha davvero fatto quello che dice.</string>
+    <string name="studio_minuti_spiega_senza_nome">I minuti sono quelli col timer acceso dichiarati da tuo figlio: Pactum non può sapere se ha davvero fatto quello che dice.</string>
+    <string name="studio_vedi">Vedi lo Studio</string>
+    <string name="studio_riga_in_corso">In Studio dalle %1$s</string>
+    <string name="studio_chiudi">Chiudi lo Studio</string>
+    <string name="studio_chiudi_titolo">Chiudere lo Studio di %1$s?</string>
+    <string name="studio_chiudi_titolo_senza_nome">Chiudere lo Studio?</string>
+    <string name="studio_chiudi_testo">Lo Studio finisce adesso, anche se non è ancora l\'ora o mancano minuti. Il motivo resta nel registro e si legge anche dal telefono del figlio.</string>
+    <string name="studio_chiudi_campo">Motivo (per esempio: visita medica)</string>
+    <string name="studio_chiudi_aiuto">Obbligatorio: da %1$d a %2$d caratteri.</string>
+    <string name="studio_chiudi_corto">Scrivi almeno %1$d caratteri.</string>
+    <string name="studio_chiudi_fatto">Studio chiuso.</string>
+    <string name="studio_errore_gia_chiuso">Lo Studio era già chiuso: ho riletto.</string>
+    <string name="studio_errore_non_trovato">Non trovo più questo Studio: ho riletto.</string>
+    <string name="studio_errore_parametri">Il motivo non va bene: da 3 a 300 caratteri, senza caratteri invisibili.</string>
+    <string name="studio_errore_rete">Non riesco a raggiungere il server: riprova.</string>
+    <string name="studio_errore_rifiutato">Il server non ha accettato la richiesta: aggiorna e riprova.</string>
+    <string name="studio_server_vecchio">Per lo Studio serve aggiornare il server di Pactum.</string>
+    <string name="studio_caricamento">Sto leggendo lo Studio…</string>
+    <string name="studio_errore">Non riesco a raggiungere il server. Controlla la connessione o riprova.</string>
+    <string name="studio_dati_vecchi">Dati non aggiornati: questi sono gli ultimi ricevuti.</string>
+    <string name="studio_in_corso_titolo">IN CORSO</string>
+    <string name="studio_config_titolo">Com\'è approvato</string>
+    <string name="studio_svolti_titolo">Gli Studi fatti</string>
+    <string name="studio_versioni_titolo">Versioni approvate</string>
+    <string name="studio_svolti_vuoto">Nessuno Studio finora.</string>
+    <string name="studio_altri">Mostra gli Studi più vecchi</string>
+    <string name="studio_altri_caricamento">Sto leggendo gli Studi più vecchi…</string>
+    <string name="studio_partito_da_solo">partito da solo</string>
+    <string name="studio_avviato_a_mano">avviato a mano da «%1$s»</string>
+    <string name="studio_avviato_a_mano_senza_nome">avviato a mano</string>
+    <string name="studio_sessione_chiusa">All\'inizio ha chiuso la sessione «%1$s».</string>
+    <string name="studio_nessun_tratto">Nessuna attività col timer.</string>
+    <string name="tratto_compiti">Compiti</string>
+    <string name="tratto_lavori_di_casa">Lavori di casa</string>
+    <string name="tratto_altro">Altro</string>
+    <string name="tratto_con_parola">%1$s (%2$s)</string>
+    <string name="tratto_lavoro">%1$s: «%2$s»</string>
+    <string name="tratto_minuti">%1$s · %2$d min</string>
+    <string name="tratto_in_corso">%1$s · in corso</string>
+    <string name="tratto_interrotto">interrotto</string>
+    <string name="tratto_non_contato">non contato</string>
+    <string name="studio_giorni_tutti">tutti i giorni</string>
+    <string name="studio_giorni_da_a">dal %1$s al %2$s</string>
+    <string name="studio_orari">Dalle %1$s, si chiude dopo le %2$s</string>
+    <string name="studio_minimo">Almeno %1$d min di attività col timer</string>
+    <string name="studio_lista_telefono">Sul telefono: %1$s</string>
+    <string name="studio_lista_computer">Sul computer: %1$s</string>
+    <string name="studio_lista_vuota">nessuna app: solo quelle sempre usabili</string>
+    <string name="studio_lista_vuota_computer">nessun programma né sito: solo quelli sempre usabili</string>
+    <string name="studio_sito">%1$s (sito)</string>
+    <string name="studio_firmato">%1$s, firmato da %2$s</string>
+    <string name="studio_app_fuori_store">le app installate fuori dal Play Store</string>
+    <string name="studio_decisa_famiglia">Decisa dalla famiglia all\'aggiornamento</string>
+    <string name="studio_decisa_da">Approvata da %1$s %2$s</string>
+    <string name="studio_decisa_da_te">Approvata da te %1$s</string>
+    <string name="studio_orari_dal">Questi orari valgono dal %1$s.</string>
+    <string name="studio_orari_da_domani">Questi orari valgono da domani.</string>
+    <string name="studio_versione">Versione %1$d</string>
+    <string name="studio_versione_orari_dal">orari dal %1$s</string>
+    <string name="studio_lista_stretta">Tieni la lista stretta: durante lo Studio il blocco dei lavori aspetta, e quello che è in lista resta libero.</string>
+    <string name="studio_dispositivo_vecchio">Su «%1$s» c\'è Pactum %2$s: lì lo Studio non c\'è e il blocco dei lavori non aspetta. Serve la 0.18 o più nuova.</string>
+    <string name="studio_dispositivo_sconosciuto">Su «%1$s» non so che versione di Pactum c\'è: se è più vecchia della 0.18, lì lo Studio non c\'è e il blocco dei lavori non aspetta.</string>
+    <!-- (0.18) La configurazione dello Studio da approvare, in "Da decidere" -->
+    <string name="studio_chiede_approvare">%1$s chiede di approvare lo Studio</string>
+    <string name="studio_chiede_approvare_senza_nome">Tuo figlio chiede di approvare lo Studio</string>
+    <string name="studio_chiede_cambiare">%1$s chiede di cambiare lo Studio</string>
+    <string name="studio_chiede_cambiare_senza_nome">Tuo figlio chiede di cambiare lo Studio</string>
+    <string name="studio_proposta_da">Dal %1$s «%2$s» · %3$s</string>
+    <string name="studio_prima">prima: %1$s</string>
+    <string name="studio_aggiunge">Aggiunge: %1$s</string>
+    <string name="studio_toglie">Toglie: %1$s</string>
+    <!-- (correzione 0.18) Il nome tecnico accanto all'etichetta: un'etichetta mandata dal figlio può nascondere un'altra app -->
+    <string name="studio_voce_con_chiave">%1$s (%2$s)</string>
+    <string name="studio_firma_tolta">Attenzione: per %1$s non si controlla più chi l\'ha firmato (prima: %2$s). Un altro programma con lo stesso nome passerebbe.</string>
+    <string name="studio_firma_cambiata">Attenzione: %1$s ora deve essere firmato da %2$s (prima: %3$s).</string>
+    <string name="studio_firma_nuova">%1$s ora deve essere firmato da %2$s (prima non si controllava).</string>
+    <string name="studio_nome_cambiato">%1$s ora si chiama «%2$s» (prima: «%3$s»).</string>
+    <string name="studio_lista_telefono_dal_computer">Attenzione: l\'ultima proposta arriva dal computer, ma cambia anche le app del telefono. Guarda il nome tecnico tra parentesi: è quello che conta.</string>
+    <string name="studio_nuovi_orari_domani">I nuovi orari valgono da domani.</string>
+    <string name="studio_nuova_lista_prossimo">La nuova lista vale dal prossimo Studio.</string>
+    <string name="studio_approva">Approva</string>
+    <string name="studio_rifiuta">Rifiuta</string>
+    <string name="studio_approva_titolo">Approvi lo Studio di %1$s?</string>
+    <string name="studio_approva_titolo_senza_nome">Approvi lo Studio?</string>
+    <string name="studio_rifiuta_titolo">Non approvi lo Studio di %1$s?</string>
+    <string name="studio_rifiuta_titolo_senza_nome">Non approvi lo Studio?</string>
+    <string name="studio_rifiuta_testo">Resta com\'era. Il perché lo legge tuo figlio (facoltativo).</string>
+    <string name="studio_approvato">Studio approvato.</string>
+    <string name="studio_rifiutato">Studio non approvato.</string>
+    <string name="studio_richiesta_cambiata">Nel frattempo la richiesta è cambiata: guardala di nuovo.</string>
+    <string name="studio_niente_da_decidere">Non c\'è più niente da decidere: qualcuno ha già deciso.</string>
+    <string name="studio_motivazione_precedente">L\'ultimo no: «%1$s»</string>
+    <!-- (0.18) Le notifiche dello Studio -->
+    <string name="tipo_studio_da_approvare">Studio da approvare</string>
+    <string name="tipo_studio_non_partito">Studio non partito</string>
+    <string name="tipo_studio_iniziato">Studio iniziato</string>
+    <string name="tipo_studio_chiuso">Studio chiuso</string>
+    <string name="tipo_studio_non_chiuso">Studio non chiuso</string>
 </resources>

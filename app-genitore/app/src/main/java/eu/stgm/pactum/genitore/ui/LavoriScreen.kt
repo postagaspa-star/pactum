@@ -89,6 +89,9 @@ import java.time.Instant
 // fatto cosa accanto a ogni gesto. Le foto si vedono a tutto schermo e restano
 // solo in memoria.
 
+/** (0.18) Il server conosce i lavori approvati (v4.0): "Approvato da…" al posto di "Confermato da…". */
+private val LocalConApprovazione = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 /** Ogni quanto si rilegge l'elenco mentre la scheda è davanti. */
 private const val INTERVALLO_RILETTURA_FACCENDE_MS = 60_000L
 
@@ -105,6 +108,7 @@ fun LavoriScreen(
     onFotoRichiestaConsumata: () -> Unit = {},
     vm: FaccendeViewModel = viewModel(),
     famigliaVm: FamigliaViewModel = viewModel(),
+    finestraVm: FinestraViewModel = viewModel(),
 ) {
     val cornice = LocalCornice.current
     val stato by vm.stato.collectAsStateWithLifecycle()
@@ -137,6 +141,10 @@ fun LavoriScreen(
     }
 
     var bocciaId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // (correzione 0.18) QUALE foto si stava bocciando: dalla v4.0 una foto da approvare
+    // si boccia senza limite di tempo, quindi la domanda può restare aperta a lungo.
+    // Se intanto la foto cambia (bocciata da un altro e rifatta) la domanda si chiude.
+    var bocciaFotoTs by rememberSaveable { mutableStateOf<String?>(null) }
     var togliId by rememberSaveable { mutableStateOf<Long?>(null) }
     // (0.17) La domanda di "svolto" non resta aperta cambiando scheda: tornando, si ricontrolla tutto.
     var svoltoId by remember { mutableStateOf<Long?>(null) }
@@ -167,11 +175,18 @@ fun LavoriScreen(
         val evento = stato.evento ?: return@LaunchedEffect
         vm.consumaEvento()
         famigliaVm.aggiorna() // i lavori da fare e il blocco accanto al figlio
+        // (correzione 0.18) Le foto da approvare di "Da decidere" e della Panoramica
+        // vengono dalla finestra: dopo un'approvazione (o una bocciatura) la si rilegge,
+        // se no la foto appena approvata resterebbe da decidere fino al giro dopo.
+        if (famiglia.pronta && (evento is EventoFaccende.Approvata || evento == EventoFaccende.Bocciata || evento == EventoFaccende.Confermata)) {
+            finestraVm.aggiorna(figlioId)
+        }
         val messaggio = when (evento) {
             is EventoFaccende.Date -> testoFaccendeDate(p, evento.quante)
             EventoFaccende.Bocciata -> p.testo(R.string.boccia_fatto)
             EventoFaccende.Annullata -> p.testo(R.string.togli_faccenda_fatto)
             EventoFaccende.Confermata -> p.testo(R.string.svolto_fatto)
+            is EventoFaccende.Approvata -> testoApprovato(p, evento.effetto)
             EventoFaccende.Modificata -> p.testo(R.string.modifica_fatto)
             EventoFaccende.NessunCambio -> p.testo(R.string.modifica_nessun_cambio)
             is EventoFaccende.Rifiuto -> {
@@ -192,6 +207,7 @@ fun LavoriScreen(
         dispositiviSenzaBlocco(famiglia.figlioScelto?.dispositivi.orEmpty())
     }
 
+    androidx.compose.runtime.CompositionLocalProvider(LocalConApprovazione provides stato.conApprovazione) {
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
@@ -245,6 +261,9 @@ fun LavoriScreen(
                     adesso = adesso,
                     invio = stato.invio,
                     conModifiche = stato.conModifiche,
+                    // (0.18, v4.0) Il blocco del server, mai ricalcolato (null = server più vecchio).
+                    bloccoServer = stato.blocco,
+                    conApprovazione = stato.conApprovazione,
                     fotoViste = fotoViste,
                     cercato = cercato,
                     ricerca = ricerca,
@@ -254,7 +273,10 @@ fun LavoriScreen(
                     onTogli = { togliId = it.id },
                     onGuardaFoto = { vm.apriFoto(it.id, it.fotoTs) },
                     onSvolto = { svoltoId = it.id },
-                    onBoccia = { bocciaId = it.id },
+                    onBoccia = {
+                        bocciaId = it.id
+                        bocciaFotoTs = it.fotoTs
+                    },
                 )
             }
         }
@@ -294,32 +316,54 @@ fun LavoriScreen(
             conConferma = stato.conModifiche,
             onChiudi = vm::chiudiFoto,
             onRiprova = { vm.apriFoto(foto.faccendaId, foto.fotoTs) },
-            onBoccia = { bocciaId = it.id },
+            onBoccia = {
+                bocciaId = it.id
+                // La foto che si sta guardando a tutto schermo (se si sa quale), non l'ultima dell'elenco.
+                bocciaFotoTs = foto.fotoTs ?: it.fotoTs
+            },
             onSvolto = { svoltoId = it.id },
         )
+    }
     }
 
     // (0.17) "Segna come svolto": una domanda breve, non si torna indietro. Vale solo
     // finché la foto guardata è quella di adesso: se l'elenco dice un'altra foto (bocciata
     // e rifatta), la domanda si chiude. Il server lo ricontrolla comunque (`foto_cambiata`).
+    // (0.18, v4.0) Per una foto da approvare la stessa domanda è "Approvi «…»?", e dice
+    // se telefono e computer si sbloccano (dal blocco del server).
     val daConfermare = trovaLavoro(svoltoId)
-    val ancoraConfermabile = daConfermare != null && azioniFatto(
-        daConfermare,
-        adesso,
-        vista = daConfermare.fotoTs?.let { ChiaveFoto(daConfermare.id, it) in fotoViste } == true,
-        conConferma = stato.conModifiche,
-    ).principale == PulsanteFatto.SEGNA_SVOLTO
+    val pulsanteDaConfermare = daConfermare?.let {
+        // (0.18) Guardata = già nel ricordo del telefono, OPPURE aperta adesso sullo
+        // schermo (il ricordo si scrive un attimo dopo: un tocco veloce su "Approva"
+        // sotto la foto non deve chiudere la domanda appena aperta).
+        val apertaOra = stato.foto?.let { aperta -> aperta.faccendaId == it.id && aperta.fotoTs == it.fotoTs && aperta.immagine != null } == true
+        azioniFatto(
+            it,
+            adesso,
+            vista = apertaOra || it.fotoTs?.let { ts -> ChiaveFoto(it.id, ts) in fotoViste } == true,
+            conConferma = stato.conModifiche,
+        ).principale
+    }
+    val ancoraConfermabile = pulsanteDaConfermare == PulsanteFatto.SEGNA_SVOLTO || pulsanteDaConfermare == PulsanteFatto.APPROVA
     LaunchedEffect(svoltoId, ancoraConfermabile) {
         if (svoltoId != null && !ancoraConfermabile) svoltoId = null
     }
     daConfermare?.takeIf { ancoraConfermabile }?.let { faccenda ->
+        val approva = pulsanteDaConfermare == PulsanteFatto.APPROVA
+        val effetto = if (approva) effettoApprovazione(faccenda, stato.blocco, adesso) else EffettoApprovazione.NESSUNO
         AlertDialog(
             onDismissRequest = { svoltoId = null },
-            title = { Text(stringResource(R.string.svolto_titolo, faccenda.titolo)) },
-            text = if (bocciabile(faccenda, adesso) is Bocciabile.Si) {
-                { Text(stringResource(R.string.svolto_testo)) }
-            } else {
-                null
+            title = {
+                Text(stringResource(if (approva) R.string.approva_titolo else R.string.svolto_titolo, faccenda.titolo))
+            },
+            text = when {
+                approva -> {
+                    { Text(testoDomandaApprova(p, effetto, nomeFiglio)) }
+                }
+                bocciabile(faccenda, adesso) is Bocciabile.Si -> {
+                    { Text(stringResource(R.string.svolto_testo)) }
+                }
+                else -> null
             },
             confirmButton = {
                 // Spento mentre un'altra azione sta mandando: il tocco non va perso.
@@ -328,10 +372,10 @@ fun LavoriScreen(
                     onClick = {
                         svoltoId = null
                         // La foto guardata (è quella di adesso: se no il pulsante non c'era).
-                        vm.conferma(figlioId, faccenda, fotoVista = faccenda.fotoTs)
+                        vm.conferma(figlioId, faccenda, fotoVista = faccenda.fotoTs, effetto = effetto)
                     },
                 ) {
-                    Text(stringResource(R.string.faccenda_segna_svolto))
+                    Text(stringResource(if (approva) R.string.faccenda_approva else R.string.faccenda_segna_svolto))
                 }
             },
             dismissButton = {
@@ -340,15 +384,32 @@ fun LavoriScreen(
         )
     }
 
-    trovaLavoro(bocciaId)?.let { faccenda ->
+    // (correzione 0.18) La domanda vale solo per la foto che si stava guardando: se il
+    // lavoro non è più fatto, o ha un'altra foto, si chiude e lo si dice (come per
+    // "Approva"). POST …/boccia non porta `foto_ts`: il controllo può farlo solo l'app.
+    val daBocciare = trovaLavoro(bocciaId)
+    val bocciaAncoraValida = daBocciare != null && bocciaAncoraLaStessaFoto(daBocciare, bocciaFotoTs)
+    LaunchedEffect(bocciaId, bocciaAncoraValida, daBocciare?.fotoTs, daBocciare?.stato) {
+        if (bocciaId != null && daBocciare != null && !bocciaAncoraValida) {
+            bocciaId = null
+            bocciaFotoTs = null
+            cornice.messaggi.mostra(p.testo(R.string.boccia_foto_cambiata))
+        }
+    }
+    daBocciare?.takeIf { bocciaAncoraValida }?.let { faccenda ->
         DialogoBoccia(
             faccenda = faccenda,
             nomeFiglio = nomeFiglio,
+            inStudio = inStudio(stato.blocco.takeIf { stato.di(figlioId) }),
             onBoccia = { nota ->
                 bocciaId = null
+                bocciaFotoTs = null
                 vm.boccia(figlioId, faccenda, nota)
             },
-            onAnnulla = { bocciaId = null },
+            onAnnulla = {
+                bocciaId = null
+                bocciaFotoTs = null
+            },
         )
     }
 }
@@ -364,6 +425,8 @@ private fun ElencoFaccende(
     adesso: Instant,
     invio: Boolean,
     conModifiche: Boolean,
+    bloccoServer: eu.stgm.pactum.genitore.dati.BloccoFaccende?,
+    conApprovazione: Boolean,
     fotoViste: Set<ChiaveFoto>,
     cercato: String,
     ricerca: StatoRicerca?,
@@ -379,7 +442,11 @@ private fun ElencoFaccende(
     val io = famiglia.io
     val vista: (Faccenda) -> Boolean = { f -> f.fotoTs?.let { ChiaveFoto(f.id, it) in fotoViste } == true }
     val gruppi = remember(faccende) { faccendeInGruppi(faccende) }
-    val blocco = statoBlocco(faccende, adesso)
+    // (0.18, contratto v4.0) Lo stato del blocco è SEMPRE quello del server, arrivato
+    // con l'elenco: mai ricalcolato. Solo un server più vecchio della v4.0 (senza
+    // `blocco` in GET /api/faccende) lo lascia calcolare all'app, come prima.
+    val blocco = statoBlocco(faccende, adesso, bloccoServer)
+    val azioniDi: (Faccenda) -> AzioniFatto = { azioniFatto(it, adesso, vista(it), conModifiche) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(Spazi.l),
@@ -408,8 +475,12 @@ private fun ElencoFaccende(
                     testoQuanteDaFare(p, blocco.daFare)?.let {
                         Text(text = it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = Spazi.xs))
                     }
+                    testoQuanteDaApprovare(p, blocco.daApprovare)?.let {
+                        Text(text = it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = Spazi.xs))
+                    }
             }
-            if (blocco.attivo) {
+            // (0.18) Rimandato dallo Studio: dovuto ma non ancora sul telefono, niente evidenza.
+            if (blocco.attivo && !blocco.rimandato) {
                 CardEvidenza(tono = Tono.Attenzione) { contenuto() }
             } else {
                 CardNormale { contenuto() }
@@ -421,12 +492,40 @@ private fun ElencoFaccende(
                 Column {
                     StatoVuoto(stringResource(R.string.faccende_nessuna))
                     Text(
-                        text = spiegaFaccende(p, nomeFiglio),
+                        text = spiegaFaccende(p, nomeFiglio, conApprovazione),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = Spazi.s),
                     )
                 }
+            }
+        }
+
+        // (0.18, contratto v4.0) In cima: le foto che aspettano l'approvazione. "Approva"
+        // compare dopo aver aperto la foto QUI; "Boccia" resta finché nessuno approva.
+        if (gruppi.daApprovare.isNotEmpty()) {
+            item(key = "da-approvare-titolo") {
+                Column {
+                    SopraTitolo(stringResource(R.string.faccende_da_approvare))
+                    Text(
+                        text = stringResource(R.string.faccende_da_approvare_spiega),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = Spazi.xs),
+                    )
+                }
+            }
+            items(gruppi.daApprovare, key = { "da-approvare-${it.id}" }) { faccenda ->
+                RigaFatta(
+                    faccenda = faccenda,
+                    io = io,
+                    adesso = adesso,
+                    invio = invio,
+                    azioni = azioniDi(faccenda),
+                    onGuardaFoto = { onGuardaFoto(faccenda) },
+                    onSvolto = { onSvolto(faccenda) },
+                    onBoccia = { onBoccia(faccenda) },
+                )
             }
         }
 
@@ -446,8 +545,6 @@ private fun ElencoFaccende(
 
         // (0.17) La ricerca, in cima ai lavori chiusi: cerca in TUTTA la storia.
         item(key = "cerca") { CampoRicerca(cercato, onCerca) }
-
-        val azioniDi: (Faccenda) -> AzioniFatto = { azioniFatto(it, adesso, vista(it), conModifiche) }
 
         if (ricerca != null) {
             // Con una ricerca aperta, i risultati al posto di Fatti e Tolti.
@@ -494,7 +591,7 @@ private fun ElencoFaccende(
 
         item(key = "trenta-giorni") {
             Text(
-                text = stringResource(R.string.faccende_foto_30_giorni),
+                text = stringResource(if (conApprovazione) R.string.faccende_foto_approvazione else R.string.faccende_foto_30_giorni),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -605,7 +702,7 @@ private fun RigaFatta(
             ).joinToString(" · ")
             if (righe.isNotEmpty()) RigaSottovoce(righe)
             righeBocciature(p, faccenda, io).forEach { RigaSottovoce(it) }
-            testoConfermato(p, faccenda, io)?.let {
+            testoConfermato(p, faccenda, io, approvato = LocalConApprovazione.current)?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodyMedium,
@@ -630,6 +727,11 @@ private fun RigaFatta(
                         PulsanteFatto.SEGNA_SVOLTO ->
                             Button(onClick = onSvolto, enabled = !invio) {
                                 Text(stringResource(R.string.faccenda_segna_svolto), maxLines = 1, softWrap = false)
+                            }
+                        // (0.18, v4.0) Una foto da approvare, guardata qui.
+                        PulsanteFatto.APPROVA ->
+                            Button(onClick = onSvolto, enabled = !invio) {
+                                Text(stringResource(R.string.faccenda_approva), maxLines = 1, softWrap = false)
                             }
                         PulsanteFatto.NESSUNO -> Unit
                     }
@@ -747,7 +849,13 @@ private fun RigaAnnullata(faccenda: Faccenda, io: RiferimentoGenitore?) {
 
 /** "Bocciare «…»?": che cosa succede, e il perché facoltativo (lo legge il figlio). */
 @Composable
-private fun DialogoBoccia(faccenda: Faccenda, nomeFiglio: String?, onBoccia: (String?) -> Unit, onAnnulla: () -> Unit) {
+private fun DialogoBoccia(
+    faccenda: Faccenda,
+    nomeFiglio: String?,
+    inStudio: Boolean,
+    onBoccia: (String?) -> Unit,
+    onAnnulla: () -> Unit,
+) {
     val p = parole()
     var nota by rememberSaveable(faccenda.id) { mutableStateOf("") }
     val problema = problemaNota(nota)
@@ -758,10 +866,7 @@ private fun DialogoBoccia(faccenda: Faccenda, nomeFiglio: String?, onBoccia: (St
         title = { Text(stringResource(R.string.boccia_titolo, faccenda.titolo)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
-                Text(
-                    nomeDaScrivere(nomeFiglio)?.let { stringResource(R.string.boccia_testo, it) }
-                        ?: stringResource(R.string.boccia_testo_senza_nome),
-                )
+                Text(testoDomandaBoccia(p, nomeFiglio, inStudio))
                 OutlinedTextField(
                     value = nota,
                     onValueChange = { nota = it },
@@ -892,11 +997,12 @@ private fun VistaFoto(
                         istanteServer(faccenda.fotoTs)?.let {
                             Text(text = p.testo(R.string.faccenda_foto_arrivata, alleQuando(p, it)), color = Color.White)
                         }
-                        val sotto = testoConfermato(p, faccenda, io) ?: testoBocciabile(p, stato).takeIf { azioni.boccia || stato is Bocciabile.Scaduta }
+                        val sotto = testoConfermato(p, faccenda, io, approvato = LocalConApprovazione.current) ?: testoBocciabile(p, stato).takeIf { azioni.boccia || stato is Bocciabile.Scaduta }
                         sotto?.let {
                             Text(text = it, color = Color.White, modifier = Modifier.padding(top = Spazi.xs))
                         }
-                        val svolto = azioni.principale == PulsanteFatto.SEGNA_SVOLTO
+                        val approva = azioni.principale == PulsanteFatto.APPROVA
+                        val svolto = azioni.principale == PulsanteFatto.SEGNA_SVOLTO || approva
                         if (svolto || azioni.boccia) {
                             // In fila se ci stanno, se no uno sotto l'altro (mai un testo tagliato).
                             FilaPulsanti(modifier = Modifier.fillMaxWidth().padding(top = Spazi.s)) {
@@ -906,7 +1012,11 @@ private fun VistaFoto(
                                         enabled = !invio,
                                         colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
                                     ) {
-                                        Text(stringResource(R.string.faccenda_segna_svolto), maxLines = 1, softWrap = false)
+                                        Text(
+                                            stringResource(if (approva) R.string.faccenda_approva else R.string.faccenda_segna_svolto),
+                                            maxLines = 1,
+                                            softWrap = false,
+                                        )
                                     }
                                 }
                                 if (azioni.boccia) {

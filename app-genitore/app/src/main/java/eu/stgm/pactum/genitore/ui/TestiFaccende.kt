@@ -71,10 +71,14 @@ fun testoStatoBlocco(
     stato: StatoBlocco,
     zona: ZoneId = ZoneId.systemDefault(),
     oggi: LocalDate = LocalDate.now(zona),
+    /** (0.18) Nella Panoramica si dice "il blocco DEI LAVORI": lì non è chiaro di che cosa. */
+    perPanoramica: Boolean = false,
 ): String? {
     val dal = stato.dal
     val prossimo = stato.prossimo
     return when {
+        // (0.18, v4.0) Dovuto ma rimandato: aspetta la fine dello Studio.
+        stato.rimandato -> parole.testo(if (perPanoramica) R.string.blocco_rimandato_panoramica else R.string.blocco_rimandato)
         stato.attivo -> dal?.let { parole.testo(R.string.blocco_attivo_dal, dalleQuando(parole, it, zona, oggi)) }
             ?: parole.testo(R.string.blocco_attivo)
         prossimo != null -> parole.testo(R.string.blocco_parte, alleQuando(parole, prossimo, zona, oggi))
@@ -89,6 +93,14 @@ fun testoQuanteDaFare(parole: Parole, quante: Int): String? = when {
     quante == 1 -> parole.testo(R.string.faccende_una_da_fare)
     else -> parole.testo(R.string.faccende_quante_da_fare, quante)
 }
+
+/** (0.18) "Una foto da approvare", "3 foto da approvare"; null se nessuna. */
+fun testoQuanteDaApprovare(parole: Parole, quante: Int): String? =
+    when {
+        quante <= 0 -> null
+        quante == 1 -> parole.testo(R.string.foto_da_approvare_una)
+        else -> parole.testo(R.string.foto_da_approvare_n, quante)
+    }
 
 /** "Una foto arrivata da meno di 24 ore…"; null se nessuna. */
 fun testoFotoDaGuardare(parole: Parole, quante: Int): String? = when {
@@ -110,9 +122,15 @@ fun fotoDaGuardare(faccende: List<Faccenda>, adesso: Instant, viste: Set<ChiaveF
     }
 
 /** Che cosa vuol dire dare faccende, col nome del figlio (o "tuo figlio"). */
-fun spiegaFaccende(parole: Parole, nomeFiglio: String?): String =
-    nomeDaScrivere(nomeFiglio)?.let { parole.testo(R.string.faccende_spiega, it) }
-        ?: parole.testo(R.string.faccende_spiega_senza_nome)
+fun spiegaFaccende(parole: Parole, nomeFiglio: String?, conApprovazione: Boolean = false): String =
+    if (conApprovazione) {
+        // (0.18, v4.0) La foto non sblocca più: sblocca l'approvazione di un genitore.
+        nomeDaScrivere(nomeFiglio)?.let { parole.testo(R.string.faccende_spiega_approvazione, it) }
+            ?: parole.testo(R.string.faccende_spiega_approvazione_senza_nome)
+    } else {
+        nomeDaScrivere(nomeFiglio)?.let { parole.testo(R.string.faccende_spiega, it) }
+            ?: parole.testo(R.string.faccende_spiega_senza_nome)
+    }
 
 /** "data da Mamma", "data da te"; null se non si sa. */
 fun testoDataDa(parole: Parole, faccenda: Faccenda, io: RiferimentoGenitore?): String? =
@@ -169,12 +187,14 @@ fun testoConfermato(
     io: RiferimentoGenitore?,
     zona: ZoneId = ZoneId.systemDefault(),
     oggi: LocalDate = LocalDate.now(zona),
+    /** (0.18, v4.0) Con un server dalla v4.0 confermare è approvare: "Approvato da Mamma". */
+    approvato: Boolean = false,
 ): String? {
     if (faccenda.confermataTs == null) return null
     val chi = when (val c = chiHaFatto(faccenda.confermataDa, io)) {
-        ChiHaFatto.Tu -> parole.testo(R.string.faccenda_confermata_da_te)
-        is ChiHaFatto.Altro -> parole.testo(R.string.faccenda_confermata_da, c.nome)
-        ChiHaFatto.NonSi -> parole.testo(R.string.faccenda_confermata)
+        ChiHaFatto.Tu -> parole.testo(if (approvato) R.string.faccenda_approvato_da_te else R.string.faccenda_confermata_da_te)
+        is ChiHaFatto.Altro -> parole.testo(if (approvato) R.string.faccenda_approvato_da else R.string.faccenda_confermata_da, c.nome)
+        ChiHaFatto.NonSi -> parole.testo(if (approvato) R.string.faccenda_approvato else R.string.faccenda_confermata)
     }
     val quando = istanteServer(faccenda.confermataTs)?.let { testoQuando(parole, it, zona, oggi) }
     return listOfNotNull(chi, quando).joinToString(" · ")
@@ -197,7 +217,13 @@ fun testoRisultato(
             quando(faccenda.creataTs)?.let { parole.testo(R.string.ricerca_dato, it) },
         )
         StatiFaccenda.FATTA -> listOfNotNull(
-            parole.testo(if (faccenda.confermataTs != null) R.string.ricerca_stato_svolto else R.string.ricerca_stato_fatto),
+            parole.testo(
+                when {
+                    daApprovare(faccenda) -> R.string.ricerca_stato_da_approvare
+                    faccenda.confermataTs != null -> R.string.ricerca_stato_svolto
+                    else -> R.string.ricerca_stato_fatto
+                },
+            ),
             quando(faccenda.fotoTs ?: faccenda.chiusaTs)?.let { parole.testo(R.string.ricerca_foto, it) },
         )
         StatiFaccenda.ANNULLATA -> listOfNotNull(parole.testo(R.string.ricerca_stato_tolto), quando(faccenda.chiusaTs))
@@ -253,9 +279,36 @@ fun testoBocciabile(parole: Parole, stato: Bocciabile): String? = when (stato) {
             parole.testo(R.string.faccenda_boccia_resta, testoDurata(parole, minuti))
         }
     }
+    Bocciabile.SenzaScadenza -> parole.testo(R.string.faccenda_boccia_senza_scadenza)
     Bocciabile.Scaduta -> parole.testo(R.string.faccenda_boccia_scaduta)
     Bocciabile.No -> null
 }
+
+/**
+ * (0.18, contratto v4.0) La domanda prima di approvare: "Non si potrà più
+ * bocciare.", e se è l'ultimo che blocca "Telefono e computer di Luca si
+ * sbloccano." (o, col blocco che aspetta lo Studio, "Il blocco di Luca non partirà
+ * a fine Studio.").
+ */
+fun testoDomandaApprova(parole: Parole, effetto: EffettoApprovazione, nomeFiglio: String?): String {
+    val nome = nomeDaScrivere(nomeFiglio)
+    return when (effetto) {
+        EffettoApprovazione.NESSUNO -> parole.testo(R.string.approva_testo)
+        EffettoApprovazione.SBLOCCA -> nome?.let { parole.testo(R.string.approva_testo_sblocca, it) }
+            ?: parole.testo(R.string.approva_testo_sblocca_senza_nome)
+        EffettoApprovazione.NON_PARTE_A_FINE_STUDIO -> nome?.let { parole.testo(R.string.approva_testo_non_parte, it) }
+            ?: parole.testo(R.string.approva_testo_non_parte_senza_nome)
+    }
+}
+
+/** (0.18) Che cosa dire dopo un'approvazione andata. */
+fun testoApprovato(parole: Parole, effetto: EffettoApprovazione): String = parole.testo(
+    when (effetto) {
+        EffettoApprovazione.NESSUNO -> R.string.approva_fatto
+        EffettoApprovazione.SBLOCCA -> R.string.approva_fatto_sblocca
+        EffettoApprovazione.NON_PARTE_A_FINE_STUDIO -> R.string.approva_fatto_non_parte
+    },
+)
 
 /** Il giorno scritto per intero, come lo dice una persona: "domenica 25/10". */
 private val formatoGiornoFaccende: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE dd/MM", Locale.ITALIAN)
@@ -267,14 +320,54 @@ private val formatoGiornoFaccende: DateTimeFormatter = DateTimeFormatter.ofPatte
  * rimasto aperto a cavallo di mezzanotte, direbbe il giorno sbagliato. È la cosa
  * che il genitore deve sapere prima del tocco.
  */
-fun testoInizioBlocco(parole: Parole, inizio: InizioBlocco?, nomeFiglio: String?): String {
+fun testoInizioBlocco(
+    parole: Parole,
+    inizio: InizioBlocco?,
+    nomeFiglio: String?,
+    conApprovazione: Boolean = false,
+    inStudio: Boolean = false,
+): String {
+    val nome = nomeDaScrivere(nomeFiglio)
     if (inizio == null) {
-        return nomeDaScrivere(nomeFiglio)?.let { parole.testo(R.string.dai_succede_subito, it) }
+        // (correzione 0.18) In Studio il blocco aspetta la fine dello Studio (parte C).
+        if (conApprovazione && inStudio) {
+            return nome?.let { parole.testo(R.string.dai_succede_subito_approvazione_studio, it) }
+                ?: parole.testo(R.string.dai_succede_subito_approvazione_studio_senza_nome)
+        }
+        if (conApprovazione) {
+            return nome?.let { parole.testo(R.string.dai_succede_subito_approvazione, it) }
+                ?: parole.testo(R.string.dai_succede_subito_approvazione_senza_nome)
+        }
+        return nome?.let { parole.testo(R.string.dai_succede_subito, it) }
             ?: parole.testo(R.string.dai_succede_subito_senza_nome)
     }
     val ora = formatoOraFaccende.format(inizio.quando)
     val giorno = formatoGiornoFaccende.format(inizio.quando)
-    return parole.testo(if (inizio.domani) R.string.dai_succede_domani else R.string.dai_succede_oggi, ora, giorno)
+    // (correzione 0.18) Dalla v4.0 non basta farli prima: serve l'approvazione prima
+    // dell'ora (parte A, «Lavoro fatto in anticipo»).
+    val testo = when {
+        conApprovazione && inizio.domani -> parole.testo(R.string.dai_succede_domani_approvazione, ora, giorno)
+        conApprovazione -> parole.testo(R.string.dai_succede_oggi_approvazione, ora, giorno)
+        inizio.domani -> parole.testo(R.string.dai_succede_domani, ora, giorno)
+        else -> parole.testo(R.string.dai_succede_oggi, ora, giorno)
+    }
+    return if (conApprovazione && inStudio) parole.testo(R.string.dai_succede_aggiunta_studio, testo) else testo
+}
+
+/**
+ * (correzione 0.18) La domanda prima di bocciare: il lavoro torna da fare e il
+ * blocco riparte subito; ma se il figlio è in Studio ([inStudio], dal blocco del
+ * server) il blocco parte a fine Studio (parte E, «Lavori scaduti o dati durante lo
+ * Studio»).
+ */
+fun testoDomandaBoccia(parole: Parole, nomeFiglio: String?, inStudio: Boolean = false): String {
+    val nome = nomeDaScrivere(nomeFiglio)
+    return when {
+        inStudio && nome != null -> parole.testo(R.string.boccia_testo_studio, nome)
+        inStudio -> parole.testo(R.string.boccia_testo_studio_senza_nome)
+        nome != null -> parole.testo(R.string.boccia_testo, nome)
+        else -> parole.testo(R.string.boccia_testo_senza_nome)
+    }
 }
 
 /** Il pulsante dell'ora scelta: "Dalle 16:00". */
@@ -303,7 +396,7 @@ fun testoProblemaNota(parole: Parole, problema: ProblemaTesto?): String? = when 
 }
 
 /** I gesti sulle faccende, per dire il rifiuto giusto. */
-enum class GestoFaccende { DAI, BOCCIA, ANNULLA, MODIFICA, CONFERMA }
+enum class GestoFaccende { DAI, BOCCIA, ANNULLA, MODIFICA, CONFERMA, APPROVA }
 
 /**
  * Che cosa dire quando il server non prende un gesto sulle faccende, ciascun
@@ -320,8 +413,12 @@ fun messaggioRifiutoFaccende(parole: Parole, codice: String?, gesto: GestoFaccen
         CodiciErrore.NON_MODIFICABILE -> parole.testo(R.string.faccende_errore_non_modificabile)
         CodiciErrore.LAVORO_TOLTO -> parole.testo(R.string.faccende_errore_tolto_nel_frattempo)
         CodiciErrore.LAVORO_NON_PIU_DA_FARE -> parole.testo(R.string.faccende_errore_non_piu_da_fare)
-        CodiciErrore.NON_CONFERMABILE -> parole.testo(R.string.faccende_errore_non_confermabile)
-        CodiciErrore.FOTO_CAMBIATA -> parole.testo(R.string.faccende_errore_foto_cambiata)
+        CodiciErrore.NON_CONFERMABILE -> parole.testo(
+            if (gesto == GestoFaccende.APPROVA) R.string.faccende_errore_non_approvabile else R.string.faccende_errore_non_confermabile,
+        )
+        CodiciErrore.FOTO_CAMBIATA -> parole.testo(
+            if (gesto == GestoFaccende.APPROVA) R.string.faccende_errore_foto_cambiata_approva else R.string.faccende_errore_foto_cambiata,
+        )
         CodiciErrore.CONFIGURAZIONE_MANCANTE -> parole.testo(R.string.faccende_errore_config_mancante)
         CodiciErrore.NON_TROVATO -> parole.testo(
             if (gesto == GestoFaccende.DAI) R.string.faccende_errore_figlio_non_trovato else R.string.faccende_errore_non_trovata,

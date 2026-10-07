@@ -47,6 +47,7 @@ import eu.stgm.pactum.genitore.ui.etichettaNotifica
 import eu.stgm.pactum.genitore.ui.faccendaDellaNotifica
 import eu.stgm.pactum.genitore.ui.idAvvisoSilenzio
 import eu.stgm.pactum.genitore.ui.notificaDiFaccende
+import eu.stgm.pactum.genitore.ui.notificaDelloStudio
 import eu.stgm.pactum.genitore.ui.idDigest
 import eu.stgm.pactum.genitore.ui.istanteServer
 import eu.stgm.pactum.genitore.ui.nomiDelleApp
@@ -739,6 +740,8 @@ class Vedetta(context: Context) {
             // (0.13) Le faccende (contratto v3.6): la pagina delle faccende di quel
             // figlio, e per una faccenda fatta la sua foto.
             notificaDiFaccende(tipo) -> MainActivity.DEST_FACCENDE
+            // (0.18) Lo Studio fatto (iniziato, chiuso, non chiuso, non partito): la sua pagina.
+            notificaDelloStudio(tipo) -> MainActivity.DEST_STUDIO
             else -> MainActivity.DEST_NOTIFICHE
         }
 
@@ -746,6 +749,8 @@ class Vedetta(context: Context) {
         private val TIPI_DA_DECIDERE = setOf(
             "nuova_proposta",
             "sessione_da_approvare",
+            // (0.18) La configurazione dello Studio da approvare.
+            "studio_da_approvare",
             "proposta_risposta",
             "proposta_annullata",
             "proposta_ritirata",

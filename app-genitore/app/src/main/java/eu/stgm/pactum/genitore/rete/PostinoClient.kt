@@ -1,6 +1,14 @@
 package eu.stgm.pactum.genitore.rete
 
 import eu.stgm.pactum.genitore.dati.AbbinamentoGenitore
+import eu.stgm.pactum.genitore.dati.BloccoFaccende
+import eu.stgm.pactum.genitore.dati.ConfigStudio
+import eu.stgm.pactum.genitore.dati.CorpoChiusuraStudio
+import eu.stgm.pactum.genitore.dati.CorpoRispostaStudio
+import eu.stgm.pactum.genitore.dati.PaccoStudio
+import eu.stgm.pactum.genitore.dati.PaccoSvolteStudio
+import eu.stgm.pactum.genitore.dati.PaccoVersioniStudio
+import eu.stgm.pactum.genitore.dati.StudioSvolto
 import eu.stgm.pactum.genitore.dati.CodiceAbbinamento
 import eu.stgm.pactum.genitore.dati.CodiceGenitore
 import eu.stgm.pactum.genitore.dati.CodiciErrore
@@ -211,7 +219,16 @@ sealed interface EsitoFaccende {
      * faccende portano `confermata_ts`. null = non si sa (elenco vuoto): vale quello
      * che si sapeva (un server vecchio risponde "serve aggiornarlo" e si smette di offrirlo).
      */
-    data class Lette(val faccende: List<Faccenda>, val conModifiche: Boolean? = true) : EsitoFaccende
+    data class Lette(
+        val faccende: List<Faccenda>,
+        val conModifiche: Boolean? = true,
+        /**
+         * (0.18, contratto v4.0) Il `blocco` del server nella stessa risposta: lo stato
+         * del blocco viene SEMPRE da qui, mai ricalcolato dall'elenco. null = server
+         * più vecchio della v4.0 (allora i testi della v3.9, senza Studio).
+         */
+        val blocco: BloccoFaccende? = null,
+    ) : EsitoFaccende
     data object ServerVecchio : EsitoFaccende
     data object NonAutorizzato : EsitoFaccende
     data object Fallita : EsitoFaccende
@@ -275,6 +292,58 @@ sealed interface EsitoRicercaFaccende {
     data object Errore : EsitoRicercaFaccende
 }
 
+// --- (0.18) La Sessione Studio (contratto v4.0, parte C) -----------------------------
+
+/**
+ * L'esito di una lettura dello Studio (GET /api/studio, /api/studio/versioni,
+ * /api/studio/svolte). Una rotta che il server non conosce (404 "Not Found", 405)
+ * = server più vecchio della v4.0: per lo Studio serve aggiornarlo.
+ */
+sealed interface EsitoLetturaStudio<out T> {
+    data class Letta<T>(val dato: T) : EsitoLetturaStudio<T>
+    data object ServerVecchio : EsitoLetturaStudio<Nothing>
+    data object NonAutorizzato : EsitoLetturaStudio<Nothing>
+    data object Fallita : EsitoLetturaStudio<Nothing>
+}
+
+/**
+ * L'esito di POST /api/studio/config/risposta.
+ * - [Decisa]: il server l'ha presa; la configurazione dopo, se il corpo si legge.
+ * - [Cambiata]: 409 `richiesta_cambiata`: la `versione` vista non è più quella,
+ *   niente è stato deciso; la configurazione di adesso, se il server l'ha mandata.
+ * - [Rifiutata]: un altro rifiuto col suo codice (`niente_da_decidere`, 404, 422…).
+ * - [Fallita]: rete caduta o risposta che non si capisce.
+ */
+sealed interface EsitoRispostaStudio {
+    data class Decisa(val config: ConfigStudio?) : EsitoRispostaStudio
+    data class Cambiata(val config: ConfigStudio?) : EsitoRispostaStudio
+    data class Rifiutata(val codice: String?) : EsitoRispostaStudio
+    data object Fallita : EsitoRispostaStudio
+}
+
+/**
+ * L'esito di POST /api/studio/{id}/chiudi col token del genitore.
+ * - [Chiuso]: chiuso; lo Studio chiuso, se il corpo si legge.
+ * - [GiaChiuso]: 409 `gia_chiuso` (il figlio, un altro genitore, la mezzanotte).
+ * - [Rifiutata]: un altro rifiuto col suo codice (404, 422 motivo, server vecchio…).
+ * - [Fallita]: rete caduta.
+ */
+sealed interface EsitoChiusuraStudio {
+    data class Chiuso(val studio: StudioSvolto?) : EsitoChiusuraStudio
+    data class GiaChiuso(val studio: StudioSvolto?) : EsitoChiusuraStudio
+    data class Rifiutata(val codice: String?) : EsitoChiusuraStudio
+    data object Fallita : EsitoChiusuraStudio
+}
+
+/** (0.18) Quello che lo Studio chiede al server: [PostinoClient] nell'app, un finto nei test. */
+interface FonteStudio {
+    suspend fun leggiStudio(figlioId: Long?): EsitoLetturaStudio<PaccoStudio>
+    suspend fun leggiVersioniStudio(figlioId: Long?): EsitoLetturaStudio<PaccoVersioniStudio>
+    suspend fun leggiSvolteStudio(figlioId: Long?, primaDi: Long?): EsitoLetturaStudio<PaccoSvolteStudio>
+    suspend fun rispondiConfigStudio(figlioId: Long?, esito: String, versione: Int, motivazione: String?): EsitoRispostaStudio
+    suspend fun chiudiStudio(figlioId: Long?, studioId: Long, motivo: String): EsitoChiusuraStudio
+}
+
 /**
  * Client verso il server, lato genitore. Protocollo: docs/contratto-api.md
  * (fonte di verità — ogni modifica passa prima da lì).
@@ -310,7 +379,7 @@ sealed interface EsitoRicercaFaccende {
 class PostinoClient(
     private val configurazione: ConfigurazionePostino,
     perLaVedetta: Boolean = false,
-) : FonteFaccende {
+) : FonteFaccende, FonteStudio {
 
     /** Il client delle richieste normali (letture e scritture): quello della vedetta ha il tempo massimo. */
     private val clientNormale: OkHttpClient = if (perLaVedetta) httpVedetta else http
@@ -741,6 +810,57 @@ class PostinoClient(
         }
     }
 
+    // --- (0.18) La Sessione Studio (contratto v4.0) ------------------------------------
+
+    /** GET /api/studio?figlio_id=n: configurazione, Studio in corso, prossime partenze, recenti. */
+    override suspend fun leggiStudio(figlioId: Long?): EsitoLetturaStudio<PaccoStudio> {
+        val risposta = richiedi("GET", conFiglio("/api/studio", figlioId), null) ?: return EsitoLetturaStudio.Fallita
+        return interpretaLetturaStudio(risposta.codice, risposta.corpo, PaccoStudio.serializer())
+    }
+
+    /** GET /api/studio/versioni?figlio_id=n: le configurazioni approvate, dalla più recente. */
+    override suspend fun leggiVersioniStudio(figlioId: Long?): EsitoLetturaStudio<PaccoVersioniStudio> {
+        val risposta = richiedi("GET", conFiglio("/api/studio/versioni", figlioId), null) ?: return EsitoLetturaStudio.Fallita
+        return interpretaLetturaStudio(risposta.codice, risposta.corpo, PaccoVersioniStudio.serializer())
+    }
+
+    /** GET /api/studio/svolte?figlio_id=n&prima_di=id: 20 Studi per volta, dal più recente. */
+    override suspend fun leggiSvolteStudio(figlioId: Long?, primaDi: Long?): EsitoLetturaStudio<PaccoSvolteStudio> {
+        val risposta = richiedi("GET", percorsoSvolteStudio(figlioId, primaDi), null) ?: return EsitoLetturaStudio.Fallita
+        return interpretaLetturaStudio(risposta.codice, risposta.corpo, PaccoSvolteStudio.serializer())
+    }
+
+    /**
+     * POST /api/studio/config/risposta: approva o rifiuta la configurazione in
+     * attesa, con la [versione] vista. Senza ritentativi automatici: un secondo
+     * invio silenzioso dopo un primo arrivato riceverebbe `niente_da_decidere`.
+     */
+    override suspend fun rispondiConfigStudio(
+        figlioId: Long?,
+        esito: String,
+        versione: Int,
+        motivazione: String?,
+    ): EsitoRispostaStudio {
+        val corpo = json.encodeToString(
+            CorpoRispostaStudio.serializer(),
+            CorpoRispostaStudio(esito = esito, versione = versione, motivazione = motivazione, figlioId = figlioId),
+        )
+        val risposta = richiedi("POST", "/api/studio/config/risposta", corpo.toRequestBody(JSON_MEDIA_TYPE), httpCreazioni)
+            ?: return EsitoRispostaStudio.Fallita
+        return interpretaRispostaStudio(risposta.codice, risposta.corpo)
+    }
+
+    /**
+     * POST /api/studio/{id}/chiudi col token del genitore: chiude lo Studio senza
+     * condizioni, col [motivo] (obbligatorio). Senza ritentativi, come le decisioni.
+     */
+    override suspend fun chiudiStudio(figlioId: Long?, studioId: Long, motivo: String): EsitoChiusuraStudio {
+        val corpo = json.encodeToString(CorpoChiusuraStudio.serializer(), CorpoChiusuraStudio(motivo = motivo, figlioId = figlioId))
+        val risposta = richiedi("POST", "/api/studio/$studioId/chiudi", corpo.toRequestBody(JSON_MEDIA_TYPE), httpCreazioni)
+            ?: return EsitoChiusuraStudio.Fallita
+        return interpretaChiusuraStudio(risposta.codice, risposta.corpo)
+    }
+
     suspend fun segnaLetta(notificaId: Long): Boolean {
         val risposta = richiedi("POST", "/api/notifiche/$notificaId/letta", CORPO_VUOTO)
         return risposta != null && risposta.codice in 200..299
@@ -1033,6 +1153,81 @@ class PostinoClient(
             else -> EsitoRicercaFaccende.Errore
         }
 
+        // --- (0.18) Lo Studio ------------------------------------------------------------
+
+        /** Il percorso di GET /api/studio/svolte: il figlio e, per le pagine dopo, `prima_di`. */
+        internal fun percorsoSvolteStudio(figlioId: Long?, primaDi: Long?): String {
+            val parametri = listOfNotNull(figlioId?.let { "figlio_id=$it" }, primaDi?.let { "prima_di=$it" })
+            return if (parametri.isEmpty()) "/api/studio/svolte" else "/api/studio/svolte?" + parametri.joinToString("&")
+        }
+
+        /** Una lettura dello Studio dal codice HTTP: come [interpretaFaccende]. */
+        internal fun <T> interpretaLetturaStudio(
+            codice: Int,
+            corpo: String?,
+            serializer: kotlinx.serialization.KSerializer<T>,
+        ): EsitoLetturaStudio<T> = when {
+            codice in 200..299 ->
+                corpo?.let { decodifica(serializer, it) }?.let { EsitoLetturaStudio.Letta(it) } ?: EsitoLetturaStudio.Fallita
+            codice == 405 -> EsitoLetturaStudio.ServerVecchio
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoLetturaStudio.ServerVecchio
+            codice == 401 -> EsitoLetturaStudio.NonAutorizzato
+            else -> EsitoLetturaStudio.Fallita
+        }
+
+        /**
+         * La risposta del genitore alla configurazione: qualunque 2xx è una decisione
+         * presa (la configurazione dopo, se il corpo si legge: un corpo inatteso non
+         * fa dire "riprova" su una decisione già fatta). Il 409 `richiesta_cambiata`
+         * porta la configurazione di adesso.
+         */
+        internal fun interpretaRispostaStudio(codice: Int, corpo: String?): EsitoRispostaStudio = when {
+            codice in 200..299 -> EsitoRispostaStudio.Decisa(corpo?.let { decodifica(ConfigStudio.serializer(), it) })
+            codice == 405 -> EsitoRispostaStudio.Rifiutata(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoRispostaStudio.Rifiutata(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 409 && codiceErrore(corpo) == CodiciErrore.RICHIESTA_CAMBIATA ->
+                EsitoRispostaStudio.Cambiata(oggettoDelRifiuto(corpo, ConfigStudio.serializer(), "config", "configurazione"))
+            else -> when (val esito = rifiuto(codice, corpo)) {
+                is EsitoScrittura.Rifiutato -> EsitoRispostaStudio.Rifiutata(esito.errore)
+                else -> EsitoRispostaStudio.Fallita
+            }
+        }
+
+        /** La chiusura del genitore: 2xx chiuso, 409 `gia_chiuso` (con lo Studio), il resto come ogni scrittura. */
+        internal fun interpretaChiusuraStudio(codice: Int, corpo: String?): EsitoChiusuraStudio = when {
+            codice in 200..299 -> EsitoChiusuraStudio.Chiuso(corpo?.let { decodifica(StudioSvolto.serializer(), it) })
+            codice == 405 -> EsitoChiusuraStudio.Rifiutata(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 404 && rottaSconosciuta(corpo) -> EsitoChiusuraStudio.Rifiutata(CodiciErrore.SERVER_DA_AGGIORNARE)
+            codice == 409 && codiceErrore(corpo) == CodiciErrore.GIA_CHIUSO ->
+                EsitoChiusuraStudio.GiaChiuso(oggettoDelRifiuto(corpo, StudioSvolto.serializer(), "studio"))
+            else -> when (val esito = rifiuto(codice, corpo)) {
+                is EsitoScrittura.Rifiutato -> EsitoChiusuraStudio.Rifiutata(esito.errore)
+                else -> EsitoChiusuraStudio.Fallita
+            }
+        }
+
+        /**
+         * Un oggetto dentro un 409 (la configurazione di adesso, lo Studio già
+         * chiuso): in `detail` (FastAPI) o in cima (il contratto), sotto una delle
+         * [chiavi]. null se manca o non si legge.
+         */
+        internal fun <T> oggettoDelRifiuto(
+            corpo: String?,
+            serializer: kotlinx.serialization.KSerializer<T>,
+            vararg chiavi: String,
+        ): T? {
+            val (dettaglio, oggetto) = corpoDelRifiuto(corpo) ?: return null
+            val elemento = chiavi.firstNotNullOfOrNull { dettaglio?.get(it) as? JsonObject ?: oggetto[it] as? JsonObject }
+                ?: return null
+            return try {
+                json.decodeFromJsonElement(serializer, elemento)
+            } catch (e: SerializationException) {
+                null
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        }
+
         /** (v3.9) Il corpo di POST …/conferma: la foto guardata (o niente, se non si sa). */
         internal fun corpoConferma(fotoTs: String?): JsonObject =
             JsonObject(if (fotoTs != null) mapOf("foto_ts" to JsonPrimitive(fotoTs)) else emptyMap())
@@ -1041,7 +1236,13 @@ class PostinoClient(
         internal fun interpretaFaccende(codice: Int, corpo: String?): EsitoFaccende = when {
             codice in 200..299 ->
                 corpo?.let { decodifica(PaccoFaccende.serializer(), it) }
-                    ?.let { EsitoFaccende.Lette(it.faccende, conModifiche = if (it.faccende.isEmpty()) null else conosceConferma(corpo)) }
+                    ?.let {
+                        EsitoFaccende.Lette(
+                            it.faccende,
+                            conModifiche = if (it.blocco != null) true else if (it.faccende.isEmpty()) null else conosceConferma(corpo),
+                            blocco = it.blocco,
+                        )
+                    }
                     ?: EsitoFaccende.Fallita
             codice == 405 -> EsitoFaccende.ServerVecchio
             codice == 404 && rottaSconosciuta(corpo) -> EsitoFaccende.ServerVecchio

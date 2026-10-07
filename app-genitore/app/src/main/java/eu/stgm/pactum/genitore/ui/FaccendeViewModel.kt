@@ -65,7 +65,12 @@ class FaccendeViewModel(application: Application) : AndroidViewModel(application
 
     fun modifica(figlioId: Long?, faccenda: Faccenda, modifica: ModificaFaccenda) = gestore.modifica(figlioId, faccenda, modifica)
 
-    fun conferma(figlioId: Long?, faccenda: Faccenda, fotoVista: String?) = gestore.conferma(figlioId, faccenda, fotoVista)
+    fun conferma(
+        figlioId: Long?,
+        faccenda: Faccenda,
+        fotoVista: String?,
+        effetto: EffettoApprovazione = EffettoApprovazione.NESSUNO,
+    ) = gestore.conferma(figlioId, faccenda, fotoVista, effetto)
 
     fun cerca(figlioId: Long?, testo: String) = gestore.cerca(figlioId, testo)
 

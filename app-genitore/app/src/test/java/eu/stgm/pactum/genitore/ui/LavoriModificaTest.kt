@@ -200,10 +200,12 @@ class LavoriModificaTest {
 
     @Test
     fun `le notifiche nuove dei lavori, se arrivano al genitore, hanno un titolo sensato`() {
-        for (tipo in listOf("faccenda_modificata", "faccenda_confermata")) {
-            val n = Notifica(id = 1, tipo = tipo, messaggio = "Mamma ha confermato «Letto»", tsServer = "2026-10-05T10:00:00+00:00")
-            assertEquals(TestoNotifica("Novità dal patto", "Mamma ha confermato «Letto»"), testoNotifica(p, n, emptyMap()))
-        }
+        val modificata = Notifica(id = 1, tipo = "faccenda_modificata", messaggio = "Mamma ha confermato «Letto»", tsServer = "2026-10-05T10:00:00+00:00")
+        assertEquals(TestoNotifica("Novità dal patto", "Mamma ha confermato «Letto»"), testoNotifica(p, modificata, emptyMap()))
+        // (0.18, contratto v4.0) `faccenda_confermata` arriva anche ai genitori (l'altro
+        // genitore ha approvato): ha il suo titolo, e il messaggio del server.
+        val confermata = modificata.copy(tipo = "faccenda_confermata", messaggio = "Mamma ha approvato «Letto»")
+        assertEquals(TestoNotifica("Lavoro approvato", "Mamma ha approvato «Letto»"), testoNotifica(p, confermata, emptyMap()))
     }
 
     @Test

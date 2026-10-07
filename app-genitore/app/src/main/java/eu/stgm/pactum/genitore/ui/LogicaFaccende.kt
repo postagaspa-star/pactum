@@ -123,6 +123,15 @@ data class StatoBlocco(
     val dal: Instant?,
     val prossimo: Instant?,
     val daFare: Int,
+    /**
+     * (0.18, contratto v4.0) Il blocco è dovuto ma aspetta la fine della Sessione
+     * Studio in corso: telefono e computer applicano lo Studio, non il blocco.
+     */
+    val rimandato: Boolean = false,
+    /** (0.18) Quante foto aspettano l'approvazione di un genitore (lavori ancora aperti). */
+    val daApprovare: Int = 0,
+    /** (0.18) true = lo stato viene da un server dalla v4.0 (lavori approvati, Studio). */
+    val conApprovazione: Boolean = false,
 )
 
 /**
@@ -136,11 +145,16 @@ data class StatoBlocco(
 fun statoBlocco(faccende: List<Faccenda>, adesso: Instant, dalServer: BloccoFaccende? = null): StatoBlocco {
     val daFare = faccende.filter { it.stato == StatiFaccenda.DA_FARE }
     if (dalServer != null) {
+        // (0.18, v4.0) `attivo` resta vero quando il blocco è rimandato dallo Studio:
+        // il blocco è dovuto, e parte alla fine dello Studio.
         return StatoBlocco(
             attivo = dalServer.attivo,
             dal = istanteServer(dalServer.dal),
             prossimo = istanteServer(dalServer.prossimo).takeIf { !dalServer.attivo },
             daFare = daFare.size,
+            rimandato = dalServer.attivo && dalServer.rimandato == true,
+            daApprovare = fotoDaApprovare(faccende),
+            conApprovazione = dalServer.rimandato != null,
         )
     }
     val inizi = daFare.map { istanteServer(it.bloccoDa) }
@@ -225,6 +239,18 @@ fun testoBloccoDa(quando: ZonedDateTime): String = formatoBloccoDa.format(quando
 
 // --- La foto e la bocciatura ------------------------------------------------------
 
+/**
+ * (0.18, contratto v4.0) Le foto che aspettano l'approvazione di un genitore: i
+ * lavori fatti con la foto arrivata dalla v4.0 e non ancora approvati. Il server
+ * lo dice in `da_approvare`.
+ */
+fun fotoDaApprovare(faccende: List<Faccenda>): Int =
+    faccende.distinctBy { it.id }.count { daApprovare(it) }
+
+/** (0.18) true = questo lavoro aspetta l'approvazione: fatto, con la foto, non ancora approvato. */
+fun daApprovare(faccenda: Faccenda): Boolean =
+    faccenda.daApprovare && faccenda.stato == StatiFaccenda.FATTA && faccenda.confermataTs == null
+
 /** Quanto tempo dopo la foto si può ancora bocciare una faccenda (contratto v3.6). */
 val FINESTRA_BOCCIATURA: Duration = Duration.ofHours(24)
 
@@ -232,6 +258,12 @@ val FINESTRA_BOCCIATURA: Duration = Duration.ofHours(24)
 sealed interface Bocciabile {
     /** Sì, per ancora [resta]. */
     data class Si(val resta: Duration) : Bocciabile
+
+    /**
+     * (0.18, contratto v4.0) Una foto da approvare: si boccia senza limite di tempo,
+     * finché nessuno l'ha approvata.
+     */
+    data object SenzaScadenza : Bocciabile
 
     /** Sono passate più di 24 ore dalla foto: non più. */
     data object Scaduta : Bocciabile
@@ -247,6 +279,7 @@ sealed interface Bocciabile {
 fun bocciabile(faccenda: Faccenda, adesso: Instant): Bocciabile {
     if (faccenda.stato != StatiFaccenda.FATTA) return Bocciabile.No
     val foto = istanteServer(faccenda.fotoTs) ?: return Bocciabile.No
+    if (daApprovare(faccenda)) return Bocciabile.SenzaScadenza
     val resta = Duration.between(adesso, foto.plus(FINESTRA_BOCCIATURA))
     return if (resta.isNegative || resta.isZero) Bocciabile.Scaduta else Bocciabile.Si(resta)
 }
@@ -333,10 +366,15 @@ private fun chiaveTitolo(titolo: String): String = ripulisci(titolo).lowercase()
 data class FaccendeInGruppi(
     /** Da fare, dalla più vecchia (lo stesso ordine che vede il figlio). */
     val daFare: List<Faccenda>,
-    /** Fatte, dalla foto più recente. */
+    /** Fatte, dalla foto più recente. (0.18) Senza quelle che aspettano l'approvazione. */
     val fatte: List<Faccenda>,
     /** Annullate, dalla più recente. */
     val annullate: List<Faccenda>,
+    /**
+     * (0.18, contratto v4.0) Con la foto da approvare, dalla foto più vecchia (chi
+     * aspetta da più tempo viene prima): in cima ai Lavori.
+     */
+    val daApprovare: List<Faccenda> = emptyList(),
 )
 
 /** Uno stato che non si conosce non entra in nessun gruppo: meglio tacere che mettere una faccenda dove non è. */
@@ -345,13 +383,15 @@ fun faccendeInGruppi(faccende: List<Faccenda>): FaccendeInGruppi {
     return FaccendeInGruppi(
         daFare = uniche.filter { it.stato == StatiFaccenda.DA_FARE }
             .sortedWith(compareBy<Faccenda> { istanteServer(it.creataTs) ?: Instant.EPOCH }.thenBy { it.id }),
-        fatte = uniche.filter { it.stato == StatiFaccenda.FATTA }
+        fatte = uniche.filter { it.stato == StatiFaccenda.FATTA && !daApprovare(it) }
             .sortedWith(
                 compareByDescending<Faccenda> { istanteServer(it.fotoTs ?: it.chiusaTs) ?: Instant.EPOCH }
                     .thenByDescending { it.id },
             ),
         annullate = uniche.filter { it.stato == StatiFaccenda.ANNULLATA }
             .sortedWith(compareByDescending<Faccenda> { istanteServer(it.chiusaTs) ?: Instant.EPOCH }.thenByDescending { it.id }),
+        daApprovare = uniche.filter { daApprovare(it) }
+            .sortedWith(compareBy<Faccenda> { istanteServer(it.fotoTs) ?: Instant.MAX }.thenBy { it.id }),
     )
 }
 
@@ -486,11 +526,15 @@ private fun pezziVersione(versione: String): List<Int>? {
 object TipiNotificaFaccende {
     const val FACCENDA_FATTA = "faccenda_fatta"
     const val FACCENDE_FINITE = "faccende_finite"
+
+    /** (0.18, v4.0) Un altro genitore ha approvato un lavoro (per chi l'ha approvato è già letta). */
+    const val FACCENDA_CONFERMATA = "faccenda_confermata"
 }
 
 /** true = la notifica parla di faccende: toccarla apre le faccende del figlio. */
 fun notificaDiFaccende(tipo: String): Boolean =
-    tipo == TipiNotificaFaccende.FACCENDA_FATTA || tipo == TipiNotificaFaccende.FACCENDE_FINITE
+    tipo == TipiNotificaFaccende.FACCENDA_FATTA || tipo == TipiNotificaFaccende.FACCENDE_FINITE ||
+        tipo == TipiNotificaFaccende.FACCENDA_CONFERMATA
 
 /**
  * La faccenda di una notifica da aprire: per `faccenda_fatta` quella della foto
@@ -499,6 +543,24 @@ fun notificaDiFaccende(tipo: String): Boolean =
 fun faccendaDellaNotifica(notifica: Notifica): Long? {
     if (notifica.tipo != TipiNotificaFaccende.FACCENDA_FATTA) return null
     return (notifica.payload["faccenda_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+}
+
+/**
+ * (0.18, contratto v4.0) true = la `faccenda_fatta` viene da un server dalla v4.0:
+ * la foto aspetta l'approvazione. Il `payload` non cambia tra le versioni, il
+ * `messaggio` sì ("<figlio> ha mandato la foto di «…»: aspetta la vostra
+ * approvazione"): è l'unico segno che la notifica porta con sé.
+ *
+ * (correzione 0.18) Si guarda SOLO la coda, dopo l'ultima «»» (la chiusura del
+ * titolo): un titolo come «Firma l'approvazione della gita» con un server v3.9
+ * ("Luca ha fatto «…»", niente dopo il titolo) non deve sembrare una foto da
+ * approvare. La coda dev'essere quella del contratto (": aspetta la vostra
+ * approvazione"); per tolleranza basta che parli di approvare.
+ */
+fun fotoDaApprovareNelMessaggio(messaggio: String): Boolean {
+    val chiusura = messaggio.lastIndexOf('»')
+    val coda = if (chiusura >= 0) messaggio.substring(chiusura + 1) else messaggio
+    return coda.contains("approv", ignoreCase = true)
 }
 
 /** Quante faccende chiude una `faccende_finite` (`faccenda_ids`); null se non si sa. */
@@ -610,6 +672,12 @@ enum class PulsanteFatto {
     /** "Segna come svolto": la foto è stata guardata qui, o non c'è più. */
     SEGNA_SVOLTO,
 
+    /**
+     * (0.18, contratto v4.0) "Approva": la foto da approvare è stata guardata QUI.
+     * Approvare è la conferma della v3.9 che, dalla v4.0, sblocca.
+     */
+    APPROVA,
+
     /** Niente: confermato senza foto, o il server non sa confermare e la foto non c'è. */
     NESSUNO,
 }
@@ -629,6 +697,17 @@ data class AzioniFatto(val principale: PulsanteFatto, val boccia: Boolean, val c
  */
 fun azioniFatto(faccenda: Faccenda, adesso: Instant, vista: Boolean, conConferma: Boolean): AzioniFatto {
     if (faccenda.stato != StatiFaccenda.FATTA) return AzioniFatto(PulsanteFatto.NESSUNO, boccia = false, confermato = false)
+    // (0.18, v4.0) Una foto da approvare: "Approva" solo dopo averla aperta QUI
+    // (nessuno approva una foto che non ha visto: senza file non si approva), e
+    // "Boccia" senza limite di tempo finché nessuno l'ha approvata.
+    if (daApprovare(faccenda)) {
+        val principale = when {
+            faccenda.foto && vista -> PulsanteFatto.APPROVA
+            faccenda.foto -> PulsanteFatto.GUARDA_FOTO
+            else -> PulsanteFatto.NESSUNO
+        }
+        return AzioniFatto(principale, boccia = true, confermato = false)
+    }
     val confermato = faccenda.confermataTs != null
     val principale = when {
         confermato || !conConferma -> if (faccenda.foto) PulsanteFatto.GUARDA_FOTO else PulsanteFatto.NESSUNO
@@ -638,6 +717,77 @@ fun azioniFatto(faccenda: Faccenda, adesso: Instant, vista: Boolean, conConferma
     val boccia = !confermato && bocciabile(faccenda, adesso) is Bocciabile.Si
     return AzioniFatto(principale, boccia, confermato)
 }
+
+// --- (0.18) Approvare: che cosa succede al blocco ------------------------------------
+
+/** Che cosa cambia per il blocco quando si approva un lavoro (detto nella domanda). */
+enum class EffettoApprovazione {
+    /** Niente da promettere: altri lavori bloccano, il blocco non è ancora partito, o non si sa. */
+    NESSUNO,
+
+    /** È l'ultimo che blocca: telefono e computer si sbloccano. */
+    SBLOCCA,
+
+    /** È l'ultimo che blocca, ma il blocco aspettava lo Studio: a fine Studio non partirà. */
+    NON_PARTE_A_FINE_STUDIO,
+}
+
+/**
+ * (correzione 0.18) Il margine per l'orologio di questo telefono (e per un elenco
+ * letto fino a un minuto prima): un altro lavoro aperto che parte entro questo
+ * tempo potrebbe già bloccare per il server, quindi non si promette lo sblocco.
+ */
+val MARGINE_SBLOCCO: Duration = Duration.ofMinutes(15)
+
+/**
+ * Che cosa succede approvando [faccenda], dal blocco del SERVER ([blocco], quello
+ * di GET /api/faccende): il blocco è attivo, [faccenda] è tra i suoi lavori aperti
+ * e OGNI altro lavoro aperto del blocco parte chiaramente nel futuro (oltre
+ * [adesso] + [MARGINE_SBLOCCO]). L'orologio di questo telefono può essere avanti o
+ * indietro, e l'elenco può essere di un minuto prima: un altro lavoro "quasi
+ * partito" o senza ora leggibile basta per non promettere niente. Senza il blocco
+ * del server, o con un dubbio, non si promette niente: meglio non dire "si
+ * sbloccano" che dirlo a torto.
+ */
+fun effettoApprovazione(faccenda: Faccenda, blocco: BloccoFaccende?, adesso: Instant): EffettoApprovazione {
+    if (blocco == null || blocco.rimandato == null || !blocco.attivo) return EffettoApprovazione.NESSUNO
+    if (blocco.daFare.none { it.id == faccenda.id }) return EffettoApprovazione.NESSUNO
+    val limite = adesso.plus(MARGINE_SBLOCCO)
+    val altriVicini = blocco.daFare
+        .filter { it.id != faccenda.id }
+        .any { voce -> istanteServer(voce.bloccoDa)?.isAfter(limite) != true }
+    if (altriVicini) return EffettoApprovazione.NESSUNO
+    return if (blocco.rimandato == true) EffettoApprovazione.NON_PARTE_A_FINE_STUDIO else EffettoApprovazione.SBLOCCA
+}
+
+/**
+ * (correzione 0.18) Dopo un'approvazione andata: la domanda aveva promesso [promesso];
+ * lo si conferma solo se il blocco riletto subito dopo ([dopo]) non è più attivo.
+ * Se la rilettura non è arrivata, o il blocco è ancora attivo (un lavoro dato
+ * intanto, un orologio sfasato), non si dice niente dello sblocco.
+ */
+fun effettoConfermato(promesso: EffettoApprovazione, dopo: BloccoFaccende?): EffettoApprovazione =
+    when {
+        promesso == EffettoApprovazione.NESSUNO -> EffettoApprovazione.NESSUNO
+        dopo == null || dopo.rimandato == null || dopo.attivo -> EffettoApprovazione.NESSUNO
+        else -> promesso
+    }
+
+/**
+ * (correzione 0.18) La domanda "Boccia" vale solo per la foto che si stava
+ * guardando ([fotoVista], il `foto_ts` di quando la domanda si è aperta): il lavoro
+ * dev'essere ancora fatto e con la stessa foto. Se un altro genitore l'ha bocciato
+ * e il figlio ne ha mandata un'altra, non si boccia una foto mai vista.
+ */
+fun bocciaAncoraLaStessaFoto(faccenda: Faccenda, fotoVista: String?): Boolean =
+    faccenda.stato == StatiFaccenda.FATTA && faccenda.fotoTs == fotoVista
+
+/**
+ * (correzione 0.18) true = il figlio è in Studio per il server (dal blocco di GET
+ * /api/faccende): il blocco dei lavori aspetta la fine dello Studio (parte C).
+ * false anche quando non si sa (server più vecchio): allora restano i testi di prima.
+ */
+fun inStudio(blocco: BloccoFaccende?): Boolean = blocco?.studio?.inCorso == true || blocco?.rimandato == true
 
 // --- (0.17) Le foto guardate da questo telefono ------------------------------------------
 

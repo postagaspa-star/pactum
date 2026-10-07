@@ -61,9 +61,11 @@ fun DaDecidereScreen(
     verdettiVm: VerdettiViewModel = viewModel(),
     finestraVm: FinestraViewModel = viewModel(),
     famigliaVm: FamigliaViewModel = viewModel(),
+    studioVm: StudioViewModel = viewModel(),
 ) {
     val cornice = LocalCornice.current
     val messaggi = cornice.messaggi
+    val statoStudio by studioVm.stato.collectAsStateWithLifecycle()
     val proposte by proposteVm.stato.collectAsStateWithLifecycle()
     val verdetti by verdettiVm.stato.collectAsStateWithLifecycle()
     val statoFinestra by finestraVm.stato.collectAsStateWithLifecycle()
@@ -167,6 +169,16 @@ fun DaDecidereScreen(
         messaggi.mostra(messaggio)
     }
 
+    // (0.18) L'esito della risposta alla configurazione dello Studio: una frase in
+    // basso, e si rileggono finestra e famiglia (i numeri).
+    LaunchedEffect(statoStudio.evento) {
+        val evento = statoStudio.evento ?: return@LaunchedEffect
+        studioVm.consumaEvento()
+        famigliaVm.aggiorna()
+        finestraVm.aggiorna(figlioMostrato)
+        messaggi.mostra(messaggioEventoStudio(testi, evento))
+    }
+
     val aggiorna = {
         famigliaVm.aggiorna()
         if (famiglia.pronta) {
@@ -229,6 +241,8 @@ fun DaDecidereScreen(
                     },
                     onAvvisoSessione = { messaggi.mostra(testi.testo(it)) },
                     onVerdetto = { id, verdetto, nota -> verdettiVm.emettiVerdetto(figlioId, id, verdetto, nota) },
+                    statoStudio = statoStudio,
+                    onDecidiStudio = { versione, esito, motivazione -> studioVm.rispondi(figlioId, versione, esito, motivazione) },
                 )
             }
         }
@@ -257,6 +271,8 @@ private fun ListaDaDecidere(
     onDecidiSessione: (SessioneDaApprovare, String, String?) -> Unit,
     onAvvisoSessione: (Int) -> Unit,
     onVerdetto: (Long, String, String?) -> Unit,
+    statoStudio: StatoStudio = StatoStudio(),
+    onDecidiStudio: (versione: Int, esito: String, motivazione: String?) -> Unit = { _, _, _ -> },
 ) {
     val cornice = LocalCornice.current
     val figlioId = famiglia.figlioId
@@ -281,7 +297,23 @@ private fun ListaDaDecidere(
     val scollegati = finestra?.let(::dispositiviScollegati) ?: proposte.scollegati
     val daDecidere = proposteDaDecidere(elencoProposte, proposte.giaChiuse, lettaProposte)
     val pendenti = proposteInAttesaDelFiglio(elencoProposte, proposte.giaChiuse, lettaProposte)
-    val voci = vociDaDecidere(daDecidere, sessioni, verdetti.dichiarazioni)
+    // (0.18, contratto v4.0) Le foto da approvare (si approvano nei Lavori, dopo
+    // averle guardate) e la configurazione dello Studio (quella appena decisa da qui
+    // sparisce subito, finché la finestra è di prima).
+    val fotoDaApprovare = finestra?.faccende?.filter(::daApprovare).orEmpty()
+    val richiestaStudio = richiestaStudio(finestra?.studio?.config, statoStudio.decise[figlioId])
+    val voci = vociDaDecidere(daDecidere, sessioni, verdetti.dichiarazioni, fotoDaApprovare, richiestaStudio)
+
+    // (0.18) La domanda aperta sulla configurazione dello Studio, con la versione
+    // vista: se intanto la richiesta cambia (o sparisce), la domanda si chiude e lo si dice.
+    var domandaStudio by rememberSaveable { mutableStateOf<Pair<String, Int>?>(null) }
+    LaunchedEffect(domandaStudio, richiestaStudio?.versione) {
+        val aperta = domandaStudio ?: return@LaunchedEffect
+        if (richiestaStudio?.versione != aperta.second) {
+            domandaStudio = null
+            if (!statoStudio.invio && statoStudio.decise[figlioId] != aperta.second) onAvvisoSessione(R.string.studio_richiesta_cambiata)
+        }
+    }
 
     // (0.11) La domanda aperta su una sessione (approva / rifiuta): quale, con quale
     // gesto, e la versione che il genitore aveva davanti. [vista] = il contenuto di
@@ -360,6 +392,17 @@ private fun ListaDaDecidere(
                     invioInCorso = verdetti.invioInCorso,
                     onVerdetto = onVerdetto,
                 )
+                is VoceDaDecidere.DiFoto -> CardFotoDaApprovare(
+                    faccenda = voce.faccenda,
+                    io = famiglia.io,
+                    onGuarda = { cornice.apriFoto(voce.faccenda.id) },
+                )
+                is VoceDaDecidere.DiStudio -> CardRichiestaStudio(
+                    richiesta = voce.richiesta,
+                    nomeFiglio = nomeFiglio,
+                    invio = statoStudio.invio,
+                    onApri = { esito -> domandaStudio = esito to voce.richiesta.versione },
+                )
             }
         }
 
@@ -397,6 +440,21 @@ private fun ListaDaDecidere(
         }
     }
 
+    // (0.18) La domanda sulla configurazione dello Studio, sulla versione vista.
+    val apertaStudio = domandaStudio
+    if (apertaStudio != null && richiestaStudio != null && richiestaStudio.versione == apertaStudio.second) {
+        DialogoDecisioneStudio(
+            esito = apertaStudio.first,
+            richiesta = richiestaStudio,
+            nomeFiglio = nomeFiglio,
+            onConferma = { motivazione ->
+                domandaStudio = null
+                onDecidiStudio(richiestaStudio.versione, apertaStudio.first, motivazione)
+            },
+            onAnnulla = { domandaStudio = null },
+        )
+    }
+
     // (0.11) La domanda aperta, solo finché la card ha ancora la versione vista: si
     // mostra il contenuto di allora, e si risponde con quella versione.
     val aperta = domanda
@@ -421,6 +479,47 @@ private fun ListaDaDecidere(
                 },
                 onAnnulla = chiudi,
             )
+        }
+    }
+}
+
+/**
+ * (0.18, contratto v4.0) Una foto da approvare, in "Da decidere": quale lavoro,
+ * quando è arrivata la foto, chi l'aveva dato; "Guarda la foto" apre i Lavori con
+ * la foto, dove si approva (o si boccia) dopo averla vista.
+ */
+@Composable
+private fun CardFotoDaApprovare(
+    faccenda: eu.stgm.pactum.genitore.dati.Faccenda,
+    io: eu.stgm.pactum.genitore.dati.RiferimentoGenitore?,
+    onGuarda: () -> Unit,
+) {
+    val p = parole()
+    eu.stgm.pactum.design.CardNormale {
+        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            eu.stgm.pactum.design.Pillola(stringResource(R.string.tipo_faccenda_da_approvare))
+        }
+        Text(
+            text = faccenda.titolo,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = Spazi.s),
+        )
+        val sotto = listOfNotNull(
+            istanteServer(faccenda.fotoTs)?.let { p.testo(R.string.faccenda_foto_arrivata, alleQuando(p, it)) },
+            testoDataDa(p, faccenda, io),
+        ).joinToString(" · ")
+        if (sotto.isNotEmpty()) {
+            Text(
+                text = sotto,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Spazi.xs),
+            )
+        }
+        eu.stgm.pactum.design.FilaPulsanti(modifier = Modifier.padding(top = Spazi.m)) {
+            androidx.compose.material3.Button(onClick = onGuarda) {
+                Text(stringResource(R.string.faccenda_guarda_foto), maxLines = 1, softWrap = false)
+            }
         }
     }
 }

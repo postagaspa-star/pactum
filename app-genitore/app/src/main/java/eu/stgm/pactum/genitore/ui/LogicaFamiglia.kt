@@ -515,7 +515,10 @@ fun telefonoDellaSessione(sessione: Sessione, dispositivi: List<VistaDispositivo
  * accanto al suo nome in cima alle schermate.
  */
 fun quanteDaDecidere(figlio: Figlio): Int =
-    figlio.proposteDaDecidere.coerceAtLeast(0) + figlio.sessioniDaApprovare.coerceAtLeast(0)
+    figlio.proposteDaDecidere.coerceAtLeast(0) + figlio.sessioniDaApprovare.coerceAtLeast(0) +
+        // (0.18, contratto v4.0) Le foto dei lavori da approvare e la configurazione
+        // dello Studio da approvare (assenti su un server più vecchio: 0).
+        figlio.faccendeDaApprovare.coerceAtLeast(0) + figlio.studioDaApprovare.coerceAtLeast(0)
 
 /** Le regole su cui si può proporre: attive e non di un dispositivo scollegato. */
 fun regoleProponibili(finestra: Finestra): List<RegolaFinestra> {

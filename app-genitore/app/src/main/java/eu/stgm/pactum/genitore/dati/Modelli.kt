@@ -2,7 +2,10 @@ package eu.stgm.pactum.genitore.dati
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 /**
  * Le risposte del postino per il genitore (docs/contratto-api.md, sezione
@@ -71,6 +74,16 @@ data class Finestra(
     val faccende: List<Faccenda>? = null,
     // (0.13) Il blocco delle faccende come lo vede il server; null = server vecchio.
     val blocco: BloccoFaccende? = null,
+    // (0.18, contratto v4.0) Quante foto di lavori aspettano l'approvazione di un
+    // genitore. null = server più vecchio della v4.0.
+    @SerialName("faccende_da_approvare") val faccendeDaApprovare: Int? = null,
+    // (0.18) La Sessione Studio del figlio: la configurazione, quello in corso e le
+    // prossime partenze. null = server più vecchio della v4.0: lo Studio non si mostra.
+    val studio: StudioPatto? = null,
+    // (0.18) Gli Studi che toccano gli 8 giorni, dal più recente.
+    @SerialName("studio_svolte") val studioSvolte: List<StudioSvolto> = emptyList(),
+    // (0.18) 1 se una configurazione dello Studio aspetta un genitore, se no 0.
+    @SerialName("studio_da_approvare") val studioDaApprovare: Int = 0,
 )
 
 // --- v3: famiglia, figli e dispositivi ----------------------------------------
@@ -116,7 +129,27 @@ data class Figlio(
     // v3.6). Assenti (server più vecchio) = 0 e false.
     @SerialName("faccende_da_fare") val faccendeDaFare: Int = 0,
     @SerialName("blocco_attivo") val bloccoAttivo: Boolean = false,
-)
+    // (0.18, contratto v4.0) Le foto dei lavori che aspettano un genitore, se il
+    // blocco aspetta la fine dello Studio, se una configurazione dello Studio
+    // aspetta un genitore, e lo Studio in corso. Assenti (server più vecchio) = 0,
+    // false, 0, null.
+    @SerialName("faccende_da_approvare") val faccendeDaApprovare: Int = 0,
+    @SerialName("blocco_rimandato") val bloccoRimandato: Boolean = false,
+    @SerialName("studio_da_approvare") val studioDaApprovare: Int = 0,
+    /**
+     * Il contratto non dice la forma: si accettano `true`/`false` e un oggetto (lo
+     * Studio in corso) o `null`. V. [studioInCorso].
+     */
+    @SerialName("studio_in_corso") val studioInCorsoGrezzo: JsonElement? = null,
+) {
+    /** (0.18) true = il figlio è in Studio adesso (per il server). */
+    val studioInCorso: Boolean
+        get() = when (val valore = studioInCorsoGrezzo) {
+            is JsonObject -> true
+            is JsonPrimitive -> valore.booleanOrNull == true
+            else -> false
+        }
+}
 
 /** Un dispositivo come lo racconta GET /api/famiglia (revocati compresi). */
 @Serializable
@@ -278,6 +311,9 @@ object CodiciErrore {
     /** (0.17) Coniato qui: un lavoro non più modificabile, e non si sa perché (non è nell'elenco riletto). */
     const val LAVORO_NON_PIU_DA_FARE = "lavoro_non_piu_da_fare"
 
+    /** (0.18, v4.0) Lo Studio era già chiuso (dal figlio, da un altro genitore, a mezzanotte). */
+    const val GIA_CHIUSO = "gia_chiuso"
+
     /** (0.17) Coniato qui: manca il collegamento (indirizzo e codice), il gesto non è partito. */
     const val CONFIGURAZIONE_MANCANTE = "configurazione_mancante"
 
@@ -397,6 +433,12 @@ data class Faccenda(
     @SerialName("confermata_ts") val confermataTs: String? = null,
     /** (v3.9) Chi l'ha segnata come svolta. */
     @SerialName("confermata_da") val confermataDa: RiferimentoGenitore? = null,
+    /**
+     * (0.18, contratto v4.0) true = la foto è arrivata dalla v4.0 e nessun genitore
+     * l'ha ancora approvata: il lavoro è ancora aperto e (dal suo `blocco_da`)
+     * blocca. Lo calcola il server; assente (server più vecchio) = false.
+     */
+    @SerialName("da_approvare") val daApprovare: Boolean = false,
 )
 
 /** L'ultima bocciatura di una faccenda: quando, perché e chi. */
@@ -423,6 +465,36 @@ data class BloccoFaccende(
     val attivo: Boolean = false,
     val dal: String? = null,
     val prossimo: String? = null,
+    /**
+     * (0.18, contratto v4.0) true = il blocco è dovuto ma aspetta la fine della
+     * Sessione Studio in corso. null = server più vecchio della v4.0.
+     */
+    val rimandato: Boolean? = null,
+    /** (0.18) Lo Studio in corso, come lo dice il blocco. null = server più vecchio. */
+    val studio: StudioDelBlocco? = null,
+    /**
+     * I lavori aperti, dal più vecchio: (v4.0) da fare E da approvare, con `stato` e
+     * `foto_ts`. Il nome è quello di prima (v3.6).
+     */
+    @SerialName("da_fare") val daFare: List<VoceBlocco> = emptyList(),
+)
+
+/** (0.18) Un lavoro aperto nel blocco: la forma ridotta, più `stato` e `foto_ts` (v4.0). */
+@Serializable
+data class VoceBlocco(
+    val id: Long,
+    val titolo: String = "",
+    @SerialName("blocco_da") val bloccoDa: String? = null,
+    val stato: String? = null,
+    @SerialName("foto_ts") val fotoTs: String? = null,
+)
+
+/** (0.18) Lo Studio in corso dentro il blocco (contratto v4.0). */
+@Serializable
+data class StudioDelBlocco(
+    @SerialName("in_corso") val inCorso: Boolean = false,
+    val id: Long? = null,
+    @SerialName("inizio_ts") val inizioTs: String? = null,
 )
 
 @Serializable
@@ -430,6 +502,12 @@ data class PaccoFaccende(
     val faccende: List<Faccenda> = emptyList(),
     /** (v3.9) Con `cerca`: ci sono più di 50 risultati (ne arrivano 50). */
     val altre: Boolean = false,
+    /**
+     * (0.18, contratto v4.0) Il blocco del server, lo stesso di GET
+     * /api/faccende/blocco: la scheda Lavori non lo calcola più da sola. Assente =
+     * server più vecchio della v4.0 (allora i testi della v3.9, senza Studio).
+     */
+    val blocco: BloccoFaccende? = null,
 )
 
 /** Una faccenda nel corpo di POST /api/faccende: il titolo e la nota facoltativa. */

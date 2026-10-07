@@ -43,6 +43,13 @@ sealed interface Pagina {
 
     /** (0.17) "Cambia il lavoro": un lavoro da fare del figlio scelto. */
     data class ModificaLavoro(val faccendaId: Long) : Pagina
+
+    /**
+     * (0.18, contratto v4.0) La Sessione Studio del figlio scelto: in corso, com'è
+     * approvata, gli Studi fatti e le versioni approvate. Le schede restano 4: lo
+     * Studio vive nella Panoramica, in "Da decidere" e in questa pagina.
+     */
+    data object Studio : Pagina
 }
 
 /** Una voce della pila: una scheda o una pagina. */
@@ -129,6 +136,7 @@ private fun codificaSchermo(schermo: Schermo): String = when (schermo) {
         Pagina.Sessioni -> "sessioni"
         Pagina.TutteLeRegole -> "regole"
         is Pagina.ModificaLavoro -> "modifica:${p.faccendaId}"
+        Pagina.Studio -> "studio"
     }
 }
 
@@ -146,6 +154,7 @@ private fun decodificaSchermo(testo: String): Schermo? {
         "sessioni" -> Schermo.SuPagina(Pagina.Sessioni)
         "regole" -> Schermo.SuPagina(Pagina.TutteLeRegole)
         "modifica" -> pezzi.getOrNull(1)?.toLongOrNull()?.let { Schermo.SuPagina(Pagina.ModificaLavoro(it)) }
+        "studio" -> Schermo.SuPagina(Pagina.Studio)
         else -> null
     }
 }
@@ -159,6 +168,7 @@ private fun decodificaSchermo(testo: String): Schermo? {
  * - "decidere", e le vecchie "turno", "proposte", "verdetti" → Da decidere;
  * - "faccende" → Lavori (la foto la apre la scheda, con l'extra `faccenda`);
  * - "tempo" → Tempo;
+ * - (0.18) "studio" → la pagina dello Studio, sopra la Panoramica;
  * - "notifiche" → la pagina Notifiche, sopra la scheda di adesso;
  * - "avvisi" → le Impostazioni, sezione Avvisi, sopra la scheda di adesso;
  * - "finestra" e qualunque valore che non si conosce → Panoramica.
@@ -175,6 +185,7 @@ fun ingresso(destinazione: String?, attuale: Navigazione = Navigazione()): Navig
         -> attuale.scegli(Scheda.DA_DECIDERE)
         MainActivity.DEST_FACCENDE -> attuale.scegli(Scheda.LAVORI)
         MainActivity.DEST_TEMPO -> attuale.scegli(Scheda.TEMPO)
+        MainActivity.DEST_STUDIO -> attuale.scegli(Scheda.PANORAMICA).apri(Pagina.Studio)
         MainActivity.DEST_NOTIFICHE -> base.apri(Pagina.Notifiche)
         MainActivity.DEST_AVVISI -> base.apri(Pagina.Impostazioni(SezioneImpostazioni.AVVISI))
         else -> attuale.scegli(Scheda.PANORAMICA)
@@ -207,6 +218,8 @@ fun destinazioneDellaRiga(notifica: Notifica): ApriDaNotifica {
         MainActivity.DEST_DECIDERE -> ApriDaNotifica(Schermo.SuScheda(Scheda.DA_DECIDERE), figlio)
         MainActivity.DEST_FACCENDE ->
             ApriDaNotifica(Schermo.SuScheda(Scheda.LAVORI), figlio, faccendaDellaNotifica(notifica))
+        // (0.18) Lo Studio iniziato, chiuso, non chiuso, non partito: la sua pagina.
+        MainActivity.DEST_STUDIO -> ApriDaNotifica(Schermo.SuPagina(Pagina.Studio), figlio)
         else -> {
             val regola = regolaIdNotifica(notifica)
             when {

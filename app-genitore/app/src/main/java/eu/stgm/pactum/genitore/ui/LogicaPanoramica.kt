@@ -1,6 +1,7 @@
 package eu.stgm.pactum.genitore.ui
 
 import eu.stgm.pactum.genitore.dati.Dichiarazione
+import eu.stgm.pactum.genitore.dati.Faccenda
 import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.Proposta
@@ -33,7 +34,13 @@ sealed interface RigaInCima {
      * foto che si possono ancora bocciare, se ce ne sono: non spariscono più
      * sotto il blocco.
      */
-    data class Blocco(val stato: StatoBlocco, val fotoDaGuardare: Int = 0) : RigaInCima
+    data class Blocco(val stato: StatoBlocco, val fotoDaGuardare: Int = 0, val fotoDaApprovare: Int = 0) : RigaInCima
+
+    /**
+     * (0.18, contratto v4.0) Foto di lavori che aspettano l'approvazione, senza un
+     * blocco partito o in arrivo (→ Lavori): "2 foto da approvare".
+     */
+    data class FotoDaApprovare(val quante: Int) : RigaInCima
 
     /** (0.16) Una sessione in corso adesso (→ Sessioni). */
     data class SessioneInCorso(val sessione: SessioneRaccontata) : RigaInCima
@@ -76,12 +83,17 @@ fun righeInCima(
     errore: Boolean,
     ricevutaAlle: Instant?,
     sessioniInCorso: List<SessioneRaccontata> = emptyList(),
+    /** (0.18, v4.0) Le foto che aspettano l'approvazione di un genitore. */
+    fotoDaApprovare: Int = 0,
 ): List<RigaInCima> = buildList {
     if (daDecidere > 0) add(RigaInCima.DaDecidere(daDecidere))
     when {
         blocco != null && (blocco.attivo || blocco.prossimo != null) ->
-            add(RigaInCima.Blocco(blocco, fotoDaGuardare.coerceAtLeast(0)))
-        fotoDaGuardare > 0 -> add(RigaInCima.FotoDaGuardare(fotoDaGuardare))
+            add(RigaInCima.Blocco(blocco, fotoDaGuardare.coerceAtLeast(0), fotoDaApprovare.coerceAtLeast(0)))
+        else -> {
+            if (fotoDaApprovare > 0) add(RigaInCima.FotoDaApprovare(fotoDaApprovare))
+            if (fotoDaGuardare > 0) add(RigaInCima.FotoDaGuardare(fotoDaGuardare))
+        }
     }
     sessioniInCorso.forEach { add(RigaInCima.SessioneInCorso(it)) }
     silenziosi.forEach { add(RigaInCima.Silenzioso(it)) }
@@ -98,6 +110,7 @@ fun chiaveRiga(riga: RigaInCima): String = when (riga) {
     is RigaInCima.DaDecidere -> "riga-da-decidere"
     is RigaInCima.Blocco -> "riga-blocco"
     is RigaInCima.FotoDaGuardare -> "riga-foto"
+    is RigaInCima.FotoDaApprovare -> "riga-foto-da-approvare"
     is RigaInCima.Silenzioso -> "riga-silenzio-${riga.dispositivo.id}"
     RigaInCima.AvvisiSpenti -> "riga-avvisi"
     is RigaInCima.AvvisiInRitardo -> "riga-avvisi"
@@ -212,10 +225,14 @@ fun quanteDaDecidereDellaFinestra(
     sessioniDecise: Map<Long, SessioneDecisa>,
     lettaAlle: Long?,
     dichiarazioni: List<Dichiarazione>?,
+    /** (0.18) La versione della configurazione dello Studio a cui si è appena risposto da qui. */
+    studioDecisaVersione: Int? = null,
 ): Int =
     proposteDaContare(finestra, giaChiuse, lettaAlle).size +
         sessioniDaApprovare(finestra.sessioni, sessioniDecise, lettaAlle, dispositiviScollegati(finestra)).size +
-        (dichiarazioni?.let(::dichiarazioniInAttesa) ?: 0)
+        (dichiarazioni?.let(::dichiarazioniInAttesa) ?: 0) +
+        // (0.18, contratto v4.0) Le foto da approvare e la configurazione dello Studio.
+        quanteDaDecidereV40(finestra, studioDecisaVersione)
 
 /**
  * Il numero sulla voce "Da decidere" della barra, di TUTTI i figli: per il figlio
@@ -252,6 +269,18 @@ sealed interface VoceDaDecidere {
         override val quando: Instant? get() = istanteServer(dichiarazione.tsServer)
         override val chiave: String get() = "dichiarazione-${dichiarazione.id}"
     }
+
+    /** (0.18, contratto v4.0) La foto di un lavoro che aspetta l'approvazione (si approva nei Lavori). */
+    data class DiFoto(val faccenda: Faccenda) : VoceDaDecidere {
+        override val quando: Instant? get() = istanteServer(faccenda.fotoTs)
+        override val chiave: String get() = "foto-${faccenda.id}"
+    }
+
+    /** (0.18, contratto v4.0) La configurazione dello Studio da approvare. */
+    data class DiStudio(val richiesta: RichiestaStudio) : VoceDaDecidere {
+        override val quando: Instant? get() = istanteServer(richiesta.proposta.richiestaTs)
+        override val chiave: String get() = "studio"
+    }
 }
 
 /**
@@ -263,10 +292,16 @@ fun vociDaDecidere(
     proposte: List<Proposta>,
     sessioni: List<SessioneDaApprovare>,
     dichiarazioni: List<Dichiarazione>,
+    /** (0.18) I lavori con la foto da approvare. */
+    foto: List<Faccenda> = emptyList(),
+    /** (0.18) La configurazione dello Studio da approvare. */
+    studio: RichiestaStudio? = null,
 ): List<VoceDaDecidere> {
     val voci = proposte.map { VoceDaDecidere.DiProposta(it) } +
         sessioni.map { VoceDaDecidere.DiSessione(it) } +
-        dichiarazioni.filter { it.stato == StatiDichiarazione.IN_ATTESA }.map { VoceDaDecidere.DiDichiarazione(it) }
+        dichiarazioni.filter { it.stato == StatiDichiarazione.IN_ATTESA }.map { VoceDaDecidere.DiDichiarazione(it) } +
+        foto.filter(::daApprovare).distinctBy { it.id }.map { VoceDaDecidere.DiFoto(it) } +
+        listOfNotNull(studio?.let { VoceDaDecidere.DiStudio(it) })
     return voci.sortedWith(
         compareBy<VoceDaDecidere> { it.quando == null }
             .thenBy { it.quando ?: Instant.MAX }
@@ -279,12 +314,16 @@ private fun ordineTipo(voce: VoceDaDecidere): Int = when (voce) {
     is VoceDaDecidere.DiProposta -> 0
     is VoceDaDecidere.DiSessione -> 1
     is VoceDaDecidere.DiDichiarazione -> 2
+    is VoceDaDecidere.DiFoto -> 3
+    is VoceDaDecidere.DiStudio -> 4
 }
 
 private fun idDi(voce: VoceDaDecidere): Long = when (voce) {
     is VoceDaDecidere.DiProposta -> voce.proposta.id
     is VoceDaDecidere.DiSessione -> voce.richiesta.sessione.id
     is VoceDaDecidere.DiDichiarazione -> voce.dichiarazione.id
+    is VoceDaDecidere.DiFoto -> voce.faccenda.id
+    is VoceDaDecidere.DiStudio -> voce.richiesta.versione.toLong()
 }
 
 // --- Le liste lunghe: le prime N, poi "Vedi tutte" ----------------------------------------

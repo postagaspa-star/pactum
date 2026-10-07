@@ -74,6 +74,8 @@ import eu.stgm.pactum.genitore.ui.Schermo
 import eu.stgm.pactum.genitore.ui.ModificaLavoroScreen
 import eu.stgm.pactum.genitore.ui.SessioniScreen
 import eu.stgm.pactum.genitore.ui.StoricoScreen
+import eu.stgm.pactum.genitore.ui.StudioScreen
+import eu.stgm.pactum.genitore.ui.StudioViewModel
 import eu.stgm.pactum.genitore.ui.TutteLeRegoleScreen
 import eu.stgm.pactum.genitore.ui.TempoScreen
 import eu.stgm.pactum.genitore.ui.VerdettiViewModel
@@ -173,6 +175,9 @@ class MainActivity : ComponentActivity() {
         /** (0.13) I lavori di casa del figlio della notifica ((0.15) la scheda Lavori). */
         const val DEST_FACCENDE = "faccende"
         const val DEST_TEMPO = "tempo"
+
+        /** (0.18) La pagina dello Studio del figlio della notifica (iniziato, chiuso, non chiuso, non partito). */
+        const val DEST_STUDIO = "studio"
         const val DEST_TURNO = "turno"
         const val DEST_NOTIFICHE = "notifiche"
 
@@ -212,6 +217,7 @@ private fun chiaveSchermo(schermo: Schermo): String = when (schermo) {
         Pagina.Sessioni -> "sessioni"
         Pagina.TutteLeRegole -> "regole"
         is Pagina.ModificaLavoro -> "modifica-${p.faccendaId}"
+        Pagina.Studio -> "studio"
     }
 }
 
@@ -283,6 +289,7 @@ private fun GenitoreRoot(
     val proposteVm: ProposteViewModel = viewModel()
     val verdettiVm: VerdettiViewModel = viewModel()
     val faccendeVm: FaccendeViewModel = viewModel()
+    val studioVm: StudioViewModel = viewModel()
     LaunchedEffect(configurazione) {
         val attuale = configurazione ?: return@LaunchedEffect
         if (!collegamentoVm.eUnAltroCollegamento(attuale)) return@LaunchedEffect
@@ -293,6 +300,7 @@ private fun GenitoreRoot(
         verdettiVm.dimentica()
         notificheVm.dimentica()
         faccendeVm.dimentica()
+        studioVm.dimentica()
     }
 
     RichiestaPermessoNotifiche()
@@ -380,6 +388,10 @@ private fun GenitoreRoot(
         apri = { vai(navigazione.apri(it)) },
         indietro = { vai(dopoIndietro ?: Navigazione()) },
         allaPanoramica = { vai(Navigazione()) },
+        apriFoto = { id ->
+            fotoDaAprire = id
+            vai(navigazione.apriScheda(Scheda.LAVORI))
+        },
     )
 
     CompositionLocalProvider(LocalCornice provides cornice) {
@@ -431,6 +443,7 @@ private fun GenitoreRoot(
                             Pagina.Sessioni -> SessioniScreen()
                             Pagina.TutteLeRegole -> TutteLeRegoleScreen()
                             is Pagina.ModificaLavoro -> ModificaLavoroScreen(faccendaId = pagina.faccendaId)
+                            Pagina.Studio -> StudioScreen()
                         }
                     }
                 }

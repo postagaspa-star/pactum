@@ -13,7 +13,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import abbinamento, clock, faccende, famiglia, genitori, semaforo
+from .. import abbinamento, clock, faccende, famiglia, genitori, semaforo, studio
 from ..auth import Identita, richiede_genitore
 from ..db import get_conn
 from ..schemas import AbbinaIn, DispositivoIn, NomeIn
@@ -58,8 +58,10 @@ def leggi_famiglia(
     faccende ha da fare e se il blocco e' attivo; e in cima chi chiama (`io`) e tutti
     i genitori, revocati compresi."""
     ora = clock.now()
+    studio.valuta_tutti(conn, ora)  # (v4.0) partenze e mezzanotti dello Studio di ogni figlio
     non_letta, parametri_non_letta = genitori.non_letta(conn, chi.genitore_id)
     figli = []
+    firme = genitori.Firme(conn)
     for figlio in conn.execute("SELECT * FROM figli ORDER BY id").fetchall():
         dispositivi = famiglia.dispositivi_del_figlio(conn, figlio["id"])
         quadro = semaforo.quadro(conn, ora, figlio["id"], dispositivi)
@@ -89,6 +91,12 @@ def leggi_famiglia(
                 "sessioni_da_approvare": sessioni_da_approvare(conn, figlio["id"]),  # (v3.5)
                 "faccende_da_fare": faccende.quante_da_fare(conn, figlio["id"]),  # (v3.6)
                 "blocco_attivo": faccende.blocco_attivo(conn, figlio["id"], ora),
+                # (v4.0) i lavori che aspettano l'approvazione, il blocco che aspetta lo
+                # Studio, lo Studio in corso e la sua configurazione da decidere
+                "faccende_da_approvare": faccende.quante_da_approvare(conn, figlio["id"]),
+                "blocco_rimandato": faccende.blocco(conn, figlio["id"], ora, firme)["rimandato"],
+                "studio_in_corso": faccende.studio_in_corso(conn, figlio["id"]) is not None,
+                "studio_da_approvare": studio.da_approvare(conn, figlio["id"]),
                 "dispositivi": [
                     {
                         **famiglia.descrizione(d),

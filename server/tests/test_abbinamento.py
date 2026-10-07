@@ -339,6 +339,8 @@ def test_forma_della_famiglia(client, orologio):
         "proposte_da_decidere",  # (v3.4)
         "sessioni_da_approvare",  # (v3.5)
         "faccende_da_fare", "blocco_attivo",  # (v3.6)
+        # (v4.0)
+        "faccende_da_approvare", "blocco_rimandato", "studio_in_corso", "studio_da_approvare",
     }
     assert primo["proposte_da_decidere"] == 0
     assert primo["sessioni_da_approvare"] == 0

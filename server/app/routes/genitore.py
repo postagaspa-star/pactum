@@ -16,7 +16,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import clock, faccende, famiglia, semaforo, siti, tempi
+from .. import clock, faccende, famiglia, semaforo, siti, studio, tempi
 from ..auth import Identita, richiede_genitore
 from ..db import accoda_notifica, get_conn, segno_mandato_oggi, stato_bonus
 from ..genitori import Firme, ancora_valido
@@ -24,6 +24,7 @@ from ..schemas import CHIAVE_TOTALE, SegnoIn
 from .faccende import cartella
 from .proposte import formatta_proposta, proposte_del_figlio
 from .regole import _riga_regola
+from .sessioni import inizio_finestra as sessioni_inizio_finestra
 from .sessioni import sessioni_da_approvare, sessioni_del_figlio, sessioni_svolte_del_figlio
 
 router = APIRouter(dependencies=[Depends(richiede_genitore)])
@@ -103,6 +104,7 @@ def finestra(
 ):
     ora = clock.now()
     figlio = famiglia.figlio_scelto(conn, figlio_id)
+    studio.valuta(conn, figlio["id"], ora)  # (v4.0) partenze e mezzanotti dello Studio
     firme = Firme(conn)
     # Una sola definizione degli 8 giorni (siti.giorni_finestra) per semaforo,
     # bonus_giornalieri, uso_recente e siti_recenti: cosi' le sezioni della
@@ -202,6 +204,14 @@ def finestra(
         # GET /api/faccende/blocco): quello che vede il figlio, uguale.
         "faccende": faccende.faccende_del_figlio(conn, figlio["id"], ora, firme, cartella(request)),
         "blocco": faccende.blocco(conn, figlio["id"], ora, firme),
+        # (v4.0) Quanti lavori aspettano l'approvazione; lo Studio come nel patto, gli
+        # Studi che toccano gli 8 giorni (al massimo 50) e la configurazione da decidere.
+        "faccende_da_approvare": faccende.quante_da_approvare(conn, figlio["id"]),
+        "studio": studio.vista_per_i_dispositivi(conn, figlio["id"], ora, nomi),
+        "studio_svolte": studio.svolte_della_finestra(
+            conn, figlio["id"], ora, sessioni_inizio_finestra(ora), nomi
+        ),
+        "studio_da_approvare": studio.da_approvare(conn, figlio["id"]),
     }
 
 

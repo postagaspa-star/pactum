@@ -4,6 +4,11 @@ dispositivi sono bloccati. Il figlio le fa mandando una foto per ognuna dal tele
 un genitore puo' bocciare una foto entro 24 ore (la faccenda si riapre e il blocco
 torna subito) o annullare una faccenda ancora da fare.
 
+(v4.0) Mandare la foto non sblocca piu': il lavoro resta aperto (da approvare) finche'
+un genitore non approva la foto (POST .../conferma, col foto_ts obbligatorio), e allora
+sblocca. Un lavoro da approvare si boccia senza limite di tempo. GET /api/faccende ha in
+piu' il `blocco`, e il blocco sa dello Studio (rimandato).
+
 - Ogni scrittura che controlla e poi scrive (le 20 da fare al massimo, la foto, la
   bocciatura, l'annullamento) sta in BEGIN IMMEDIATE: due richieste simultanee si
   mettono in fila e la seconda rilegge quello che ha scritto la prima (due bocciature
@@ -29,6 +34,7 @@ torna subito) o annullare una faccenda ancora da fare.
   lock, come le altre decisioni: con una foto o una bocciatura che arrivano insieme ne
   passa una sola. GET /api/faccende?cerca= cerca per titolo in tutto lo storico."""
 
+import json
 import os
 import sqlite3
 from datetime import datetime, timedelta
@@ -37,7 +43,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
-from .. import clock, faccende, famiglia, genitori
+from .. import clock, faccende, famiglia, genitori, studio
 from ..auth import Identita, richiede_dispositivo, richiede_genitore, richiede_patto
 from ..db import accoda_notifica, get_conn
 from ..faccende import (
@@ -186,10 +192,16 @@ def boccia(
     try:
         genitori.ancora_valido(conn, chi)
         riga = faccende.faccenda_o_404(conn, faccenda_id)
+        # (v4.0) Un lavoro da approvare si boccia senza limite di tempo, finche' nessuno
+        # l'ha approvato; le 24 ore restano per le foto di prima della v4.0.
+        da_approvare = faccende.da_approvare(riga, faccende.approvazione_dal(conn))
         if (
             riga["stato"] != "fatta"
             or riga["foto_ts"] is None
-            or ora - datetime.fromisoformat(riga["foto_ts"]) >= timedelta(hours=ORE_BOCCIATURA)
+            or (
+                not da_approvare
+                and ora - datetime.fromisoformat(riga["foto_ts"]) >= timedelta(hours=ORE_BOCCIATURA)
+            )
             or riga["confermata_ts"] is not None  # (v3.9) confermata: "svolto" non si boccia
         ):
             raise HTTPException(status_code=409, detail={"errore": "non_bocciabile"})
@@ -201,6 +213,7 @@ def boccia(
             (ts, ts, nota, chi.genitore_id, giro, faccenda_id),
         )
         faccende.registra_storia(conn, faccenda_id, "bocciata", ts, chi.genitore_id, nota)
+        _chiudi_avviso_della_foto(conn, riga)  # (v4.0) l'avviso della foto e' deciso
         da_togliere = faccende.metti_da_parte(dove, faccenda_id)
         firme = Firme(conn)
         chi_boccia = firme.di(chi.genitore_id)
@@ -357,19 +370,60 @@ def conferma(
     Corpo facoltativo `{"foto_ts"}`: la foto che il genitore ha guardato. Se intanto la
     faccenda ne ha un'altra (bocciata da un altro genitore e rifatta) -> 409
     foto_cambiata e niente conferma: nessuno conferma una foto che non ha visto. Si
-    confronta l'istante. I controlli: corpo (422), 404, non_confermabile, foto_cambiata."""
+    confronta l'istante. I controlli: corpo (422), 404, non_confermabile, foto_cambiata.
+
+    (v4.0) Approvare = confermare, e per un lavoro da approvare (foto dalla v4.0) SBLOCCA:
+    smette di essere aperto, e se era l'ultimo che bloccava il blocco finisce. Per lui il
+    `foto_ts` e' obbligatorio (422 senza, controllato dopo il 404: per sapere che e' da
+    approvare bisogna averlo trovato): nessuno approva una foto che non ha visto. La
+    stessa approvazione ripetuta dallo stesso genitore con lo stesso foto_ts (la risposta
+    persa, l'app che riprova) -> 200 col lavoro, senza avvisi nuovi. Avvisi: al figlio
+    (con "telefono e computer sbloccati" solo se il blocco era attivo e non rimandato
+    dallo Studio, e adesso finisce), agli altri genitori (gia' letto per chi approva),
+    e `faccende_finite` quando non resta niente da fare ne' da approvare. L'avviso della
+    foto (`faccenda_fatta`) si chiude per tutti. Un lavoro di prima della v4.0 si
+    conferma come nella v3.9: un riconoscimento, che non sblocca niente."""
     vista = corpo.foto_ts if corpo is not None else None
-    ts = clock.iso(clock.now())
+    ora = clock.now()
+    ts = clock.iso(ora)
     # BEGIN IMMEDIATE: una conferma e una bocciatura insieme si mettono in fila; la
     # seconda rilegge e riceve il suo 409 (non_bocciabile o non_confermabile).
     conn.execute("BEGIN IMMEDIATE")
     try:
         genitori.ancora_valido(conn, chi)
         riga = faccende.faccenda_o_404(conn, faccenda_id)
+        dal = faccende.approvazione_dal(conn)
+        da_approvare = faccende.da_approvare(riga, dal)
+        if da_approvare and vista is None:
+            raise HTTPException(
+                status_code=422,
+                detail=[{"loc": ["body", "foto_ts"],
+                         "msg": "per approvare un lavoro serve il foto_ts della foto che hai guardato"}],
+            )
+        if (
+            riga["stato"] == "fatta"
+            and riga["confermata_ts"] is not None
+            and riga["confermata_genitore_id"] == chi.genitore_id
+            and riga["foto_ts"] is not None
+            and riga["foto_ts"] >= dal
+            and vista is not None
+            and datetime.fromisoformat(vista) == datetime.fromisoformat(riga["foto_ts"])
+        ):
+            # (v4.0) La stessa approvazione di nuovo: e' gia' tutto fatto.
+            conn.rollback()
+            return faccende.una(conn, faccenda_id, Firme(conn), cartella(request))
         if riga["stato"] != "fatta" or riga["foto_ts"] is None or riga["confermata_ts"] is not None:
             raise HTTPException(status_code=409, detail={"errore": "non_confermabile"})
         if vista is not None and datetime.fromisoformat(vista) != datetime.fromisoformat(riga["foto_ts"]):
             raise HTTPException(status_code=409, detail={"errore": "foto_cambiata"})
+        if da_approvare:
+            # (Correzione) Prima di dire se il blocco era rimandato, lo Studio del figlio
+            # dev'essere aggiornato: una partenza delle 15:00 non ancora elaborata (nessuna
+            # richiesta dalle 15:00) o la mezzanotte di uno Studio di ieri. Senza, i testi
+            # e `sblocca` direbbero il contrario di quello che fanno i dispositivi.
+            studio.elabora(conn, riga["figlio_id"], ora)
+            studio.segna_giro(conn, ora)
+        prima = faccende.blocco(conn, riga["figlio_id"], ora, Firme(conn)) if da_approvare else None
         conn.execute(
             "UPDATE faccende SET confermata_ts = ?, confermata_genitore_id = ? WHERE id = ?",
             (ts, chi.genitore_id, faccenda_id),
@@ -377,21 +431,91 @@ def conferma(
         faccende.registra_storia(conn, faccenda_id, "confermata", ts, chi.genitore_id)
         firme = Firme(conn)
         chi_conferma = firme.di(chi.genitore_id)
-        accoda_notifica(
-            conn,
-            "faccenda_confermata",
-            f"{chi_conferma['nome']} ha confermato «{riga['titolo']}»",
-            {"faccenda_id": faccenda_id, "titolo": riga["titolo"], "genitore": chi_conferma},
-            ts,
-            destinatario="figlio",
-            figlio_id=riga["figlio_id"],
-            dispositivo_id=None,
-        )
+        if da_approvare:
+            _avvisi_dell_approvazione(conn, riga, prima, ora, chi, chi_conferma)
+        else:
+            accoda_notifica(
+                conn,
+                "faccenda_confermata",
+                f"{chi_conferma['nome']} ha confermato «{riga['titolo']}»",
+                {"faccenda_id": faccenda_id, "titolo": riga["titolo"], "genitore": chi_conferma},
+                ts,
+                destinatario="figlio",
+                figlio_id=riga["figlio_id"],
+                dispositivo_id=None,
+            )
         conn.commit()
     except BaseException:
         conn.rollback()
         raise
     return faccende.una(conn, faccenda_id, firme, cartella(request))
+
+
+def _chiudi_avviso_della_foto(conn: sqlite3.Connection, riga: sqlite3.Row) -> None:
+    """(v4.0) Un solo avviso aperto per lavoro: l'avviso `faccenda_fatta` di questo
+    lavoro che un genitore non ha ancora letto si segna come letto per tutti (`letta = 1`
+    sulle notifiche del genitore vuol dire chiusa per tutti), quando arriva una foto nuova,
+    quando un genitore approva e quando boccia."""
+    for avviso in conn.execute(
+        "SELECT id, payload FROM notifiche WHERE destinatario = 'genitore' AND letta = 0"
+        " AND tipo = 'faccenda_fatta' AND figlio_id = ?",
+        (riga["figlio_id"],),
+    ).fetchall():
+        if json.loads(avviso["payload"]).get("faccenda_id") == riga["id"]:
+            conn.execute("UPDATE notifiche SET letta = 1 WHERE id = ?", (avviso["id"],))
+
+
+def _avvisi_dell_approvazione(
+    conn: sqlite3.Connection, riga: sqlite3.Row, prima: dict, ora: datetime, chi: Identita, genitore: dict
+) -> None:
+    """(v4.0) Gli avvisi di un'approvazione che sblocca (o che toglie un lavoro dal blocco):
+    `faccenda_confermata` al figlio e ai genitori (gia' letta per chi ha approvato), e
+    `faccende_finite` quando l'approvazione chiude il giro. Dentro il lock, dopo aver
+    scritto l'approvazione."""
+    ts = clock.iso(ora)
+    dopo = faccende.blocco(conn, riga["figlio_id"], ora, Firme(conn))
+    finisce = prima["attivo"] and not dopo["attivo"]
+    sblocca = finisce and not prima["rimandato"]
+    messaggio = f"{genitore['nome']} ha approvato «{riga['titolo']}»"
+    if sblocca:
+        messaggio += ": telefono e computer sbloccati"
+    elif finisce:  # era rimandato dallo Studio: niente era coperto
+        messaggio += ": il blocco non partirà a fine Studio"
+    payload = {"faccenda_id": riga["id"], "titolo": riga["titolo"], "genitore": genitore, "sblocca": sblocca}
+    accoda_notifica(conn, "faccenda_confermata", messaggio, payload, ts, destinatario="figlio",
+                    figlio_id=riga["figlio_id"], dispositivo_id=None)
+    notifica_id = accoda_notifica(conn, "faccenda_confermata", messaggio, payload, ts,
+                                  destinatario="genitore", figlio_id=riga["figlio_id"],
+                                  dispositivo_id=None)
+    conn.execute(
+        "INSERT OR IGNORE INTO notifiche_lette_genitori (notifica_id, genitore_id, ts_server)"
+        " VALUES (?, ?, ?)",
+        (notifica_id, chi.genitore_id, ts),
+    )
+    _chiudi_avviso_della_foto(conn, riga)
+    if faccende.aperte(conn, riga["figlio_id"]):
+        return
+    # Il giro si chiude: niente piu' da fare ne' da approvare.
+    nome_figlio = famiglia.figlio_o_404(conn, riga["figlio_id"])["nome"]
+    fatte = [
+        r["id"]
+        for r in conn.execute(
+            "SELECT id FROM faccende WHERE figlio_id = ? AND giro = ? AND stato = 'fatta' ORDER BY id",
+            (riga["figlio_id"], riga["giro"]),
+        )
+    ]
+    bloccava = riga["blocco_da"] <= ts and not prima["rimandato"]
+    accoda_notifica(
+        conn,
+        "faccende_finite",
+        f"{nome_figlio} ha i lavori di casa tutti approvati"
+        + (": telefono e computer sbloccati" if bloccava else ""),
+        {"faccenda_ids": fatte},
+        ts,
+        destinatario="genitore",
+        figlio_id=riga["figlio_id"],
+        dispositivo_id=None,
+    )
 
 
 # --- le letture (genitore e dispositivi) ---
@@ -416,11 +540,17 @@ def elenca_faccende(
                      "msg": f"cerca arriva al massimo a {LUNGHEZZA_MASSIMA_RICERCA} caratteri"}],
         )
     figlio = _figlio_di(conn, chi, figlio_id)
+    ora = clock.now()
+    studio.valuta(conn, figlio, ora)
+    # (v4.0) In piu' il `blocco`, uguale a GET /api/faccende/blocco: la scheda Lavori
+    # dell'app del genitore non lo calcola piu' da sola (e dalla sua presenza riconosce
+    # un server dalla v4.0).
+    blocco = faccende.blocco(conn, figlio, ora, Firme(conn))
     if testo:
         trovate, altre = faccende.cerca(conn, figlio, testo, Firme(conn), cartella(request))
-        return {"faccende": trovate, "altre": altre}
-    elenco = faccende.faccende_del_figlio(conn, figlio, clock.now(), Firme(conn), cartella(request))
-    return {"faccende": elenco}
+        return {"faccende": trovate, "altre": altre, "blocco": blocco}
+    elenco = faccende.faccende_del_figlio(conn, figlio, ora, Firme(conn), cartella(request))
+    return {"faccende": elenco, "blocco": blocco}
 
 
 @router.get("/faccende/blocco")
@@ -430,8 +560,13 @@ def leggi_blocco(
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     """La risposta piccola che i dispositivi chiedono spesso (almeno ogni minuto). Al
-    genitore, per il figlio di `figlio_id` o il primo, la stessa che ha nella finestra."""
-    return faccende.blocco(conn, _figlio_di(conn, chi, figlio_id), clock.now(), Firme(conn))
+    genitore, per il figlio di `figlio_id` o il primo, la stessa che ha nella finestra.
+    (v4.0) Prima le partenze e le mezzanotti dello Studio: il computer legge da qui quando
+    lo Studio finisce."""
+    figlio = _figlio_di(conn, chi, figlio_id)
+    ora = clock.now()
+    studio.valuta(conn, figlio, ora)
+    return faccende.blocco(conn, figlio, ora, Firme(conn))
 
 
 @router.get("/faccende/{faccenda_id}/foto")
@@ -514,8 +649,8 @@ def _consegna(
 ) -> dict:
     """La foto gia' pulita diventa quella della faccenda, che si chiude: fatta. Il file
     si scrive prima in un temporaneo (fuori dal lock: e' il pezzo lento) e prende il suo
-    nome solo dentro il lock, se la faccenda e' ancora da fare. Avvisi ai genitori: la
-    faccenda fatta e, se era l'ultima da fare del figlio, le faccende finite."""
+    nome solo dentro il lock, se la faccenda e' ancora da fare. Avviso ai genitori: la
+    foto da approvare (v4.0: la foto non sblocca piu', sblocca l'approvazione)."""
     ora = clock.now()
     ts = clock.iso(ora)
     temporanea = faccende.scrivi_temporanea(dove, faccenda_id, foto)
@@ -542,40 +677,25 @@ def _consegna(
                 (ts, ts, faccenda_id),
             )
             faccende.registra_storia(conn, faccenda_id, "foto", ts)
+            # (v4.0) Una foto ricevuta da questo server (che la fa approvare): al ritorno
+            # dalla v3.9 si riconoscono le foto arrivate dopo l'ultimo giro (db._migra_v40).
+            studio.segna_giro(conn, ora)
             nome_figlio = famiglia.figlio_o_404(conn, riga["figlio_id"])["nome"]
+            # (v4.0) La foto non sblocca piu': il lavoro aspetta l'approvazione di un
+            # genitore (e `faccende_finite` parte all'ultima approvazione). Un solo avviso
+            # aperto per lavoro: quello di una foto di prima (poi bocciata) non ancora
+            # letto si chiude.
+            _chiudi_avviso_della_foto(conn, riga)
             accoda_notifica(
                 conn,
                 "faccenda_fatta",
-                f"{nome_figlio} ha fatto «{riga['titolo']}»",
+                f"{nome_figlio} ha mandato la foto di «{riga['titolo']}»: aspetta la vostra approvazione",
                 {"faccenda_id": faccenda_id, "titolo": riga["titolo"]},
                 ts,
                 destinatario="genitore",
                 figlio_id=riga["figlio_id"],
                 dispositivo_id=None,
             )
-            if faccende.quante_da_fare(conn, riga["figlio_id"]) == 0:
-                # Era l'ultima: il giro si chiude. Il blocco c'era se questa faccenda
-                # (l'unica rimasta da fare) bloccava gia'; se no le ha fatte in anticipo.
-                fatte = [
-                    r["id"]
-                    for r in conn.execute(
-                        "SELECT id FROM faccende WHERE figlio_id = ? AND giro = ? AND stato = 'fatta'"
-                        " ORDER BY id",
-                        (riga["figlio_id"], riga["giro"]),
-                    )
-                ]
-                sbloccati = riga["blocco_da"] <= ts
-                accoda_notifica(
-                    conn,
-                    "faccende_finite",
-                    f"{nome_figlio} ha finito i lavori di casa"  # (v3.7)
-                    + (": telefono e computer sbloccati" if sbloccati else ""),
-                    {"faccenda_ids": fatte},
-                    ts,
-                    destinatario="genitore",
-                    figlio_id=riga["figlio_id"],
-                    dispositivo_id=None,
-                )
             conn.commit()
         except BaseException:
             conn.rollback()

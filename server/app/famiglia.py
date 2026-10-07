@@ -102,7 +102,9 @@ def _ultimo_fra_sospensioni_e_riprese(conn: sqlite3.Connection, dispositivo_id: 
 
     Un momento non e' mai piu' di 48 ore prima del suo arrivo: l'ultimo fatto e' sempre
     tra quelli arrivati nelle 48 ore prima dell'ultimo arrivo, e solo quelli si leggono.
-    (tipo, momento ISO) oppure None se il dispositivo non ne ha mai mandati."""
+    (tipo, momento ISO, motivo) oppure None se il dispositivo non ne ha mai mandati.
+    (v4.0) `motivo`: quello scritto nei dettagli (per una sospensione: spegnimento,
+    sospensione o disconnessione), None se non c'e'."""
     tipi = "tipo IN ('sospensione', 'ripresa')"
     ultimo_arrivo = conn.execute(
         f"SELECT MAX(ts_server) AS t FROM eventi WHERE dispositivo_id = ? AND {tipi}", (dispositivo_id,)
@@ -112,14 +114,34 @@ def _ultimo_fra_sospensioni_e_riprese(conn: sqlite3.Connection, dispositivo_id: 
     dal = clock.iso(datetime.fromisoformat(ultimo_arrivo) - clock.RITARDO_MASSIMO)
     candidati = []
     for riga in conn.execute(
-        f"SELECT rowid, tipo, ts_server, ts_device FROM eventi WHERE dispositivo_id = ? AND {tipi}"
+        f"SELECT rowid, tipo, ts_server, ts_device, dettagli FROM eventi WHERE dispositivo_id = ? AND {tipi}"
         " AND ts_server >= ?",
         (dispositivo_id, dal),
     ).fetchall():
         momento = clock.momento_dichiarato(datetime.fromisoformat(riga["ts_server"]), riga["ts_device"])
-        candidati.append((momento, riga["rowid"], riga["tipo"]))
-    momento, _, tipo = max(candidati)
-    return tipo, clock.iso(momento)
+        candidati.append((momento, riga["rowid"], riga["tipo"], riga["dettagli"]))
+    momento, _, tipo, dettagli = max(candidati)
+    return tipo, clock.iso(momento), _motivo(dettagli)
+
+
+def _motivo(dettagli: str | None) -> str | None:
+    try:
+        letti = json.loads(dettagli) if dettagli else None
+    except ValueError:
+        return None
+    motivo = letti.get("motivo") if isinstance(letti, dict) else None
+    return motivo if isinstance(motivo, str) else None
+
+
+def motivo_dello_spegnimento(conn: sqlite3.Connection, dispositivo_id: int) -> str | None:
+    """(v4.0) Il `motivo` della sospensione che tiene il dispositivo `spento` (l'ultimo
+    fatto tra sospensioni e riprese), None se l'ultimo fatto non e' una sospensione. Serve
+    alla rete di sicurezza del computer (studio._spariti): un'uscita dall'account
+    (`disconnessione`) non e' uno spegnimento pulito."""
+    fatto = _ultimo_fra_sospensioni_e_riprese(conn, dispositivo_id)
+    if fatto is None or fatto[0] != "sospensione":
+        return None
+    return fatto[2]
 
 
 def stato_silenzio(conn: sqlite3.Connection, dispositivo: sqlite3.Row | None, ora: datetime) -> dict:

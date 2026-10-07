@@ -1,9 +1,9 @@
 import re
 import unicodedata
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictBool, StrictInt, field_validator, model_validator
 
 ORARIO = r"^(?:[01]\d|2[0-3]):[0-5]\d$"
 
@@ -495,3 +495,277 @@ class ModificaFaccendaIn(BaseModel):
         if not self.model_fields_set & {"titolo", "nota", "blocco_da"}:
             raise ValueError("serve almeno uno tra titolo, nota e blocco_da")
         return self
+
+
+# (v4.0) La Sessione Studio (contratto-api.md, "v4.0 — C. La Sessione Studio").
+GIORNI_SETTIMANA = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+MINUTI_MINIMI_STUDIO = (10, 600)
+VOCI_MASSIME_STUDIO = 200
+LUNGHEZZA_MASSIMA_FIRMA = 200
+LUNGHEZZA_CHIAVE_STUDIO = 64
+DICHIARAZIONE_STUDIO = (10, 1000)
+MOTIVO_CHIUSURA = (3, 300)
+LUNGHEZZA_MASSIMA_PAROLA = 30
+TRATTI_PER_VOLTA = 50
+SECONDI_MASSIMI_TRATTO = 48 * 3600
+CAMPI_CONFIG_STUDIO = ("giorni", "inizio", "chiusura_minima", "minuti_minimi", "telefono", "computer")
+
+
+def _app_studio(app: list[str]) -> list[str]:
+    """Come le app di una sessione (pacchetti Android o gruppo:apk), ma da 0 a 200: una
+    lista vuota vuol dire "solo le app sempre usabili"."""
+    for chiave in app:
+        if chiave != GRUPPO_APK and not (
+            len(chiave) <= LUNGHEZZA_MASSIMA_CHIAVE and PACCHETTO_ANDROID.fullmatch(chiave)
+        ):
+            raise ValueError(
+                f"{chiave!r} non va bene: servono nomi di pacchetti Android o {GRUPPO_APK}"
+            )
+    senza_doppioni = list(dict.fromkeys(app))
+    if len(senza_doppioni) > VOCI_MASSIME_STUDIO:
+        raise ValueError(f"le app dello Studio arrivano a {VOCI_MASSIME_STUDIO}")
+    return senza_doppioni
+
+
+def _programmi_studio(programmi: list[str]) -> list[str]:
+    """Le voci del computer: exe:<nome> o sito:<dominio>, con le regole delle chiavi del
+    computer (v3: minuscole, senza spazi ne' percorsi). categoria:*, totale e i pacchetti
+    Android non vanno. Da 0 a 200, senza doppioni. Che un exe: sia un browser lo controlla
+    la route (422 browser_nella_lista)."""
+    for chiave in programmi:
+        if (
+            len(chiave) > LUNGHEZZA_MASSIMA_CHIAVE
+            or not chiave.startswith(PREFISSI_SOLO_COMPUTER)
+            or not chiave_adatta("computer", chiave)
+        ):
+            raise ValueError(f"{chiave!r} non va bene: servono voci exe:<programma> o sito:<dominio>")
+    senza_doppioni = list(dict.fromkeys(programmi))
+    if len(senza_doppioni) > VOCI_MASSIME_STUDIO:
+        raise ValueError(f"le voci del computer arrivano a {VOCI_MASSIME_STUDIO}")
+    return senza_doppioni
+
+
+def _firme_studio(firme: dict[str, str]) -> dict[str, str]:
+    """Il soggetto del certificato di ogni programma firmato: da 1 a 200 caratteri
+    (ripulito come un'etichetta). Le chiavi che non sono voci exe: della lista le lascia
+    cadere la route, che conosce la lista."""
+    pulite = {}
+    for chiave, firma in firme.items():
+        firma = _etichetta(firma)
+        if not 1 <= len(firma) <= LUNGHEZZA_MASSIMA_FIRMA:
+            raise ValueError(f"una firma va da 1 a {LUNGHEZZA_MASSIMA_FIRMA} caratteri")
+        pulite[chiave] = firma
+    return pulite
+
+
+class ListaTelefonoStudio(BaseModel):
+    app: list[str]
+    nomi: dict[str, str] | None = None
+
+    @field_validator("app")
+    @classmethod
+    def _app(cls, app: list[str]) -> list[str]:
+        return _app_studio(app)
+
+    @field_validator("nomi")
+    @classmethod
+    def _nomi(cls, nomi: dict[str, str] | None) -> dict[str, str] | None:
+        return None if nomi is None else _nomi_sessione(nomi)
+
+
+class ListaComputerStudio(BaseModel):
+    programmi: list[str]
+    nomi: dict[str, str] | None = None
+    firme: dict[str, str] | None = None
+
+    @field_validator("programmi")
+    @classmethod
+    def _programmi(cls, programmi: list[str]) -> list[str]:
+        return _programmi_studio(programmi)
+
+    @field_validator("nomi")
+    @classmethod
+    def _nomi(cls, nomi: dict[str, str] | None) -> dict[str, str] | None:
+        return None if nomi is None else _nomi_sessione(nomi)
+
+    @field_validator("firme")
+    @classmethod
+    def _firme(cls, firme: dict[str, str] | None) -> dict[str, str] | None:
+        return None if firme is None else _firme_studio(firme)
+
+
+class StudioConfigPatch(BaseModel):
+    """PATCH /api/studio/config: almeno un campo. I campi che mancano si prendono dalla
+    proposta in attesa, se c'e', altrimenti da quella approvata (o, alla prima proposta,
+    dai valori di partenza): lo fa la route, dentro il lock. telefono e computer si
+    sostituiscono interi."""
+
+    giorni: list[GiornoSettimana] | None = None
+    inizio: str | None = Field(default=None, pattern=ORARIO)
+    chiusura_minima: str | None = Field(default=None, pattern=ORARIO)
+    minuti_minimi: StrictInt | None = Field(
+        default=None, ge=MINUTI_MINIMI_STUDIO[0], le=MINUTI_MINIMI_STUDIO[1]
+    )
+    telefono: ListaTelefonoStudio | None = None
+    computer: ListaComputerStudio | None = None
+
+    @field_validator("giorni")
+    @classmethod
+    def _giorni(cls, giorni: list[str] | None) -> list[str] | None:
+        if giorni is None:
+            return None
+        presenti = set(giorni)
+        if not presenti:
+            raise ValueError("serve almeno un giorno: lo Studio parte senza eccezioni")
+        return [g for g in GIORNI_SETTIMANA if g in presenti]  # senza doppioni, in ordine
+
+    @model_validator(mode="after")
+    def _almeno_un_campo(self):
+        if all(getattr(self, campo) is None for campo in CAMPI_CONFIG_STUDIO):
+            raise ValueError("serve almeno un campo della configurazione dello Studio")
+        return self
+
+
+class RispostaStudioIn(BaseModel):
+    esito: Literal["approva", "rifiuta"]
+    # La versione della configurazione che il genitore ha sullo schermo (un intero vero).
+    versione: StrictInt
+    motivazione: str | None = Field(default=None, max_length=LUNGHEZZA_MASSIMA_MOTIVAZIONE)
+    figlio_id: StrictInt | None = None
+
+
+def _parola_tratto(parola: str) -> str:
+    """La parola di un tratto `altro` (es. "allenamento"): le regole dei nomi, 1-30."""
+    parola = unicodedata.normalize("NFC", parola.strip())
+    if not all(_visibile(c) for c in parola):
+        raise ValueError("la parola non puo' avere caratteri invisibili o di controllo")
+    if not 1 <= len(parola) <= LUNGHEZZA_MASSIMA_PAROLA:
+        raise ValueError(f"la parola va da 1 a {LUNGHEZZA_MASSIMA_PAROLA} caratteri")
+    return parola
+
+
+def _ms_valido(ms: int) -> bool:
+    if ms < 0:
+        return False
+    try:
+        datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return False
+    return True
+
+
+class TrattoIn(BaseModel):
+    """Un tratto del timer, come lo manda il telefono. `inizio` e `fine` sono ms (l'ora del
+    server agganciata, o l'orologio del telefono con ora_agganciata false). Un tratto in
+    corso ha `inizio` e niente `fine`; uno finito o interrotto ha `fine` e i `secondi`."""
+
+    id: str = Field(min_length=1, max_length=128)
+    tipo: Literal["compiti", "lavori_di_casa", "altro"]
+    parola: str | None = None
+    faccenda_id: StrictInt | None = None
+    inizio: StrictInt | None = None
+    fine: StrictInt | None = None
+    ora_agganciata: StrictBool
+    secondi: StrictInt = Field(ge=0, le=SECONDI_MASSIMI_TRATTO)
+    esito: Literal["in_corso", "finito", "interrotto"]
+
+    @field_validator("parola")
+    @classmethod
+    def _parola(cls, parola: str | None) -> str | None:
+        return None if parola is None else _parola_tratto(parola)
+
+    @model_validator(mode="after")
+    def _coerente(self):
+        if self.tipo == "altro" and self.parola is None:
+            raise ValueError("un tratto 'altro' vuole la parola (per esempio allenamento)")
+        if self.faccenda_id is not None and self.tipo != "lavori_di_casa":
+            # (Correzione) faccenda_id va solo con lavori_di_casa: su un altro tipo vale
+            # null, come per un lavoro che non e' del figlio (contratto, «se non e' un
+            # lavoro del figlio vale null»). Un 422 rifiuterebbe tutto il pacco (fino a 50
+            # tratti, o la chiusura col corpo) e bloccherebbe la coda del telefono.
+            self.faccenda_id = None
+        if self.esito == "in_corso":
+            if self.inizio is None or not _ms_valido(self.inizio):
+                raise ValueError("un tratto in corso vuole l'inizio")
+            if self.fine is not None:
+                raise ValueError("un tratto in corso non ha la fine")
+        else:
+            if self.fine is None or not _ms_valido(self.fine):
+                raise ValueError("un tratto finito vuole la fine")
+            if self.secondi < 1:
+                raise ValueError("un tratto finito dura almeno un secondo")
+        return self
+
+
+class TrattiIn(BaseModel):
+    tratti: list[TrattoIn] = Field(min_length=1, max_length=TRATTI_PER_VOLTA)
+
+
+class AvviaStudioIn(BaseModel):
+    chiave: str = Field(min_length=1, max_length=LUNGHEZZA_CHIAVE_STUDIO)
+    ts_device: StrictInt | None = None
+
+
+class QualeStudioIn(BaseModel):
+    """Lo Studio di una chiusura senza id: quello che contiene la partenza di quel giorno,
+    oppure quello avviato a mano con quella chiave. Uno dei due."""
+
+    giorno: str | None = None
+    chiave: str | None = Field(default=None, min_length=1, max_length=LUNGHEZZA_CHIAVE_STUDIO)
+
+    @field_validator("giorno")
+    @classmethod
+    def _giorno(cls, giorno: str | None) -> str | None:
+        if giorno is not None:
+            try:
+                valido = date.fromisoformat(giorno).isoformat() == giorno
+            except ValueError:
+                valido = False
+            if not valido:
+                raise ValueError("il giorno va scritto YYYY-MM-DD")
+        return giorno
+
+    @model_validator(mode="after")
+    def _uno_dei_due(self):
+        if (self.giorno is None) == (self.chiave is None):
+            raise ValueError("serve il giorno oppure la chiave dello Studio")
+        return self
+
+
+def _testo_lungo(testo: str, minimo: int, massimo: int, cosa: str) -> str:
+    """La dichiarazione del figlio o il motivo del genitore: le regole della nota di un
+    lavoro (NFC, a capo ammessi, niente caratteri invisibili, spazi ai bordi tolti), con
+    una lunghezza minima e massima."""
+    testo = unicodedata.normalize("NFC", testo.replace("\r\n", "\n").replace("\r", "\n").strip())
+    if not all(c == "\n" or _visibile(c) for c in testo):
+        raise ValueError(f"{cosa} non puo' avere caratteri invisibili o di controllo")
+    if not minimo <= len(testo) <= massimo:
+        raise ValueError(f"{cosa} va da {minimo} a {massimo} caratteri")
+    return testo
+
+
+class ChiudiStudioIn(BaseModel):
+    """La chiusura del figlio, dal telefono (anche consegnata dopo, senza rete)."""
+
+    chiave: str = Field(min_length=1, max_length=LUNGHEZZA_CHIAVE_STUDIO)
+    ts_device: StrictInt | None = None
+    dichiarazione: str
+    tratti: list[TrattoIn] | None = Field(default=None, max_length=TRATTI_PER_VOLTA)
+    studio: QualeStudioIn | None = None
+
+    @field_validator("dichiarazione")
+    @classmethod
+    def _dichiarazione(cls, testo: str) -> str:
+        return _testo_lungo(testo, *DICHIARAZIONE_STUDIO, "la dichiarazione")
+
+
+class ChiudiStudioGenitoreIn(BaseModel):
+    """La chiusura del genitore: senza condizioni, ma con un motivo."""
+
+    motivo: str
+    figlio_id: StrictInt | None = None
+
+    @field_validator("motivo")
+    @classmethod
+    def _motivo(cls, testo: str) -> str:
+        return _testo_lungo(testo, *MOTIVO_CHIUSURA, "il motivo")

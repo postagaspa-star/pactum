@@ -21,7 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import dati_v24
-from aiuti_v3 import auth, contenuto_in, dispositivo_abbinato
+from aiuti_v3 import auth, contenuto_in, dispositivo_abbinato, senza_righe_v40
 from conftest import FIGLIO, GENITORE, TOKEN_FIGLIO, TOKEN_GENITORE, Orologio
 
 PRIMA = json.loads((Path(__file__).parent / "dati" / "v24_prima.json").read_text(encoding="utf-8"))
@@ -161,7 +161,7 @@ def test_ogni_riga_di_prima_resta_uguale_e_va_al_figlio_1(avvia, db_v24):
     prima = dati_v24.righe(db_v24)
     with avvia():
         pass
-    dopo = dati_v24.righe(db_v24)
+    dopo = senza_righe_v40(dati_v24.righe(db_v24))  # (v4.0) le sue due righe in patto
 
     for tabella in TABELLE_V24:
         assert len(dopo[tabella]) == len(prima[tabella]), tabella

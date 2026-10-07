@@ -1,0 +1,4008 @@
+{
+ "blocco_computer": {
+  "attivo": true,
+  "da_fare": [
+   {
+    "blocco_da": "2026-10-06T09:00:00+00:00",
+    "bocciature": 0,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "id": 6,
+    "nota": null,
+    "titolo": "Svuota la lavastoviglie",
+    "ultima_bocciatura": null
+   },
+   {
+    "blocco_da": "2026-10-06T15:00:00+00:00",
+    "bocciature": 0,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "id": 7,
+    "nota": "pagina 42",
+    "titolo": "Compiti di matematica",
+    "ultima_bocciatura": null
+   }
+  ],
+  "dal": "2026-10-06T09:00:00+00:00",
+  "prossimo": null
+ },
+ "blocco_sara": {
+  "attivo": false,
+  "da_fare": [],
+  "dal": null,
+  "prossimo": null
+ },
+ "blocco_telefono": {
+  "attivo": true,
+  "da_fare": [
+   {
+    "blocco_da": "2026-10-06T09:00:00+00:00",
+    "bocciature": 0,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "id": 6,
+    "nota": null,
+    "titolo": "Svuota la lavastoviglie",
+    "ultima_bocciatura": null
+   },
+   {
+    "blocco_da": "2026-10-06T15:00:00+00:00",
+    "bocciature": 0,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "id": 7,
+    "nota": "pagina 42",
+    "titolo": "Compiti di matematica",
+    "ultima_bocciatura": null
+   }
+  ],
+  "dal": "2026-10-06T09:00:00+00:00",
+  "prossimo": null
+ },
+ "faccende_luca": {
+  "faccende": [
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T15:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T09:30:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 7,
+    "nota": "pagina 42",
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Compiti di matematica",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-06T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 6,
+    "nota": null,
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:00:00+00:00"
+     }
+    ],
+    "titolo": "Svuota la lavastoviglie",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T08:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-06T08:20:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T08:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-06T08:20:00+00:00",
+    "id": 5,
+    "nota": "i bianchi",
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T08:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-06T08:20:00+00:00"
+     }
+    ],
+    "titolo": "Stendi la lavatrice",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 3,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Lava i piatti",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 2,
+    "nota": null,
+    "stato": "annullata",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "annullata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Porta fuori il cane",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "confermata_ts": "2026-10-04T09:30:00+00:00",
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 1,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "confermata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Rifai il letto",
+    "ultima_bocciatura": null
+   }
+  ]
+ },
+ "faccende_sara": {
+  "faccende": [
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 2,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 4,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Riordina la camera",
+    "ultima_bocciatura": null
+   }
+  ]
+ },
+ "faccende_telefono": {
+  "faccende": [
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T15:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T09:30:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 7,
+    "nota": "pagina 42",
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Compiti di matematica",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-06T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 6,
+    "nota": null,
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:00:00+00:00"
+     }
+    ],
+    "titolo": "Svuota la lavastoviglie",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T08:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-06T08:20:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T08:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-06T08:20:00+00:00",
+    "id": 5,
+    "nota": "i bianchi",
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T08:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-06T08:20:00+00:00"
+     }
+    ],
+    "titolo": "Stendi la lavatrice",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 3,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Lava i piatti",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 2,
+    "nota": null,
+    "stato": "annullata",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "annullata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Porta fuori il cane",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "confermata_ts": "2026-10-04T09:30:00+00:00",
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 1,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "confermata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Rifai il letto",
+    "ultima_bocciatura": null
+   }
+  ]
+ },
+ "famiglia": {
+  "figli": [
+   {
+    "blocco_attivo": true,
+    "dispositivi": [
+     {
+      "abbinato": true,
+      "id": 1,
+      "nome": "Telefono",
+      "revocato": false,
+      "stato_silenzio": {
+       "silente": false,
+       "spento": false,
+       "spento_dal": null,
+       "ultimo_battito": "2026-10-06T09:55:00+00:00"
+      },
+      "tipo": "telefono",
+      "versione_app": "0.17.0"
+     },
+     {
+      "abbinato": true,
+      "id": 2,
+      "nome": "Computer",
+      "revocato": false,
+      "stato_silenzio": {
+       "silente": false,
+       "spento": false,
+       "spento_dal": null,
+       "ultimo_battito": "2026-10-06T09:55:00+00:00"
+      },
+      "tipo": "computer",
+      "versione_app": "0.14.0"
+     }
+    ],
+    "faccende_da_fare": 2,
+    "id": 1,
+    "nome": "Luca",
+    "notifiche_non_lette": 5,
+    "proposte_da_decidere": 0,
+    "riepilogo": {
+     "giorni_fuori_regola": 0,
+     "interruzioni": 0
+    },
+    "sessioni_da_approvare": 0,
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "verde"
+     }
+    ]
+   },
+   {
+    "blocco_attivo": false,
+    "dispositivi": [
+     {
+      "abbinato": true,
+      "id": 3,
+      "nome": "Telefono di Sara",
+      "revocato": false,
+      "stato_silenzio": {
+       "silente": false,
+       "spento": false,
+       "spento_dal": null,
+       "ultimo_battito": "2026-10-06T09:55:00+00:00"
+      },
+      "tipo": "telefono",
+      "versione_app": "0.17.0"
+     }
+    ],
+    "faccende_da_fare": 0,
+    "id": 2,
+    "nome": "Sara",
+    "notifiche_non_lette": 2,
+    "proposte_da_decidere": 0,
+    "riepilogo": {
+     "giorni_fuori_regola": 0,
+     "interruzioni": 0
+    },
+    "sessioni_da_approvare": 0,
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "grigio"
+     }
+    ]
+   }
+  ],
+  "genitori": [
+   {
+    "id": 1,
+    "nome": "Genitore",
+    "revocato": false
+   },
+   {
+    "id": 2,
+    "nome": "Mamma",
+    "revocato": false
+   }
+  ],
+  "io": {
+   "id": 1,
+   "nome": "Genitore"
+  }
+ },
+ "finestra_luca": {
+  "blocco": {
+   "attivo": true,
+   "da_fare": [
+    {
+     "blocco_da": "2026-10-06T09:00:00+00:00",
+     "bocciature": 0,
+     "creata_da": {
+      "id": 2,
+      "nome": "Mamma"
+     },
+     "id": 6,
+     "nota": null,
+     "titolo": "Svuota la lavastoviglie",
+     "ultima_bocciatura": null
+    },
+    {
+     "blocco_da": "2026-10-06T15:00:00+00:00",
+     "bocciature": 0,
+     "creata_da": {
+      "id": 1,
+      "nome": "Genitore"
+     },
+     "id": 7,
+     "nota": "pagina 42",
+     "titolo": "Compiti di matematica",
+     "ultima_bocciatura": null
+    }
+   ],
+   "dal": "2026-10-06T09:00:00+00:00",
+   "prossimo": null
+  },
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_giornalieri": [
+   {
+    "giorno": "2026-09-29",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-30",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-01",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-02",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-03",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-04",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-05",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-06",
+    "minuti": 0
+   }
+  ],
+  "dispositivi": [
+   {
+    "abbinato": true,
+    "bonus": {
+     "giorno": {
+      "residui": 30,
+      "tetto": 30,
+      "usati": 0
+     },
+     "settimana": {
+      "residui": 90,
+      "tetto": 90,
+      "usati": 0
+     }
+    },
+    "bonus_giornalieri": [
+     {
+      "giorno": "2026-09-29",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-30",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-01",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-02",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-03",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-04",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-05",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-06",
+      "minuti": 0
+     }
+    ],
+    "id": 1,
+    "medie": {
+     "mese": {
+      "giorni": 2,
+      "minuti": 28,
+      "totale": 55
+     },
+     "settimana": {
+      "giorni": 2,
+      "minuti": 28,
+      "totale": 55
+     }
+    },
+    "nome": "Telefono",
+    "revocato": false,
+    "siti_recenti": [
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-29",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-30",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-01",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-02",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-03",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-04",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-05",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-06",
+      "totale_domini": null
+     }
+    ],
+    "stato_silenzio": {
+     "silente": false,
+     "spento": false,
+     "spento_dal": null,
+     "ultimo_battito": "2026-10-06T09:55:00+00:00"
+    },
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "verde"
+     }
+    ],
+    "tipo": "telefono",
+    "uso_recente": [
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-09-29",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-09-30",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-01",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-02",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-03",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": "2026-10-04T08:00:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.zhiliaoapp.musically",
+        "limite": 60,
+        "minuti": 40,
+        "nome": "TikTok",
+        "regola_id": 1
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-10-04",
+      "sessioni_minuti": null,
+      "totale_minuti": 40
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-05",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": "2026-10-06T09:30:00+00:00",
+      "app": [
+       {
+        "bonus": 0,
+        "chiave": "com.zhiliaoapp.musically",
+        "limite": 60,
+        "minuti": 15,
+        "nome": "TikTok",
+        "regola_id": 1
+       }
+      ],
+      "categorie": [],
+      "giorno": "2026-10-06",
+      "sessioni_minuti": null,
+      "totale_minuti": 15
+     }
+    ]
+   },
+   {
+    "abbinato": true,
+    "bonus": {
+     "giorno": {
+      "residui": 30,
+      "tetto": 30,
+      "usati": 0
+     },
+     "settimana": {
+      "residui": 90,
+      "tetto": 90,
+      "usati": 0
+     }
+    },
+    "bonus_giornalieri": [
+     {
+      "giorno": "2026-09-29",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-30",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-01",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-02",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-03",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-04",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-05",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-06",
+      "minuti": 0
+     }
+    ],
+    "id": 2,
+    "medie": {
+     "mese": null,
+     "settimana": null
+    },
+    "nome": "Computer",
+    "revocato": false,
+    "siti_recenti": [
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-29",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-30",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-01",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-02",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-03",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-04",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-05",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-06",
+      "totale_domini": null
+     }
+    ],
+    "stato_silenzio": {
+     "silente": false,
+     "spento": false,
+     "spento_dal": null,
+     "ultimo_battito": "2026-10-06T09:55:00+00:00"
+    },
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "computer",
+    "uso_recente": [
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-09-29",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-09-30",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-01",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-02",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-03",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-04",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-05",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-06",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     }
+    ]
+   }
+  ],
+  "faccende": [
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T15:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T09:30:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 7,
+    "nota": "pagina 42",
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Compiti di matematica",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-06T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 6,
+    "nota": null,
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:00:00+00:00"
+     }
+    ],
+    "titolo": "Svuota la lavastoviglie",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T08:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-06T08:20:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T08:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-06T08:20:00+00:00",
+    "id": 5,
+    "nota": "i bianchi",
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T08:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-06T08:20:00+00:00"
+     }
+    ],
+    "titolo": "Stendi la lavatrice",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 3,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Lava i piatti",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 2,
+    "nota": null,
+    "stato": "annullata",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "annullata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Porta fuori il cane",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "confermata_ts": "2026-10-04T09:30:00+00:00",
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 1,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "confermata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Rifai il letto",
+    "ultima_bocciatura": null
+   }
+  ],
+  "manomissioni_recenti": [],
+  "medie": {
+   "mese": {
+    "giorni": 2,
+    "minuti": 28,
+    "totale": 55
+   },
+   "settimana": {
+    "giorni": 2,
+    "minuti": 28,
+    "totale": 55
+   }
+  },
+  "proposte_pendenti": [],
+  "regole": [
+   {
+    "allentabile_dal": "2026-10-08T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-10-04T08:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 1,
+    "nome": "TikTok",
+    "parametri": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 60
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "verde"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-10-04T08:00:00+00:00"
+   }
+  ],
+  "riepilogo": {
+   "giorni_fuori_regola": 0,
+   "interruzioni": 0
+  },
+  "segno_oggi": false,
+  "sessioni": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "approvata_ts": "2026-10-04T08:00:00+00:00",
+    "creata_ts": "2026-10-04T08:00:00+00:00",
+    "decisa_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 1,
+    "modifica_in_attesa": null,
+    "motivazione": null,
+    "nome": "Compiti",
+    "nomi": {},
+    "stato": "approvata",
+    "versione": 2
+   }
+  ],
+  "sessioni_da_approvare": 0,
+  "sessioni_svolte": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "chiusura": "terminata",
+    "dispositivo_id": 1,
+    "durata_minuti": 45,
+    "fine_prevista_ts": "2026-10-04T10:15:00+00:00",
+    "fine_ts": "2026-10-04T09:50:00+00:00",
+    "id": 1,
+    "in_corso": false,
+    "inizio_ts": "2026-10-04T09:30:00+00:00",
+    "nome": "Compiti",
+    "nomi": {},
+    "sessione_id": 1
+   }
+  ],
+  "sforamenti_recenti": [],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-02",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-03",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-04",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-05",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-06",
+    "totale_domini": null
+   }
+  ],
+  "stato_silenzio": {
+   "silente": false,
+   "spento": false,
+   "spento_dal": null,
+   "ultimo_battito": "2026-10-06T09:55:00+00:00"
+  },
+  "storico_modifiche": [
+   {
+    "azione": "creazione",
+    "concordata": false,
+    "direzione": null,
+    "dopo": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 60
+    },
+    "id": 1,
+    "prima": null,
+    "regola_id": 1,
+    "ts_server": "2026-10-04T08:00:00+00:00"
+   }
+  ],
+  "striscia": [
+   {
+    "data": "2026-09-29",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-02",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-03",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-04",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-05",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-06",
+    "stato": "verde"
+   }
+  ],
+  "uso_recente": [
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-09-29",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-09-30",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-01",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-02",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-03",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": "2026-10-04T08:00:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.zhiliaoapp.musically",
+      "limite": 60,
+      "minuti": 40,
+      "nome": "TikTok",
+      "regola_id": 1
+     }
+    ],
+    "categorie": [],
+    "giorno": "2026-10-04",
+    "sessioni_minuti": null,
+    "totale_minuti": 40
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-05",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": "2026-10-06T09:30:00+00:00",
+    "app": [
+     {
+      "bonus": 0,
+      "chiave": "com.zhiliaoapp.musically",
+      "limite": 60,
+      "minuti": 15,
+      "nome": "TikTok",
+      "regola_id": 1
+     }
+    ],
+    "categorie": [],
+    "giorno": "2026-10-06",
+    "sessioni_minuti": null,
+    "totale_minuti": 15
+   }
+  ]
+ },
+ "finestra_sara": {
+  "blocco": {
+   "attivo": false,
+   "da_fare": [],
+   "dal": null,
+   "prossimo": null
+  },
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_giornalieri": [
+   {
+    "giorno": "2026-09-29",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-09-30",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-01",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-02",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-03",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-04",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-05",
+    "minuti": 0
+   },
+   {
+    "giorno": "2026-10-06",
+    "minuti": 0
+   }
+  ],
+  "dispositivi": [
+   {
+    "abbinato": true,
+    "bonus": {
+     "giorno": {
+      "residui": 30,
+      "tetto": 30,
+      "usati": 0
+     },
+     "settimana": {
+      "residui": 90,
+      "tetto": 90,
+      "usati": 0
+     }
+    },
+    "bonus_giornalieri": [
+     {
+      "giorno": "2026-09-29",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-09-30",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-01",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-02",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-03",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-04",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-05",
+      "minuti": 0
+     },
+     {
+      "giorno": "2026-10-06",
+      "minuti": 0
+     }
+    ],
+    "id": 3,
+    "medie": {
+     "mese": null,
+     "settimana": null
+    },
+    "nome": "Telefono di Sara",
+    "revocato": false,
+    "siti_recenti": [
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-29",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-09-30",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-01",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-02",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-03",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-04",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-05",
+      "totale_domini": null
+     },
+     {
+      "aggiornato_ts": null,
+      "dns_cifrato": false,
+      "domini": [],
+      "giorno": "2026-10-06",
+      "totale_domini": null
+     }
+    ],
+    "stato_silenzio": {
+     "silente": false,
+     "spento": false,
+     "spento_dal": null,
+     "ultimo_battito": "2026-10-06T09:55:00+00:00"
+    },
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "telefono",
+    "uso_recente": [
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-09-29",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-09-30",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-01",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-02",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-03",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-04",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-05",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     },
+     {
+      "aggiornato_ts": null,
+      "app": [],
+      "categorie": [],
+      "giorno": "2026-10-06",
+      "sessioni_minuti": null,
+      "totale_minuti": null
+     }
+    ]
+   }
+  ],
+  "faccende": [
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 2,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 4,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Riordina la camera",
+    "ultima_bocciatura": null
+   }
+  ],
+  "manomissioni_recenti": [],
+  "medie": {
+   "mese": null,
+   "settimana": null
+  },
+  "proposte_pendenti": [],
+  "regole": [],
+  "riepilogo": {
+   "giorni_fuori_regola": 0,
+   "interruzioni": 0
+  },
+  "segno_oggi": false,
+  "sessioni": [],
+  "sessioni_da_approvare": 0,
+  "sessioni_svolte": [],
+  "sforamenti_recenti": [],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-02",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-03",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-04",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-05",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-06",
+    "totale_domini": null
+   }
+  ],
+  "stato_silenzio": {
+   "silente": false,
+   "spento": false,
+   "spento_dal": null,
+   "ultimo_battito": "2026-10-06T09:55:00+00:00"
+  },
+  "storico_modifiche": [],
+  "striscia": [
+   {
+    "data": "2026-09-29",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-02",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-03",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-04",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-05",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-06",
+    "stato": "grigio"
+   }
+  ],
+  "uso_recente": [
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-09-29",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-09-30",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-01",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-02",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-03",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-04",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-05",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   },
+   {
+    "aggiornato_ts": null,
+    "app": [],
+    "categorie": [],
+    "giorno": "2026-10-06",
+    "sessioni_minuti": null,
+    "totale_minuti": null
+   }
+  ]
+ },
+ "notifiche_genitore": {
+  "notifiche": [
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 1,
+    "messaggio": "Nuova regola limite_tempo creata",
+    "payload": {
+     "azione": "creazione",
+     "parametri": {
+      "app_o_categoria": "com.zhiliaoapp.musically",
+      "minuti_al_giorno": 60
+     },
+     "regola_id": 1
+    },
+    "tipo": "modifica_regola",
+    "ts_server": "2026-10-04T08:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 6,
+    "messaggio": "Luca ha fatto «Rifai il letto»",
+    "payload": {
+     "faccenda_id": 1,
+     "titolo": "Rifai il letto"
+    },
+    "tipo": "faccenda_fatta",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 8,
+    "messaggio": "Luca ha fatto «Lava i piatti»",
+    "payload": {
+     "faccenda_id": 3,
+     "titolo": "Lava i piatti"
+    },
+    "tipo": "faccenda_fatta",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 2,
+    "id": 10,
+    "messaggio": "Sara ha fatto «Riordina la camera»",
+    "payload": {
+     "faccenda_id": 4,
+     "titolo": "Riordina la camera"
+    },
+    "tipo": "faccenda_fatta",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 2,
+    "id": 11,
+    "messaggio": "Sara ha finito i lavori di casa: telefono e computer sbloccati",
+    "payload": {
+     "faccenda_ids": [
+      4
+     ]
+    },
+    "tipo": "faccende_finite",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 13,
+    "messaggio": "Luca ha fatto «Stendi la lavatrice»",
+    "payload": {
+     "faccenda_id": 5,
+     "titolo": "Stendi la lavatrice"
+    },
+    "tipo": "faccenda_fatta",
+    "ts_server": "2026-10-06T08:20:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 14,
+    "messaggio": "Luca ha finito i lavori di casa: telefono e computer sbloccati",
+    "payload": {
+     "faccenda_ids": [
+      5
+     ]
+    },
+    "tipo": "faccende_finite",
+    "ts_server": "2026-10-06T08:20:00+00:00"
+   }
+  ]
+ },
+ "notifiche_mamma": {
+  "notifiche": [
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 1,
+    "messaggio": "Nuova regola limite_tempo creata",
+    "payload": {
+     "azione": "creazione",
+     "parametri": {
+      "app_o_categoria": "com.zhiliaoapp.musically",
+      "minuti_al_giorno": 60
+     },
+     "regola_id": 1
+    },
+    "tipo": "modifica_regola",
+    "ts_server": "2026-10-04T08:00:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 6,
+    "messaggio": "Luca ha fatto «Rifai il letto»",
+    "payload": {
+     "faccenda_id": 1,
+     "titolo": "Rifai il letto"
+    },
+    "tipo": "faccenda_fatta",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 8,
+    "messaggio": "Luca ha fatto «Lava i piatti»",
+    "payload": {
+     "faccenda_id": 3,
+     "titolo": "Lava i piatti"
+    },
+    "tipo": "faccenda_fatta",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 2,
+    "id": 10,
+    "messaggio": "Sara ha fatto «Riordina la camera»",
+    "payload": {
+     "faccenda_id": 4,
+     "titolo": "Riordina la camera"
+    },
+    "tipo": "faccenda_fatta",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 2,
+    "id": 11,
+    "messaggio": "Sara ha finito i lavori di casa: telefono e computer sbloccati",
+    "payload": {
+     "faccenda_ids": [
+      4
+     ]
+    },
+    "tipo": "faccende_finite",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 13,
+    "messaggio": "Luca ha fatto «Stendi la lavatrice»",
+    "payload": {
+     "faccenda_id": 5,
+     "titolo": "Stendi la lavatrice"
+    },
+    "tipo": "faccenda_fatta",
+    "ts_server": "2026-10-06T08:20:00+00:00"
+   },
+   {
+    "destinatario": "genitore",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 14,
+    "messaggio": "Luca ha finito i lavori di casa: telefono e computer sbloccati",
+    "payload": {
+     "faccenda_ids": [
+      5
+     ]
+    },
+    "tipo": "faccende_finite",
+    "ts_server": "2026-10-06T08:20:00+00:00"
+   }
+  ]
+ },
+ "notifiche_telefono": {
+  "notifiche": [
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 3,
+    "messaggio": "Mamma ha approvato la sessione «Compiti»",
+    "payload": {
+     "cambio": false,
+     "esito": "approva",
+     "genitore": {
+      "id": 2,
+      "nome": "Mamma"
+     },
+     "nome": "Compiti",
+     "sessione_id": 1
+    },
+    "tipo": "sessione_risposta",
+    "ts_server": "2026-10-04T08:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 4,
+    "messaggio": "Mamma ti ha dato 3 lavori di casa",
+    "payload": {
+     "blocco_da": "2026-10-04T09:00:00+00:00",
+     "faccenda_ids": [
+      1,
+      2,
+      3
+     ],
+     "genitore": {
+      "id": 2,
+      "nome": "Mamma"
+     }
+    },
+    "tipo": "nuove_faccende",
+    "ts_server": "2026-10-04T09:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 7,
+    "messaggio": "Genitore ha confermato «Rifai il letto»",
+    "payload": {
+     "faccenda_id": 1,
+     "genitore": {
+      "id": 1,
+      "nome": "Genitore"
+     },
+     "titolo": "Rifai il letto"
+    },
+    "tipo": "faccenda_confermata",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 9,
+    "messaggio": "Genitore ha annullato «Porta fuori il cane»",
+    "payload": {
+     "faccenda_id": 2,
+     "genitore": {
+      "id": 1,
+      "nome": "Genitore"
+     },
+     "titolo": "Porta fuori il cane"
+    },
+    "tipo": "faccenda_annullata",
+    "ts_server": "2026-10-04T09:30:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 12,
+    "messaggio": "Genitore ti ha dato un lavoro di casa: «Stendi la lavatrice»",
+    "payload": {
+     "blocco_da": "2026-10-06T08:00:00+00:00",
+     "faccenda_ids": [
+      5
+     ],
+     "genitore": {
+      "id": 1,
+      "nome": "Genitore"
+     }
+    },
+    "tipo": "nuove_faccende",
+    "ts_server": "2026-10-06T08:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 15,
+    "messaggio": "Mamma ti ha dato un lavoro di casa: «Svuota la lavastoviglie»",
+    "payload": {
+     "blocco_da": "2026-10-06T09:00:00+00:00",
+     "faccenda_ids": [
+      6
+     ],
+     "genitore": {
+      "id": 2,
+      "nome": "Mamma"
+     }
+    },
+    "tipo": "nuove_faccende",
+    "ts_server": "2026-10-06T09:00:00+00:00"
+   },
+   {
+    "destinatario": "figlio",
+    "dispositivo_id": null,
+    "figlio_id": 1,
+    "id": 16,
+    "messaggio": "Genitore ti ha dato un lavoro di casa: «Compiti di matematica»",
+    "payload": {
+     "blocco_da": "2026-10-06T15:00:00+00:00",
+     "faccenda_ids": [
+      7
+     ],
+     "genitore": {
+      "id": 1,
+      "nome": "Genitore"
+     }
+    },
+    "tipo": "nuove_faccende",
+    "ts_server": "2026-10-06T09:30:00+00:00"
+   }
+  ]
+ },
+ "patto_computer": {
+  "blocco": {
+   "attivo": true,
+   "da_fare": [
+    {
+     "blocco_da": "2026-10-06T09:00:00+00:00",
+     "bocciature": 0,
+     "creata_da": {
+      "id": 2,
+      "nome": "Mamma"
+     },
+     "id": 6,
+     "nota": null,
+     "titolo": "Svuota la lavastoviglie",
+     "ultima_bocciatura": null
+    },
+    {
+     "blocco_da": "2026-10-06T15:00:00+00:00",
+     "bocciature": 0,
+     "creata_da": {
+      "id": 1,
+      "nome": "Genitore"
+     },
+     "id": 7,
+     "nota": "pagina 42",
+     "titolo": "Compiti di matematica",
+     "ultima_bocciatura": null
+    }
+   ],
+   "dal": "2026-10-06T09:00:00+00:00",
+   "prossimo": null
+  },
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_oggi_per_regola": {},
+  "dichiarazioni_in_attesa": [],
+  "dispositivi": [
+   {
+    "id": 1,
+    "nome": "Telefono",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "verde"
+     }
+    ],
+    "tipo": "telefono"
+   },
+   {
+    "id": 2,
+    "nome": "Computer",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "computer"
+   }
+  ],
+  "dispositivo": {
+   "id": 2,
+   "nome": "Computer",
+   "tipo": "computer"
+  },
+  "faccende": [
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T15:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T09:30:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 7,
+    "nota": "pagina 42",
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Compiti di matematica",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-06T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 6,
+    "nota": null,
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:00:00+00:00"
+     }
+    ],
+    "titolo": "Svuota la lavastoviglie",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T08:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-06T08:20:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T08:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-06T08:20:00+00:00",
+    "id": 5,
+    "nota": "i bianchi",
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T08:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-06T08:20:00+00:00"
+     }
+    ],
+    "titolo": "Stendi la lavatrice",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 3,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Lava i piatti",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 2,
+    "nota": null,
+    "stato": "annullata",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "annullata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Porta fuori il cane",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "confermata_ts": "2026-10-04T09:30:00+00:00",
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 1,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "confermata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Rifai il letto",
+    "ultima_bocciatura": null
+   }
+  ],
+  "figlio": {
+   "id": 1,
+   "nome": "Luca"
+  },
+  "fuso": "Europe/Rome",
+  "proposte_inviate": [],
+  "proposte_pendenti": [],
+  "regole": [],
+  "riepilogo": {
+   "giorni_fuori_regola": 0,
+   "interruzioni": 0
+  },
+  "sessione_in_corso": null,
+  "sessioni": [],
+  "sessioni_svolte": [],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-02",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-03",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-04",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-05",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-06",
+    "totale_domini": null
+   }
+  ],
+  "striscia": [
+   {
+    "data": "2026-09-29",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-02",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-03",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-04",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-05",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-06",
+    "stato": "verde"
+   }
+  ],
+  "striscia_dispositivo": [
+   {
+    "data": "2026-09-29",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-02",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-03",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-04",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-05",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-06",
+    "stato": "grigio"
+   }
+  ]
+ },
+ "patto_sara": {
+  "blocco": {
+   "attivo": false,
+   "da_fare": [],
+   "dal": null,
+   "prossimo": null
+  },
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_oggi_per_regola": {},
+  "dichiarazioni_in_attesa": [],
+  "dispositivi": [
+   {
+    "id": 3,
+    "nome": "Telefono di Sara",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "telefono"
+   }
+  ],
+  "dispositivo": {
+   "id": 3,
+   "nome": "Telefono di Sara",
+   "tipo": "telefono"
+  },
+  "faccende": [
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 2,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 4,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Riordina la camera",
+    "ultima_bocciatura": null
+   }
+  ],
+  "figlio": {
+   "id": 2,
+   "nome": "Sara"
+  },
+  "fuso": "Europe/Rome",
+  "proposte_inviate": [],
+  "proposte_pendenti": [],
+  "regole": [],
+  "riepilogo": {
+   "giorni_fuori_regola": 0,
+   "interruzioni": 0
+  },
+  "sessione_in_corso": null,
+  "sessioni": [],
+  "sessioni_svolte": [],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-02",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-03",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-04",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-05",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-06",
+    "totale_domini": null
+   }
+  ],
+  "striscia": [
+   {
+    "data": "2026-09-29",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-02",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-03",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-04",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-05",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-06",
+    "stato": "grigio"
+   }
+  ],
+  "striscia_dispositivo": [
+   {
+    "data": "2026-09-29",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-02",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-03",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-04",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-05",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-06",
+    "stato": "grigio"
+   }
+  ]
+ },
+ "patto_telefono": {
+  "blocco": {
+   "attivo": true,
+   "da_fare": [
+    {
+     "blocco_da": "2026-10-06T09:00:00+00:00",
+     "bocciature": 0,
+     "creata_da": {
+      "id": 2,
+      "nome": "Mamma"
+     },
+     "id": 6,
+     "nota": null,
+     "titolo": "Svuota la lavastoviglie",
+     "ultima_bocciatura": null
+    },
+    {
+     "blocco_da": "2026-10-06T15:00:00+00:00",
+     "bocciature": 0,
+     "creata_da": {
+      "id": 1,
+      "nome": "Genitore"
+     },
+     "id": 7,
+     "nota": "pagina 42",
+     "titolo": "Compiti di matematica",
+     "ultima_bocciatura": null
+    }
+   ],
+   "dal": "2026-10-06T09:00:00+00:00",
+   "prossimo": null
+  },
+  "bonus": {
+   "giorno": {
+    "residui": 30,
+    "tetto": 30,
+    "usati": 0
+   },
+   "settimana": {
+    "residui": 90,
+    "tetto": 90,
+    "usati": 0
+   }
+  },
+  "bonus_oggi_per_regola": {},
+  "dichiarazioni_in_attesa": [],
+  "dispositivi": [
+   {
+    "id": 1,
+    "nome": "Telefono",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "verde"
+     }
+    ],
+    "tipo": "telefono"
+   },
+   {
+    "id": 2,
+    "nome": "Computer",
+    "revocato": false,
+    "striscia": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "grigio"
+     }
+    ],
+    "tipo": "computer"
+   }
+  ],
+  "dispositivo": {
+   "id": 1,
+   "nome": "Telefono",
+   "tipo": "telefono"
+  },
+  "faccende": [
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T15:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T09:30:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 7,
+    "nota": "pagina 42",
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Compiti di matematica",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": null,
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-06T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 6,
+    "nota": null,
+    "stato": "da_fare",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T09:00:00+00:00"
+     }
+    ],
+    "titolo": "Svuota la lavastoviglie",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-06T08:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-06T08:20:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "creata_ts": "2026-10-06T08:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-06T08:20:00+00:00",
+    "id": 5,
+    "nota": "i bianchi",
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "data",
+      "ts": "2026-10-06T08:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-06T08:20:00+00:00"
+     }
+    ],
+    "titolo": "Stendi la lavatrice",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 3,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Lava i piatti",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": null,
+    "confermata_ts": null,
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": false,
+    "foto_ts": null,
+    "id": 2,
+    "nota": null,
+    "stato": "annullata",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "annullata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Porta fuori il cane",
+    "ultima_bocciatura": null
+   },
+   {
+    "annullata_da": null,
+    "blocco_da": "2026-10-04T09:00:00+00:00",
+    "bocciature": 0,
+    "chiusa_ts": "2026-10-04T09:30:00+00:00",
+    "confermata_da": {
+     "id": 1,
+     "nome": "Genitore"
+    },
+    "confermata_ts": "2026-10-04T09:30:00+00:00",
+    "creata_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "creata_ts": "2026-10-04T09:00:00+00:00",
+    "figlio_id": 1,
+    "foto": true,
+    "foto_ts": "2026-10-04T09:30:00+00:00",
+    "id": 1,
+    "nota": null,
+    "stato": "fatta",
+    "storia": [
+     {
+      "genitore": {
+       "id": 2,
+       "nome": "Mamma"
+      },
+      "tipo": "data",
+      "ts": "2026-10-04T09:00:00+00:00"
+     },
+     {
+      "tipo": "foto",
+      "ts": "2026-10-04T09:30:00+00:00"
+     },
+     {
+      "genitore": {
+       "id": 1,
+       "nome": "Genitore"
+      },
+      "tipo": "confermata",
+      "ts": "2026-10-04T09:30:00+00:00"
+     }
+    ],
+    "titolo": "Rifai il letto",
+    "ultima_bocciatura": null
+   }
+  ],
+  "figlio": {
+   "id": 1,
+   "nome": "Luca"
+  },
+  "fuso": "Europe/Rome",
+  "proposte_inviate": [],
+  "proposte_pendenti": [],
+  "regole": [
+   {
+    "allentabile_dal": "2026-10-08T08:00:00+00:00",
+    "attiva": true,
+    "creata_ts": "2026-10-04T08:00:00+00:00",
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "figlio_id": 1,
+    "id": 1,
+    "parametri": {
+     "app_o_categoria": "com.zhiliaoapp.musically",
+     "minuti_al_giorno": 60
+    },
+    "semaforo": [
+     {
+      "data": "2026-09-29",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-09-30",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-01",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-02",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-03",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-04",
+      "stato": "verde"
+     },
+     {
+      "data": "2026-10-05",
+      "stato": "grigio"
+     },
+     {
+      "data": "2026-10-06",
+      "stato": "verde"
+     }
+    ],
+    "tipo": "limite_tempo",
+    "ultima_modifica_ts": "2026-10-04T08:00:00+00:00"
+   }
+  ],
+  "riepilogo": {
+   "giorni_fuori_regola": 0,
+   "interruzioni": 0
+  },
+  "sessione_in_corso": null,
+  "sessioni": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "approvata_ts": "2026-10-04T08:00:00+00:00",
+    "creata_ts": "2026-10-04T08:00:00+00:00",
+    "decisa_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 1,
+    "modifica_in_attesa": null,
+    "motivazione": null,
+    "nome": "Compiti",
+    "nomi": {},
+    "stato": "approvata",
+    "versione": 2
+   }
+  ],
+  "sessioni_svolte": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "chiusura": "terminata",
+    "dispositivo_id": 1,
+    "durata_minuti": 45,
+    "fine_prevista_ts": "2026-10-04T10:15:00+00:00",
+    "fine_ts": "2026-10-04T09:50:00+00:00",
+    "id": 1,
+    "in_corso": false,
+    "inizio_ts": "2026-10-04T09:30:00+00:00",
+    "nome": "Compiti",
+    "nomi": {},
+    "sessione_id": 1
+   }
+  ],
+  "siti_recenti": [
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-29",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-09-30",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-01",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-02",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-03",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-04",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-05",
+    "totale_domini": null
+   },
+   {
+    "aggiornato_ts": null,
+    "dns_cifrato": false,
+    "domini": [],
+    "giorno": "2026-10-06",
+    "totale_domini": null
+   }
+  ],
+  "striscia": [
+   {
+    "data": "2026-09-29",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-02",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-03",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-04",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-05",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-06",
+    "stato": "verde"
+   }
+  ],
+  "striscia_dispositivo": [
+   {
+    "data": "2026-09-29",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-09-30",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-01",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-02",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-03",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-04",
+    "stato": "verde"
+   },
+   {
+    "data": "2026-10-05",
+    "stato": "grigio"
+   },
+   {
+    "data": "2026-10-06",
+    "stato": "verde"
+   }
+  ]
+ },
+ "sessioni_telefono": {
+  "sessioni": [
+   {
+    "app": [
+     "eu.spaggiari.classevivafamiglia",
+     "com.google.android.apps.classroom"
+    ],
+    "approvata_ts": "2026-10-04T08:00:00+00:00",
+    "creata_ts": "2026-10-04T08:00:00+00:00",
+    "decisa_da": {
+     "id": 2,
+     "nome": "Mamma"
+    },
+    "dispositivo": {
+     "id": 1,
+     "nome": "Telefono",
+     "tipo": "telefono"
+    },
+    "dispositivo_id": 1,
+    "id": 1,
+    "modifica_in_attesa": null,
+    "motivazione": null,
+    "nome": "Compiti",
+    "nomi": {},
+    "stato": "approvata",
+    "versione": 2
+   }
+  ]
+ }
+}

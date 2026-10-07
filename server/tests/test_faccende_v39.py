@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 
 import dati_v24
 import dati_v38
-from aiuti_v3 import contenuto_in
+from aiuti_v3 import contenuto_in, senza_righe_v40
 from conftest import FIGLIO, GENITORE, TOKEN_FIGLIO, TOKEN_GENITORE, Orologio
 from test_faccende import (  # noqa: F401  (famiglia e' una fixture)
     EXIF,
@@ -42,6 +42,7 @@ from test_faccende import (  # noqa: F401  (famiglia e' una fixture)
     _notifiche,
     _ok,
     famiglia,
+    foto_di_prima,
     jpeg,
 )
 
@@ -69,7 +70,11 @@ def _boccia(client, faccenda_id, headers=GENITORE):
 
 
 def _cerca(client, testo, headers=GENITORE, **query):
-    return _ok(client.get("/api/faccende", headers=headers, params={"cerca": testo, **query}))
+    """La ricerca senza il `blocco` (v4.0: GET /api/faccende lo porta sempre, anche con
+    cerca; qui conta quello che trova)."""
+    risposta = _ok(client.get("/api/faccende", headers=headers, params={"cerca": testo, **query}))
+    assert "blocco" in risposta
+    return {chiave: valore for chiave, valore in risposta.items() if chiave != "blocco"}
 
 
 def _ovunque(client, faccenda_id) -> list[dict]:
@@ -286,7 +291,7 @@ def test_modifica_e_foto_insieme(client, famiglia, db_path):
 
 # --- confermare ---
 
-def test_confermare_una_faccenda_fatta(client, famiglia, orologio):
+def test_confermare_una_faccenda_fatta(client, famiglia, orologio, foto_di_prima):
     lavatrice, letto = _date(client, "Lavatrice", "Letto")
     orologio.avanza(minutes=1)
     assert _foto(client, lavatrice["id"]).status_code == 200
@@ -316,7 +321,7 @@ def test_confermare_una_faccenda_fatta(client, famiglia, orologio):
     assert (non_ancora["confermata_ts"], non_ancora["confermata_da"]) == (None, None)
 
 
-def test_cosa_non_si_conferma(client, famiglia, orologio):
+def test_cosa_non_si_conferma(client, famiglia, orologio, foto_di_prima):
     lavatrice, letto, cane = _date(client, "Lavatrice", "Letto", "Cane")
     _ok(client.post(f"/api/faccende/{cane['id']}/annulla", headers=GENITORE))
     for non_fatta in (letto, cane):  # da fare, annullata
@@ -335,7 +340,7 @@ def test_cosa_non_si_conferma(client, famiglia, orologio):
     assert len(_notifiche(client, FIGLIO, "faccenda_confermata")) == 1
 
 
-def test_confermata_non_si_boccia_piu(client, famiglia, orologio):
+def test_confermata_non_si_boccia_piu(client, famiglia, orologio, foto_di_prima):
     (lavatrice,) = _date(client, "Lavatrice")
     assert _foto(client, lavatrice["id"]).status_code == 200
     _ok(_conferma(client, lavatrice["id"]))
@@ -345,7 +350,7 @@ def test_confermata_non_si_boccia_piu(client, famiglia, orologio):
     assert _notifiche(client, FIGLIO, "faccenda_bocciata") == []
 
 
-def test_si_conferma_anche_dopo_24_ore_e_senza_il_file(client, famiglia, db_path, orologio):
+def test_si_conferma_anche_dopo_24_ore_e_senza_il_file(client, famiglia, db_path, orologio, foto_di_prima):
     lavatrice, letto = _date(client, "Lavatrice", "Letto")
     assert _foto(client, lavatrice["id"]).status_code == 200
     assert _foto(client, letto["id"], jpeg(scan=b"letto")).status_code == 200
@@ -389,7 +394,7 @@ def test_conferma_e_bocciatura_insieme_ne_passa_una(client, famiglia):
             _ok(client.post(f"/api/faccende/{faccenda['id']}/annulla", headers=GENITORE))
 
 
-def test_la_conferma_dice_quale_foto_ha_guardato(client, famiglia, orologio):
+def test_la_conferma_dice_quale_foto_ha_guardato(client, famiglia, orologio, foto_di_prima):
     """Corpo facoltativo {"foto_ts"}: la stessa foto (anche con un altro fuso) si
     conferma; senza corpo, {} o null come prima."""
     date = _date(client, *[f"Faccenda {n}" for n in range(5)])
@@ -440,7 +445,7 @@ def test_l_ordine_dei_controlli_della_conferma(client, famiglia):
     _errore(_conferma(client, lavatrice["id"], foto_ts="2026-07-01T10:00:00Z"), 409, "non_confermabile")
 
 
-def test_due_conferme_insieme_ne_passa_una(client, famiglia):
+def test_due_conferme_insieme_ne_passa_una(client, famiglia, foto_di_prima):
     (faccenda,) = _date(client, "Lavatrice")
     assert _foto(client, faccenda["id"]).status_code == 200
     barriera = threading.Barrier(2)
@@ -507,7 +512,7 @@ def test_le_lettere_che_non_si_scompongono(client, famiglia):
         assert titoli(testo) == [atteso], testo
 
 
-def test_la_ricerca_guarda_tutta_la_storia(client, famiglia, orologio):
+def test_la_ricerca_guarda_tutta_la_storia(client, famiglia, orologio, foto_di_prima):
     """Qualunque data e stato: anche le chiuse da piu' di 30 giorni, che l'elenco di
     sempre non mostra piu'."""
     vecchia, fatta = _date(client, "Letto vecchio", "Letto fatto")
@@ -553,7 +558,7 @@ def test_cerca_vuoto_e_troppo_lungo(client, famiglia):
     senza = _ok(client.get("/api/faccende", headers=GENITORE))
     for vuoto in ("", "   ", "\n"):
         assert _ok(client.get("/api/faccende", headers=GENITORE, params={"cerca": vuoto})) == senza
-    assert set(senza) == {"faccende"}  # senza cerca tutto com'era: niente `altre`
+    assert set(senza) == {"faccende", "blocco"}  # senza cerca niente `altre` (v4.0: il blocco c'e' sempre)
     assert _cerca(client, "x" * 80) == {"faccende": [], "altre": False}
     assert _cerca(client, "  " + "x" * 80 + "  ") == {"faccende": [], "altre": False}
     r = client.get("/api/faccende", headers=GENITORE, params={"cerca": "x" * 81})
@@ -650,7 +655,7 @@ def test_niente_si_perde_e_la_storia_resta_in_sola_aggiunta(avvia_v38, db_v38):
     contatore = _contatore(db_v38, "faccende_storia")
     with avvia_v38():
         pass
-    dopo = dati_v24.righe(db_v38)
+    dopo = senza_righe_v40(dati_v24.righe(db_v38))  # (v4.0) le sue due righe in patto
     for tabella, righe in prima.items():
         if tabella == "faccende":
             senza = [{k: v for k, v in r.items() if k not in ("confermata_ts", "confermata_genitore_id")}
@@ -682,23 +687,73 @@ def test_niente_si_perde_e_la_storia_resta_in_sola_aggiunta(avvia_v38, db_v38):
         conn.close()
 
 
+def _sparito(voce) -> bool:
+    return isinstance(voce, dict) and "computer_sparito" in (
+        (voce.get("dettagli") or {}).get("sotto_tipo"),
+        ((voce.get("payload") or {}).get("dettagli") or {}).get("sotto_tipo"),
+    )
+
+
+def _senza_la_rete_di_sicurezza(dopo):
+    """(v4.0, correzione) La lettura senza quello che aggiunge la rete di sicurezza del
+    computer: in questo database il computer di Luca tace da sabato mentre il blocco di
+    «Stendi i panni» e' attivo, e la v4.0 lo segnala alla prima richiesta (una
+    `manomissione` computer_sparito, la sua notifica, un'interruzione in piu' nel
+    riepilogo di Luca). Tutto il resto deve restare uguale."""
+    if isinstance(dopo, list):
+        return [_senza_la_rete_di_sicurezza(v) for v in dopo if not _sparito(v)]
+    if not isinstance(dopo, dict):
+        return dopo
+    return {k: _senza_la_rete_di_sicurezza(v) for k, v in dopo.items()}
+
+
+def _riepiloghi_di_luca(nome: str, dopo: dict) -> list[dict]:
+    if nome in ("patto_telefono", "finestra_luca"):
+        return [dopo["riepilogo"]]
+    if nome == "famiglia":
+        return [f["riepilogo"] for f in dopo["figli"] if f["id"] == 1]
+    return []
+
+
 def test_dopo_la_migrazione_gli_stessi_numeri_di_prima(avvia_v38):
     """Le letture del server v3.8 su questo database a ORA_V38 (dati/v38_prima.json): la
-    v3.9 aggiunge solo confermata_ts e confermata_da (null) alle faccende."""
+    v3.9 aggiunge solo confermata_ts e confermata_da (null) alle faccende. (v4.0) La rete
+    di sicurezza segnala una volta il computer di Luca, che tace da sabato durante il
+    blocco: si controlla che sia proprio quella, e il resto si confronta senza di lei."""
     prima = dati_v38.prima()
     with avvia_v38() as c:
+        finestra = c.get("/api/finestra", headers=GENITORE).json()
+        (sparito,) = [m for m in finestra["manomissioni_recenti"] if _sparito(m)]
+        assert (sparito["dettagli"]["durante"], sparito["dettagli"]["ts_server"]) == (
+            "blocco", dati_v38.ORA_V38.isoformat())
         for nome, percorso, chi in dati_v38.LETTURE:
             risposta = c.get(percorso, headers=dati_v38.intestazione(chi))
             assert risposta.status_code == 200, (nome, risposta.text)
             dopo = risposta.json()
-            contenuto_in(prima[nome], dopo, nome)
+            # l'interruzione in piu' e' quella del computer sparito (Luca e' il figlio 1), e
+            # nella famiglia anche la sua notifica non letta
+            for riepilogo in _riepiloghi_di_luca(nome, dopo):
+                assert riepilogo["interruzioni"] == 1, nome
+                riepilogo["interruzioni"] = 0
+            if nome == "famiglia":
+                (luca,) = [f for f in dopo["figli"] if f["id"] == 1]
+                luca["notifiche_non_lette"] -= 1
+            contenuto_in(prima[nome], _senza_la_rete_di_sicurezza(dopo), nome)
             elenchi = [dopo.get("faccende")] if nome.startswith(("faccende", "patto", "finestra")) else []
             for elenco in elenchi:
                 for f, di_prima in zip(elenco, prima[nome]["faccende"]):
-                    assert set(f) == set(di_prima) | {"confermata_ts", "confermata_da"}, nome
-                    assert (f["confermata_ts"], f["confermata_da"]) == (None, None)
+                    # (v4.0) in piu' da_approvare: false, le foto di prima hanno gia' sbloccato
+                    assert set(f) == set(di_prima) | {"confermata_ts", "confermata_da", "da_approvare"}, nome
+                    assert (f["confermata_ts"], f["confermata_da"], f["da_approvare"]) == (None, None, False)
             if nome.startswith("blocco"):
-                assert dopo == prima[nome]  # il blocco non cambia forma
+                # il blocco di prima, voce per voce; (v4.0) in piu' rimandato e studio, e
+                # stato/foto_ts in ogni voce (qui tutte da fare)
+                assert set(dopo) == set(prima[nome]) | {"rimandato", "studio"}, nome
+                assert (dopo["rimandato"], dopo["studio"]) == (
+                    False, {"in_corso": False, "id": None, "inizio_ts": None})
+                assert [{k: v for k, v in voce.items() if k not in ("stato", "foto_ts")}
+                        for voce in dopo["da_fare"]] == prima[nome]["da_fare"], nome
+                assert {(voce["stato"], voce["foto_ts"]) for voce in dopo["da_fare"]} <= {("da_fare", None)}
         # le foto ci sono ancora (stanno accanto al database, la migrazione non le tocca)
         luca = {f["titolo"]: f for f in c.get("/api/faccende", headers=GENITORE).json()["faccende"]}
         assert luca["Svuota la lavastoviglie"]["foto"] is True
@@ -769,7 +824,12 @@ def test_una_migrazione_che_non_riesce_lascia_il_database_com_era(avvia_v38, db_
     with pytest.raises(sqlite3.Error):
         with avvia_v38():
             pass
-    assert dati_v24.righe(db_v38) == prima
+    dopo = dati_v24.righe(db_v38)
+    # (v4.0) le tabelle nuove dello Studio nascono con lo SCHEMA, prima della migrazione che
+    # si rompe: sono vuote, e un server v3.9 le ignora
+    assert all(dopo.pop(tabella) == [] for tabella in
+               ("studio_config", "studio_versioni", "studio_svolte", "studio_tratti", "studio_partenze"))
+    assert dopo == prima
     assert _schema(db_v38, "faccende") == schema_faccende
     (copia,) = _copie(db_v38, ".prima-v3.9-")
     monkeypatch.setattr(db, "TABELLA_FACCENDE_STORIA", vera)

@@ -278,6 +278,181 @@ CREATE TRIGGER IF NOT EXISTS faccende_storia_non_si_cancella BEFORE DELETE ON fa
 BEGIN SELECT RAISE(ABORT, 'la storia delle faccende non si cancella'); END;
 """
 
+# (v4.0) La Sessione Studio (contratto-api.md, "v4.0 — C. La Sessione Studio"). Solo
+# tabelle nuove: nessuna tabella che c'e' gia' cambia, quindi un server v3.9 su un
+# database v4.0 le ignora (contratto, "F. Database e migrazione").
+#
+# studio_config: una riga per figlio. `approvata` e `in_attesa` sono il contenuto (JSON:
+# giorni, inizio, chiusura_minima, minuti_minimi, telefono, computer); `versione` cresce
+# a ogni proposta, ritiro e decisione; `orari_dal` e' il giorno (fuso del patto) da cui
+# valgono gli orari approvati. Il genitore decide dicendo quale versione ha visto.
+#
+# studio_versioni: le configurazioni approvate, in sola aggiunta (i trigger lo tengono):
+# servono a sapere quali orari valevano un giorno e quali liste valevano a un istante.
+#
+# studio_svolte: gli Studi. Uno solo aperto per figlio, uno solo automatico per (figlio,
+# giorno), una sola chiave di avvio a mano per figlio (indici unici: anche sotto richieste
+# concorrenti). Le liste si congelano alla partenza. Uno Studio chiuso non si riscrive,
+# con due sole eccezioni scritte nel trigger: il `non_chiuso` di mezzanotte che cede a
+# una chiusura del figlio valida consegnata dopo (non_chiuso -> figlio, una volta), e la
+# dichiarazione del figlio che arriva dopo la chiusura del genitore (si salva, una volta,
+# e la chiusura resta del genitore).
+#
+# studio_tratti: i tratti del timer del telefono; `id` e' quello del telefono (chiave di
+# idempotenza). In sola aggiunta: un tratto cambia solo da `in_corso` a un esito finale,
+# e un tratto finito puo' solo passare a un altro Studio (studio_id: la chiusura tardiva
+# del figlio con le partenze dopo T rielaborate). `conta` si decide una volta sola,
+# insieme all'esito finale. `fine` e' quella che vale (una fine entro 2 minuti
+# dall'arrivo vale l'arrivo), `fine_mandata` quella del telefono.
+#
+# studio_partenze: ogni partenza automatica trattata, una volta sola: `nato` (ha creato
+# uno Studio), `entrata` (e' entrata in uno Studio aperto), `saltata` (nessun telefono
+# dalla 0.18), `senza_studio` (e' caduta mentre girava un server che lo Studio non lo
+# conosce: al ritorno alla v4.0 non crea niente). Porta con se' le condizioni di quel
+# giorno (inizio, chiudibile_dal, minuti_minimi), congelate.
+TABELLE_STUDIO = """
+CREATE TABLE IF NOT EXISTS studio_config (
+    figlio_id INTEGER PRIMARY KEY REFERENCES figli(id),
+    stato TEXT NOT NULL CHECK (stato IN ('nessuna', 'in_attesa', 'approvata', 'rifiutata')),
+    versione INTEGER NOT NULL DEFAULT 0,
+    approvata TEXT,
+    orari_dal TEXT,
+    approvata_ts TEXT,
+    decisa_genitore_id INTEGER REFERENCES genitori(id),
+    in_attesa TEXT,
+    richiesta_ts TEXT,
+    richiesta_dispositivo_id INTEGER REFERENCES dispositivi(id),
+    motivazione TEXT
+);
+
+CREATE TABLE IF NOT EXISTS studio_versioni (
+    figlio_id INTEGER NOT NULL REFERENCES figli(id),
+    versione INTEGER NOT NULL,
+    contenuto TEXT NOT NULL,
+    orari_dal TEXT NOT NULL,
+    approvata_ts TEXT NOT NULL,
+    genitore_id INTEGER REFERENCES genitori(id),
+    PRIMARY KEY (figlio_id, versione)
+);
+
+CREATE TRIGGER IF NOT EXISTS studio_versioni_non_si_cambiano BEFORE UPDATE ON studio_versioni
+BEGIN SELECT RAISE(ABORT, 'le versioni approvate dello Studio non si cambiano'); END;
+
+CREATE TRIGGER IF NOT EXISTS studio_versioni_non_si_cancellano BEFORE DELETE ON studio_versioni
+BEGIN SELECT RAISE(ABORT, 'le versioni approvate dello Studio non si cancellano'); END;
+
+CREATE TABLE IF NOT EXISTS studio_svolte (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    figlio_id INTEGER NOT NULL REFERENCES figli(id),
+    origine TEXT NOT NULL CHECK (origine IN ('automatica', 'manuale')),
+    giorno TEXT NOT NULL,
+    chiave TEXT,
+    inizio_ts TEXT NOT NULL,
+    avviato_dispositivo_id INTEGER REFERENCES dispositivi(id),
+    liste TEXT NOT NULL,
+    liste_versione INTEGER,
+    minuti_minimi_avvio INTEGER NOT NULL,
+    sessione_chiusa_id INTEGER REFERENCES sessioni_svolte(id),
+    fine_ts TEXT,
+    chiusura TEXT CHECK (chiusura IN ('figlio', 'genitore', 'non_chiuso')),
+    chiusa_dispositivo_id INTEGER REFERENCES dispositivi(id),
+    chiusa_genitore_id INTEGER REFERENCES genitori(id),
+    dichiarazione TEXT,
+    dichiarazione_ts TEXT,
+    motivo TEXT,
+    minuti_alla_chiusura INTEGER,
+    chiave_chiusura TEXT,
+    CHECK ((fine_ts IS NULL) = (chiusura IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS idx_studio_svolte_figlio ON studio_svolte (figlio_id, inizio_ts);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_studio_svolte_una_aperta
+    ON studio_svolte (figlio_id) WHERE fine_ts IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_studio_svolte_automatica
+    ON studio_svolte (figlio_id, giorno) WHERE origine = 'automatica';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_studio_svolte_chiave
+    ON studio_svolte (figlio_id, chiave) WHERE chiave IS NOT NULL;
+
+CREATE TRIGGER IF NOT EXISTS studio_chiuso_non_si_riscrive BEFORE UPDATE ON studio_svolte
+WHEN OLD.fine_ts IS NOT NULL AND NOT (
+    NEW.id = OLD.id AND NEW.figlio_id = OLD.figlio_id AND NEW.origine = OLD.origine
+    AND NEW.giorno = OLD.giorno AND NEW.chiave IS OLD.chiave AND NEW.inizio_ts = OLD.inizio_ts
+    AND NEW.liste = OLD.liste AND NEW.minuti_minimi_avvio = OLD.minuti_minimi_avvio
+    AND NEW.sessione_chiusa_id IS OLD.sessione_chiusa_id
+    AND (
+        (OLD.chiusura = 'non_chiuso' AND NEW.chiusura = 'figlio' AND NEW.fine_ts <= OLD.fine_ts
+         AND NEW.dichiarazione IS NOT NULL AND NEW.chiusa_genitore_id IS NULL)
+        OR
+        (OLD.chiusura = 'genitore' AND NEW.chiusura = 'genitore' AND NEW.fine_ts = OLD.fine_ts
+         AND OLD.dichiarazione IS NULL AND NEW.dichiarazione IS NOT NULL
+         AND NEW.motivo IS OLD.motivo AND NEW.chiusa_genitore_id IS OLD.chiusa_genitore_id
+         AND NEW.minuti_alla_chiusura IS OLD.minuti_alla_chiusura)
+    )
+)
+BEGIN SELECT RAISE(ABORT, 'uno Studio chiuso non si riscrive'); END;
+
+CREATE TRIGGER IF NOT EXISTS studio_svolte_non_si_cancellano BEFORE DELETE ON studio_svolte
+BEGIN SELECT RAISE(ABORT, 'gli Studi non si cancellano'); END;
+
+CREATE TABLE IF NOT EXISTS studio_tratti (
+    id TEXT PRIMARY KEY,
+    figlio_id INTEGER NOT NULL REFERENCES figli(id),
+    dispositivo_id INTEGER NOT NULL REFERENCES dispositivi(id),
+    tipo TEXT NOT NULL CHECK (tipo IN ('compiti', 'lavori_di_casa', 'altro')),
+    parola TEXT,
+    faccenda_id INTEGER REFERENCES faccende(id),
+    inizio INTEGER,
+    fine INTEGER,
+    fine_mandata INTEGER,
+    ora_agganciata INTEGER NOT NULL,
+    secondi INTEGER NOT NULL,
+    esito TEXT NOT NULL CHECK (esito IN ('in_corso', 'finito', 'interrotto')),
+    tutele INTEGER NOT NULL DEFAULT 1,
+    conta INTEGER,
+    studio_id INTEGER REFERENCES studio_svolte(id),
+    arrivo_ts TEXT NOT NULL,
+    esito_ts TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_studio_tratti_studio ON studio_tratti (studio_id);
+CREATE INDEX IF NOT EXISTS idx_studio_tratti_figlio ON studio_tratti (figlio_id, fine);
+
+-- (correzione v4.0) Un tratto finito arrivato senza Studio (prima del suo `avvia`) ha
+-- `conta` NULL, "da decidere": si decide UNA volta, quando lo Studio nasce e lo prende.
+-- Il trigger si riscrive a ogni avvio (DROP + CREATE) cosi' vale anche sui database
+-- che avevano la sua prima forma.
+DROP TRIGGER IF EXISTS studio_tratti_finiti_non_cambiano;
+CREATE TRIGGER IF NOT EXISTS studio_tratti_finiti_non_cambiano BEFORE UPDATE ON studio_tratti
+WHEN OLD.esito != 'in_corso' AND NOT (
+    NEW.id = OLD.id AND NEW.figlio_id = OLD.figlio_id AND NEW.dispositivo_id = OLD.dispositivo_id
+    AND NEW.tipo = OLD.tipo AND NEW.parola IS OLD.parola AND NEW.faccenda_id IS OLD.faccenda_id
+    AND NEW.inizio IS OLD.inizio AND NEW.fine IS OLD.fine AND NEW.fine_mandata IS OLD.fine_mandata
+    AND NEW.ora_agganciata = OLD.ora_agganciata AND NEW.secondi = OLD.secondi
+    AND NEW.esito = OLD.esito AND NEW.tutele = OLD.tutele
+    AND (NEW.conta IS OLD.conta
+         OR (OLD.conta IS NULL AND OLD.studio_id IS NULL AND NEW.studio_id IS NOT NULL))
+    AND NEW.arrivo_ts = OLD.arrivo_ts AND NEW.esito_ts IS OLD.esito_ts
+)
+BEGIN SELECT RAISE(ABORT, 'un tratto finito non cambia'); END;
+
+CREATE TRIGGER IF NOT EXISTS studio_tratti_non_si_cancellano BEFORE DELETE ON studio_tratti
+BEGIN SELECT RAISE(ABORT, 'i tratti non si cancellano'); END;
+
+CREATE TABLE IF NOT EXISTS studio_partenze (
+    figlio_id INTEGER NOT NULL REFERENCES figli(id),
+    giorno TEXT NOT NULL,
+    studio_id INTEGER REFERENCES studio_svolte(id),
+    esito TEXT NOT NULL CHECK (esito IN ('nato', 'entrata', 'saltata', 'senza_studio')),
+    inizio_ts TEXT NOT NULL,
+    chiudibile_dal TEXT NOT NULL,
+    minuti_minimi INTEGER NOT NULL,
+    ts_server TEXT NOT NULL,
+    PRIMARY KEY (figlio_id, giorno)
+);
+
+CREATE INDEX IF NOT EXISTS idx_studio_partenze_studio ON studio_partenze (studio_id);
+"""
+
 # (v3.4) Le colonne di TABELLA_PROPOSTE, nell'ordine: la migrazione copia quelle che
 # la tabella vecchia ha gia', le altre (autore) prendono il default. (v3.6) Anche chi
 # ha proposto e chi ha risposto: NULL nelle righe di prima.
@@ -462,7 +637,7 @@ CREATE TABLE IF NOT EXISTS notifiche (
     figlio_id INTEGER REFERENCES figli(id),
     dispositivo_id INTEGER REFERENCES dispositivi(id)
 );
-""" + TABELLE_SESSIONI + TABELLE_GENITORI + TABELLA_FACCENDE
+""" + TABELLE_SESSIONI + TABELLE_GENITORI + TABELLA_FACCENDE + TABELLE_STUDIO
 
 # (v3.1) Chi ha letto una notifica del figlio: ogni dispositivo per conto suo, cosi'
 # una notifica per tutto il figlio (il segno) arriva al telefono E al computer anche
@@ -488,6 +663,26 @@ SUFFISSO_COPIA_V34 = ".prima-v3.4-"
 SUFFISSO_COPIA_V36 = ".prima-v3.6-"
 # (v3.9) E quella prima della migrazione delle faccende: <db>.prima-v3.9-<data>.
 SUFFISSO_COPIA_V39 = ".prima-v3.9-"
+
+# (v4.0) E quella prima della v4.0 (lavori approvati e Studio): <db>.prima-v4.0-<data>.
+SUFFISSO_COPIA_V40 = ".prima-v4.0-"
+# (v4.0) Le righe di `patto` della v4.0: da quando le foto chiedono l'approvazione di un
+# genitore (scritta una volta sola, al primo avvio), e l'ultima volta che la v4.0 ha
+# guardato le partenze dello Studio (per riconoscere, al ritorno dalla v3.9, che nel
+# frattempo ha girato un server che lo Studio non lo conosce).
+CHIAVE_APPROVAZIONE_DAL = "faccende_approvazione_dal"
+CHIAVE_ULTIMO_GIRO = "studio_ultimo_giro"
+# (v4.0) La configurazione dello Studio che ogni figlio riceve alla migrazione: quella
+# decisa dalla famiglia (lun-ven, 15:00, chiudibile dopo le 16:00, 60 minuti), con le
+# liste vuote (vanno proposte dal figlio e approvate da un genitore).
+CONFIG_STUDIO_INIZIALE = {
+    "giorni": ["lun", "mar", "mer", "gio", "ven"],
+    "inizio": "15:00",
+    "chiusura_minima": "16:00",
+    "minuti_minimi": 60,
+    "telefono": {"app": [], "nomi": {}},
+    "computer": {"programmi": [], "nomi": {}, "firme": {}},
+}
 
 # (v3.9) Le colonne della conferma ("svolto") che le faccende di prima non hanno:
 # ALTER TABLE ADD COLUMN, NULL nelle righe che ci sono (nessuno le ha confermate).
@@ -1376,6 +1571,105 @@ def _migra_v39(conn: sqlite3.Connection) -> None:
         conn.execute("PRAGMA foreign_keys=ON")
 
 
+def _riga_patto(conn: sqlite3.Connection, chiave: str) -> str | None:
+    if "patto" not in _tabelle(conn):
+        return None
+    riga = conn.execute("SELECT valore FROM patto WHERE chiave = ?", (chiave,)).fetchone()
+    return riga[0] if riga is not None else None
+
+
+def _va_migrato_a_v40(conn: sqlite3.Connection) -> bool:
+    """(v4.0) Contratto, "F. Database e migrazione": c'e' una storia e manca la riga
+    `faccende_approvazione_dal` (il primo avvio della v4.0, o il primo dopo aver rimesso
+    la copia .prima-v4.0-). Allora prima si copia. Un database nuovo no."""
+    return _ci_sono_dati(conn) and _riga_patto(conn, CHIAVE_APPROVAZIONE_DAL) is None
+
+
+def domani_nel_patto(ora: datetime) -> str:
+    """Il giorno dopo `ora` nel fuso del patto, YYYY-MM-DD: da quando valgono gli orari
+    dello Studio approvati a `ora` (anche alla prima approvazione e alla migrazione)."""
+    return (ora.astimezone(config.fuso_patto()).date() + timedelta(days=1)).isoformat()
+
+
+def _migra_v40(conn: sqlite3.Connection, con_dati: bool) -> None:
+    """(v4.0) Dentro la transazione finale di init_db, quindi tutto insieme o niente.
+
+    Al primo avvio della v4.0 (manca `faccende_approvazione_dal`): la riga, con l'ora di
+    questo avvio (da qui in poi le foto aspettano l'approvazione di un genitore; quelle di
+    prima hanno gia' sbloccato e non tornano a bloccare), e `studio_ultimo_giro`. Se il
+    database aveva una storia (la migrazione vera: la famiglia esiste gia'), ogni figlio
+    che c'e' riceve la configurazione dello Studio decisa dalla famiglia, approvata
+    (versione 1, `decisa_da` nessuno), con gli orari dal giorno dopo; e la riga 1 di
+    studio_versioni. Su un database nuovo i figli nascono senza Studio (`nessuna`), come
+    quelli creati dopo la migrazione.
+
+    Agli avvii dopo: se nel frattempo ha girato un server che lo Studio non lo conosce
+    (la v3.9 rimessa senza toccare il database: battiti arrivati dopo l'ultimo giro della
+    v4.0), le foto arrivate intanto hanno gia' sbloccato: `faccende_approvazione_dal` va
+    ad adesso, e le partenze cadute in quel periodo non creano Studi."""
+    ora = clock.now()
+    ts = clock.iso(ora)
+    if _riga_patto(conn, CHIAVE_APPROVAZIONE_DAL) is None:
+        conn.execute(
+            "INSERT OR IGNORE INTO patto (chiave, valore) VALUES (?, ?)", (CHIAVE_APPROVAZIONE_DAL, ts)
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO patto (chiave, valore) VALUES (?, ?)", (CHIAVE_ULTIMO_GIRO, ts)
+        )
+        if con_dati:
+            contenuto = json.dumps(CONFIG_STUDIO_INIZIALE)
+            orari_dal = domani_nel_patto(ora)
+            for (figlio_id,) in conn.execute("SELECT id FROM figli ORDER BY id").fetchall():
+                if conn.execute(
+                    "SELECT 1 FROM studio_config WHERE figlio_id = ?", (figlio_id,)
+                ).fetchone() is not None:
+                    continue
+                conn.execute(
+                    "INSERT INTO studio_config (figlio_id, stato, versione, approvata, orari_dal,"
+                    " approvata_ts) VALUES (?, 'approvata', 1, ?, ?, ?)",
+                    (figlio_id, contenuto, orari_dal, ts),
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO studio_versioni (figlio_id, versione, contenuto, orari_dal,"
+                    " approvata_ts) VALUES (?, 1, ?, ?, ?)",
+                    (figlio_id, contenuto, orari_dal, ts),
+                )
+            log.info("MIGRAZIONE v4.0: lavori approvati dal %s, Studio approvato per ogni figlio"
+                     " dal %s (liste vuote)", ts, orari_dal)
+        return
+    ultimo = _riga_patto(conn, CHIAVE_ULTIMO_GIRO)
+    if ultimo is None:
+        conn.execute("INSERT INTO patto (chiave, valore) VALUES (?, ?)", (CHIAVE_ULTIMO_GIRO, ts))
+        return
+    # I segni di un server senza Studio: battiti arrivati dopo l'ultimo giro (la v4.0
+    # aggiorna l'ultimo giro a ogni battito, nella stessa transazione), oppure foto arrivate
+    # dopo (anche quelle lo aggiornano): una foto arrivata alla v3.9 ha gia' sbloccato, e
+    # anche se intanto non e' arrivato nessun battito non deve tornare a bloccare.
+    girato_senza_studio = conn.execute(
+        "SELECT 1 FROM battiti WHERE ts_server > ? LIMIT 1", (ultimo,)
+    ).fetchone() is not None or conn.execute(
+        "SELECT 1 FROM faccende WHERE foto_ts > ? LIMIT 1", (ultimo,)
+    ).fetchone() is not None
+    if not girato_senza_studio:
+        return
+    from . import studio  # qui e non in cima: studio importa db
+
+    log.warning(
+        "Dal %s ha girato un server che lo Studio non lo conosce (la v3.9?): le foto arrivate"
+        " intanto hanno gia' sbloccato e non tornano a bloccare (faccende_approvazione_dal ="
+        " %s), e le partenze dello Studio di quel periodo non creano Studi.",
+        ultimo,
+        ts,
+    )
+    conn.execute(
+        "UPDATE patto SET valore = ? WHERE chiave = ?", (ts, CHIAVE_APPROVAZIONE_DAL)
+    )
+    studio.segna_partenze_senza_studio(conn, datetime.fromisoformat(ultimo), ora)
+    # (correzione) uno Studio rimasto aperto si chiude all'ultimo giro, senza accuse
+    studio.chiudi_al_ritorno_dalla_v39(conn, datetime.fromisoformat(ultimo))
+    conn.execute("UPDATE patto SET valore = ? WHERE chiave = ?", (ts, CHIAVE_ULTIMO_GIRO))
+
+
 def _sincronizza_credenziali(
     conn: sqlite3.Connection, token_figlio: str | None, token_genitore: str | None
 ) -> None:
@@ -1477,6 +1771,11 @@ def init_db(
         # (v3.9) E per le faccende, che cambiano (la conferma, la storia coi tipi nuovi).
         if _va_migrato_a_v39(conn):
             _copia_prima_della_migrazione(conn, db_path, SUFFISSO_COPIA_V39, "v3.9")
+        # (v4.0) E per la v4.0 (lavori approvati, Studio), anche lei di prima, col
+        # database com'e' arrivato. Le righe nuove si scrivono al commit finale qui sotto.
+        v40_con_dati = _va_migrato_a_v40(conn)
+        if v40_con_dati:
+            _copia_prima_della_migrazione(conn, db_path, SUFFISSO_COPIA_V40, "v4.0")
         # Tutto lo schema in una transazione: una scrittura sola su disco invece di
         # una per tabella (su Windows ogni transazione e' un file di journal in piu').
         # (v3.5) Le sessioni sono solo tabelle nuove, che nascono qui (CREATE TABLE IF
@@ -1495,6 +1794,9 @@ def init_db(
             (str(tetto_settimana),),
         )
         _sincronizza_credenziali(conn, token_figlio, token_genitore)
+        # (v4.0) Nella stessa transazione del commit finale: la riga dei lavori approvati,
+        # lo Studio dei figli che ci sono, il ritorno dalla v3.9.
+        _migra_v40(conn, v40_con_dati)
         conn.commit()
     finally:
         conn.close()
@@ -1525,7 +1827,7 @@ def accoda_notifica(
     *,
     figlio_id: int,
     dispositivo_id: int | None,
-) -> None:
+) -> int:
     """(v3) Ogni notifica dice di quale figlio parla e, se riguarda un dispositivo
     (una sua regola, un suo evento, un suo bonus), di quale: NULL per quelle del
     figlio, che arrivano a tutti i suoi dispositivi. (v3.4) Una notifica per il
@@ -1539,12 +1841,12 @@ def accoda_notifica(
         ).fetchone()
         if revocato is not None:
             dispositivo_id = None
-    conn.execute(
+    return conn.execute(
         "INSERT INTO notifiche"
         " (destinatario, tipo, messaggio, payload, ts_server, figlio_id, dispositivo_id)"
         " VALUES (?, ?, ?, ?, ?, ?, ?)",
         (destinatario, tipo, messaggio, json.dumps(payload), ts, figlio_id, dispositivo_id),
-    )
+    ).lastrowid
 
 
 def registra_modifica(

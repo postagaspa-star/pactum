@@ -27,7 +27,9 @@ from fastapi.testclient import TestClient
 
 import dati_v24
 import dati_v35
-from aiuti_v3 import auth, contenuto_in, dispositivo_abbinato, eventi, nuovo_dispositivo, regola
+from aiuti_v3 import (
+    auth, contenuto_in, dispositivo_abbinato, eventi, nuovo_dispositivo, regola, senza_righe_v40,
+)
 from conftest import FIGLIO, GENITORE, TOKEN_FIGLIO, TOKEN_GENITORE, Orologio
 
 GENITORE_1 = {"id": 1, "nome": "Genitore"}
@@ -612,7 +614,7 @@ def test_niente_si_perde_e_il_genitore_1_prende_la_storia(avvia_v35, db_v35):
     prima = dati_v24.righe(db_v35)
     with avvia_v35():
         pass
-    dopo = dati_v24.righe(db_v35)
+    dopo = senza_righe_v40(dati_v24.righe(db_v35))  # (v4.0) le sue due righe in patto
     for tabella, righe in prima.items():
         assert _senza_v36(dopo[tabella]) == righe, tabella
     for tabella in ("genitori", "codici_genitori", "notifiche_lette_genitori", "faccende"):

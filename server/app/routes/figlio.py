@@ -8,7 +8,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import clock, faccende, famiglia, semaforo, siti
+from .. import clock, faccende, famiglia, semaforo, siti, studio
 from ..auth import Identita, richiede_dispositivo
 from ..config import MINUTI_IN_UN_GIORNO, nome_fuso
 from ..db import (
@@ -46,7 +46,12 @@ def battito(
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     corpo = corpo or BattitoIn()
-    ts = clock.iso(clock.now())
+    ora = clock.now()
+    ts = clock.iso(ora)
+    # (v4.0) Prima le partenze dello Studio, le mezzanotti e i computer spariti del figlio
+    # (anche col battito del computer): prima di scrivere questo battito, cosi' un
+    # computer che torna dopo essere sparito resta nel registro.
+    studio.valuta(conn, chi.figlio_id, ora)
     conn.execute(
         "INSERT INTO battiti"
         " (batteria, versione_app, elapsed_realtime, ts_device, ts_server, dispositivo_id)"
@@ -60,6 +65,9 @@ def battito(
             "UPDATE dispositivi SET versione_app = ? WHERE id = ?",
             (corpo.versione_app, chi.dispositivo_id),
         )
+    # (v4.0) Questo server conosce lo Studio e ha sentito il dispositivo: al ritorno dalla
+    # v3.9 si riconosce dai battiti arrivati dopo l'ultimo giro (db._migra_v40).
+    studio.segna_giro(conn, ora)
     conn.commit()
     return {"ricevuto": True}
 
@@ -258,6 +266,7 @@ def patto(
     ~3 KB a ~90 KB."""
     con_tempi = tempi == "1"
     ora = clock.now()
+    studio.valuta(conn, chi.figlio_id, ora)  # (v4.0) partenze e mezzanotti dello Studio
     figlio = famiglia.figlio_o_404(conn, chi.figlio_id)
     dispositivi = famiglia.dispositivi_del_figlio(conn, chi.figlio_id)
     per_id = {d["id"]: d for d in dispositivi}
@@ -340,6 +349,10 @@ def patto(
         # (v3.6) Del figlio, non del dispositivo: il blocco vale su tutti i suoi.
         "faccende": faccende.faccende_del_figlio(conn, chi.figlio_id, ora, firme, cartella(request)),
         "blocco": faccende.blocco(conn, chi.figlio_id, ora, firme),
+        # (v4.0) La Sessione Studio: la configurazione, quella in corso, le prossime
+        # partenze (per partire da soli anche senza rete). Lo storico non c'e': sta in
+        # GET /api/studio/svolte (il patto lo legge ogni minuto anche il computer).
+        "studio": studio.vista_per_i_dispositivi(conn, chi.figlio_id, ora, note),
     }
     if con_tempi:
         # (v3.8) I tempi di questo dispositivo, identici a quelli della finestra, e

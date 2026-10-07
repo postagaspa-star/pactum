@@ -32,6 +32,11 @@ CHIAVI_ATTESE = {
     # (v3.6)
     "faccende",
     "blocco",
+    # (v4.0)
+    "faccende_da_approvare",
+    "studio",
+    "studio_svolte",
+    "studio_da_approvare",
 }
 
 

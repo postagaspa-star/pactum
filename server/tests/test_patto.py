@@ -30,6 +30,8 @@ CHIAVI_ATTESE = {
     # (v3.6)
     "faccende",
     "blocco",
+    # (v4.0)
+    "studio",
 }
 
 

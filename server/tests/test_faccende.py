@@ -34,6 +34,8 @@ MAMMA = {"id": 2, "nome": "Mamma"}
 GENITORE_1 = {"id": 1, "nome": "Genitore"}
 MEGA = 4 * 1024 * 1024
 SCUOLA = ["eu.spaggiari.classevivafamiglia", "com.google.android.apps.classroom"]
+# (v4.0) Il blocco di un figlio che non e' in Studio: niente rimandato, nessuno Studio.
+SENZA_STUDIO = {"rimandato": False, "studio": {"in_corso": False, "id": None, "inizio_ts": None}}
 
 
 # --- un JPEG fatto a mano, segmento per segmento ---
@@ -90,6 +92,21 @@ def famiglia(client):
     return SimpleNamespace(pc=pc, pc_id=pc_id, mamma=mamma, sara=sara["id"], tel_sara=tel_sara)
 
 
+@pytest.fixture
+def foto_di_prima(client, db_path):
+    """(v4.0) Le foto di un test valgono come arrivate PRIMA della v4.0: la riga
+    `faccende_approvazione_dal` va oltre ogni ora dei test. Per quelle la v4.0 non cambia
+    niente (contratto, parte A: sbloccate alla foto, confermabili come riconoscimento,
+    bocciabili entro 24 ore): i test della v3.9 sulla conferma restano veri per loro."""
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("UPDATE patto SET valore = '9999-12-31T23:59:59+00:00'"
+                     " WHERE chiave = 'faccende_approvazione_dal'")
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _ok(risposta, atteso=200):
     assert risposta.status_code == atteso, risposta.text
     return risposta.json()
@@ -112,6 +129,18 @@ def _foto(client, faccenda_id, dati=None, headers=FIGLIO, params=None, **intesta
         headers={**headers, "Content-Type": "image/jpeg", **intestazioni},
         params=params,
     )
+
+
+def _approva(client, faccenda_id, headers=None):
+    """(v4.0) Un genitore approva la foto di un lavoro (la conferma col foto_ts che ha
+    guardato): e' l'approvazione che sblocca, non la foto."""
+    figli = [f["id"] for f in _ok(client.get("/api/famiglia", headers=GENITORE))["figli"]]
+    (faccenda,) = [
+        f for figlio_id in figli for f in _elenco(client, GENITORE, figlio_id=figlio_id)
+        if f["id"] == faccenda_id
+    ]
+    return client.post(f"/api/faccende/{faccenda_id}/conferma", json={"foto_ts": faccenda["foto_ts"]},
+                       headers=headers or GENITORE)
 
 
 def _blocco(client, headers=FIGLIO) -> dict:
@@ -148,6 +177,7 @@ def test_dare_faccende(client, famiglia):
         "foto_ts": None, "foto": False, "bocciature": 0, "ultima_bocciatura": None,
         "chiusa_ts": None, "annullata_da": None,
         "confermata_ts": None, "confermata_da": None,  # (v3.9)
+        "da_approvare": False,  # (v4.0)
         "storia": [{"tipo": "data", "ts": ORA, "genitore": MAMMA}],
     }
     # l'avviso arriva a tutti i dispositivi di Luca, e a nessun altro
@@ -191,7 +221,7 @@ def test_quante_e_per_chi(client, famiglia):
     assert r.status_code == 404
     # le faccende si danno solo da genitore
     assert _dai(client, "Letto", headers=FIGLIO).status_code == 403
-    assert client.get("/api/faccende", headers=FIGLIO).json() == {"faccende": []}
+    assert client.get("/api/faccende", headers=FIGLIO).json()["faccende"] == []
 
 
 def test_al_massimo_20_da_fare(client, famiglia):
@@ -244,20 +274,21 @@ def test_blocco_da(client, famiglia, orologio):
 # --- il blocco ---
 
 def test_il_blocco_si_vede_uguale_dappertutto(client, famiglia, orologio):
-    assert _blocco(client) == {"attivo": False, "dal": None, "prossimo": None, "da_fare": []}
+    assert _blocco(client) == {"attivo": False, "dal": None, "prossimo": None, "da_fare": [], **SENZA_STUDIO}
     lavatrice, letto = _date(client, {"titolo": "Lavatrice", "nota": "i bianchi"}, "Letto", headers=famiglia.mamma)
     orologio.avanza(minutes=1)
     (cane,) = _date(client, "Cane", blocco_da="2026-07-14T16:00:00+00:00")
     blocco = _blocco(client)
     assert blocco == {
-        "attivo": True, "dal": ORA, "prossimo": None,
-        "da_fare": [
+        "attivo": True, "dal": ORA, "prossimo": None, **SENZA_STUDIO,  # (v4.0)
+        "da_fare": [  # (v4.0) con stato e foto_ts
             {"id": lavatrice["id"], "titolo": "Lavatrice", "nota": "i bianchi", "blocco_da": ORA, "creata_da": MAMMA,
-             "bocciature": 0, "ultima_bocciatura": None},
+             "bocciature": 0, "ultima_bocciatura": None, "stato": "da_fare", "foto_ts": None},
             {"id": letto["id"], "titolo": "Letto", "nota": None, "blocco_da": ORA, "creata_da": MAMMA,
-             "bocciature": 0, "ultima_bocciatura": None},
+             "bocciature": 0, "ultima_bocciatura": None, "stato": "da_fare", "foto_ts": None},
             {"id": cane["id"], "titolo": "Cane", "nota": None, "blocco_da": "2026-07-14T16:00:00+00:00",
-             "creata_da": GENITORE_1, "bocciature": 0, "ultima_bocciatura": None},
+             "creata_da": GENITORE_1, "bocciature": 0, "ultima_bocciatura": None, "stato": "da_fare",
+             "foto_ts": None},
         ],
     }
     elenco = _elenco(client)
@@ -282,27 +313,32 @@ def test_il_blocco_si_vede_uguale_dappertutto(client, famiglia, orologio):
 def test_un_blocco_programmato(client, famiglia, orologio):
     (letto,) = _date(client, "Letto", blocco_da="2026-07-14T16:00:00+00:00")
     assert _blocco(client) | {"da_fare": []} == {
-        "attivo": False, "dal": None, "prossimo": "2026-07-14T16:00:00+00:00", "da_fare": [],
+        "attivo": False, "dal": None, "prossimo": "2026-07-14T16:00:00+00:00", "da_fare": [], **SENZA_STUDIO,
     }
     assert _ok(client.get("/api/famiglia", headers=GENITORE))["figli"][0]["blocco_attivo"] is False
     orologio.vai_a(datetime(2026, 7, 14, 16, 0, tzinfo=timezone.utc))
     blocco = _blocco(client)
     assert (blocco["attivo"], blocco["dal"], blocco["prossimo"]) == (True, "2026-07-14T16:00:00+00:00", None)
     assert _foto(client, letto["id"]).status_code == 200
+    assert _blocco(client)["attivo"] is True  # (v4.0) la foto non sblocca: aspetta l'approvazione
+    assert _approva(client, letto["id"]).status_code == 200
     assert _blocco(client)["attivo"] is False
     (finite,) = _notifiche(client, GENITORE, "faccende_finite")
-    assert finite["messaggio"] == "Luca ha finito i lavori di casa: telefono e computer sbloccati"
+    assert finite["messaggio"] == "Luca ha i lavori di casa tutti approvati: telefono e computer sbloccati"
 
 
 def test_le_faccende_fatte_in_anticipo(client, famiglia, orologio):
-    """Si puo' mandare la foto anche prima di blocco_da: il blocco allora non parte."""
+    """Si puo' mandare la foto anche prima di blocco_da: (v4.0) se un genitore la approva
+    prima dell'ora, il blocco allora non parte."""
     lavatrice, letto = _date(client, "Lavatrice", "Letto", blocco_da="2026-07-15T14:00:00+00:00")
     assert _foto(client, lavatrice["id"]).status_code == 200
     assert _foto(client, letto["id"], jpeg(COMMENTO)).status_code == 200
+    assert _approva(client, lavatrice["id"]).status_code == 200
+    assert _approva(client, letto["id"], headers=famiglia.mamma).status_code == 200
     orologio.vai_a(datetime(2026, 7, 15, 15, 0, tzinfo=timezone.utc))
-    assert _blocco(client) == {"attivo": False, "dal": None, "prossimo": None, "da_fare": []}
+    assert _blocco(client) == {"attivo": False, "dal": None, "prossimo": None, "da_fare": [], **SENZA_STUDIO}
     (finite,) = _notifiche(client, GENITORE, "faccende_finite")
-    assert finite["messaggio"] == "Luca ha finito i lavori di casa"
+    assert finite["messaggio"] == "Luca ha i lavori di casa tutti approvati"
     assert finite["payload"] == {"faccenda_ids": [lavatrice["id"], letto["id"]]}
 
 
@@ -317,21 +353,27 @@ def test_il_giro_completo(client, famiglia, db_path, orologio):
     assert _blocco(client)["attivo"] is True  # ne manca una
     for headers in (GENITORE, famiglia.mamma):  # tutti i genitori
         (avviso,) = _notifiche(client, headers, "faccenda_fatta")
-        assert avviso["messaggio"] == "Luca ha fatto «Lavatrice»"
+        # (v4.0) la foto aspetta l'approvazione
+        assert avviso["messaggio"] == "Luca ha mandato la foto di «Lavatrice»: aspetta la vostra approvazione"
         assert avviso["payload"] == {"faccenda_id": lavatrice["id"], "titolo": "Lavatrice"}
         assert (avviso["figlio_id"], avviso["dispositivo_id"]) == (1, None)
         assert _notifiche(client, headers, "faccende_finite") == []
     orologio.avanza(minutes=10)
     assert _foto(client, letto["id"]).status_code == 200
+    assert _blocco(client)["attivo"] is True  # (v4.0) le foto non sbloccano
+    assert _approva(client, lavatrice["id"]).status_code == 200
+    assert _blocco(client)["attivo"] is True and _notifiche(client, GENITORE, "faccende_finite") == []
+    assert _approva(client, letto["id"], headers=famiglia.mamma).status_code == 200
     assert _blocco(client)["attivo"] is False
     for headers in (GENITORE, famiglia.mamma):
         (finite,) = _notifiche(client, headers, "faccende_finite")
-        assert finite["messaggio"] == "Luca ha finito i lavori di casa: telefono e computer sbloccati"
+        assert finite["messaggio"] == "Luca ha i lavori di casa tutti approvati: telefono e computer sbloccati"
         assert finite["payload"] == {"faccenda_ids": [lavatrice["id"], letto["id"]]}
     assert sorted(os.listdir(_cartella(db_path))) == [f"{lavatrice['id']}.jpg", f"{letto['id']}.jpg"]
     # un giro nuovo: faccende_finite elenca solo quelle del suo giro
     (cane,) = _date(client, "Cane")
     assert _foto(client, cane["id"]).status_code == 200
+    assert _approva(client, cane["id"]).status_code == 200
     assert _notifiche(client, GENITORE, "faccende_finite")[-1]["payload"] == {"faccenda_ids": [cane["id"]]}
 
 
@@ -551,6 +593,9 @@ def test_la_stessa_foto_due_volte(client, famiglia, orologio):
     assert len(_notifiche(client, GENITORE, "faccenda_fatta")) == 1
     _errore(_foto(client, lavatrice["id"], jpeg(scan=b"un'altra")), 409, "non_da_fare")
     assert _ok(_foto(client, letto["id"]))["stato"] == "fatta"
+    # (v4.0) il giro si chiude all'ultima approvazione
+    assert _approva(client, lavatrice["id"]).status_code == 200
+    assert _approva(client, letto["id"]).status_code == 200
     assert len(_notifiche(client, GENITORE, "faccende_finite")) == 1
     assert _ok(_foto(client, letto["id"]))["stato"] == "fatta"
     assert len(_notifiche(client, GENITORE, "faccende_finite")) == 1
@@ -573,7 +618,7 @@ def test_bocciare_una_foto(client, famiglia, db_path, orologio):
     lavatrice, letto = _date(client, "Lavatrice", "Letto")
     assert _foto(client, lavatrice["id"]).status_code == 200
     assert _foto(client, letto["id"]).status_code == 200
-    assert _blocco(client)["attivo"] is False
+    assert _approva(client, letto["id"]).status_code == 200  # (v4.0) la lavatrice aspetta ancora
     orologio.avanza(hours=2)
     bocciata = _ok(client.post(f"/api/faccende/{lavatrice['id']}/boccia",
                                json={"nota": "c'e' ancora il cesto pieno"}, headers=famiglia.mamma))
@@ -596,18 +641,24 @@ def test_bocciare_una_foto(client, famiglia, db_path, orologio):
         assert avviso["payload"] == {"faccenda_id": lavatrice["id"], "titolo": "Lavatrice",
                                      "nota": "c'e' ancora il cesto pieno", "genitore": MAMMA}
         assert avviso["dispositivo_id"] is None
-    # rifatta: un giro nuovo, che contiene solo lei
+    # rifatta e bocciata di nuovo, senza nota (e anche senza corpo): senza i due punti
     orologio.avanza(minutes=30)
     assert _foto(client, lavatrice["id"], jpeg(scan=b"seconda")).status_code == 200
-    assert _notifiche(client, GENITORE, "faccende_finite")[-1]["payload"] == {"faccenda_ids": [lavatrice["id"]]}
-    # senza nota (e anche senza corpo): senza i due punti
     orologio.avanza(minutes=1)
     rifatta = _ok(client.post(f"/api/faccende/{lavatrice['id']}/boccia", headers=GENITORE))
     assert rifatta["bocciature"] == 2 and rifatta["ultima_bocciatura"]["nota"] is None
     assert _notifiche(client, FIGLIO, "faccenda_bocciata")[-1]["messaggio"] == "Genitore ha bocciato «Lavatrice»"
+    # (v4.0) rifatta e approvata: il giro resta quello di prima (una bocciatura dopo le
+    # foto non apre un giro nuovo), quindi ci sono tutte e due
+    assert _foto(client, lavatrice["id"], jpeg(scan=b"terza")).status_code == 200
+    assert _approva(client, lavatrice["id"]).status_code == 200
+    (finite,) = _notifiche(client, GENITORE, "faccende_finite")
+    assert finite["payload"] == {"faccenda_ids": [lavatrice["id"], letto["id"]]}
 
 
-def test_si_boccia_solo_entro_24_ore(client, famiglia, orologio):
+def test_si_boccia_solo_entro_24_ore(client, famiglia, orologio, foto_di_prima):
+    """(v4.0) Le 24 ore restano per le foto arrivate prima della v4.0 (foto_di_prima); un
+    lavoro da approvare si boccia senza limite (test_faccende_v40)."""
     lavatrice, letto, cane = _date(client, "Lavatrice", "Letto", "Cane")
     assert _foto(client, lavatrice["id"]).status_code == 200
     orologio.avanza(minutes=1)
@@ -654,6 +705,7 @@ def test_due_bocciature_insieme_ne_passa_una(client, famiglia, orologio):
 def test_annullare_una_faccenda(client, famiglia, orologio):
     lavatrice, letto = _date(client, "Lavatrice", "Letto")
     assert _foto(client, lavatrice["id"]).status_code == 200
+    assert _approva(client, lavatrice["id"]).status_code == 200  # (v4.0) la foto da sola non sblocca
     orologio.avanza(minutes=5)
     annullata = _ok(client.post(f"/api/faccende/{letto['id']}/annulla", headers=famiglia.mamma))
     assert (annullata["stato"], annullata["annullata_da"], annullata["chiusa_ts"]) == (
@@ -876,6 +928,10 @@ def test_niente_sessioni_col_blocco_attivo(client, famiglia, orologio):
     _errore(client.post(f"/api/sessioni/{s['id']}/avvia", json={"durata_minuti": 30}, headers=FIGLIO),
             409, "blocco_faccende")
     assert _foto(client, letto["id"]).status_code == 200
+    # (v4.0) la foto da sola non basta: il lavoro aspetta l'approvazione, e blocca ancora
+    _errore(client.post(f"/api/sessioni/{s['id']}/avvia", json={"durata_minuti": 30}, headers=FIGLIO),
+            409, "blocco_faccende")
+    assert _approva(client, letto["id"]).status_code == 200
     assert client.post(f"/api/sessioni/{s['id']}/avvia", json={"durata_minuti": 30}, headers=FIGLIO).status_code == 201
 
 
@@ -905,6 +961,7 @@ def test_un_telefono_che_non_conosce_le_faccende_avvia_come_prima(client, famigl
 def test_l_elenco_tiene_le_chiuse_degli_ultimi_30_giorni(client, famiglia, orologio):
     vecchia, annullata, da_fare = _date(client, "Vecchia", "Annullata", "Da fare")
     assert _foto(client, vecchia["id"]).status_code == 200
+    assert _approva(client, vecchia["id"]).status_code == 200  # (v4.0) da approvare resterebbe sempre
     assert client.post(f"/api/faccende/{annullata['id']}/annulla", headers=GENITORE).status_code == 200
     orologio.avanza(days=30)
     assert {f["id"] for f in _elenco(client)} == {vecchia["id"], annullata["id"], da_fare["id"]}
@@ -915,11 +972,15 @@ def test_l_elenco_tiene_le_chiuse_degli_ultimi_30_giorni(client, famiglia, orolo
 # --- la pulizia ---
 
 def test_la_pulizia_delle_foto(client, famiglia, db_path, orologio):
+    """(v4.0) Con le foto approvate subito: i 30 giorni di una foto approvata si contano
+    dall'approvazione (qui la stessa ora della foto)."""
     (vecchia,) = _date(client, "Vecchia")
     assert _foto(client, vecchia["id"]).status_code == 200
+    assert _approva(client, vecchia["id"]).status_code == 200
     orologio.avanza(days=10)
     (recente,) = _date(client, "Recente")
     assert _foto(client, recente["id"]).status_code == 200
+    assert _approva(client, recente["id"]).status_code == 200
     cartella = _cartella(db_path)
     un_ora_fa = time.time() - 2 * 3600
     orfani = {"999.jpg": un_ora_fa, "spazzatura.txt": un_ora_fa, f"{vecchia['id']}.jpg.abc.parziale": un_ora_fa,

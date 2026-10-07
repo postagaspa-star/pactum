@@ -68,3 +68,16 @@ def contenuto_in(prima, dopo, percorso="$") -> None:
             contenuto_in(a, b, f"{percorso}[{i}]")
     else:
         assert prima == dopo, f"{percorso}: {prima!r} prima, {dopo!r} dopo"
+
+
+# (v4.0) Le due righe che la v4.0 scrive in `patto` al primo avvio (i lavori approvati e
+# l'ultimo giro dello Studio): i test delle migrazioni di prima confrontano il resto.
+RIGHE_PATTO_V40 = ("faccende_approvazione_dal", "studio_ultimo_giro")
+
+
+def senza_righe_v40(righe: dict) -> dict:
+    """Le righe del database (dati_v24.righe) senza le due righe della v4.0 in `patto`,
+    dopo aver controllato che ci siano tutte e due."""
+    patto = righe.get("patto", [])
+    assert {r["chiave"] for r in patto} >= set(RIGHE_PATTO_V40), patto
+    return {**righe, "patto": [r for r in patto if r["chiave"] not in RIGHE_PATTO_V40]}

@@ -28,6 +28,7 @@ from .routes import (
     proposte,
     regole,
     sessioni,
+    studio,
 )
 
 # uvicorn.error e' il logger che uvicorn configura con un handler a livello INFO:
@@ -150,6 +151,7 @@ def create_app() -> FastAPI:
     app.include_router(famiglia.abbina_router, prefix="/api")
     app.include_router(sessioni.router, prefix="/api")  # (v3.5)
     app.include_router(faccende.router, prefix="/api")  # (v3.6)
+    app.include_router(studio.router, prefix="/api")  # (v4.0)
     # Distribuzione (tappa 6): /api/versione sotto /api; /scarica alla radice.
     app.include_router(distribuzione.versione_router, prefix="/api")
     app.include_router(distribuzione.scarica_router)

@@ -35,7 +35,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import clock, config, faccende, famiglia, siti
+from .. import clock, config, faccende, famiglia, siti, studio
 from ..auth import Identita, richiede_dispositivo, richiede_genitore, richiede_patto
 from ..controllo_corpo import INTERO_MASSIMO, INTERO_MINIMO
 from ..db import accoda_notifica, get_conn
@@ -639,6 +639,9 @@ def avvia_sessione(
     vale dalla prossima. Una sola sessione in corso per dispositivo."""
     # Secondi interi, come ogni ts_server: la fine prevista e' esattamente inizio + durata.
     ora = clock.now().replace(microsecond=0)
+    # (v4.0) Prima le partenze dello Studio: una partenza passata crea lo Studio (e
+    # chiude le sessioni in corso a quell'istante) prima di questo avvio.
+    studio.valuta(conn, chi.figlio_id, ora)
     # BEGIN IMMEDIATE: "nessuna sessione in corso" e l'avvio sono un atto solo. Due
     # avvii simultanei (un doppio tocco) si mettono in fila e il secondo trova il primo.
     conn.execute("BEGIN IMMEDIATE")
@@ -650,6 +653,12 @@ def avvia_sessione(
         _chiudi_scadute(conn, chi.dispositivo_id, ora)
         if _aperta(conn, chi.dispositivo_id) is not None:
             raise HTTPException(status_code=409, detail={"errore": "sessione_gia_in_corso"})
+        # (v4.0) Durante lo Studio non si avviano sessioni (409 studio_in_corso), solo sui
+        # telefoni che conoscono lo Studio (dalla 0.18): prima del blocco dei lavori.
+        if faccende.conosce_lo_studio(dispositivo["versione_app"]) and faccende.studio_aperto(
+            conn, chi.figlio_id
+        ) is not None:
+            raise HTTPException(status_code=409, detail={"errore": "studio_in_corso"})
         # (v3.6) Prima le faccende: col blocco attivo una sessione non parte. Dentro il
         # lock, come gli altri controlli: una faccenda data in quel momento conta. Solo
         # per i telefoni che conoscono le faccende (dalla 0.13): su quelli piu' vecchi il

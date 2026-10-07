@@ -64,6 +64,8 @@ _SUFFISSO_BOCCIATA = ".bocciata"
 # blocco non c'e' (contratto, "Compatibilita'"), e il server non gli risponde coi codici
 # del blocco che non conosce.
 VERSIONE_FACCENDE = (0, 13)
+# (v4.0) Le app e i programmi del computer che conoscono lo Studio: dalla 0.18.
+VERSIONE_STUDIO = (0, 18)
 _VERSIONE = re.compile(r"\s*(\d+)\.(\d+)")
 # Un file temporaneo, o una foto senza faccenda, si toglie solo se ha piu' di un'ora:
 # uno piu' giovane puo' essere una consegna che sta arrivando proprio adesso (il file
@@ -247,11 +249,54 @@ def metti_da_parte(cartella: str, faccenda_id: int) -> str | None:
     return da_parte
 
 
+def versione_almeno(versione_app: str | None, minima: tuple[int, int]) -> bool:
+    """L'app ha almeno la versione `minima` (maggiore, minore). Una versione che manca o
+    non si legge e' di un'app vecchia: quelle nuove la dichiarano sempre."""
+    trovata = _VERSIONE.match(versione_app or "")
+    return trovata is not None and (int(trovata.group(1)), int(trovata.group(2))) >= minima
+
+
 def conosce_le_faccende(versione_app: str | None) -> bool:
     """Un'app dalla 0.13 in su. Una versione che manca o non si legge e' di un'app
     vecchia: quelle che conoscono le faccende la dichiarano sempre."""
-    trovata = _VERSIONE.match(versione_app or "")
-    return trovata is not None and (int(trovata.group(1)), int(trovata.group(2))) >= VERSIONE_FACCENDE
+    return versione_almeno(versione_app, VERSIONE_FACCENDE)
+
+
+def conosce_lo_studio(versione_app: str | None) -> bool:
+    """(v4.0) Un'app (o un programma del computer) dalla 0.18 in su: conosce lo Studio."""
+    return versione_almeno(versione_app, VERSIONE_STUDIO)
+
+
+def ha_telefono_con_lo_studio(conn: sqlite3.Connection, figlio_id: int) -> bool:
+    """(v4.0) Il figlio ha almeno un telefono non revocato con l'app dalla 0.18 (letta
+    dall'ultima versione dichiarata col battito): senza, nessuno potrebbe chiudere uno
+    Studio, e lo Studio non parte."""
+    return any(
+        conosce_lo_studio(r["versione_app"])
+        for r in conn.execute(
+            "SELECT versione_app FROM dispositivi WHERE figlio_id = ? AND tipo = 'telefono'"
+            " AND revocato_ts IS NULL",
+            (figlio_id,),
+        ).fetchall()
+    )
+
+
+def studio_aperto(conn: sqlite3.Connection, figlio_id: int) -> sqlite3.Row | None:
+    """(v4.0) Lo Studio aperto del figlio (al massimo uno, garantito dall'indice unico)."""
+    return conn.execute(
+        "SELECT * FROM studio_svolte WHERE figlio_id = ? AND fine_ts IS NULL", (figlio_id,)
+    ).fetchone()
+
+
+def studio_in_corso(conn: sqlite3.Connection, figlio_id: int) -> sqlite3.Row | None:
+    """(v4.0) Lo Studio in corso come lo vedono i dispositivi: quello aperto, ma solo se
+    il figlio ha un telefono dalla 0.18 (contratto: senza, `studio.in_corso` e' null e
+    nessun dispositivo parte da solo). Chi lo legge ha gia' elaborato partenze e
+    mezzanotti (studio.valuta)."""
+    aperto = studio_aperto(conn, figlio_id)
+    if aperto is None or not ha_telefono_con_lo_studio(conn, figlio_id):
+        return None
+    return aperto
 
 
 def registra_storia(
@@ -300,6 +345,41 @@ def _foto_presente(cartella: str, riga: sqlite3.Row) -> bool:
     return riga["foto_ts"] is not None and os.path.isfile(percorso_foto(cartella, riga["id"]))
 
 
+# --- (v4.0) i lavori da approvare ---
+
+# Dopo ogni ts_server vero: un database senza la riga `faccende_approvazione_dal` (mai,
+# dopo init_db) non ha lavori da approvare.
+_MAI = "9999-12-31T23:59:59+00:00"
+
+
+def approvazione_dal(conn: sqlite3.Connection) -> str:
+    """(v4.0) Da quando le foto chiedono l'approvazione di un genitore: la riga
+    `faccende_approvazione_dal` di `patto`, scritta una volta al primo avvio della v4.0.
+    Le foto arrivate prima hanno gia' sbloccato (regola v3.6-v3.9) e non tornano a
+    bloccare."""
+    riga = conn.execute(
+        "SELECT valore FROM patto WHERE chiave = 'faccende_approvazione_dal'"
+    ).fetchone()
+    return riga[0] if riga is not None else _MAI
+
+
+def da_approvare(riga: sqlite3.Row, dal: str) -> bool:
+    """(v4.0) Un lavoro fatto la cui foto (arrivata dalla v4.0) nessun genitore ha
+    ancora approvato: e' ancora aperto e blocca. Non e' salvato: si ricava da foto_ts,
+    confermata_ts e `faccende_approvazione_dal`."""
+    return (
+        riga["stato"] == "fatta"
+        and riga["confermata_ts"] is None
+        and riga["foto_ts"] is not None
+        and riga["foto_ts"] >= dal
+    )
+
+
+# La condizione SQL "lavoro aperto": da fare, oppure fatto e da approvare. Vuole come
+# parametro `faccende_approvazione_dal`.
+APERTA = "(stato = 'da_fare' OR (stato = 'fatta' AND confermata_ts IS NULL AND foto_ts >= ?))"
+
+
 # --- le forme ---
 
 def _ultima_bocciatura(riga: sqlite3.Row, firme: Firme) -> dict | None:
@@ -313,10 +393,11 @@ def _ultima_bocciatura(riga: sqlite3.Row, firme: Firme) -> dict | None:
 
 
 def formatta(
-    riga: sqlite3.Row, firme: Firme, cartella: str, storia: list | None = None
+    riga: sqlite3.Row, firme: Firme, cartella: str, storia: list | None = None, dal: str = _MAI
 ) -> dict:
     """La faccenda come la vedono le app. `storia`: quella gia' letta da chi formatta un
-    elenco (storie); senza, la si legge qui."""
+    elenco (storie); senza, la si legge qui. (v4.0) `dal`: `faccende_approvazione_dal`,
+    per `da_approvare`."""
     if storia is None:
         storia = []
     return {
@@ -337,6 +418,8 @@ def formatta(
         # (v3.9) "svolto": la conferma di un genitore, null finche' nessuno conferma
         "confermata_ts": riga["confermata_ts"],
         "confermata_da": firme.di(riga["confermata_genitore_id"]),
+        # (v4.0) fatta, con la foto dalla v4.0, e nessun genitore l'ha ancora approvata
+        "da_approvare": da_approvare(riga, dal),
         "storia": storia,
     }
 
@@ -360,15 +443,17 @@ def faccende_del_figlio(
     conn: sqlite3.Connection, figlio_id: int, ora: datetime, firme: Firme, cartella: str
 ) -> list[dict]:
     """GET /api/faccende: tutte le da fare, piu' le fatte e le annullate chiuse negli
-    ultimi 30 giorni; dalla piu' recente (creata_ts, poi id)."""
+    ultimi 30 giorni; dalla piu' recente (creata_ts, poi id). (v4.0) Anche le fatte da
+    approvare, sempre, come le da fare (finche' aspettano)."""
     dal = clock.iso(ora - timedelta(days=GIORNI_CHIUSE))
+    approvazione = approvazione_dal(conn)
     righe = conn.execute(
-        "SELECT * FROM faccende WHERE figlio_id = ? AND (stato = 'da_fare' OR chiusa_ts >= ?)"
+        f"SELECT * FROM faccende WHERE figlio_id = ? AND ({APERTA} OR chiusa_ts >= ?)"
         " ORDER BY creata_ts DESC, id DESC",
-        (figlio_id, dal),
+        (figlio_id, approvazione, dal),
     ).fetchall()
     storia = storie(conn, [r["id"] for r in righe], firme)
-    return [formatta(r, firme, cartella, storia[r["id"]]) for r in righe]
+    return [formatta(r, firme, cartella, storia[r["id"]], approvazione) for r in righe]
 
 
 # (v3.9) Le lettere che Unicode non scompone in base + segno: per la ricerca valgono la
@@ -411,44 +496,83 @@ def cerca(
     altre = len(righe) > RISULTATI_RICERCA
     righe = righe[:RISULTATI_RICERCA]
     storia = storie(conn, [r["id"] for r in righe], firme)
-    return [formatta(r, firme, cartella, storia[r["id"]]) for r in righe], altre
+    approvazione = approvazione_dal(conn)
+    return [formatta(r, firme, cartella, storia[r["id"]], approvazione) for r in righe], altre
 
 
 def una(conn: sqlite3.Connection, faccenda_id: int, firme: Firme, cartella: str) -> dict:
     """Una faccenda sola, con la sua storia: la risposta delle scritture."""
     riga = faccenda_o_404(conn, faccenda_id)
-    return formatta(riga, firme, cartella, storie(conn, [faccenda_id], firme)[faccenda_id])
+    return formatta(
+        riga, firme, cartella, storie(conn, [faccenda_id], firme)[faccenda_id], approvazione_dal(conn)
+    )
 
 
-def _da_fare(conn: sqlite3.Connection, figlio_id: int) -> list[sqlite3.Row]:
-    """Le faccende da fare del figlio, dalla piu' vecchia."""
+def aperte(conn: sqlite3.Connection, figlio_id: int) -> list[sqlite3.Row]:
+    """(v4.0) I lavori aperti del figlio (da fare e da approvare), dal piu' vecchio."""
     return conn.execute(
-        "SELECT * FROM faccende WHERE figlio_id = ? AND stato = 'da_fare' ORDER BY creata_ts, id",
-        (figlio_id,),
+        f"SELECT * FROM faccende WHERE figlio_id = ? AND {APERTA} ORDER BY creata_ts, id",
+        (figlio_id, approvazione_dal(conn)),
     ).fetchall()
 
 
 def blocco_attivo(conn: sqlite3.Connection, figlio_id: int, ora: datetime) -> bool:
-    """C'e' almeno una faccenda da fare il cui blocco_da e' gia' passato."""
+    """C'e' almeno un lavoro aperto (v4.0: da fare, o da approvare) il cui blocco_da e'
+    gia' passato. Non tiene conto dello Studio: dice solo che il blocco e' dovuto."""
     return conn.execute(
-        "SELECT 1 FROM faccende WHERE figlio_id = ? AND stato = 'da_fare' AND blocco_da <= ? LIMIT 1",
-        (figlio_id, clock.iso(ora)),
+        f"SELECT 1 FROM faccende WHERE figlio_id = ? AND {APERTA} AND blocco_da <= ? LIMIT 1",
+        (figlio_id, approvazione_dal(conn), clock.iso(ora)),
+    ).fetchone() is not None
+
+
+def blocco_attivo_a(conn: sqlite3.Connection, figlio_id: int, istante: datetime) -> bool:
+    """(v4.0) Il blocco era attivo a `istante` (nel passato), ricostruito dai lavori come
+    sono adesso: un lavoro gia' dato a quell'istante, col blocco_da passato e ancora aperto
+    allora (da fare; da approvare fino all'approvazione; con una foto di prima della v4.0
+    fino all'arrivo della foto; annullato fino all'annullamento). Serve all'avvio a mano
+    consegnato in ritardo e al computer che sparisce. Una bocciatura porta il blocco_da
+    all'ora della bocciatura: il tempo prima di lei non si ricostruisce (li' il lavoro
+    era fatto, e il suo blocco gia' finito o ancora da approvare)."""
+    t = clock.iso(istante)
+    dal = approvazione_dal(conn)
+    return conn.execute(
+        "SELECT 1 FROM faccende WHERE figlio_id = ? AND creata_ts <= ? AND blocco_da <= ? AND ("
+        " stato = 'da_fare'"
+        " OR (stato = 'fatta' AND foto_ts >= ? AND (confermata_ts IS NULL OR confermata_ts > ?))"
+        " OR (stato = 'fatta' AND foto_ts < ? AND foto_ts > ?)"
+        " OR (stato = 'annullata' AND chiusa_ts > ?)) LIMIT 1",
+        (figlio_id, t, t, dal, t, dal, t, t),
     ).fetchone() is not None
 
 
 def blocco(conn: sqlite3.Connection, figlio_id: int, ora: datetime, firme: Firme) -> dict:
     """GET /api/faccende/blocco, la risposta piccola che i dispositivi chiedono spesso:
-    `attivo` se almeno una da fare blocca gia', `dal` il piu' vecchio di quei blocco_da;
-    se non e' attivo, `prossimo` il blocco_da piu' vicino nel futuro (il dispositivo lo
-    usa per partire da solo anche senza rete); e tutte le da fare, dalla piu' vecchia."""
+    `attivo` se almeno un lavoro aperto blocca gia', `dal` il piu' vecchio di quei
+    blocco_da; se non e' attivo, `prossimo` il blocco_da piu' vicino nel futuro (il
+    dispositivo lo usa per partire da solo anche senza rete); e tutti i lavori aperti,
+    dal piu' vecchio.
+
+    (v4.0) Aperti sono i da fare e i da approvare (fatti, con la foto dalla v4.0, che
+    nessun genitore ha ancora approvato): restano in `da_fare` (le app vecchie lo leggono
+    cosi') con in piu' `stato` e `foto_ts`. `attivo` non tiene conto dello Studio (un'app
+    vecchia resta piu' stretta, mai piu' larga); `rimandato` e' vero quando il blocco e'
+    dovuto ma il figlio e' in Studio (il blocco aspetta la fine dello Studio); `studio`
+    dice quale Studio e' in corso."""
     adesso = clock.iso(ora)
-    righe = _da_fare(conn, figlio_id)
+    righe = aperte(conn, figlio_id)
     bloccano = [r["blocco_da"] for r in righe if r["blocco_da"] <= adesso]
     future = [r["blocco_da"] for r in righe if r["blocco_da"] > adesso]
+    in_corso = studio_in_corso(conn, figlio_id)
     return {
         "attivo": bool(bloccano),
         "dal": min(bloccano) if bloccano else None,
         "prossimo": min(future) if future and not bloccano else None,
+        "rimandato": bool(bloccano) and in_corso is not None,
+        "studio": {
+            "in_corso": in_corso is not None,
+            "id": in_corso["id"] if in_corso is not None else None,
+            "inizio_ts": in_corso["inizio_ts"] if in_corso is not None else None,
+        },
         "da_fare": [
             {
                 "id": r["id"],
@@ -458,6 +582,8 @@ def blocco(conn: sqlite3.Connection, figlio_id: int, ora: datetime, firme: Firme
                 "creata_da": firme.di(r["creata_genitore_id"]),
                 "bocciature": r["bocciature"],
                 "ultima_bocciatura": _ultima_bocciatura(r, firme),
+                "stato": r["stato"],  # (v4.0) da_fare | fatta (da approvare)
+                "foto_ts": r["foto_ts"],  # (v4.0) null per un lavoro da fare
             }
             for r in righe
         ],
@@ -470,12 +596,23 @@ def quante_da_fare(conn: sqlite3.Connection, figlio_id: int) -> int:
     ).fetchone()["n"]
 
 
+def quante_da_approvare(conn: sqlite3.Connection, figlio_id: int) -> int:
+    """(v4.0) I lavori fatti che aspettano l'approvazione di un genitore."""
+    return conn.execute(
+        "SELECT COUNT(*) AS n FROM faccende WHERE figlio_id = ? AND stato = 'fatta'"
+        " AND confermata_ts IS NULL AND foto_ts >= ?",
+        (figlio_id, approvazione_dal(conn)),
+    ).fetchone()["n"]
+
+
 def giro_per_nuove(conn: sqlite3.Connection, figlio_id: int) -> int:
-    """Il giro delle faccende che tornano o diventano da fare: quello delle da fare che
-    ci sono gia' (sono sempre di uno stesso giro), oppure uno nuovo se il figlio non ne
-    aveva nessuna."""
+    """Il giro delle faccende che tornano o diventano da fare: quello dei lavori aperti
+    che ci sono gia' (sono sempre di uno stesso giro), oppure uno nuovo se il figlio non
+    ne aveva nessuno. (v4.0) Il giro resta aperto finche' c'e' un lavoro aperto, anche
+    solo da approvare: una bocciatura dopo le foto resta nello stesso giro."""
     aperto = conn.execute(
-        "SELECT giro FROM faccende WHERE figlio_id = ? AND stato = 'da_fare' LIMIT 1", (figlio_id,)
+        f"SELECT giro FROM faccende WHERE figlio_id = ? AND {APERTA} ORDER BY id LIMIT 1",
+        (figlio_id, approvazione_dal(conn)),
     ).fetchone()
     if aperto is not None:
         return aperto["giro"]
@@ -492,7 +629,12 @@ def pulisci_foto(db_path: str, ora: datetime) -> int:
     foto bocciata rimasta, un file temporaneo di una consegna interrotta, qualsiasi
     altro file). Le sottocartelle non si toccano. Restituisce quanti file ha tolto. Non
     solleva per un file che non si riesce a togliere: lo dice il log e ci riprova la
-    volta dopo."""
+    volta dopo.
+
+    (v4.0) La foto di un lavoro da approvare non si cancella (nessuno approva una foto
+    che non puo' piu' guardare); quella di un lavoro approvato 30 giorni dopo
+    l'approvazione (`confermata_ts`); quelle di prima della v4.0 30 giorni dopo l'arrivo,
+    come prima."""
     cartella = cartella_foto(db_path)
     if not os.path.isdir(cartella):
         return 0
@@ -500,10 +642,16 @@ def pulisci_foto(db_path: str, ora: datetime) -> int:
     conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
     try:
-        foto_ts = {
-            r["id"]: r["foto_ts"]
-            for r in conn.execute("SELECT id, foto_ts FROM faccende WHERE foto_ts IS NOT NULL")
-        }
+        dal = approvazione_dal(conn)
+        # id della faccenda -> l'ora da cui si contano i 30 giorni; None = non si cancella
+        foto_ts = {}
+        for r in conn.execute(
+            "SELECT id, foto_ts, confermata_ts FROM faccende WHERE foto_ts IS NOT NULL"
+        ).fetchall():
+            if r["foto_ts"] < dal:
+                foto_ts[r["id"]] = r["foto_ts"]
+            else:
+                foto_ts[r["id"]] = r["confermata_ts"]
     finally:
         conn.close()
     adesso = time.time()
@@ -513,7 +661,10 @@ def pulisci_foto(db_path: str, ora: datetime) -> int:
             if not voce.is_file(follow_symlinks=False):
                 continue
             nome = _NOME_FOTO.fullmatch(voce.name)
-            arrivata = foto_ts.get(int(nome.group(1))) if nome else None
+            faccenda = int(nome.group(1)) if nome else None
+            if faccenda in foto_ts and foto_ts[faccenda] is None:
+                continue  # (v4.0) aspetta l'approvazione di un genitore: resta
+            arrivata = foto_ts.get(faccenda)
             if arrivata is not None:
                 da_togliere = arrivata < limite  # la foto di una faccenda: dopo 30 giorni
             else:

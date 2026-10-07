@@ -12,6 +12,8 @@ import eu.stgm.pactum.figlio.faccende.LetturaFaccende
 import eu.stgm.pactum.figlio.sessione.LetturaSessioni
 import eu.stgm.pactum.figlio.sessione.SessioneDefinita
 import eu.stgm.pactum.figlio.sessione.SessioneSvolta
+import eu.stgm.pactum.figlio.studio.LetturaStudio
+import eu.stgm.pactum.figlio.studio.StatoStudioServer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -80,6 +82,10 @@ data class Patto(
     // letti a parte (LetturaTempi). Assenti = server di prima della v3.8.
     @SerialName("uso_recente") val usoRecenteGrezzo: JsonElement? = null,
     @SerialName("medie") val medieGrezze: JsonElement? = null,
+    // (0.18, v4.0) La Sessione Studio: `{ config, in_corso, prossime_partenze }`,
+    // grezza e letta a parte (LetturaStudio). Assente = server di prima della
+    // v4.0: lo Studio si spegne (contratto v4.0, «Il telefono»).
+    @SerialName("studio") val studioGrezzo: JsonElement? = null,
     // App-interno (NON dal server): il giorno del patto in cui `bonusOggiPerRegola`
     // è valido, stampato da PattoLocale al salvataggio. Se al momento della
     // valutazione non è più oggi (notte offline), i bonus di "oggi" non valgono.
@@ -118,6 +124,9 @@ data class Patto(
 
     /** (0.13) Tutte le faccende (da fare e chiuse da poco), null se il patto non le porta. */
     val faccende: List<FaccendaLocale>? get() = LetturaFaccende.faccende(faccendeGrezze)
+
+    /** (0.18) Lo Studio per il server; null se il patto non lo porta (server vecchio) o non si legge. */
+    val studio: StatoStudioServer? get() = LetturaStudio.stato(studioGrezzo)
 
     /**
      * (v3) Le regole che valgono su QUESTO telefono: le sue e quelle di vita

@@ -90,6 +90,12 @@ class BootReceiver : BroadcastReceiver() {
                 // (0.13) Le sveglie non sopravvivono al riavvio: quella del
                 // prossimo blocco delle faccende si richiede qui.
                 runCatching { ControlloBlocco.dopo(context) }
+                // (0.18) E quella dello Studio (la partenza, la mezzanotte): il tratto in
+                // corso, se c'era, si chiude all'ultimo punto salvato.
+                runCatching {
+                    eu.stgm.pactum.figlio.studio.ControlloStudio.dimenticaSveglia()
+                    eu.stgm.pactum.figlio.studio.ControlloStudio.dopo(context)
+                }
                 CodaEventi(context).accoda(
                     Evento(
                         tipo = TipiEvento.RIAVVIO,

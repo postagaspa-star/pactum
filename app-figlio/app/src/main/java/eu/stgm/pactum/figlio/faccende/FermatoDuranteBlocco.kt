@@ -63,9 +63,12 @@ object FermatoDuranteBlocco {
         .filter { bloccatoIl(it.quando) }
         .maxByOrNull { it.quando }
 
-    /** I dettagli dell'evento (logica pura). */
-    fun dettagli(uscita: Uscita, adesso: Long) = buildJsonObject {
-        put("sotto_tipo", "fermato_durante_blocco")
+    /**
+     * I dettagli dell'evento (logica pura). (0.18, contratto v4.0) Fermato
+     * durante la Sessione Studio: `fermato_durante_studio`, con le stesse regole.
+     */
+    fun dettagli(uscita: Uscita, adesso: Long, duranteStudio: Boolean = false) = buildJsonObject {
+        put("sotto_tipo", if (duranteStudio) "fermato_durante_studio" else "fermato_durante_blocco")
         put("dal", uscita.quando)
         put("al", adesso)
         put("minuti", ((adesso - uscita.quando).coerceAtLeast(0L) + 59_999) / 60_000)
@@ -96,11 +99,14 @@ object FermatoDuranteBlocco {
                 null
             }
             val memoria = ArchivioBlocco.leggi(app)
-            val trovata = daSegnalare(uscite, accensioneIl, aggiornataIl, memoria.uscitaVista) { memoria.attivoAlMuro(it) }
+            // (0.18) Anche durante la Sessione Studio (i suoi periodi sono sull'ora del server).
+            val studio = eu.stgm.pactum.figlio.studio.ArchivioStudio.leggi(app)
+            val inStudio = { muro: Long -> studio.inStudioAl(muro + (memoria.scarto ?: 0L)) }
+            val trovata = daSegnalare(uscite, accensioneIl, aggiornataIl, memoria.uscitaVista) { memoria.attivoAlMuro(it) || inStudio(it) }
             val ultima = uscite.maxOf { it.quando }
             ArchivioBlocco.modifica(app) { it.copy(uscitaVista = maxOf(ultima, it.uscitaVista ?: Long.MIN_VALUE)) }
             if (trovata != null) {
-                CodaEventi(app).accoda(Evento(tipo = TipiEvento.MANOMISSIONE, tsDevice = adesso, dettagli = dettagli(trovata, adesso)))
+                CodaEventi(app).accoda(Evento(tipo = TipiEvento.MANOMISSIONE, tsDevice = adesso, dettagli = dettagli(trovata, adesso, inStudio(trovata.quando))))
                 try {
                     ConsegnaEventi.subito(app)
                 } catch (e: Exception) {

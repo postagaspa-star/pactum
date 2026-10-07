@@ -245,6 +245,26 @@ data class MemoriaSessioni(
     }
 
     /**
+     * (0.18, contratto v4.0) La sessione in corso chiusa all'istante [al]
+     * (l'inizio della Sessione Studio, sull'orologio del telefono), come
+     * "Termina la sessione": solo se a [al] era già iniziata. [adesso] =
+     * adesso, per trovare quella in corso. Null se non ce n'è.
+     */
+    fun conTermineAl(al: Long, adesso: Long): Pair<MemoriaSessioni, TerminazioneInAttesa?> {
+        val attiva = inCorso(adesso) ?: return this to null
+        if (attiva.inizio > al) return this to null
+        val fine = al.coerceIn(attiva.inizio, adesso)
+        val chiusura = TerminazioneInAttesa(attiva.svoltaId, fine)
+        val nuova = copy(
+            svolte = svolte.map {
+                if (it.id == attiva.svoltaId) it.copy(fineLocale = fine, paginaFine = it.paginaFine ?: PaginaFine.ATTESA) else it
+            },
+            terminazioni = terminazioni.filterNot { it.svoltaId == attiva.svoltaId } + chiusura,
+        )
+        return nuova to chiusura
+    }
+
+    /**
      * Quello che dice il server (`sessioni_svolte` e `sessione_in_corso` di
      * GET /api/patto), unito a quello che sa il telefono:
      *  - le sessioni del server entrano o aggiornano la copia, ma la fine

@@ -113,7 +113,7 @@ class SorveglianzaSessione(context: Context, private val attiva: SessioneAttiva)
      */
     private fun copertaDalBlocco(primoPiano: String?): Boolean = try {
         val ora = Orologio.adesso()
-        if (!StatoBlocco.attivoAdesso(ora)) {
+        if (!StatoBlocco.applicatoAdesso(ora)) {
             false
         } else {
             val giudice = giudiceFaccende ?: GiudiceFaccende(app).also { giudiceFaccende = it }

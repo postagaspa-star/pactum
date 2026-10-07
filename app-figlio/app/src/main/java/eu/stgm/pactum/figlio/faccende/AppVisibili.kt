@@ -98,6 +98,18 @@ object LetturaEventi {
         }
         return da.coerceAtLeast(0L)
     }
+
+    /** Oltre questo, un punto di lettura nel futuro vuol dire un orologio a muro spostato indietro. */
+    const val SOVRAPPOSIZIONE_FUTURA_MS = 60_000L
+
+    /**
+     * (0.18) L'orologio a muro spostato indietro: il punto a cui si era
+     * arrivati ([lettoFinoA]) è nel futuro. Si riparte da capo, con la
+     * finestra lunga: altrimenti l'intervallo da leggere non è valido, nessun
+     * evento arriva e la barriera crede che davanti ci sia ancora l'app di prima.
+     */
+    fun orologioIndietro(lettoFinoA: Long?, adesso: Long): Boolean =
+        lettoFinoA != null && lettoFinoA > adesso + SOVRAPPOSIZIONE_FUTURA_MS
 }
 
 /**

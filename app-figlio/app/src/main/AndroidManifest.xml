@@ -112,6 +112,17 @@
             android:launchMode="singleTask"
             android:taskAffinity="eu.stgm.pactum.figlio.faccende" />
 
+        <!-- (0.18) La barriera della Sessione Studio: "Sei in Studio", la lista,
+             un solo pulsante, Esci (alla schermata Home). Come quella delle
+             Sessioni: task sua, fuori dalle recenti, aperta dal servizio con
+             "Mostra sopra le altre app". Mai sopra il blocco schermo. -->
+        <activity
+            android:name=".studio.BarrieraStudioActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="eu.stgm.pactum.figlio.studio" />
+
         <!-- (0.13) La foto di una faccenda: la fotocamera scrive lo scatto in un
              file di Pactum, condiviso solo per quello scatto e solo in
              scrittura temporanea (FileProvider, cartella faccende/scatti). -->
@@ -151,6 +162,13 @@
              l'invoca solo il PendingIntent di AlarmManager. -->
         <receiver
             android:name=".faccende.SvegliaFaccendeReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- (0.18) La sveglia esatta della Sessione Studio (5 minuti prima, la
+             partenza, la mezzanotte). Interno: l'invoca solo il PendingIntent. -->
+        <receiver
+            android:name=".studio.SvegliaStudioReceiver"
             android:enabled="true"
             android:exported="false" />
 

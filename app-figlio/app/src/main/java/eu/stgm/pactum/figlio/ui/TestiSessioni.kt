@@ -102,6 +102,7 @@ fun testoEsitoAvvio(context: Context, esito: EsitoAvvio, adesso: Long = System.c
     } ?: context.getString(R.string.sessione_iniziata_semplice)
     EsitoAvvio.NonApprovata -> context.getString(R.string.sessione_esito_non_approvata)
     EsitoAvvio.BloccoFaccende -> context.getString(R.string.sessione_esito_blocco_faccende)
+    EsitoAvvio.StudioInCorso -> context.getString(R.string.sessione_esito_studio_in_corso)
     is EsitoAvvio.GiaInCorso -> esito.svolta?.let {
         testoFinoAlle(
             context,

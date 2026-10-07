@@ -118,6 +118,8 @@ fun OggiScreen(
     val ambitoSnackbar = rememberCoroutineScope()
     // (0.11) La Sessione in corso; (0.13) il blocco dei lavori di casa.
     val inSessione = rememberSessioneInCorso()
+    // (0.18, contratto v4.0) La Sessione Studio: una card in cima quando è in corso o sta per partire.
+    val studio = rememberStudio()
     val avvioIncerto = rememberAvvioIncerto()
     val memoria by StatoBlocco.memoria.collectAsStateWithLifecycle()
     val bloccato = rememberBloccoFaccende()
@@ -178,7 +180,8 @@ fun OggiScreen(
     val cima = Cima.di(
         bloccato = bloccato,
         sessioneInCorso = inSessione.attiva != null,
-        bloccoProgrammato = !bloccato && memoria.prossimo != null && daFare.isNotEmpty(),
+        // (0.18, v4.0) Conta anche una foto mandata in anticipo e non ancora approvata.
+        bloccoProgrammato = !bloccato && memoria.prossimo != null && VistaFaccende.aperte(memoria).isNotEmpty(),
     )
     val permessiMancanti = Permessi.mancanti(permessi)
     // La prima lettura: niente numeri finti ("0 min") prima che i dati ci siano.
@@ -202,10 +205,20 @@ fun OggiScreen(
             contentPadding = PaddingValues(Spazi.l + Spazi.xs),
             verticalArrangement = Arrangement.spacedBy(Spazi.l),
         ) {
+            // 0. (0.18) La Sessione Studio, in corso o che sta per partire.
+            if (haCardStudio(studio)) {
+                item(key = "studio") {
+                    CardStudioOggi(studio) { messaggio -> ambitoSnackbar.launch { snackbarHostState.showSnackbar(messaggio) } }
+                }
+            }
             // 1. Una sola card di stato, solo se c'è qualcosa.
             when (cima.card) {
                 CardCima.BLOCCO -> item(key = "blocco") {
-                    CardBloccoLavori(daFare = daFare.size, onApriLavori = onApriLavori)
+                    CardBloccoLavori(
+                        daFare = daFare.size,
+                        daApprovare = VistaFaccende.inApprovazione(memoria).size,
+                        onApriLavori = onApriLavori,
+                    )
                 }
                 CardCima.SESSIONE -> inSessione.attiva?.let { attiva ->
                     item(key = "sessione-in-corso") {
@@ -450,13 +463,14 @@ private fun RigaApp(riga: OggiViewModel.RigaUso) {
  * casa · 2 da fare" e "Vai ai lavori".
  */
 @Composable
-private fun CardBloccoLavori(daFare: Int, onApriLavori: () -> Unit) {
+private fun CardBloccoLavori(daFare: Int, daApprovare: Int, onApriLavori: () -> Unit) {
     CardEvidenza(tono = Tono.Attenzione) {
         Text(
-            text = if (daFare > 0) {
-                pluralStringResource(R.plurals.oggi_blocco_lavori, daFare, daFare)
-            } else {
-                stringResource(R.string.faccende_bloccato)
+            text = when {
+                daFare > 0 -> pluralStringResource(R.plurals.oggi_blocco_lavori, daFare, daFare)
+                // (0.18, contratto v4.0) Solo foto che aspettano un genitore.
+                daApprovare > 0 -> pluralStringResource(R.plurals.oggi_blocco_approvazione, daApprovare, daApprovare)
+                else -> stringResource(R.string.faccende_bloccato)
             },
             style = MaterialTheme.typography.titleMedium,
         )

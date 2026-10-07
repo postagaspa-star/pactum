@@ -153,6 +153,8 @@ object Collegamento {
             // (0.11) Le sessioni del dispositivo di prima non sono di questo:
             // se ce n'era una in corso, la sua barriera si ferma qui.
             if (!stessoDispositivo) ArchivioSessioni.svuota(app)
+            // (0.18) Anche lo Studio di prima non è di questo dispositivo.
+            if (!stessoDispositivo) eu.stgm.pactum.figlio.studio.ArchivioStudio.svuota(app)
         }
         // Un bonus del patto vecchio non parte verso quello nuovo.
         if (!stessoDispositivo && sospeso != null) ConsegnaBonus.dimenticaInFondo(app, sospeso.id)

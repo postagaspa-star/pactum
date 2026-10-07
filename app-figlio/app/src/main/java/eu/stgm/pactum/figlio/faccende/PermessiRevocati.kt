@@ -35,19 +35,35 @@ object PermessiRevocati {
     /** Cosa segnalare e i nuovi stati noti (logica pura). */
     data class Esito(val daSegnalare: List<String>, val usoNoto: Boolean, val sopraNoto: Boolean)
 
-    fun decidi(usoNoto: Boolean?, uso: Boolean, sopraNoto: Boolean?, sopra: Boolean, bloccoAttivo: Boolean): Esito {
+    fun decidi(usoNoto: Boolean?, uso: Boolean, sopraNoto: Boolean?, sopra: Boolean, bloccoAttivo: Boolean, inStudio: Boolean = false): Esito {
         val segnala = buildList {
             if (usoNoto == true && !uso) add(MemoriaBlocco.PERMESSO_ACCESSO_USO)
-            if (sopraNoto == true && !sopra && bloccoAttivo) add(MemoriaBlocco.PERMESSO_MOSTRA_SOPRA)
+            // (0.18, contratto v4.0) Anche durante la Sessione Studio.
+            if (sopraNoto == true && !sopra && (bloccoAttivo || inStudio)) add(MemoriaBlocco.PERMESSO_MOSTRA_SOPRA)
         }
         return Esito(segnala, usoNoto = uso, sopraNoto = sopra)
+    }
+
+    /**
+     * I dettagli dell'evento (logica pura): `{ sotto_tipo, permesso }` e,
+     * (0.18, contratto v4.0) durante lo Studio, in più `"durante": "studio"`.
+     */
+    fun dettagli(permesso: String, inStudio: Boolean) = buildJsonObject {
+        put("sotto_tipo", "permesso_revocato")
+        put("permesso", permesso)
+        if (inStudio) put("durante", "studio")
     }
 
     /**
      * Guarda i due permessi adesso: accoda gli eventi delle revoche e salva lo
      * stato noto. Restituisce i permessi segnalati (vuoto = niente di nuovo).
      */
-    suspend fun controlla(context: Context, bloccoAttivo: Boolean, adesso: Long = System.currentTimeMillis()): List<String> =
+    suspend fun controlla(
+        context: Context,
+        bloccoAttivo: Boolean,
+        adesso: Long = System.currentTimeMillis(),
+        inStudio: Boolean = false,
+    ): List<String> =
         mutex.withLock {
             val app = context.applicationContext
             val impostazioni = Impostazioni(app)
@@ -55,17 +71,14 @@ object PermessiRevocati {
             val sopraNoto = impostazioni.leggiMostraSopraNoto()
             val uso = PermessiHelper.haAccessoUso(app)
             val sopra = PermessiHelper.puoMostrareSopra(app)
-            val esito = decidi(usoNoto, uso, sopraNoto, sopra, bloccoAttivo)
+            val esito = decidi(usoNoto, uso, sopraNoto, sopra, bloccoAttivo, inStudio)
             val coda = CodaEventi(app)
             for (permesso in esito.daSegnalare) {
                 coda.accoda(
                     Evento(
                         tipo = TipiEvento.MANOMISSIONE,
                         tsDevice = adesso,
-                        dettagli = buildJsonObject {
-                            put("sotto_tipo", "permesso_revocato")
-                            put("permesso", permesso)
-                        },
+                        dettagli = dettagli(permesso, inStudio),
                     ),
                 )
             }

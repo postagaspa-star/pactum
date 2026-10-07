@@ -49,6 +49,12 @@ sealed interface EsitoAvvio {
      */
     data object BloccoFaccende : EsitoAvvio
 
+    /**
+     * (0.18, contratto v4.0) 409 `studio_in_corso`, o il telefono già in
+     * Sessione Studio: durante lo Studio le sessioni non si avviano.
+     */
+    data object StudioInCorso : EsitoAvvio
+
     /** 409 `sessione_gia_in_corso`. [svolta] = quella in corso, se si è ritrovata: la sua fine vera. */
     data class GiaInCorso(val svolta: SvoltaLocale? = null) : EsitoAvvio
 
@@ -136,6 +142,7 @@ object EsitiSessioni {
             "sessione_non_approvata" -> EsitoAvvio.NonApprovata
             "sessione_gia_in_corso" -> EsitoAvvio.GiaInCorso()
             "blocco_faccende" -> EsitoAvvio.BloccoFaccende
+            "studio_in_corso" -> EsitoAvvio.StudioInCorso
             "dispositivo_revocato" -> EsitoAvvio.Scollegato
             else -> when {
                 codiceHttp == 0 -> if (incerta) EsitoAvvio.Incerto else EsitoAvvio.SenzaRete

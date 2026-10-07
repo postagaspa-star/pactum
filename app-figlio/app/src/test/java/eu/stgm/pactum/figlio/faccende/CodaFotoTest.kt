@@ -149,7 +149,14 @@ class CodaFotoTest {
         assertEquals(1, mandata.conDaFare(listOf(faccenda), t0 + 1000).first.foto.size)
         assertTrue(mandata.conDaFare(emptyList(), t0 + 1000).first.foto.isEmpty())
         assertTrue(mandata.conDaFare(listOf(faccenda.copy(bocciature = 1)), t0 + 1000).first.foto.isEmpty())
+        // Un lavoro che per il server è ancora DA FARE (il server non ha la foto):
+        // dopo un giorno la "mandata" se ne va e «Scatta la foto» torna.
         assertTrue(mandata.conDaFare(listOf(faccenda), t0 + giorno + 1).first.foto.isEmpty())
+        // (0.18, contratto v4.0) Finché il lavoro è aperto (aspetta l'approvazione)
+        // la foto resta "mandata", anche dopo un giorno: non più solo 24 ore.
+        val aspetta = faccenda.copy(stato = StatiFaccenda.FATTA, fotoIl = t0)
+        assertEquals(1, mandata.conDaFare(listOf(aspetta), t0 + giorno + 1).first.foto.size)
+        assertEquals(1, mandata.conDaFare(listOf(aspetta), t0 + 10 * giorno).first.foto.size)
     }
 
     @Test
@@ -169,17 +176,25 @@ class CodaFotoTest {
     }
 
     @Test
-    fun `al massimo 30 foto - le più vecchie se ne vanno coi loro file`() {
+    fun `al massimo 30 foto - le mandate più vecchie se ne vanno, mai una da mandare`() {
+        // (0.18, contratto v4.0) Prima si scattavano e si toglievano le più vecchie
+        // anche se non erano ancora partite. Adesso fa posto solo una foto già
+        // mandata (che aspetta l'approvazione): 2 mandate, 30 nuove in coda.
         var coda = MemoriaCodaFoto()
         val via = mutableListOf<String>()
-        for (i in 1..32) {
+        for (i in 1..2) {
+            coda = coda.conScatto(foto(i.toLong(), "$i.jpg", t0 + i)).first
+            coda = coda.conEsito(i.toLong(), "$i.jpg", EsitoFoto.ARRIVATA, t0 + i).first
+        }
+        for (i in 3..32) {
             val (nuova, togliere) = coda.conScatto(foto(i.toLong(), "$i.jpg", t0 + i))
             coda = nuova
             via += togliere
         }
         assertEquals(MemoriaCodaFoto.MASSIMO, coda.foto.size)
-        assertEquals(listOf("1.jpg", "2.jpg"), via)
         assertNull(coda.di(1))
+        assertNull(coda.di(2))
+        assertEquals(30, coda.daMandare(mio).size)
     }
 
     @Test

@@ -35,12 +35,31 @@ object StatoBlocco {
 
     fun attivoAdesso(ora: Istante = Orologio.adesso()): Boolean = _memoria.value.attivoAdesso(ora)
 
+    /**
+     * (0.18, contratto v4.0) Il blocco si APPLICA adesso: è dovuto e il
+     * telefono, secondo la sua memoria, non è in Sessione Studio. Durante lo
+     * Studio il blocco aspetta e parte a fine Studio. La barriera dei lavori
+     * guarda questo, non [attivoAdesso].
+     */
+    fun applicatoAdesso(ora: Istante = Orologio.adesso()): Boolean {
+        val m = _memoria.value
+        return BloccoEStudio.applicato(m.attivoAdesso(ora), eu.stgm.pactum.figlio.studio.StatoStudio.memoria.value.attivo(eu.stgm.pactum.figlio.studio.OraServer.di(m, ora)) != null)
+    }
+
     /** Ogni cambio sveglia anche il giro della barriera che aspetta (PactumService). */
     internal fun aggiorna(memoria: MemoriaBlocco) {
         if (memoria == _memoria.value) return
         _memoria.value = memoria
         _sveglia.trySend(Unit)
     }
+}
+
+/** (0.18, contratto v4.0) Il blocco e lo Studio (logica pura): durante lo Studio il blocco aspetta. */
+object BloccoEStudio {
+    fun applicato(bloccoDovuto: Boolean, inStudio: Boolean): Boolean = bloccoDovuto && !inStudio
+
+    /** Il blocco è dovuto ma aspetta la fine dello Studio («Il blocco dei lavori parte a fine Studio»). */
+    fun rimandato(bloccoDovuto: Boolean, inStudio: Boolean): Boolean = bloccoDovuto && inStudio
 }
 
 /**

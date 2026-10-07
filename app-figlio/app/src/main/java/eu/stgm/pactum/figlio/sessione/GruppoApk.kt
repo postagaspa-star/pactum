@@ -72,7 +72,12 @@ object PeriodiSessione {
         val inizio = giorno.atStartOfDay(zona).toInstant().toEpochMilli()
         val note = ArchivioSessioni.sessioniNote(context)
         val svolte = if (fine > inizio) ArchivioSessioni.leggi(context).periodi(inizio, fine) else emptyList()
-        if (svolte.isEmpty()) {
+        // (0.18, contratto v4.0) Anche la Sessione Studio: il tempo nelle app
+        // della sua lista non conta (limiti, categorie, totale, fasce), e va in
+        // `sessioni_minuti`. I suoi periodi sono sull'ora del server: si portano
+        // sull'orologio del telefono (quello degli eventi d'uso) con lo scarto misurato.
+        val studio = if (fine > inizio) periodiStudio(context, inizio, fine) else emptyList()
+        if (svolte.isEmpty() && studio.isEmpty()) {
             PeriodiDelGiorno(emptyList(), note)
         } else {
             // Un classificatore per tutta la lettura: ogni app si chiede una volta.
@@ -81,11 +86,22 @@ object PeriodiSessione {
                 svolte.map { svolta ->
                     // Nella misura "non si sa" vuol dire fuori: conta come sempre.
                     PeriodoSessione(svolta.inizio, svolta.fine) { p -> AppDellaSessione.ammette(svolta.app, p, gruppoApk) == true }
+                } + studio.map { (da, a, app) ->
+                    PeriodoSessione(da, a) { p -> AppDellaSessione.ammette(app, p, gruppoApk) == true }
                 },
                 note,
             )
         }
     } catch (e: Exception) {
         PeriodiDelGiorno(emptyList(), note = false)
+    }
+
+    /** (0.18) I periodi di Studio che toccano [da, a), sull'orologio del telefono, con le loro app. */
+    private fun periodiStudio(context: Context, da: Long, a: Long): List<Triple<Long, Long, List<String>>> {
+        val scarto = eu.stgm.pactum.figlio.faccende.ArchivioBlocco.leggi(context).scarto ?: 0L
+        val adesso = System.currentTimeMillis()
+        return eu.stgm.pactum.figlio.studio.ArchivioStudio.leggi(context).periodi
+            .map { Triple(it.inizio - scarto, (it.fine?.minus(scarto)) ?: adesso, it.app) }
+            .filter { (inizio, fine, _) -> inizio < a && fine > da && fine > inizio }
     }
 }

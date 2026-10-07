@@ -15,10 +15,16 @@ object VistaFaccende {
      * foto non hanno bisogno né di regole né dell'accesso all'uso.
      */
     fun primaDelResto(bloccato: Boolean, memoria: MemoriaBlocco, arrivoDalleFaccende: Boolean): Boolean =
-        bloccato || memoria.daFare.isNotEmpty() || arrivoDalleFaccende
+        // (0.18, v4.0) Una foto che aspetta l'approvazione non chiede niente al ragazzo.
+        bloccato || memoria.daFare.any { !it.aspettaApprovazione } || arrivoDalleFaccende
 
-    /** Le faccende da fare, dalla più vecchia. */
-    fun daFare(memoria: MemoriaBlocco): List<FaccendaLocale> {
+    /**
+     * (0.18, contratto v4.0) I lavori APERTI, dalla più vecchia: quelli da
+     * fare e quelli con la foto che aspetta l'approvazione di un genitore.
+     * Dal blocco (`da_fare` li porta tutti, con `stato` e `foto_ts`) o
+     * dall'elenco intero, il più fresco dei due.
+     */
+    fun aperte(memoria: MemoriaBlocco): List<FaccendaLocale> {
         val elenco = memoria.elenco.associateBy { it.id }
         val lista = if (memoria.bloccoPiuFresco || memoria.elenco.isEmpty()) {
             memoria.daFare.map { d ->
@@ -27,23 +33,32 @@ object VistaFaccende {
                     id = d.id,
                     titolo = d.titolo,
                     nota = d.nota,
-                    stato = StatiFaccenda.DA_FARE,
+                    stato = d.stato,
                     bloccoDa = d.bloccoDa,
                     creataIl = e?.creataIl,
                     genitore = d.genitore ?: e?.genitore,
+                    fotoIl = d.fotoIl ?: e?.fotoIl,
+                    foto = e?.foto ?: false,
                     bocciature = d.bocciature,
                     ultimaBocciatura = d.ultimaBocciatura,
+                    daApprovare = d.aspettaApprovazione,
                 )
             }
         } else {
-            memoria.elenco.filter { it.daFare }
+            memoria.elenco.filter { it.aperta }
         }
         return lista.sortedWith(compareBy<FaccendaLocale>({ it.creataIl ?: Long.MAX_VALUE }, { it.id }))
     }
 
-    /** Le fatte e le annullate, dalla più recente; mai una che adesso è da fare. */
+    /** Le faccende da fare (senza foto, o con la foto bocciata), dalla più vecchia. */
+    fun daFare(memoria: MemoriaBlocco): List<FaccendaLocale> = aperte(memoria).filter { it.daFare }
+
+    /** (0.18, contratto v4.0) «Aspettano l'approvazione»: la foto è arrivata, manca un genitore che la approvi. */
+    fun inApprovazione(memoria: MemoriaBlocco): List<FaccendaLocale> = aperte(memoria).filterNot { it.daFare }
+
+    /** Le fatte (approvate, o di prima della v4.0) e le annullate, dalla più recente; mai una aperta. */
     fun chiuse(memoria: MemoriaBlocco): List<FaccendaLocale> {
-        val aperte = daFare(memoria).mapTo(HashSet()) { it.id }
+        val aperte = aperte(memoria).mapTo(HashSet()) { it.id }
         return memoria.elenco
             .filter { (it.fatta || it.annullata) && it.id !in aperte }
             .sortedWith(compareByDescending<FaccendaLocale> { it.chiusaIl ?: it.creataIl ?: 0L }.thenByDescending { it.id })

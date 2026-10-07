@@ -26,6 +26,8 @@ class PactumApp : Application() {
         // si conta su quello che non si sposta).
         Orologio.inizializza(this)
         ArchivioBlocco.precarica(this)
+        // (0.18) E la Sessione Studio: uno Studio in corso si sa da subito.
+        eu.stgm.pactum.figlio.studio.ArchivioStudio.precarica(this)
         BattitoWorker.pianifica(this)
         // (0.13) Pactum fermato a mano ("Forza arresto") durante il blocco: lo si
         // dice al registro appena riparte.

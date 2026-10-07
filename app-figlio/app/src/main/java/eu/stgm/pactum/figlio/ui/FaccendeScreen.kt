@@ -78,6 +78,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.faccende.ArchivioCodaFoto
+import eu.stgm.pactum.figlio.faccende.BloccoEStudio
+import eu.stgm.pactum.figlio.studio.OraServer
+import eu.stgm.pactum.figlio.studio.StatoStudio
 import eu.stgm.pactum.figlio.faccende.FaccendaLocale
 import eu.stgm.pactum.figlio.faccende.FotoFaccenda
 import eu.stgm.pactum.figlio.faccende.MemoriaBlocco
@@ -101,15 +104,27 @@ import java.time.ZoneId
 @Composable
 fun rememberBloccoFaccende(): Boolean {
     val memoria by StatoBlocco.memoria.collectAsStateWithLifecycle()
+    // (0.18, contratto v4.0) Durante la Sessione Studio il blocco aspetta.
+    val studio by StatoStudio.memoria.collectAsStateWithLifecycle()
     var ora by remember { mutableStateOf(Orologio.adesso()) }
-    LaunchedEffect(memoria) {
+    LaunchedEffect(memoria, studio) {
         while (true) {
             ora = Orologio.adesso()
-            val attesa = memoria.attesaPartenza(ora) ?: break
+            val attesa = memoria.attesaPartenza(ora)
+                ?: if (memoria.attivoAdesso(ora) && studio.attivo(OraServer.di(memoria, ora)) != null) INTERVALLO_ORA_MS else break
             delay((attesa + 50).coerceIn(50, INTERVALLO_ORA_MS))
         }
     }
-    return memoria.attivoAdesso(ora)
+    return BloccoEStudio.applicato(memoria.attivoAdesso(ora), studio.attivo(OraServer.di(memoria, ora)) != null)
+}
+
+/** (0.18) Il blocco è dovuto ma aspetta la fine della Sessione Studio. */
+@Composable
+fun rememberBloccoRimandato(): Boolean {
+    val memoria by StatoBlocco.memoria.collectAsStateWithLifecycle()
+    val studio by StatoStudio.memoria.collectAsStateWithLifecycle()
+    val ora = Orologio.adesso()
+    return BloccoEStudio.rimandato(memoria.attivoAdesso(ora), studio.attivo(OraServer.di(memoria, ora)) != null)
 }
 
 /**
@@ -225,6 +240,8 @@ fun FaccendeScreen(
     }
 
     val daFare = VistaFaccende.daFare(memoria)
+    // (0.18, contratto v4.0) Le foto mandate che aspettano l'approvazione di un genitore.
+    val inApprovazione = VistaFaccende.inApprovazione(memoria)
     val chiuse = VistaFaccende.chiuse(memoria)
 
     Scaffold(
@@ -239,7 +256,7 @@ fun FaccendeScreen(
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when {
-                stato.caricamento && !stato.letto && daFare.isEmpty() && chiuse.isEmpty() ->
+                stato.caricamento && !stato.letto && daFare.isEmpty() && inApprovazione.isEmpty() && chiuse.isEmpty() ->
                     Caricamento(testo = stringResource(R.string.faccende_caricamento))
 
                 stato.configurazioneMancante ->
@@ -269,29 +286,39 @@ fun FaccendeScreen(
                     }
                     // (0.15) Lo stato del blocco, compatto: la card quando il telefono
                     // è bloccato, una riga quando è programmato, niente se non c'è.
-                    if (bloccato || (memoria.prossimo != null && daFare.isNotEmpty())) {
+                    if (bloccato || (memoria.prossimo != null && (daFare.isNotEmpty() || inApprovazione.isNotEmpty()))) {
                         item(key = "stato-blocco") { SchedaBlocco(bloccato, memoria, adesso, daFare) }
                     }
-                    if (daFare.isEmpty()) {
+                    if (daFare.isEmpty() && inApprovazione.isEmpty()) {
                         if (!stato.serverDaAggiornare) {
                             // La spiegazione solo qui, quando non c'è niente da fare.
                             item {
                                 StatoVuoto(
                                     titolo = stringResource(R.string.faccende_vuoto),
-                                    testo = stringResource(R.string.faccende_intro),
+                                    testo = stringResource(if (memoria.approvazione) R.string.faccende_intro_approvazione else R.string.faccende_intro),
                                 )
                             }
                         }
                     } else {
-                        item { TitoloSezione(stringResource(R.string.faccende_sezione_da_fare)) }
-                        items(daFare, key = { "da-fare-${it.id}" }) { faccenda ->
-                            CardDaFare(
-                                faccenda = faccenda,
-                                foto = VistaFaccende.foto(faccenda, coda),
-                                adesso = adesso,
-                                occupato = stato.preparazioneInCorso || scattoFaccenda != null,
-                                onScatta = { scatta(faccenda) },
-                            )
+                        if (daFare.isNotEmpty()) {
+                            item { TitoloSezione(stringResource(R.string.faccende_sezione_da_fare)) }
+                            items(daFare, key = { "da-fare-${it.id}" }) { faccenda ->
+                                CardDaFare(
+                                    faccenda = faccenda,
+                                    foto = VistaFaccende.foto(faccenda, coda),
+                                    adesso = adesso,
+                                    occupato = stato.preparazioneInCorso || scattoFaccenda != null,
+                                    onScatta = { scatta(faccenda) },
+                                )
+                            }
+                        }
+                        // (0.18, contratto v4.0) La foto è arrivata: niente "Scatta la foto",
+                        // si aspetta che un genitore la approvi.
+                        if (inApprovazione.isNotEmpty()) {
+                            item { TitoloSezione(stringResource(R.string.faccende_sezione_approvazione)) }
+                            items(inApprovazione, key = { "approvazione-${it.id}" }) { faccenda ->
+                                CardInApprovazione(faccenda = faccenda, adesso = adesso)
+                            }
                         }
                     }
                     // (0.15) Fatti e annullati: chiusi, si aprono quando servono.
@@ -318,6 +345,7 @@ fun FaccendeScreen(
                                                 faccenda = faccenda,
                                                 scaricando = stato.scaricamentoInCorso == faccenda.id,
                                                 onVediFoto = { vedi(faccenda) },
+                                                approvazione = memoria.approvazione,
                                             )
                                         }
                                     }
@@ -360,14 +388,19 @@ private fun SchedaBlocco(bloccato: Boolean, memoria: MemoriaBlocco, adesso: Long
     if (bloccato) {
         // (0.17) Si sblocca con le foto dei lavori che bloccano adesso: se ce ne
         // sono altri per più tardi, si dice quali (quelli di adesso, per nome).
-        val divisi = VistaFaccende.divisi(daFare, { it.bloccoDa }, adesso, bloccato = true)
-        val spiega = if (divisi.poi.isEmpty()) {
-            stringResource(R.string.faccende_bloccato_spiega)
+        // (0.18, contratto v4.0) Con un server v4.0 non basta la foto: serve che
+        // un genitore la approvi.
+        val divisi = VistaFaccende.divisi(daFare, { it.bloccoDa }, adesso, bloccato = daFare.isNotEmpty())
+        val spiega = if (divisi.poi.isEmpty() || divisi.adesso.isEmpty()) {
+            stringResource(if (memoria.approvazione) R.string.faccende_bloccato_spiega_approvazione else R.string.faccende_bloccato_spiega)
         } else {
             val nomi = divisi.adesso.map { "«" + it.titolo.ifBlank { context.getString(R.string.faccenda_senza_titolo) } + "»" }
             // "«A», «B» e «C»".
             val elenco = if (nomi.size > 1) nomi.dropLast(1).joinToString(", ") + " e " + nomi.last() else nomi.joinToString()
-            stringResource(R.string.faccende_bloccato_spiega_alcuni, elenco)
+            stringResource(
+                if (memoria.approvazione) R.string.faccende_bloccato_spiega_alcuni_approvazione else R.string.faccende_bloccato_spiega_alcuni,
+                elenco,
+            )
         }
         CardEvidenza(tono = Tono.Attenzione) {
             Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
@@ -434,9 +467,48 @@ private fun CardDaFare(
     }
 }
 
+/**
+ * (0.18, contratto v4.0) Un lavoro con la foto arrivata che aspetta
+ * l'approvazione di un genitore: «Foto mandata alle 16:10 · aspetta che un
+ * genitore la approvi», senza «Scatta la foto». Se un genitore la boccia,
+ * torna fra quelli da fare.
+ */
+@Composable
+private fun CardInApprovazione(faccenda: FaccendaLocale, adesso: Long) {
+    CardNormale {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
+            Text(
+                text = faccenda.titolo.ifBlank { stringResource(R.string.faccenda_senza_titolo) },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            faccenda.genitore?.let { Nota(stringResource(R.string.faccenda_data_da, it)) }
+            Text(
+                text = testoFotoMandata(LocalContext.current, faccenda.fotoIl, adesso),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+/**
+ * (0.18) «Foto mandata alle 16:10 · aspetta che un genitore la approvi», o
+ * «…il 3/10 alle 16:10…» se è di un altro giorno, o senza l'ora se non si sa.
+ */
+fun testoFotoMandata(context: Context, fotoIl: Long?, adesso: Long): String {
+    if (fotoIl == null) return context.getString(R.string.faccenda_aspetta_approvazione)
+    val zona = ZoneId.systemDefault()
+    val quando = Instant.ofEpochMilli(fotoIl).atZone(zona)
+    val ora = "%02d:%02d".format(quando.hour, quando.minute)
+    return if (quando.toLocalDate() == Instant.ofEpochMilli(adesso).atZone(zona).toLocalDate()) {
+        context.getString(R.string.faccenda_aspetta_approvazione_alle, ora)
+    } else {
+        context.getString(R.string.faccenda_aspetta_approvazione_il, "${quando.dayOfMonth}/${quando.monthValue}", ora)
+    }
+}
+
 /** Una faccenda fatta (con la foto da guardare, finché il server la tiene) o annullata. */
 @Composable
-private fun CardChiusa(faccenda: FaccendaLocale, scaricando: Boolean, onVediFoto: () -> Unit) {
+private fun CardChiusa(faccenda: FaccendaLocale, scaricando: Boolean, onVediFoto: () -> Unit, approvazione: Boolean = false) {
     CardNormale {
         Column(verticalArrangement = Arrangement.spacedBy(Spazi.s)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -460,9 +532,11 @@ private fun CardChiusa(faccenda: FaccendaLocale, scaricando: Boolean, onVediFoto
             faccenda.genitore?.let { Nota(stringResource(R.string.faccenda_data_da, it)) }
             // (0.17, contratto v3.9) "Svolto": il genitore l'ha confermato.
             if (faccenda.fatta && faccenda.confermata) {
+                // (0.18, contratto v4.0) Confermare è approvare.
                 Text(
-                    text = faccenda.confermataDa?.let { stringResource(R.string.faccenda_confermata_da, it) }
-                        ?: stringResource(R.string.faccenda_confermata),
+                    text = faccenda.confermataDa?.let {
+                        stringResource(if (approvazione) R.string.faccenda_approvata_da else R.string.faccenda_confermata_da, it)
+                    } ?: stringResource(R.string.faccenda_confermata),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )

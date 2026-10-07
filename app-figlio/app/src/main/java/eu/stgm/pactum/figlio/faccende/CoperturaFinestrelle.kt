@@ -38,8 +38,17 @@ import eu.stgm.pactum.figlio.permessi.PermessiHelper
  * X o di chiudere lo schermo diviso; "Apri Pactum" fa lo stesso e porta alle
  * faccende. Si toglie da sola appena non c'è più niente da coprire, a schermo
  * spento e quando il blocco finisce.
+ *
+ * (0.18, contratto v4.0) La usa anche la Sessione Studio («Ogni app fuori
+ * dalla lista si copre entro pochi secondi»): stessa finestra, col testo
+ * «Sei in Studio» e «Apri Pactum» che porta a Oggi ([Motivo.STUDIO]). Il
+ * blocco dei lavori e lo Studio non coprono mai insieme (durante lo Studio il
+ * blocco aspetta); se il motivo cambia, la copertura si rifà col testo giusto.
  */
 object CoperturaFinestrelle {
+
+    /** (0.18) Per cosa copre: il blocco dei lavori di casa o la Sessione Studio. */
+    enum class Motivo { FACCENDE, STUDIO }
 
     private val principale = Handler(Looper.getMainLooper())
 
@@ -53,17 +62,29 @@ object CoperturaFinestrelle {
     @Volatile
     private var pausaFino: Long? = null
 
+    /** (0.18) Il motivo della copertura voluta, e quello della copertura sullo schermo (solo dal filo principale). */
+    @Volatile
+    private var motivoVoluto = Motivo.FACCENDE
+    private var motivoVista = Motivo.FACCENDE
+
     /** Dal giro della barriera: [daCoprire] = le app da coprire ancora visibili. */
-    fun aggiorna(context: Context, daCoprire: Set<String>, monotono: Long = SystemClock.elapsedRealtime()) {
+    fun aggiorna(context: Context, daCoprire: Set<String>, monotono: Long = SystemClock.elapsedRealtime(), motivo: Motivo = Motivo.FACCENDE) {
         val mostra = DecisioneFinestrelle.mostra(daCoprire, monotono, pausaFino) && PermessiHelper.puoMostrareSopra(context)
-        imposta(context.applicationContext, mostra)
+        // Il giro di uno non toglie la copertura dell'altro (solo nel passaggio fra blocco e Studio).
+        if (!mostra && voluta && motivoVoluto != motivo) return
+        imposta(context.applicationContext, mostra, motivo)
     }
 
-    fun togli(context: Context) = imposta(context.applicationContext, false)
+    /** Via la copertura; con [solo], solo se è quella di quel motivo. */
+    fun togli(context: Context, solo: Motivo? = null) {
+        if (solo != null && motivoVoluto != solo) return
+        imposta(context.applicationContext, false, motivoVoluto)
+    }
 
-    private fun imposta(app: Context, mostra: Boolean) {
+    private fun imposta(app: Context, mostra: Boolean, motivo: Motivo) {
         if (voluta == mostra && !mostra) return
         voluta = mostra
+        if (mostra) motivoVoluto = motivo
         principale.post { riconcilia(app) }
     }
 
@@ -86,8 +107,18 @@ object CoperturaFinestrelle {
             }
             return
         }
-        if (attuale == null) {
-            val v = costruisci(app)
+        // (0.18) Una copertura col testo dell'altro motivo: si rifà.
+        if (attuale != null && motivoVista != motivoVoluto) {
+            vista = null
+            try {
+                wm.removeView(attuale)
+            } catch (e: Exception) {
+                // già tolta
+            }
+        }
+        if (vista == null) {
+            val motivo = motivoVoluto
+            val v = costruisci(app, motivo)
             val parametri = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -98,6 +129,7 @@ object CoperturaFinestrelle {
             try {
                 wm.addView(v, parametri)
                 vista = v
+                motivoVista = motivo
             } catch (e: Exception) {
                 // Android non l'ha lasciata aprire: niente copertura, come per la barriera.
             }
@@ -111,7 +143,8 @@ object CoperturaFinestrelle {
      * dallo schermo) e i margini delle barre di sistema. Quando si apre, si
      * chiude e cosa copre non cambia.
      */
-    private fun costruisci(app: Context): View {
+    private fun costruisci(app: Context, motivo: Motivo): View {
+        val studio = motivo == Motivo.STUDIO
         val dp = { valore: Float -> TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, valore, app.resources.displayMetrics).toInt() }
         val testo = { id: Int, grande: Boolean ->
             TextView(app).apply {
@@ -146,8 +179,8 @@ object CoperturaFinestrelle {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(24f), dp(32f), dp(24f), dp(32f))
-            addView(testo(R.string.barriera_faccende_titolo, true))
-            addView(testo(R.string.finestrella_testo, false))
+            addView(testo(if (studio) R.string.studio_barriera_titolo else R.string.barriera_faccende_titolo, true))
+            addView(testo(if (studio) R.string.studio_finestrella_testo else R.string.finestrella_testo, false))
             addView(testo(R.string.finestrella_aiuto, false))
             addView(
                 pulsante(R.string.finestrella_chiudi, true) {
@@ -163,7 +196,7 @@ object CoperturaFinestrelle {
                         app.startActivity(
                             Intent(app, MainActivity::class.java)
                                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                                .putExtra(MainActivity.EXTRA_DESTINAZIONE, MainActivity.DEST_FACCENDE),
+                                .putExtra(MainActivity.EXTRA_DESTINAZIONE, if (studio) MainActivity.DEST_OGGI else MainActivity.DEST_FACCENDE),
                         )
                     } catch (e: Exception) {
                         // Pactum non si apre: la copertura è tolta lo stesso, per la pausa

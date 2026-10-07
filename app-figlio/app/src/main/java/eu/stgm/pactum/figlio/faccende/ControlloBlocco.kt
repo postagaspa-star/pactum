@@ -8,6 +8,8 @@ import eu.stgm.pactum.figlio.dati.Patto
 import eu.stgm.pactum.figlio.notifiche.AvvisiLocali
 import eu.stgm.pactum.figlio.notifiche.NovitaDalPatto
 import eu.stgm.pactum.figlio.rete.PostinoClient
+import eu.stgm.pactum.figlio.studio.ArchivioStudio
+import eu.stgm.pactum.figlio.studio.OraServer
 import eu.stgm.pactum.figlio.sync.ConsegnaEventi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -174,12 +176,19 @@ object ControlloBlocco {
     suspend fun dopo(context: Context, ora: Istante = Orologio.adesso()) {
         val app = context.applicationContext
         val memoria = withContext(Dispatchers.IO) { ArchivioBlocco.leggi(app) }
-        val bloccato = memoria.attivoAdesso(ora)
+        // (0.18, contratto v4.0) Durante la Sessione Studio il blocco aspetta:
+        // niente avviso adesso; a fine Studio parte, con l'avviso.
+        val inStudio = withContext(Dispatchers.IO) { ArchivioStudio.leggi(app) }.attivo(OraServer.di(memoria, ora)) != null
+        val bloccato = BloccoEStudio.applicato(memoria.attivoAdesso(ora), inStudio)
         annunciaSeServe(app, memoria, ora, bloccato)
+        // (0.18) Un blocco che aspetta lo Studio si annuncia quando parte, a fine Studio.
+        if (inStudio && memoria.annunciato != null) {
+            withContext(Dispatchers.IO) { ArchivioBlocco.modifica(app) { it.copy(annunciato = null) } }
+        }
         programmaSveglia(app, memoria, ora)
         withContext(Dispatchers.IO) { ArchivioCodaFoto.modifica(app) { it.conDaFare(memoria.daFare, ora.muro) } }
         val segnalati = try {
-            PermessiRevocati.controlla(app, bloccato, ora.muro)
+            PermessiRevocati.controlla(app, bloccato, ora.muro, inStudio)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -219,7 +228,9 @@ object ControlloBlocco {
             app,
             id = AvvisiLocali.ID_BLOCCO_FACCENDE,
             titolo = app.getString(R.string.notifica_blocco_partito),
-            testo = app.getString(R.string.notifica_blocco_partito_testo),
+            testo = app.getString(
+                if (memoria.approvazione) R.string.notifica_blocco_partito_testo_approvazione else R.string.notifica_blocco_partito_testo,
+            ),
             destinazione = MainActivity.DEST_FACCENDE,
             canale = AvvisiLocali.CANALE_FACCENDE,
         )

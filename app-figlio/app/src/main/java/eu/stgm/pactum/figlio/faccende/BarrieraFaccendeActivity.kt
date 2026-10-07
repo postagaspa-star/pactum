@@ -58,7 +58,7 @@ class BarrieraFaccendeActivity : ComponentActivity() {
         // Scaffold qui sotto tiene il contenuto fuori dalle barre di sistema.
         attivaBordoPieno()
         super.onCreate(savedInstanceState)
-        if (!StatoBlocco.attivoAdesso()) {
+        if (!StatoBlocco.applicatoAdesso()) {
             finish()
             return
         }
@@ -78,7 +78,8 @@ class BarrieraFaccendeActivity : ComponentActivity() {
                 LaunchedEffect(memoria) {
                     while (true) {
                         ora = Orologio.adesso()
-                        if (!memoria.attivoAdesso(ora)) {
+                        // (0.18) Anche quando parte la Sessione Studio: il blocco aspetta.
+                        if (!StatoBlocco.applicatoAdesso(ora)) {
                             finish()
                             return@LaunchedEffect
                         }
@@ -86,8 +87,12 @@ class BarrieraFaccendeActivity : ComponentActivity() {
                     }
                 }
                 val adesso = memoria.oraServer(ora)
+                // (0.18, contratto v4.0) Due gruppi: «Da fare» e «Aspettano l'approvazione».
+                val (aspettano, daFare) = memoria.daFare.partition { it.aspettaApprovazione }
                 SchermataBarrieraFaccende(
-                    divisi = VistaFaccende.divisi(memoria.daFare, { it.bloccoDa }, adesso, bloccato = true),
+                    divisi = VistaFaccende.divisi(daFare, { it.bloccoDa }, adesso, bloccato = aspettano.isEmpty()),
+                    inApprovazione = aspettano,
+                    approvazione = memoria.approvazione,
                     adesso = adesso,
                     onApri = { apriPactum() },
                 )
@@ -97,7 +102,7 @@ class BarrieraFaccendeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!StatoBlocco.attivoAdesso()) {
+        if (!StatoBlocco.applicatoAdesso()) {
             finish()
             return
         }
@@ -183,7 +188,13 @@ class BarrieraFaccendeActivity : ComponentActivity() {
  * 18:00: Letto"); in basso, sotto il pollice, "Apri Pactum".
  */
 @Composable
-private fun SchermataBarrieraFaccende(divisi: VistaFaccende.Divisi<FaccendaDaFare>, adesso: Long, onApri: () -> Unit) {
+private fun SchermataBarrieraFaccende(
+    divisi: VistaFaccende.Divisi<FaccendaDaFare>,
+    inApprovazione: List<FaccendaDaFare>,
+    approvazione: Boolean,
+    adesso: Long,
+    onApri: () -> Unit,
+) {
     val context = LocalContext.current
     Scaffold { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
@@ -199,9 +210,12 @@ private fun SchermataBarrieraFaccende(divisi: VistaFaccende.Divisi<FaccendaDaFar
                     style = MaterialTheme.typography.headlineSmall,
                 )
                 Text(
-                    text = stringResource(R.string.barriera_faccende_testo),
+                    text = stringResource(if (approvazione) R.string.barriera_faccende_testo_approvazione else R.string.barriera_faccende_testo),
                     style = MaterialTheme.typography.bodyLarge,
                 )
+                if (inApprovazione.isNotEmpty() && divisi.adesso.isNotEmpty()) {
+                    Text(text = stringResource(R.string.barriera_faccende_da_fare), style = MaterialTheme.typography.labelLarge)
+                }
                 divisi.adesso.forEach { faccenda ->
                     Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
                         Text(
@@ -223,6 +237,23 @@ private fun SchermataBarrieraFaccende(divisi: VistaFaccende.Divisi<FaccendaDaFar
                             Text(
                                 text = testoPoi(context, faccenda, adesso),
                                 style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                // (0.18, contratto v4.0) La foto è arrivata: si aspetta un genitore.
+                if (inApprovazione.isNotEmpty()) {
+                    Text(text = stringResource(R.string.barriera_faccende_approvazione), style = MaterialTheme.typography.labelLarge)
+                    inApprovazione.forEach { faccenda ->
+                        Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                            Text(
+                                text = faccenda.titolo.ifBlank { stringResource(R.string.faccenda_senza_titolo) },
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = eu.stgm.pactum.figlio.ui.testoFotoMandata(context, faccenda.fotoIl, adesso),
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }

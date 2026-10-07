@@ -39,10 +39,18 @@ object TipiNotificaFaccende {
      */
     const val FACCENDA_MODIFICATA = "faccenda_modificata"
 
-    /** (0.17, v3.9) Il genitore ha confermato un lavoro fatto ("svolto"): il blocco non cambia. */
+    /**
+     * (0.17, v3.9) Il genitore ha confermato un lavoro fatto ("svolto").
+     * (0.18, contratto v4.0) Confermare è approvare, e approvare SBLOCCA:
+     * l'ultimo lavoro approvato toglie il blocco (payload `sblocca`).
+     */
     const val FACCENDA_CONFERMATA = "faccenda_confermata"
 
-    /** Quelle che dicono che il blocco può essere cambiato: si richiede subito lo stato. */
+    /**
+     * Quelle che dicono che il blocco può essere cambiato: si richiede subito
+     * lo stato. (0.18, v4.0) Anche `faccenda_confermata`: un lavoro approvato
+     * può togliere il blocco, e il telefono non si sblocca mai da solo.
+     */
     val CAMBIANO_IL_BLOCCO = setOf(
         NUOVE_FACCENDE,
         FACCENDA_BOCCIATA,
@@ -50,6 +58,7 @@ object TipiNotificaFaccende {
         FACCENDA_FATTA,
         FACCENDE_FINITE,
         FACCENDA_MODIFICATA,
+        FACCENDA_CONFERMATA,
     )
 
     /** Quelle del canale dei lavori di casa, che aprono la pagina Lavori. */
@@ -64,6 +73,11 @@ data class Bocciatura(val ts: Long? = null, val nota: String? = null, val da: St
  * Una faccenda da fare, come la dice `GET /api/faccende/blocco` (`da_fare`):
  * quella che il telefono deve ricordare anche senza rete. [genitore] = il
  * nome di chi l'ha data; [bloccoDa] = da quando blocca (epoch ms).
+ *
+ * (0.18, contratto v4.0) `da_fare` del blocco porta TUTTI i lavori aperti:
+ * quelli da fare ([stato] `da_fare`) e quelli con la foto che aspetta
+ * l'approvazione di un genitore ([stato] `fatta`, [fotoIl] = l'ora della
+ * foto). Un server di prima della v4.0 non manda `stato`: vale `da_fare`.
  */
 @Serializable
 data class FaccendaDaFare(
@@ -74,7 +88,12 @@ data class FaccendaDaFare(
     val genitore: String? = null,
     val bocciature: Int = 0,
     val ultimaBocciatura: Bocciatura? = null,
-)
+    val stato: String = StatiFaccenda.DA_FARE,
+    val fotoIl: Long? = null,
+) {
+    /** (0.18) La foto è arrivata e aspetta che un genitore la approvi: niente "Scatta la foto". */
+    val aspettaApprovazione: Boolean get() = stato == StatiFaccenda.FATTA
+}
 
 /** Una faccenda intera (`GET /api/faccende`, `faccende` del patto): per la pagina Faccende. */
 @Serializable
@@ -95,8 +114,16 @@ data class FaccendaLocale(
     /** (0.17, contratto v3.9) Il genitore l'ha confermata ("svolto"): quando e chi. */
     val confermataIl: Long? = null,
     val confermataDa: String? = null,
+    /**
+     * (0.18, contratto v4.0) Fatta, con la foto che aspetta l'approvazione di
+     * un genitore: è ancora un lavoro APERTO (blocca dal suo `blocco_da`).
+     */
+    val daApprovare: Boolean = false,
 ) {
     val confermata: Boolean get() = confermataIl != null
+
+    /** (0.18) Aperta: da fare, o fatta con la foto che aspetta l'approvazione. */
+    val aperta: Boolean get() = stato == StatiFaccenda.DA_FARE || (stato == StatiFaccenda.FATTA && daApprovare)
     val daFare: Boolean get() = stato == StatiFaccenda.DA_FARE
     val fatta: Boolean get() = stato == StatiFaccenda.FATTA
     val annullata: Boolean get() = stato == StatiFaccenda.ANNULLATA
@@ -109,13 +136,25 @@ data class RisultatiRicerca(val faccende: List<FaccendaLocale>, val altre: Boole
  * `GET /api/faccende/blocco` letto. [attivo] = c'è almeno una faccenda da
  * fare che blocca già; [dal] = da quando; [prossimo] = se non è attivo, quando
  * parte il prossimo blocco (anche senza rete); [daFare] = tutte le da fare.
+ *
+ * (0.18, contratto v4.0) [daFare] = tutti i lavori aperti (anche quelli che
+ * aspettano l'approvazione); [rimandato] = il blocco è dovuto ma aspetta la
+ * fine della Sessione Studio; [studio] = lo Studio in corso per il server;
+ * [approvazione] = il server è dalla v4.0 (il blocco porta `rimandato`):
+ * i lavori si sbloccano con l'approvazione, non con la foto.
  */
 data class BloccoDalServer(
     val attivo: Boolean,
     val dal: Long?,
     val prossimo: Long?,
     val daFare: List<FaccendaDaFare>,
+    val rimandato: Boolean = false,
+    val approvazione: Boolean = false,
+    val studio: StudioNelBlocco? = null,
 )
+
+/** (0.18, contratto v4.0) Lo `studio` del blocco: `{ "in_corso", "id", "inizio_ts" }`. */
+data class StudioNelBlocco(val inCorso: Boolean, val id: Long?, val inizio: Long?)
 
 /**
  * La lettura delle forme del contratto (logica pura). Tutto ciò che non si
@@ -128,12 +167,24 @@ object LetturaFaccende {
     fun blocco(elemento: JsonElement?): BloccoDalServer? {
         val o = elemento as? JsonObject ?: return null
         val attivo = (o["attivo"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull ?: return null
+        val rimandato = (o["rimandato"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull
         return BloccoDalServer(
             attivo = attivo,
             dal = LetturaSessioni.istante(o["dal"]),
             prossimo = LetturaSessioni.istante(o["prossimo"]),
             daFare = (o["da_fare"] as? JsonArray)?.mapNotNull { daFare(it) }.orEmpty(),
+            // (0.18, v4.0) Solo un `true` vero rimanda; il campo c'è = server v4.0.
+            rimandato = rimandato == true,
+            approvazione = rimandato != null || o.containsKey("studio"),
+            studio = studioNelBlocco(o["studio"]),
         )
+    }
+
+    /** (0.18) Lo `studio` del blocco; null se manca o non si legge. */
+    private fun studioNelBlocco(elemento: JsonElement?): StudioNelBlocco? {
+        val o = elemento as? JsonObject ?: return null
+        val inCorso = (o["in_corso"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull ?: return null
+        return StudioNelBlocco(inCorso, intero(o["id"])?.takeIf { it > 0 }, LetturaSessioni.istante(o["inizio_ts"]))
     }
 
     /** Il blocco dal corpo di `GET /api/faccende/blocco`. */
@@ -150,6 +201,10 @@ object LetturaFaccende {
             genitore = nomeGenitore(o["creata_da"]),
             bocciature = intero(o["bocciature"])?.toInt()?.coerceAtLeast(0) ?: 0,
             ultimaBocciatura = bocciatura(o["ultima_bocciatura"]),
+            // (0.18, v4.0) Un lavoro con la foto che aspetta l'approvazione. Uno
+            // stato che non si conosce vale "da fare": mai un lavoro aperto perso.
+            stato = if (testo(o["stato"])?.trim()?.lowercase() == StatiFaccenda.FATTA) StatiFaccenda.FATTA else StatiFaccenda.DA_FARE,
+            fotoIl = LetturaSessioni.istante(o["foto_ts"]),
         )
     }
 
@@ -172,6 +227,7 @@ object LetturaFaccende {
             annullataDa = nomeGenitore(o["annullata_da"]),
             confermataIl = LetturaSessioni.istante(o["confermata_ts"]),
             confermataDa = nomeGenitore(o["confermata_da"]),
+            daApprovare = (o["da_approvare"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull == true,
         )
     }
 

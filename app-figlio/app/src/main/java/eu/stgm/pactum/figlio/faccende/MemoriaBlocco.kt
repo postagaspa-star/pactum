@@ -87,6 +87,14 @@ data class MemoriaBlocco(
     val elencoIl: Long? = null,
     /** L'ultima uscita forzata del processo già guardata (ApplicationExitInfo, ms). */
     val uscitaVista: Long? = null,
+    /**
+     * (0.18, contratto v4.0) Per il server il blocco aspetta la fine della
+     * Sessione Studio: è solo per i testi. Se coprire o no lo decide il
+     * telefono con la SUA memoria dello Studio (StatoStudio), non da qui.
+     */
+    val rimandato: Boolean = false,
+    /** (0.18) Il server è dalla v4.0: i lavori si sbloccano quando un genitore approva la foto. */
+    val approvazione: Boolean = false,
 ) {
 
     /**
@@ -188,6 +196,8 @@ data class MemoriaBlocco(
             conosciuto = true,
             serverVecchio = false,
             scollegato = false,
+            rimandato = r.rimandato,
+            approvazione = r.approvazione,
         )
     }
 
@@ -216,7 +226,18 @@ data class MemoriaBlocco(
             sentitoIl = arrivo.muro,
             episodio = null,
             scollegato = true,
+            rimandato = false,
         )
+    }
+
+    /**
+     * (0.18, contratto v4.0) L'ora del server è agganciata all'orologio che
+     * non si sposta in QUESTA accensione: l'ultima risposta è arrivata dopo
+     * l'ultimo riavvio. Serve allo Studio: senza, una chiusura senza rete non vale.
+     */
+    fun oraAgganciata(ora: Istante): Boolean {
+        val a = ancora ?: return false
+        return a.avvio != null && a.avvio == ora.avvio && ora.monotono >= a.monotono
     }
 
     /**
@@ -226,6 +247,26 @@ data class MemoriaBlocco(
      * non si sposta. Il blocco resta com'era.
      */
     fun conCambioOra(): MemoriaBlocco = copy(ordine = null, ordineElenco = null, scarto = null)
+
+    /**
+     * (0.18) Un'ora del server che è DI SICURO già passata: l'ora del server
+     * dell'ultima risposta più il tempo contato dall'orologio che non si
+     * sposta (dopo un riavvio, almeno il tempo dall'accensione). Non dipende
+     * dall'orologio del telefono. Null se il server non ha mai risposto.
+     */
+    fun oraServerMinima(ora: Istante): Long? {
+        val a = ancora ?: return null
+        if (a.avvio != null && a.avvio == ora.avvio && ora.monotono >= a.monotono) return a.server + (ora.monotono - a.monotono)
+        val riavviato = ora.monotono < a.monotono || (a.avvio != null && ora.avvio != null && a.avvio != ora.avvio)
+        return a.server + if (riavviato) ora.monotono.coerceAtLeast(0L) else (ora.monotono - a.monotono).coerceAtLeast(0L)
+    }
+
+    /**
+     * (0.18) L'orologio del telefono spostato a mano dopo l'ultima risposta, e
+     * l'ora del server non agganciata (riavvio senza rete): l'ora del server
+     * adesso è solo l'orologio del telefono, che il figlio può spostare.
+     */
+    fun orologioAMano(ora: Istante): Boolean = scarto == null && !oraAgganciata(ora)
 
     /** L'elenco intero delle faccende, per la pagina. Un elenco più vecchio di quello che c'è non entra. */
     fun conElenco(faccende: List<FaccendaLocale>, richiesta: Istante, arrivo: Istante): MemoriaBlocco {

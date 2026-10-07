@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 import java.time.Instant
@@ -72,6 +73,14 @@ data class ParoleFaccende(
     /** (nome, titolo) → "Mamma ha confermato «Letto»". */
     val confermata: String = "",
     val confermataTesto: String = "",
+    /** (0.18, v4.0) (nome, titolo) → "Mamma ha approvato «Letto»". */
+    val approvata: String = "",
+    /** "Telefono e computer sono sbloccati." */
+    val approvataSblocca: String = "",
+    /** "Il lavoro è fatto." */
+    val approvataTesto: String = "",
+    /** (0.18) "Il lavoro è fatto: il blocco non partirà a fine Studio." */
+    val approvataNonParte: String = "",
 )
 
 /**
@@ -187,12 +196,35 @@ object TestoFaccende {
         return parole.modificata.format(nome) to righe.joinToString("\n")
     }
 
-    /** (0.17, v3.9) `faccenda_confermata`: "Mamma ha confermato «Letto»". Null se manca il titolo. */
-    fun avvisoConfermata(payload: JsonObject, parole: ParoleFaccende): Pair<String, String>? {
+    /**
+     * (0.17, v3.9) `faccenda_confermata`: "Mamma ha confermato «Letto»". Null se manca il titolo.
+     * (0.18, contratto v4.0) Dalla v4.0 il payload porta `sblocca`: confermare
+     * è approvare. "Mamma ha approvato «Letto»", e se era l'ultimo che
+     * bloccava "Telefono e computer sono sbloccati.". Se il blocco era
+     * rimandato dallo Studio il server chiude il suo [messaggio] con
+     * «: il blocco non partirà a fine Studio» (`sblocca` è false, come per un
+     * lavoro che non era l'ultimo): allora lo dice anche il telefono.
+     */
+    fun avvisoConfermata(payload: JsonObject, parole: ParoleFaccende, messaggio: String? = null): Pair<String, String>? {
         val titoloFaccenda = testo(payload["titolo"]) ?: return null
         val nome = genitore(payload) ?: parole.genitoreSenzaNome
+        val sblocca = (payload["sblocca"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull
+        if (sblocca != null && parole.approvata.isNotEmpty()) {
+            val dettaglio = when {
+                sblocca -> parole.approvataSblocca
+                bloccoNonParte(messaggio) && parole.approvataNonParte.isNotEmpty() -> parole.approvataNonParte
+                else -> parole.approvataTesto
+            }
+            return parole.approvata.format(nome, titoloFaccenda) to dettaglio
+        }
         return parole.confermata.format(nome, titoloFaccenda) to parole.confermataTesto
     }
+
+    /** (0.18, contratto v4.0, parte A) La coda del messaggio del server quando il blocco era rimandato dallo Studio. */
+    const val CODA_NON_PARTE = "il blocco non partirà a fine Studio"
+
+    private fun bloccoNonParte(messaggio: String?): Boolean =
+        messaggio?.trim()?.trimEnd('.')?.endsWith(CODA_NON_PARTE) == true
 
     /**
      * (0.17, contratto v3.9) Da quando blocca un lavoro già partito: "14:02"

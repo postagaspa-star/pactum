@@ -63,6 +63,23 @@ data class SituazioneBarriera(
      * queste. Per le altre vale la sessione: il più stretto dei due.
      */
     val copertaDalBlocco: Boolean = false,
+    /**
+     * (0.18, contratto v4.0) La Sessione Studio: una lista vuota vuol dire
+     * «solo le app sempre usabili» (si copre tutto il resto), non «nessuna
+     * sessione».
+     */
+    val listaVuotaValida: Boolean = false,
+    /**
+     * (0.18) Lo Studio: una pagina web «dentro un'app» (o un foglio del Play
+     * Store) resta libera solo se l'ha aperta, appena prima, un'app della
+     * lista o una sempre usabile, non la Home né le Recenti (la regola di
+     * GuardiaFaccende.apertaDaUnApp). Le Sessioni restano come prima.
+     */
+    val paginaSoloDaUnApp: Boolean = false,
+    /** L'app che era davanti appena prima di questa (TracciaPrimoPiano.precedente), se si sa. */
+    val precedente: String? = null,
+    /** Le schermate Home installate: da lì (e dalle Recenti) una pagina non si apre «per un'app». */
+    val home: Set<String> = emptySet(),
 )
 
 object GuardiaSessione {
@@ -94,7 +111,7 @@ object GuardiaSessione {
         if (s.adesso < sessione.inizio - MemoriaSessioni.TOLLERANZA_INIZIO_MS) {
             return lascia(MotivoBarriera.NESSUNA_SESSIONE)
         }
-        if (sessione.app.isEmpty()) return lascia(MotivoBarriera.NESSUNA_SESSIONE)
+        if (sessione.app.isEmpty() && !s.listaVuotaValida) return lascia(MotivoBarriera.NESSUNA_SESSIONE)
         if (!sessione.annunciata) return lascia(MotivoBarriera.NON_ANNUNCIATA)
         if (!s.schermoAcceso) return lascia(MotivoBarriera.SCHERMO_SPENTO)
         if (!s.sbloccato) return lascia(MotivoBarriera.BLOCCATO)
@@ -110,12 +127,28 @@ object GuardiaSessione {
             null -> return lascia(MotivoBarriera.INCERTO)
             false -> Unit
         }
-        if (ClassiAttivita.aiutoDiUnApp(app, s.classe)) return lascia(MotivoBarriera.PARTE_DI_UN_APP)
+        if (ClassiAttivita.aiutoDiUnApp(app, s.classe) && (!s.paginaSoloDaUnApp || apertaDaUnApp(s, sessione, app))) {
+            return lascia(MotivoBarriera.PARTE_DI_UN_APP)
+        }
         // I pezzi di sistema senza icona (servizi Google, selettore dei file,
         // finestre dei permessi…) li apre un'altra app, e non contano nell'uso:
         // la barriera copre solo quello che conta.
         if (s.contaNellUso(app) != true) return lascia(MotivoBarriera.NON_CONTA)
         return DecisioneBarriera(copri = true, motivo = MotivoBarriera.FUORI_SESSIONE)
+    }
+
+    /** Da qui non si apre una pagina «per conto di un'app»: il sistema stesso, le finestre di scelta. */
+    private val NON_APRONO_PAGINE = setOf("android", "com.android.systemui", "com.android.intentresolver")
+
+    /**
+     * (0.18) La pagina l'ha aperta, appena prima, un'app della lista o una
+     * sempre usabile (non la Home, non le Recenti, non il sistema). Ripresa
+     * dalle Recenti, o dopo uno schermo spento, non ha un «prima»: si copre.
+     */
+    private fun apertaDaUnApp(s: SituazioneBarriera, sessione: SessioneAttiva, app: String): Boolean {
+        val prima = s.precedente?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        if (prima == app || prima in s.home || prima in NON_APRONO_PAGINE) return false
+        return prima in s.sempreUsabili || AppDellaSessione.ammette(sessione.app, prima, s.nelGruppoApk) == true
     }
 
     private fun lascia(motivo: MotivoBarriera) = DecisioneBarriera(copri = false, motivo = motivo)

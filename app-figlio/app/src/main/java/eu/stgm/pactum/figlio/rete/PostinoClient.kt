@@ -406,6 +406,35 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         }
     }
 
+    // --- (0.18, v4.0) La Sessione Studio --------------------------------------
+    // Un server di prima della v4.0 risponde 404 o 405: "serve aggiornare il server".
+
+    /** GET /api/studio: la configurazione, lo Studio in corso, le prossime partenze, i recenti; con l'ora del server. */
+    suspend fun leggiStudio(): LetturaConData = leggiConData("/api/studio")
+
+    /** GET /api/studio/svolte?prima_di=…: lo storico, 20 per volta. */
+    suspend fun leggiSvolteStudio(primaDi: Long? = null): Pair<String?, Int> =
+        leggiConCodice("/api/studio/svolte" + (primaDi?.let { "?prima_di=$it" } ?: ""))
+
+    /** GET /api/studio/versioni: le configurazioni approvate, dalla più recente. */
+    suspend fun leggiVersioniStudio(): Pair<String?, Int> = leggiConCodice("/api/studio/versioni")
+
+    /** PATCH /api/studio/config: la proposta (solo i campi che cambiano). */
+    suspend fun proponiStudio(corpo: String): RispostaHttp = mutazione("PATCH", "/api/studio/config", corpo)
+
+    /** DELETE /api/studio/config/proposta: ritira la proposta in attesa. */
+    suspend fun ritiraPropostaStudio(): RispostaHttp = mutazione("DELETE", "/api/studio/config/proposta", null)
+
+    /** POST /api/studio/avvia `{ chiave, ts_device }`: lo Studio a mano. Mai ritentata da sola: la chiave la rende sicura. */
+    suspend fun avviaStudio(corpo: String): RispostaHttp = mutazione("POST", "/api/studio/avvia", corpo)
+
+    /** POST /api/studio/{id}/chiudi, o /api/studio/chiudi (senza id: `studio: { giorno }` o `{ chiave }` nel corpo). */
+    suspend fun chiudiStudio(id: Long?, corpo: String): RispostaHttp =
+        mutazione("POST", if (id != null) "/api/studio/$id/chiudi" else "/api/studio/chiudi", corpo)
+
+    /** POST /api/studio/tratti `{ "tratti": [ … ] }`, da 1 a 50 per volta. */
+    suspend fun mandaTrattiStudio(corpo: String): RispostaHttp = mutazione("POST", "/api/studio/tratti", corpo)
+
     // --- Interni -------------------------------------------------------------
 
     private suspend fun inviaSemplice(percorso: String, corpo: String): Boolean {

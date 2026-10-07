@@ -121,9 +121,10 @@ class LavoriV39Test {
             assertEquals(AvvisiLocali.CANALE_FACCENDE, AvvisiLocali.canaleTipo(tipo))
             assertEquals(MainActivity.DEST_FACCENDE, AvvisiLocali.destinazioneTipo(tipo))
         }
-        // Un lavoro cambiato rilegge subito il blocco; uno confermato non lo cambia.
+        // Un lavoro cambiato rilegge subito il blocco. (0.18, contratto v4.0)
+        // Anche uno confermato: confermare è approvare, e può sbloccare.
         assertTrue(TipiNotificaFaccende.FACCENDA_MODIFICATA in TipiNotificaFaccende.CAMBIANO_IL_BLOCCO)
-        assertFalse(TipiNotificaFaccende.FACCENDA_CONFERMATA in TipiNotificaFaccende.CAMBIANO_IL_BLOCCO)
+        assertTrue(TipiNotificaFaccende.FACCENDA_CONFERMATA in TipiNotificaFaccende.CAMBIANO_IL_BLOCCO)
     }
 
     // --- confermata_ts / confermata_da ------------------------------------------------

@@ -8,6 +8,7 @@ import eu.stgm.pactum.figlio.ui.ProposteViewModel
 import eu.stgm.pactum.figlio.ui.RegoleViewModel
 import eu.stgm.pactum.figlio.ui.SessioniViewModel
 import eu.stgm.pactum.figlio.ui.SitiViewModel
+import eu.stgm.pactum.figlio.ui.StudioViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -23,6 +24,8 @@ data class StatiFinti(
     val diario: DichiarazioniViewModel.StatoDiario = DatiFinti.diarioNormale(),
     val siti: SitiViewModel.StatoSiti = DatiFinti.sitiNormali(),
     val faccende: FaccendeViewModel.StatoFaccende = DatiFinti.faccendeLette(),
+    // (0.18) La sezione «Sessione Studio» della scheda Sessioni.
+    val studio: StudioViewModel.StatoStudioUi = StudioViewModel.StatoStudioUi(),
 ) {
     class Flussi {
         lateinit var oggi: MutableStateFlow<OggiViewModel.StatoOggi>
@@ -32,6 +35,7 @@ data class StatiFinti(
         lateinit var diario: MutableStateFlow<DichiarazioniViewModel.StatoDiario>
         lateinit var siti: MutableStateFlow<SitiViewModel.StatoSiti>
         lateinit var faccende: MutableStateFlow<FaccendeViewModel.StatoFaccende>
+        lateinit var studio: MutableStateFlow<StudioViewModel.StatoStudioUi>
     }
 
     val flussi = Flussi()
@@ -44,5 +48,6 @@ data class StatiFinti(
         flussi.diario = p[DichiarazioniViewModel::class.java].fingi(diario)
         flussi.siti = p[SitiViewModel::class.java].fingi(siti)
         flussi.faccende = p[FaccendeViewModel::class.java].fingi(faccende)
+        flussi.studio = p[StudioViewModel::class.java].fingi(studio)
     }
 }

@@ -79,10 +79,24 @@ data class FotoInCoda(
 @Serializable
 data class MemoriaCodaFoto(val foto: List<FotoInCoda> = emptyList()) {
 
-    /** Lo scatto nuovo al posto di quello di prima della stessa faccenda. Il secondo: i file da cancellare. */
+    /**
+     * Lo scatto nuovo al posto di quello di prima della stessa faccenda. Il
+     * secondo: i file da cancellare.
+     *
+     * (0.18, contratto v4.0) Oltre il tetto ([MASSIMO]) la coda fa posto
+     * togliendo PRIMA le foto già mandate (quelle che aspettano solo
+     * l'approvazione), dalla più vecchia, poi quelle rifiutate; MAI una foto
+     * scattata e non ancora consegnata: piuttosto la coda va oltre il tetto.
+     */
     fun conScatto(nuova: FotoInCoda): Pair<MemoriaCodaFoto, List<String>> {
         val restano = foto.filterNot { it.faccendaId == nuova.faccendaId }
-        val tenute = (restano + nuova).takeLast(MASSIMO)
+        val tutte = restano + nuova
+        val daTogliere = (tutte.size - MASSIMO).coerceAtLeast(0)
+        val togliibili = tutte
+            .filter { it.stato != StatiFoto.IN_CODA }
+            .sortedWith(compareBy<FotoInCoda>({ if (it.stato == StatiFoto.MANDATA) 0 else 1 }, { it.mandataIl ?: it.scattataIl }))
+            .take(daTogliere)
+        val tenute = tutte.filterNot { v -> togliibili.any { it === v } }
         val fileTenuti = tenute.mapTo(HashSet()) { it.file }
         val daCancellare = (foto + nuova).map { it.file }.filter { it !in fileTenuti }.distinct()
         return MemoriaCodaFoto(tenute) to daCancellare
@@ -126,11 +140,16 @@ data class MemoriaCodaFoto(val foto: List<FotoInCoda> = emptyList()) {
      * non conta più, nemmeno se è ancora in coda (era già arrivata, la
      * risposta si era persa, e il genitore l'ha bocciata: rimandarla
      * sbloccherebbe con la foto bocciata). Una mandata o rifiutata resta
-     * finché la faccenda è ancora da fare (poi la dice il server: fatta,
-     * annullata o bocciata); una mandata da più di un giorno se ne va
-     * comunque. Una in coda di una faccenda che il blocco non dice (forse il
-     * blocco è vecchio) resta: decide il server quando arriva. Il secondo: i
-     * file da cancellare.
+     * finché la faccenda è ancora APERTA (poi la dice il server: approvata,
+     * annullata o bocciata). (0.18, contratto v4.0) Un lavoro resta aperto
+     * finché un genitore non approva la foto, senza scadenza: una foto
+     * "mandata" di un lavoro che per il server ASPETTA L'APPROVAZIONE resta
+     * tale finché il lavoro è tra gli aperti, non più solo per 24 ore. Una
+     * "mandata" di un lavoro che il server dice ancora DA FARE (il server non
+     * ha la foto: un database rimesso dalla copia, un blocco vecchio) se ne va
+     * dopo un giorno come prima, così «Scatta la foto» torna. Una in coda di
+     * una faccenda che il blocco non dice (forse il blocco è vecchio) resta:
+     * decide il server quando arriva. Il secondo: i file da cancellare.
      */
     fun conDaFare(daFare: List<FaccendaDaFare>, adesso: Long): Pair<MemoriaCodaFoto, List<String>> {
         val perId = daFare.associateBy { it.id }
@@ -140,6 +159,7 @@ data class MemoriaCodaFoto(val foto: List<FotoInCoda> = emptyList()) {
                 faccenda != null && faccenda.bocciature > voce.bocciature -> false
                 voce.stato == StatiFoto.IN_CODA -> true
                 faccenda == null -> false
+                faccenda.aspettaApprovazione -> true
                 else -> voce.stato != StatiFoto.MANDATA || adesso - (voce.mandataIl ?: adesso) < UN_GIORNO_MS
             }
         }
@@ -152,7 +172,9 @@ data class MemoriaCodaFoto(val foto: List<FotoInCoda> = emptyList()) {
      * annullata) non serve più. Il secondo: i file da cancellare.
      */
     fun soloDaFare(daFare: List<FaccendaDaFare>): Pair<MemoriaCodaFoto, List<String>> {
-        val ids = daFare.mapTo(HashSet()) { it.id }
+        // (0.18, v4.0) Il blocco porta anche i lavori che aspettano l'approvazione:
+        // una foto in coda serve solo a quelli ancora DA FARE.
+        val ids = daFare.filterNot { it.aspettaApprovazione }.mapTo(HashSet()) { it.id }
         val (tenute, via) = foto.partition { it.stato != StatiFoto.IN_CODA || it.faccendaId in ids }
         return MemoriaCodaFoto(tenute) to via.map { it.file }
     }

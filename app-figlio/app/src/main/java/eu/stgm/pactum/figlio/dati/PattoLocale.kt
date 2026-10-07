@@ -60,6 +60,8 @@ class PattoLocale(context: Context) {
             // (0.13) E il blocco delle faccende con il loro elenco: un patto
             // fresco vale come una risposta del server sul blocco.
             runCatching { ControlloBlocco.daPatto(app, patto) }
+            // (0.18, v4.0) E la Sessione Studio (un patto senza `studio` la spegne).
+            runCatching { eu.stgm.pactum.figlio.studio.ControlloStudio.daPatto(app, patto) }
             true
         }
     }

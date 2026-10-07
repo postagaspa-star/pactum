@@ -390,7 +390,8 @@ private fun PactumRoot(
                         // Le proposte del genitore a cui rispondere.
                         Scheda.REGOLE -> statoProposte.pendenti
                         // (0.13) Quanti lavori di casa ci sono da fare.
-                        Scheda.LAVORI -> memoriaBlocco.daFare.size
+                        // (0.18) Solo quelli da fare: le foto che aspettano l'approvazione no.
+                        Scheda.LAVORI -> memoriaBlocco.daFare.count { !it.aspettaApprovazione }
                         else -> 0
                     }
                     VoceBarra(

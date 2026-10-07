@@ -7,6 +7,7 @@ import eu.stgm.pactum.figlio.faccende.ArchivioBlocco
 import eu.stgm.pactum.figlio.faccende.Orologio
 import eu.stgm.pactum.figlio.rete.PostinoClient
 import eu.stgm.pactum.figlio.servizio.PactumService
+import eu.stgm.pactum.figlio.studio.ArchivioStudio
 import eu.stgm.pactum.figlio.sync.Ritento
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -158,9 +159,14 @@ object ConsegnaSessioni {
         if (ArchivioSessioni.leggi(app).inCorso(System.currentTimeMillis()) != null) {
             return EsitoAvvio.GiaInCorso(svoltaInCorso(app))
         }
+        // (0.18, contratto v4.0) Durante la Sessione Studio le sessioni non si
+        // avviano (controllato prima del blocco, come sul server).
+        val ora = Orologio.adesso()
+        val blocco = ArchivioBlocco.leggi(app)
+        if (ArchivioStudio.leggi(app).attivo(eu.stgm.pactum.figlio.studio.OraServer.di(blocco, ora)) != null) return EsitoAvvio.StudioInCorso
         // (0.13) Col blocco delle faccende una sessione non si avvia: il
         // telefono lo sa già (anche senza rete), e non lo chiede al server.
-        if (ArchivioBlocco.leggi(app).attivoAdesso(Orologio.adesso())) return EsitoAvvio.BloccoFaccende
+        if (blocco.attivoAdesso(ora)) return EsitoAvvio.BloccoFaccende
         val postino = PostinoClient(configurazione)
         // Prima le chiusure ancora in attesa: finché il server ha aperta la
         // sessione di prima, rifiuterebbe questa ("già in corso").
@@ -270,6 +276,39 @@ object ConsegnaSessioni {
             }
         }
         return if (ArchivioSessioni.leggi(app).terminazioni.isEmpty()) Consegna.FATTA else Consegna.ERRORE_SERVER
+    }
+
+    /**
+     * (0.18, contratto v4.0) Alla partenza della Sessione Studio, anche senza
+     * rete, la sessione normale in corso si chiude qui (`terminata`, fine =
+     * l'inizio dello Studio, [al] sull'orologio del telefono) e la chiusura si
+     * consegna come quella di "Termina la sessione". Solo una sessione già
+     * iniziata a quell'istante. Restituisce la sessione chiusa, se c'era.
+     */
+    suspend fun terminaPerStudio(context: Context, al: Long): SvoltaLocale? {
+        val app = context.applicationContext
+        val chiusa = try {
+            withContext(Dispatchers.IO) {
+                ArchivioSessioni.modificaCon(app) { memoria ->
+                    val (nuova, chiusura) = memoria.conTermineAl(al, System.currentTimeMillis())
+                    nuova to chiusura?.let { c -> nuova.svolte.firstOrNull { it.id == c.svoltaId } }
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        if (chiusa == null) return null
+        falliti = 0
+        ambito.launch {
+            try {
+                consegna(app)
+            } catch (e: Exception) {
+                // resta in coda: riprova il giro della sentinella, poi il worker
+            }
+        }
+        return chiusa
     }
 
     /** La barriera vive nel servizio del testimone: se non c'è, si accende (siamo in primo piano). */

@@ -69,6 +69,12 @@ object AvvisiLocali {
     /** (0.13) "Prima le faccende: il telefono è bloccato": uno alla volta. */
     const val ID_BLOCCO_FACCENDE = 9_000_001
 
+    /** (0.18) «Tra 5 minuti parte lo Studio». */
+    const val ID_STUDIO_PREAVVISO = 9_200_001
+
+    /** (0.18) Lo Studio: la chiusura non arrivata, l'avvio a mano rifiutato. */
+    const val ID_STUDIO_AVVISO = 9_200_002
+
     /** (0.12) Il preavviso di una regola: quello di 1 minuto sostituisce quello di 5. */
     private const val BASE_ID_PREAVVISO = 8_000_000L
 
@@ -237,6 +243,8 @@ object AvvisiLocali {
         TipiNotifica.SEGNO -> context.getString(R.string.tipo_segno)
         TipiNotifica.SESSIONE_RISPOSTA -> context.getString(R.string.tipo_sessione)
         in TipiNotificaFaccende.DEL_FIGLIO -> context.getString(R.string.tipo_faccende)
+        // (0.18) La Sessione Studio (il testo è il messaggio del server).
+        in eu.stgm.pactum.figlio.studio.TipiNotificaStudio.TUTTI -> context.getString(R.string.tipo_studio)
         else -> context.getString(R.string.tipo_novita)
     }
 
@@ -264,6 +272,9 @@ object AvvisiLocali {
         TipiNotifica.SESSIONE_RISPOSTA -> MainActivity.DEST_SESSIONI
         // (0.13) Le faccende (nuove, bocciate, annullate; 0.17 cambiate, confermate) aprono la loro pagina.
         in TipiNotificaFaccende.DEL_FIGLIO -> MainActivity.DEST_FACCENDE
+        // (0.18) La decisione sulla configurazione apre Sessioni (dove c'è la Sessione Studio);
+        // lo Studio chiuso da un genitore apre Oggi.
+        eu.stgm.pactum.figlio.studio.TipiNotificaStudio.STUDIO_RISPOSTA -> MainActivity.DEST_SESSIONI
         else -> MainActivity.DEST_OGGI
     }
 

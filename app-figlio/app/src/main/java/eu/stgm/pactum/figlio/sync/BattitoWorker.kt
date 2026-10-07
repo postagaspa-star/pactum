@@ -132,7 +132,10 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         runCatching {
             val (letto, codicePatto) = postino.leggiPattoConCodice()
             // (0.13) 401: questo telefono non è più collegato, il blocco si toglie.
-            if (codicePatto == 401) ControlloBlocco.scollegato(context)
+            if (codicePatto == 401) {
+                ControlloBlocco.scollegato(context)
+                runCatching { eu.stgm.pactum.figlio.studio.ControlloStudio.scollegato(context) }
+            }
             letto?.let { patto ->
                 PattoLocale(context).salva(patto)
                 // Serie e record si aggiornano anche quando l'app resta chiusa:
@@ -153,6 +156,9 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         // partenza e i permessi mancanti durante il blocco).
         runCatching { ConsegnaFoto.riprovaSeServe(context, forza = true) }
         runCatching { ControlloBlocco.dopo(context) }
+        // (0.18) Lo Studio: la coda verso il server e il giro (partenza, sveglia, mezzanotte).
+        runCatching { eu.stgm.pactum.figlio.studio.ConsegnaStudio.riprovaSeServe(context, forza = true) }
+        runCatching { eu.stgm.pactum.figlio.studio.ControlloStudio.dopo(context) }
 
         // (0.14) Il battito sotto lo stesso lucchetto della sveglia dello
         // stand-by e del servizio: se ne è partito uno da poco, non se ne fa
@@ -199,10 +205,15 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         // (0.13) L'accesso all'uso (sempre) e "Mostra sopra le altre app"
         // (durante il blocco delle faccende), con il permesso nei dettagli:
         // sotto lo stesso lucchetto del giro delle faccende, niente doppioni.
+        // (0.18, contratto v4.0) Durante lo Studio il blocco aspetta: si segnala con `durante: studio`.
+        val ora = Orologio.adesso()
+        val blocco = ArchivioBlocco.leggi(context)
+        val inStudio = eu.stgm.pactum.figlio.studio.ArchivioStudio.leggi(context).attivo(eu.stgm.pactum.figlio.studio.OraServer.di(blocco, ora)) != null
         PermessiRevocati.controlla(
             context,
-            bloccoAttivo = ArchivioBlocco.leggi(context).attivoAdesso(Orologio.adesso()),
+            bloccoAttivo = blocco.attivoAdesso(ora) && !inStudio,
             adesso = adesso,
+            inStudio = inStudio,
         )
 
         val notifOra = NotificationManagerCompat.from(context).areNotificationsEnabled()

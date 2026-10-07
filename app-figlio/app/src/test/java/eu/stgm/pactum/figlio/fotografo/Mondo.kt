@@ -67,6 +67,8 @@ object Mondo {
         ArchivioSessioni.modifica(app) { MemoriaSessioni() }
         ArchivioBlocco.modifica(app) { MemoriaBlocco() }
         ArchivioCodaFoto.modifica(app) { MemoriaCodaFoto() to emptyList() }
+        // (0.18) Nessuna Sessione Studio, finché un test non la mette.
+        eu.stgm.pactum.figlio.studio.ArchivioStudio.svuota(app)
         RichiestaTermine.consuma()
     }
 

@@ -54,6 +54,14 @@ import eu.stgm.pactum.figlio.sessione.SvoltaLocale
 import eu.stgm.pactum.figlio.sessione.TestoSessioni
 import eu.stgm.pactum.figlio.sessione.nomeSessioneTraVirgolette
 import eu.stgm.pactum.figlio.siti.OsservazioneSiti
+import eu.stgm.pactum.figlio.studio.ArchivioStudio
+import eu.stgm.pactum.figlio.studio.ConsegnaStudio
+import eu.stgm.pactum.figlio.studio.ControlloStudio
+import eu.stgm.pactum.figlio.studio.OraServer
+import eu.stgm.pactum.figlio.studio.SorveglianzaStudio
+import eu.stgm.pactum.figlio.studio.StatoStudio
+import eu.stgm.pactum.figlio.studio.TestoStudio
+import eu.stgm.pactum.figlio.ui.paroleStudio
 import eu.stgm.pactum.figlio.sync.BattitoCadenzato
 import eu.stgm.pactum.figlio.sync.ConsegnaEventi
 import eu.stgm.pactum.figlio.sync.Spegnimento
@@ -124,6 +132,8 @@ class PactumService : Service() {
     private var loopSessione: Job? = null
     private var loopFaccende: Job? = null
     private var loopBarrieraFaccende: Job? = null
+    private var loopStudio: Job? = null
+    private var loopBarrieraStudio: Job? = null
 
     // (0.13) Lo schermo che si riaccende o si sblocca sveglia il giro delle
     // faccende (il blocco si chiede subito). Un canale suo: quello della
@@ -138,6 +148,9 @@ class PactumService : Service() {
         override fun onAvailable(network: Network) {
             ConsegnaFoto.reteTornata(applicationContext)
             ControlloBlocco.richiedi()
+            // (0.18) Lo Studio: la coda (avvio, tratti, chiusure) parte subito, e lo stato si rilegge.
+            ConsegnaStudio.reteTornata(applicationContext)
+            ControlloStudio.richiedi()
         }
     }
 
@@ -158,6 +171,7 @@ class PactumService : Service() {
                     accensioni.trySend(Unit)
                     accensioniFaccende.trySend(Unit)
                     StatoBlocco.svegliati()
+                    StatoStudio.svegliati()
                     ambito.launch(Dispatchers.IO) {
                         protetto { ArchivioSessioni.ricalcola(applicationContext) }
                         aggiornaNotifica(StatoSessione.attivaAdesso())
@@ -228,6 +242,8 @@ class PactumService : Service() {
         avviaLoopSessione()
         avviaLoopFaccende()
         avviaLoopBarrieraFaccende()
+        avviaLoopStudio()
+        avviaLoopBarrieraStudio()
         return START_STICKY
     }
 
@@ -551,6 +567,23 @@ class PactumService : Service() {
             while (isActive) {
                 val ora = Orologio.adesso()
                 val memoria = StatoBlocco.memoria.value
+                // (0.18, contratto v4.0) Durante la Sessione Studio il blocco aspetta:
+                // si ricontrolla spesso, così parte appena lo Studio finisce.
+                if (memoria.attivoAdesso(ora) && !StatoBlocco.applicatoAdesso(ora)) {
+                    if (bloccatoPrima) {
+                        sorveglianza?.daCapo()
+                        CoperturaFinestrelle.togli(applicationContext)
+                    }
+                    bloccatoPrima = false
+                    withTimeoutOrNull(ATTESA_BLOCCO_IN_STUDIO_MS) {
+                        select {
+                            StatoBlocco.sveglia.onReceive { }
+                            StatoStudio.sveglia.onReceive { }
+                        }
+                    }
+                    if (StatoBlocco.applicatoAdesso()) protetto { ControlloBlocco.dopo(applicationContext) }
+                    continue
+                }
                 if (!memoria.attivoAdesso(ora)) {
                     if (bloccatoPrima) {
                         // Finito: niente più copertura, e il prossimo blocco riparte da capo.
@@ -578,6 +611,98 @@ class PactumService : Service() {
                     // Dopo un errore, tutto da capo con la finestra lunga.
                     giro.daCapo()
                     SorveglianzaFaccende.ATTESA_ERRORE_MS
+                }
+                delay(attesa.coerceAtLeast(MINIMO_ATTESA_MS))
+            }
+        }
+    }
+
+    /**
+     * (0.18, contratto v4.0) La Sessione Studio: il giro di controllo. Durante
+     * lo Studio rilegge GET /api/studio almeno ogni minuto (subito a una
+     * notifica studio_chiuso o studio_risposta, ControlloStudio.richiedi),
+     * salva il punto del timer ogni 30 secondi (un riavvio chiude il tratto
+     * lì), consegna la coda e aggiorna la notifica fissa con lo stato. Fuori
+     * dallo Studio guarda la partenza (anche senza rete: la sveglia esatta lo
+     * sveglia all'ora giusta) e rilegge lo Studio ogni quarto d'ora a schermo acceso.
+     */
+    private fun avviaLoopStudio() {
+        if (loopStudio?.isActive == true) return
+        val schermo = getSystemService(PowerManager::class.java)
+        loopStudio = ambito.launch(Dispatchers.IO) {
+            protetto { ArchivioStudio.leggi(applicationContext) }
+            var ultimaLettura: Long? = null
+            var inStudioPrima: Boolean? = null
+            // Una rilettura chiesta (notifica dello Studio, avvio o chiusura appena
+            // consegnati): si fa anche a schermo spento e fuori dallo Studio.
+            var richiesta = false
+            while (isActive) {
+                val mono = SystemClock.elapsedRealtime()
+                val acceso = schermo?.isInteractive ?: true
+                val inStudio = StatoStudio.inCorsoAdesso(OraServer.adesso(applicationContext))
+                val intervallo = if (inStudio) CadenzaSentinella.INTERVALLO_MS else INTERVALLO_STUDIO_FUORI_MS
+                val ultima = ultimaLettura
+                if ((inStudio || acceso || richiesta) && (ultima == null || mono - ultima >= intervallo)) {
+                    protetto { ControlloStudio.interroga(applicationContext) }
+                    ultimaLettura = mono
+                    richiesta = false
+                } else {
+                    protetto { ControlloStudio.dopo(applicationContext) }
+                }
+                if (inStudio) {
+                    protetto {
+                        val o = OraServer.adesso(applicationContext)
+                        ArchivioStudio.modifica(applicationContext) { it.conPuntoSalvato(o.ora) }
+                    }
+                }
+                protetto { ConsegnaStudio.riprovaSeServe(applicationContext) }
+                val oraInStudio = StatoStudio.inCorsoAdesso(OraServer.adesso(applicationContext))
+                if (inStudio || oraInStudio || inStudioPrima != oraInStudio) aggiornaNotifica(StatoSessione.attivaAdesso())
+                inStudioPrima = oraInStudio
+                val attesa = if (oraInStudio) ATTESA_GIRO_STUDIO_MS else CadenzaSentinella.INTERVALLO_MS
+                val svegliato = withTimeoutOrNull(attesa) {
+                    select {
+                        ControlloStudio.richieste.onReceive { true }
+                        StatoStudio.sveglia.onReceive { false }
+                    }
+                }
+                // Una notifica dello Studio, la rete tornata o una consegna: si rilegge subito.
+                if (svegliato == true) {
+                    ultimaLettura = null
+                    richiesta = true
+                }
+            }
+        }
+    }
+
+    /** (0.18) La barriera dello Studio, solo mentre lo Studio c'è: un giro circa ogni secondo. */
+    private fun avviaLoopBarrieraStudio() {
+        if (loopBarrieraStudio?.isActive == true) return
+        loopBarrieraStudio = ambito.launch(Dispatchers.IO) {
+            protetto { ArchivioStudio.leggi(applicationContext) }
+            var sorveglianza: SorveglianzaStudio? = null
+            while (isActive) {
+                val o = OraServer.adesso(applicationContext)
+                if (StatoStudio.attivoAdesso(o) == null) {
+                    if (sorveglianza != null) {
+                        // Lo Studio è finito: via anche la copertura delle finestrelle.
+                        sorveglianza.azzera()
+                        CoperturaFinestrelle.togli(applicationContext, CoperturaFinestrelle.Motivo.STUDIO)
+                    }
+                    sorveglianza = null
+                    val prossima = StatoStudio.memoria.value.prossimaPartenza(o.server)
+                    val attesa = prossima?.let { (it.inizio - o.server).coerceAtLeast(MINIMO_ATTESA_MS) } ?: ATTESA_STUDIO_FUORI_MS
+                    withTimeoutOrNull(attesa.coerceAtMost(ATTESA_BARRIERA_STUDIO_FUORI_MS)) { StatoStudio.sveglia.receive() }
+                    continue
+                }
+                val giro = sorveglianza ?: SorveglianzaStudio(applicationContext).also { sorveglianza = it }
+                val attesa = try {
+                    giro.giro(System.currentTimeMillis(), SystemClock.elapsedRealtime())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    giro.azzera()
+                    SorveglianzaStudio.ATTESA_ERRORE_MS
                 }
                 delay(attesa.coerceAtLeast(MINIMO_ATTESA_MS))
             }
@@ -725,7 +850,10 @@ class PactumService : Service() {
      * quale e fino a quando: toccandola si arriva a Oggi, dove c'è "Termina la sessione".
      */
     private fun notificaTestimone(attiva: SessioneAttiva? = null): Notification {
-        val testo = attiva?.let {
+        // (0.18, contratto v4.0) Durante la Sessione Studio la notifica fissa dice
+        // lo stato: «Studio dalle 15:00 · 42 min su 60 · si chiude dopo le 16:00».
+        val studio = testoStudio()
+        val testo = studio ?: attiva?.let {
             val quando = TestoSessioni.quandoFinisce(it.fine, System.currentTimeMillis(), ZoneId.systemDefault())
             getString(
                 if (quando.domani) R.string.notifica_testimone_sessione_domani else R.string.notifica_testimone_sessione,
@@ -744,7 +872,7 @@ class PactumService : Service() {
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
         // (0.11) "Termina la sessione" anche da qui: apre Pactum sulla conferma.
-        if (attiva != null) {
+        if (attiva != null && studio == null) {
             costruttore.addAction(
                 0,
                 getString(R.string.sessione_termina),
@@ -752,6 +880,17 @@ class PactumService : Service() {
             )
         }
         return costruttore.build()
+    }
+
+    /** (0.18) Lo stato dello Studio in corso per la notifica fissa; null se non c'è. */
+    private fun testoStudio(): String? = try {
+        val o = OraServer.adesso(applicationContext)
+        val m = ArchivioStudio.leggi(applicationContext)
+        m.attivo(o)?.let { s ->
+            TestoStudio.stato(s, m.minutiStimati(s, o.ora, o.server), m.chiudibile(s, o.ora, o.server), m.zona(), paroleStudio(this))
+        }
+    } catch (e: Exception) {
+        null
     }
 
     private fun creaCanale() {
@@ -770,6 +909,17 @@ class PactumService : Service() {
         private const val ID_NOTIFICA = 1
         private const val INTERVALLO_BATTITO_MS = 15L * 60 * 1000
         private const val MINIMO_ATTESA_MS = 50L
+
+        /** (0.18) Durante lo Studio il blocco dovuto si ricontrolla così spesso (parte a fine Studio). */
+        private const val ATTESA_BLOCCO_IN_STUDIO_MS = 15_000L
+
+        /** (0.18) Il giro di controllo dello Studio: ogni mezzo minuto durante, la lettura ogni quarto d'ora fuori. */
+        private const val ATTESA_GIRO_STUDIO_MS = 30_000L
+        private const val INTERVALLO_STUDIO_FUORI_MS = 15L * 60 * 1000
+        private const val ATTESA_STUDIO_FUORI_MS = 60_000L
+
+        /** (0.18) Fuori dallo Studio la barriera guarda ogni pochi secondi se è partito (un avvio a mano, una risposta). */
+        private const val ATTESA_BARRIERA_STUDIO_FUORI_MS = 5_000L
 
         /** (0.13) Tra una domanda e l'altra sul blocco, mai meno di un secondo. */
         private const val ATTESA_MINIMA_FACCENDE_MS = 1_000L

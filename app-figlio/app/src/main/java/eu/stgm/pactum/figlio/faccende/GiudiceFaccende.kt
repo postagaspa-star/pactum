@@ -42,7 +42,8 @@ class GiudiceFaccende(context: Context) {
     fun decidi(primoPiano: String?, classe: String?, precedente: String?, ora: Istante): DecisioneFaccende =
         GuardiaFaccende.decidi(
             SituazioneFaccende(
-                bloccoAttivo = StatoBlocco.attivoAdesso(ora),
+                // (0.18) Durante la Sessione Studio il blocco aspetta.
+                bloccoAttivo = StatoBlocco.applicatoAdesso(ora),
                 primoPiano = primoPiano,
                 schermoAcceso = true,
                 sbloccato = true,

@@ -57,6 +57,10 @@ object NovitaDalPatto {
         // (0.13) Una faccenda nuova, bocciata o annullata, (0.17) o cambiata: il
         // blocco si richiede subito, anche se gli avvisi sono spenti.
         if (notifiche.any { it.tipo in TipiNotificaFaccende.CAMBIANO_IL_BLOCCO }) ControlloBlocco.richiedi()
+        // (0.18, contratto v4.0) Lo Studio chiuso da un genitore, o la sua configurazione decisa: si rilegge subito.
+        if (notifiche.any { it.tipo in eu.stgm.pactum.figlio.studio.TipiNotificaStudio.CAMBIANO_LO_STUDIO }) {
+            eu.stgm.pactum.figlio.studio.ControlloStudio.richiedi()
+        }
         if (!AvvisiLocali.puoAvvisare(context)) return
 
         val giaAvvisate = impostazioni.leggiIdAvvisati()
@@ -164,7 +168,7 @@ object NovitaDalPatto {
             // (0.17, contratto v3.9) Cambiato (con la nuova ora del blocco) e confermato.
             TipiNotificaFaccende.FACCENDA_MODIFICATA ->
                 TestoFaccende.avvisoModificata(notifica.payload, System.currentTimeMillis(), ZoneId.systemDefault(), parole)
-            TipiNotificaFaccende.FACCENDA_CONFERMATA -> TestoFaccende.avvisoConfermata(notifica.payload, parole)
+            TipiNotificaFaccende.FACCENDA_CONFERMATA -> TestoFaccende.avvisoConfermata(notifica.payload, parole, notifica.messaggio)
             else -> null
         }
 
@@ -190,6 +194,10 @@ object NovitaDalPatto {
         modificataNotaTolta = context.getString(R.string.notifica_faccenda_modificata_nota_tolta),
         confermata = context.getString(R.string.notifica_faccenda_confermata),
         confermataTesto = context.getString(R.string.notifica_faccenda_confermata_testo),
+        approvata = context.getString(R.string.notifica_faccenda_approvata),
+        approvataSblocca = context.getString(R.string.notifica_faccenda_approvata_sblocca),
+        approvataTesto = context.getString(R.string.notifica_faccenda_approvata_testo),
+        approvataNonParte = context.getString(R.string.notifica_faccenda_approvata_non_parte),
     )
 
     /**

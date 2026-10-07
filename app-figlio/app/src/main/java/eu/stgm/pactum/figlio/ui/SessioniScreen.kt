@@ -110,8 +110,12 @@ import kotlinx.coroutines.withContext
 fun SessioniScreen(
     onApriImpostazioni: () -> Unit = {},
     vm: SessioniViewModel = viewModel(),
+    studioVm: StudioViewModel = viewModel(),
 ) {
     val stato by vm.stato.collectAsStateWithLifecycle()
+    // (0.18, contratto v4.0) La Sessione Studio, in cima.
+    val statoStudio by studioVm.stato.collectAsStateWithLifecycle()
+    val studio = rememberStudio()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     // Le snackbar partono fuori dall'effetto degli eventi: l'evento si consuma
@@ -139,6 +143,7 @@ fun SessioniScreen(
 
     LifecycleResumeEffect(Unit) {
         vm.aggiorna()
+        studioVm.aggiorna()
         onPauseOrDispose { }
     }
 
@@ -247,6 +252,13 @@ fun SessioniScreen(
                     } else if (stato.datiFermi) {
                         item { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
                     }
+                    // (0.18, contratto v4.0) La Sessione Studio, in cima alla scheda.
+                    item(key = "studio") {
+                        SezioneStudio(statoStudio, studio, studioVm) { messaggio ->
+                            ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+                        }
+                    }
+                    item(key = "titolo-sessioni") { TitoloSezione(stringResource(R.string.sessioni_le_tue)) }
                     inCorso.attiva?.let { attiva ->
                         item(key = "in-corso") {
                             SchedaSessioneInCorso(
@@ -286,6 +298,7 @@ fun SessioniScreen(
                                     unaInCorso = inCorso.attiva != null,
                                     invioInCorso = stato.invioInCorso,
                                     bloccoFaccende = bloccoFaccende,
+                                    inStudio = studio.studio != null,
                                     onInizia = {
                                         ricorda(sessione)
                                         vm.dimenticaEsiti()
@@ -413,6 +426,7 @@ private fun CardSessione(
     unaInCorso: Boolean,
     invioInCorso: Boolean,
     bloccoFaccende: Boolean,
+    inStudio: Boolean = false,
     onInizia: () -> Unit,
     onModifica: () -> Unit,
     onElimina: () -> Unit,
@@ -485,12 +499,15 @@ private fun CardSessione(
             }
             nota?.let { Nota(it) }
             if (sessione.approvata && !inCorsoQuesta) {
-                Button(enabled = !unaInCorso && !invioInCorso && !bloccoFaccende, onClick = onInizia) {
+                Button(enabled = !unaInCorso && !invioInCorso && !bloccoFaccende && !inStudio, onClick = onInizia) {
                     Text(stringResource(R.string.sessione_inizia))
                 }
                 // Il pulsante spento, e il perché in una riga.
                 if (unaInCorso) {
                     Nota(stringResource(R.string.sessione_una_gia_in_corso))
+                } else if (inStudio) {
+                    // (0.18, contratto v4.0) Durante lo Studio le sessioni non si iniziano.
+                    Nota(stringResource(R.string.sessione_esito_studio_in_corso))
                 } else if (bloccoFaccende) {
                     Nota(stringResource(R.string.sessione_blocco_faccende))
                 }
@@ -654,7 +671,7 @@ private const val ETICHETTA_MASSIMA = 100
  * nell'elenco, per poterle togliere.
  */
 @Composable
-private fun DialogoSceltaAppSessione(
+internal fun DialogoSceltaAppSessione(
     iniziali: List<String>,
     nomiNoti: Map<String, String>,
     onFatto: (List<String>, Map<String, String>) -> Unit,

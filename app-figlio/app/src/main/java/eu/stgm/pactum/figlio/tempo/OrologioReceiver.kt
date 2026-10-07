@@ -76,6 +76,8 @@ class OrologioReceiver : BroadcastReceiver() {
         val aMano = ancora == null || riavviatoNelFrattempo ||
             abs(adesso - (ancora.wallClock + (elapsedAdesso - ancora.elapsedRealtime))) > SOGLIA_SCARTO_MS
         if (aMano) runCatching { ControlloBlocco.cambioOra(context) }
+        // (0.18) Lo Studio si decide sull'ora del server: l'ordine delle risposte riparte.
+        if (aMano) runCatching { eu.stgm.pactum.figlio.studio.ControlloStudio.cambioOra(context) }
         if (ancora != null && !riavviatoNelFrattempo) {
             val attesa = ancora.wallClock + (elapsedAdesso - ancora.elapsedRealtime)
             val scarto = adesso - attesa

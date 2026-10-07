@@ -37,7 +37,10 @@ public class FormeJsonTest
     public void Uso_giornaliero_del_computer()
     {
         var d = Fotografie.Uso(GiornataDiProva(), 1).Dettagli;
-        Assert.Equal(new[] { "giorno", "nomi", "totale_minuti", "uso_categorie", "uso_minuti" }, Chiavi(d));
+        // (0.18, contratto v4.0) In più sessioni_minuti: i minuti nella lista dello Studio (qui nessuno).
+        Assert.Equal(new[] { "giorno", "nomi", "sessioni_minuti", "totale_minuti", "uso_categorie", "uso_minuti" }, Chiavi(d));
+        Assert.Equal(0, Json.Intero(d["sessioni_minuti"]));
+        Intero(d["sessioni_minuti"]);
         Assert.Equal("2026-09-23", Json.Testo(d["giorno"]));
         Assert.Equal(131, Json.Intero(d["totale_minuti"]));
         Intero(d["totale_minuti"]);
@@ -126,20 +129,21 @@ public class FormeJsonTest
     [Fact]
     public void La_versione_e_la_stessa_nel_programma_e_nel_file()
     {
-        Assert.Equal("0.14.0", Versione.Nome);
-        // (0.14) Il codice segue quello delle app del telefono: 0.14.0 = 14 (v. Versione).
-        Assert.Equal(14, Versione.Codice);
+        Assert.Equal("0.18.0", Versione.Nome);
+        // (0.18) Il codice segue quello delle app del telefono: 0.18.0 = 18 (v. Versione).
+        Assert.Equal(18, Versione.Codice);
         var assembly = typeof(Versione).Assembly;
-        Assert.Equal(new Version(0, 14, 0, 0), assembly.GetName().Version);
+        Assert.Equal(new Version(0, 18, 0, 0), assembly.GetName().Version);
         var file = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-        Assert.Equal("0.14.0.0", file.FileVersion);
+        Assert.Equal("0.18.0.0", file.FileVersion);
     }
 
     [Theory]
     [InlineData(2, false)]
     [InlineData(13, false)]
     [InlineData(14, false)]
-    [InlineData(15, true)]
+    [InlineData(18, false)]
+    [InlineData(19, true)]
     public async Task Una_versione_nuova_si_annuncia_solo_col_codice_del_computer_piu_alto(int codiceServer, bool annunciata)
     {
         // (0.14) Il codice del computer segue quello delle app (la 0.14.0 è la 14): il programma annuncia
@@ -167,7 +171,7 @@ public class FormeJsonTest
         await motore.SincronizzaAsync("prova");
 
         Assert.Contains(server.Ricevute, r => r.Percorso == "/api/versione");
-        if (annunciata) Assert.Equal("È uscita la 0.15.0. Fai clic qui per aprire la pagina da cui scaricarla.", Assert.Single(avvisi));
+        if (annunciata) Assert.Equal("È uscita la 0." + codiceServer + ".0. Fai clic qui per aprire la pagina da cui scaricarla.", Assert.Single(avvisi));
         else Assert.Empty(avvisi);
     }
 
@@ -241,11 +245,13 @@ public class FormeJsonTest
         using var cartella = new CartellaTemporanea();
         using var motore = new Motore.Motore(new Percorsi(cartella.Percorso));
         var s = motore.Stato();
-        Assert.Equal(new[] { "abbinato", "dispositivo", "figlio", "patto_aggiornato", "rete_ok", "server", "ultimo_invio_ok", "versione" }, Chiavi(s));
+        // (0.18, contratto v4.0) In più "studio": lo Studio come lo sa il computer (qui nessuno).
+        Assert.Equal(new[] { "abbinato", "dispositivo", "figlio", "patto_aggiornato", "rete_ok", "server", "studio", "ultimo_invio_ok", "versione" }, Chiavi(s));
+        Assert.False(Json.Booleano(s["studio"]!["in_corso"]));
         Assert.False(Json.Booleano(s["abbinato"]));
         Assert.Null(s["figlio"]);
         Assert.Null(s["dispositivo"]);
-        Assert.Equal("0.14.0", Json.Testo(s["versione"]));
+        Assert.Equal("0.18.0", Json.Testo(s["versione"]));
     }
 
     [Theory]

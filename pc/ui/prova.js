@@ -510,10 +510,12 @@
       server: S.server,
       figlio: S.abbinato ? S.figlio : null,
       dispositivo: S.abbinato ? S.computer : null,
-      versione: '0.14.0',
+      versione: '0.18.0',
       ultimo_invio_ok: S.abbinato ? isoTs(S.ultimoInvio) : null,
       rete_ok: opzioni.rete,
       patto_aggiornato: S.abbinato ? isoTs(S.pattoAggiornato) : null,
+      // (0.18) Lo Studio come lo sa il motore: qui nessuno in corso.
+      studio: { in_corso: false },
     };
   }
 
@@ -628,6 +630,7 @@
       case 'POST /locale/abbina': return abbina(corpo);
       case 'GET /locale/oggi': return S.abbinato ? risposta(200, oggiLocale()) : risposta(200, null);
       case 'GET /locale/visti': return risposta(200, S.visti);
+      case 'GET /locale/studio-firme': return risposta(200, { firme: { 'exe:winword.exe': 'Microsoft Corporation', 'exe:geogebra.exe': 'International GeoGebra Institute' } });
       case 'POST /locale/bonus': return bonus(corpo);
       case 'GET /locale/serie': {
         const serie = T.serieDiGiorni(striscia());
@@ -674,7 +677,46 @@
       // (0.13, contratto v3.6) Un server vecchio non le manda: lì la sezione dice che va aggiornato.
       faccende: opzioni.vecchio ? undefined : faccende(),
       blocco: opzioni.vecchio ? undefined : blocco(),
+      // (0.18, contratto v4.0) La Sessione Studio: un server vecchio non la manda.
+      studio: opzioni.vecchio ? undefined : studioFinto(),
     };
+  }
+
+  // (0.18, contratto v4.0) Lo Studio finto: lista approvata, nessuno Studio in corso, la prossima partenza domani alle 15.
+  function studioFinto() {
+    if (!S.studio) {
+      const approvata = {
+        giorni: ['lun', 'mar', 'mer', 'gio', 'ven'], inizio: '15:00', chiusura_minima: '16:00', minuti_minimi: 60,
+        telefono: { app: [], nomi: {} },
+        computer: { programmi: ['exe:winword.exe', 'sito:spaggiari.eu'], nomi: { 'exe:winword.exe': 'Microsoft Word', 'sito:spaggiari.eu': 'spaggiari.eu' },
+          firme: { 'exe:winword.exe': 'Microsoft Corporation' } },
+        orari_dal: isoTs(traMinuti(-1440 * 3)).slice(0, 10), approvata_ts: isoTs(traMinuti(-1440 * 4)), decisa_da: { id: 2, nome: 'Mamma' },
+      };
+      S.studio = { config: { stato: 'approvata', versione: 1, approvata, in_attesa: null, motivazione: null } };
+    }
+    const domani = new Date();
+    domani.setDate(domani.getDate() + 1);
+    domani.setHours(15, 0, 0, 0);
+    const chiude = new Date(domani.getTime() + 3600000);
+    return {
+      config: copia(S.studio.config),
+      in_corso: null,
+      prossime_partenze: [{ giorno: isoTs(domani).slice(0, 10), inizio_ts: isoTs(domani), chiudibile_dal: isoTs(chiude), minuti_minimi: 60 }],
+    };
+  }
+
+  function proponiStudio(corpo) {
+    studioFinto();
+    const computer = corpo && corpo.computer;
+    if (!computer || !Array.isArray(computer.programmi)) return errore(422, 'computer.programmi mancante');
+    // Lo stesso elenco del server (server/app/studio.py, BROWSER).
+    const browser = computer.programmi.find((k) => /^exe:(chrome|msedge|firefox|brave|opera|opera_gx|vivaldi|arc|chromium|iexplore|waterfox|librewolf|tor|yandex|browser|seamonkey|palemoon|floorp|thorium|zen|maxthon|duckduckgo)\.exe$/.test(k));
+    if (browser) return errore(422, { errore: 'browser_nella_lista' });
+    const c = S.studio.config;
+    c.versione += 1;
+    c.in_attesa = Object.assign(copia(c.approvata), { computer: copia(computer), richiesta_ts: isoTs(new Date()),
+      da: { id: S.computer.id, nome: S.computer.nome, tipo: 'computer' } });
+    return risposta(200, c);
   }
 
   function piuRecenti(a, b) {
@@ -903,6 +945,8 @@
     // (0.13, contratto v3.6) Le faccende e il blocco. Un server vecchio non le conosce: 404.
     if (metodo === 'GET' && via === '/api/faccende') return opzioni.vecchio ? errore(404, 'Not Found') : risposta(200, { faccende: faccende() });
     if (metodo === 'GET' && via === '/api/faccende/blocco') return opzioni.vecchio ? errore(404, 'Not Found') : risposta(200, blocco());
+    // (0.18, contratto v4.0) La lista dello Studio proposta dal computer.
+    if (metodo === 'PATCH' && via === '/api/studio/config') return opzioni.vecchio ? errore(404, 'Not Found') : proponiStudio(corpo);
     return errore(404, 'Not Found');
   }
 

@@ -69,6 +69,13 @@ internal static class Win32
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
+    public const int GWL_EXSTYLE = -20;
+    public const long WS_EX_TOOLWINDOW = 0x00000080;
+    public const long WS_EX_NOACTIVATE = 0x08000000;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
     public static readonly IntPtr HWND_TOPMOST = new(-1);
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
@@ -119,6 +126,98 @@ internal static class Win32
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsIconic(IntPtr hWnd);
+
+    /// <summary>(0.18) Rimostra una copertura nascosta da fuori, senza attivarla.</summary>
+    public const int SW_SHOWNOACTIVATE = 4;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    /// <summary>(0.18) Finestre «nascoste» da Windows pur essendo visibili (altri desktop virtuali, app sospese).</summary>
+    public const int DWMWA_CLOAKED = 14;
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+
+    /// <summary>La finestra è «nascosta» da Windows (cloaked): non si vede anche se risulta visibile.</summary>
+    public static bool Nascosta(IntPtr hwnd)
+    {
+        try
+        {
+            return DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out int c, sizeof(int)) == 0 && c != 0;
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>(correzione 0.18) Fine della sessione di Windows: i messaggi e la prova che sta avvenendo davvero.</summary>
+    public const int WM_QUERYENDSESSION = 0x0011;
+    public const int WM_ENDSESSION = 0x0016;
+    public const int SM_SHUTTINGDOWN = 0x2000;
+
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetrics(int nIndex);
+
+    /// <summary>
+    /// (correzione 0.18) La sessione di Windows si sta chiudendo davvero (spegnimento, riavvio, uscita dall'account)?
+    /// Un messaggio di fine sessione mandato da un altro programma, o da un installatore che chiude le app (Restart
+    /// Manager), arriva con questo valore a zero.
+    /// </summary>
+    public static bool SessioneSiChiude()
+    {
+        try
+        {
+            return GetSystemMetrics(SM_SHUTTINGDOWN) != 0;
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return true; // senza la prova si fa come prima: lo spegnimento non si blocca mai
+        }
+    }
+
+    /// <summary>(correzione 0.18) Il rettangolo visibile di una finestra, senza i bordi invisibili (una finestra ingrandita sborda di 8 px).</summary>
+    public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    public static extern int DwmGetWindowRect(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+    /// <summary>Il rettangolo visibile della finestra (DWM), oppure quello di GetWindowRect; null se non si legge.</summary>
+    public static RECT? RettangoloVisibile(IntPtr hwnd)
+    {
+        try
+        {
+            if (DwmGetWindowRect(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) == 0) return r;
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+        }
+        return GetWindowRect(hwnd, out var w) ? w : null;
+    }
+
+    /// <summary>(correzione 0.18) Uno stile che, comparso su una copertura, la renderebbe trasparente (le nostre non lo usano mai).</summary>
+    public const long WS_EX_LAYERED = 0x00080000;
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowRgnBox(IntPtr hWnd, out RECT lprc);
+
+    /// <summary>La finestra ha una «regione» (una forma ritagliata, anche vuota)? Senza regione GetWindowRgnBox dà ERROR (0).</summary>
+    public static bool HaRegione(IntPtr hwnd)
+    {
+        try
+        {
+            return GetWindowRgnBox(hwnd, out _) != 0;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>(0.18) Finestre che lasciano passare i clic (sovrapposizioni trasparenti di giochi e schede video).</summary>
+    public const long WS_EX_TRANSPARENT = 0x00000020;
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

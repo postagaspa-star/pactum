@@ -59,6 +59,20 @@ public static class Eventi
     public static Evento ChiusoDuranteBlocco(long ts) =>
         Manomissione(new JsonObject { ["sotto_tipo"] = "chiuso_durante_blocco" }, ts);
 
+    /// <summary>
+    /// (0.18, contratto v4.0) Come <see cref="ChiusoDuranteBlocco"/>, ma per una Sessione Studio: il
+    /// programma è stato chiuso di colpo mentre uno Studio era in corso, e al riavvio lo si dice.
+    /// </summary>
+    public static Evento ChiusoDuranteStudio(long ts) =>
+        Manomissione(new JsonObject { ["sotto_tipo"] = "chiuso_durante_studio" }, ts);
+
+    /// <summary>
+    /// (0.18, contratto v4.0) Il guardiano è partito perché il mutex era tenuto da un processo che non è
+    /// <c>Pactum.exe</c> (un finto risponditore): lo si dice una volta sola per accensione.
+    /// </summary>
+    public static Evento IstanzaOccupata(long ts) =>
+        Manomissione(new JsonObject { ["sotto_tipo"] = "istanza_occupata" }, ts);
+
     /// <summary>Un browser di cui non si riesce a leggere la barra degli indirizzi (una volta al giorno).</summary>
     public static Evento SitiNonLeggibili(string programma, string giorno, long ts) => Manomissione(new JsonObject
     {
@@ -72,8 +86,13 @@ public static class Eventi
         Evento.Nuovo(TipiEvento.Sospensione, ts, new JsonObject { ["motivo"] = motivo });
 
     /// <param name="motivo"><c>avvio · riattivazione · accesso</c></param>
-    public static Evento Ripresa(string motivo, long avvioSistemaMs, long ts) =>
-        Evento.Nuovo(TipiEvento.Ripresa, ts, new JsonObject { ["motivo"] = motivo, ["avvio_sistema_ts"] = avvioSistemaMs });
+    /// <summary>Una <c>ripresa</c>. (0.18, contratto v4.0) Con <paramref name="dal"/> (lo spegnimento annullato riconosciuto al riavvio) dice da quando.</summary>
+    public static Evento Ripresa(string motivo, long avvioSistemaMs, long ts, long? dal = null)
+    {
+        var dettagli = new JsonObject { ["motivo"] = motivo, ["avvio_sistema_ts"] = avvioSistemaMs };
+        if (dal is long d) dettagli["dal"] = d;
+        return Evento.Nuovo(TipiEvento.Ripresa, ts, dettagli);
+    }
 
     public static Evento Sforamento(Nucleo.Sforamento s, string giornoComputer, long ts) =>
         Evento.Nuovo(TipiEvento.Sforamento, ts, Valutatore.DettagliSforamento(s, giornoComputer));
@@ -129,6 +148,9 @@ public static class Fotografie
             ["giorno"] = g.Giorno,
             ["uso_minuti"] = uso,
             ["totale_minuti"] = g.MinutiTotali,
+            // (0.18, contratto v4.0) I minuti passati nella lista dello Studio, che non contano: dalla 0.18 li manda
+            // anche il computer (contratto v3.5: un intero da 0 a 1440).
+            ["sessioni_minuti"] = g.MinutiStudio,
             ["nomi"] = nomi,
             ["uso_categorie"] = categorie,
         };

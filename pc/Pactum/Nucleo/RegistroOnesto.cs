@@ -69,6 +69,15 @@ public sealed class StatoVivo
 
     /// <summary>(0.13) Un blocco delle faccende era attivo all'ultimo "sono vivo": serve a <c>chiuso_durante_blocco</c>.</summary>
     [JsonPropertyName("bloccato_faccende")] public bool BloccatoFaccende { get; set; }
+
+    /// <summary>(0.18, contratto v4.0) Una Sessione Studio era in corso all'ultimo "sono vivo": serve a <c>chiuso_durante_studio</c>.</summary>
+    [JsonPropertyName("studio_in_corso")] public bool StudioInCorso { get; set; }
+
+    /// <summary>(correzione 0.18) La prossima partenza dello Studio nota all'ultimo «sono vivo» (ms UTC): per accorgersi di uno <c>studio.json</c> sparito o cambiato.</summary>
+    [JsonPropertyName("prossima_partenza_ms")] public long? ProssimaPartenzaMs { get; set; }
+
+    /// <summary>(correzione 0.18) L'inizio dello Studio in corso all'ultimo «sono vivo» (ms UTC), se c'era.</summary>
+    [JsonPropertyName("studio_inizio_ms")] public long? StudioInizioMs { get; set; }
 }
 
 public static class Chiusure
@@ -88,7 +97,11 @@ public static class Chiusure
 /// mentre un blocco delle faccende era attivo: si manda in più una <c>manomissione chiuso_durante_blocco</c>.
 /// Mai dopo uno spegnimento, una disconnessione o una sospensione (lì <see cref="ProgrammaChiuso"/> è già null).
 /// </param>
-public sealed record EsitoAvvio(bool StessoAvvioDiWindows, JsonObject? ProgrammaChiuso, JsonObject? CambioOra, string MotivoRipresa, long AvvioSistemaMs, bool ChiusoDuranteBlocco = false);
+/// <param name="ChiusoDuranteStudio">
+/// (0.18, contratto v4.0) Come <see cref="ChiusoDuranteBlocco"/>, ma per una Sessione Studio in corso:
+/// si manda in più una <c>manomissione chiuso_durante_studio</c>.
+/// </param>
+public sealed record EsitoAvvio(bool StessoAvvioDiWindows, JsonObject? ProgrammaChiuso, JsonObject? CambioOra, string MotivoRipresa, long AvvioSistemaMs, bool ChiusoDuranteBlocco = false, bool ChiusoDuranteStudio = false, long? RipresaDalMs = null);
 
 /// <summary>
 /// Il programma chiuso a forza: al riavvio si confronta l'ultimo "sono vivo" con
@@ -137,6 +150,7 @@ public static class Vivo
             // dall'avvio automatico, non risulta "spento" all'infinito.
             JsonObject? tardivo = null;
             bool chiusoDuranteBloccoCross = false;
+            bool chiusoDuranteStudioCross = false;
             if (precedente.Chiusura != null && tickAdesso > AvvioTardivoMs)
             {
                 tardivo = new JsonObject
@@ -147,11 +161,11 @@ public static class Vivo
                     ["avvio_ritardato"] = true,
                 };
             }
-            else if (precedente.Chiusura == null && precedente.BloccatoFaccende
+            else if (precedente.Chiusura == null && (precedente.BloccatoFaccende || precedente.StudioInCorso)
                      && spegnimentoPulitoMs is long spento && spento > precedente.UtcMs)
             {
-                // (0.13) Chiuso di colpo durante un blocco, poi Windows si è spento PULITO dopo l'ultimo
-                // "sono vivo": Pactum era già morto prima dello spegnimento. Il buco e la manomissione.
+                // (0.13) Chiuso di colpo durante un blocco (0.18: o uno Studio), poi Windows si è spento PULITO
+                // dopo l'ultimo "sono vivo": Pactum era già morto prima dello spegnimento. Il buco e la manomissione.
                 // Se lo spegnimento non è stato pulito (corrente, schermata blu) ShutdownTime resta vecchio
                 // (<= l'ultimo "sono vivo") e non si dice niente.
                 tardivo = new JsonObject
@@ -160,20 +174,52 @@ public static class Vivo
                     ["dal"] = precedente.UtcMs,
                     ["al"] = spento,
                 };
-                chiusoDuranteBloccoCross = true;
+                chiusoDuranteBloccoCross = precedente.BloccatoFaccende;
+                chiusoDuranteStudioCross = precedente.StudioInCorso;
             }
-            return new EsitoAvvio(false, tardivo, null, "avvio", avvioAdesso, chiusoDuranteBloccoCross);
+            return new EsitoAvvio(false, tardivo, null, "avvio", avvioAdesso, chiusoDuranteBloccoCross, chiusoDuranteStudioCross);
         }
 
+        // Stesso avvio di Windows. Era coperto (blocco o Studio) all'ultimo "sono vivo"?
+        bool eraCoperto = precedente.BloccatoFaccende || precedente.StudioInCorso;
         JsonObject? chiuso = null;
+        string motivo;
+        long? ripresaDal = null;
         if (precedente.Chiusura == null)
         {
-            chiuso = new JsonObject
-            {
-                ["sotto_tipo"] = "programma_chiuso",
-                ["dal"] = precedente.UtcMs,
-                ["al"] = utcAdesso,
-            };
+            // Chiuso di colpo (Task Manager): programma_chiuso sempre, come dalla 0.13.
+            chiuso = new JsonObject { ["sotto_tipo"] = "programma_chiuso", ["dal"] = precedente.UtcMs, ["al"] = utcAdesso };
+            motivo = "avvio";
+        }
+        else if ((precedente.Chiusura == Chiusure.Spegnimento || precedente.Chiusura == Chiusure.Disconnessione)
+                 && spegnimentoPulitoMs is long spentoDopo && spentoDopo > precedente.UtcMs)
+        {
+            // (correzione 0.18, contratto v4.0 «leggendo ShutdownTime») Windows si è spento pulito DOPO l'ultimo «sono
+            // vivo»: lo spegnimento è avvenuto davvero, anche se il contatore degli avvii e il cronometro sembrano dello
+            // stesso avvio (l'Avvio rapido di Windows iberna il kernel invece di spegnerlo). Un avvio normale: niente
+            // ripresa spegnimento_annullato e nessuna manomissione.
+            motivo = "avvio";
+        }
+        else if (precedente.Chiusura == Chiusure.Spegnimento)
+        {
+            // (0.18, contratto v4.0) La chiusura diceva "spegnimento" ma l'avvio di Windows è lo stesso: lo
+            // spegnimento non è avvenuto (poi Pactum è stato ucciso e riaperto). Ripresa spegnimento_annullato;
+            // programma_chiuso solo se era in blocco o Studio.
+            motivo = "spegnimento_annullato";
+            ripresaDal = precedente.UtcMs;
+            if (eraCoperto) chiuso = ProgrammaChiusoConCausa(precedente.UtcMs, utcAdesso, "spegnimento_annullato");
+        }
+        else if (precedente.Chiusura == Chiusure.Disconnessione)
+        {
+            // (0.18, contratto v4.0) Uscita dall'account / cambio utente, poi rientro nello stesso avvio: ripresa
+            // accesso (come la 0.13); programma_chiuso con causa disconnessione solo se era in blocco o Studio.
+            motivo = "accesso";
+            if (eraCoperto) chiuso = ProgrammaChiusoConCausa(precedente.UtcMs, utcAdesso, "disconnessione");
+        }
+        else
+        {
+            // volontaria, crash, aggiornamento: niente manomissione.
+            motivo = "avvio";
         }
 
         // Con Windows sempre acceso, orologio e cronometro devono essere andati avanti insieme.
@@ -184,9 +230,17 @@ public static class Vivo
             cambioOra = new JsonObject { ["sotto_tipo"] = "cambio_ora", ["drift_secondi"] = scarto / 1000 };
         }
 
-        var motivo = precedente.Chiusura == Chiusure.Disconnessione ? "accesso" : "avvio";
-        // (0.13) Chiuso di colpo (chiusura non pulita, stesso avvio di Windows) mentre un blocco era attivo.
+        // (0.13/0.18) Chiuso mentre un blocco o uno Studio era attivo.
         bool chiusoDuranteBlocco = chiuso != null && precedente.BloccatoFaccende;
-        return new EsitoAvvio(true, chiuso, cambioOra, motivo, avvioAdesso, chiusoDuranteBlocco);
+        bool chiusoDuranteStudio = chiuso != null && precedente.StudioInCorso;
+        return new EsitoAvvio(true, chiuso, cambioOra, motivo, avvioAdesso, chiusoDuranteBlocco, chiusoDuranteStudio, ripresaDal);
     }
+
+    private static JsonObject ProgrammaChiusoConCausa(long dal, long al, string causa) => new()
+    {
+        ["sotto_tipo"] = "programma_chiuso",
+        ["dal"] = dal,
+        ["al"] = al,
+        ["causa"] = causa,
+    };
 }

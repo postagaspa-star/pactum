@@ -192,7 +192,13 @@ public class CategorieTest
     [InlineData("co.uk")]
     public void Senza_un_sito_non_escono_ne_dominio_ne_categoria(string? testo)
     {
-        Assert.Equal(new Lettura(null, false), Lettura.DallaBarra(testo));
+        // (correzione 0.18) La lettura dice in più se è una scheda nuova o una pagina senza sito (SenzaSito, per lo
+        // Studio): qui conta che non escano né dominio né categoria e che la lettura non risulti fallita.
+        var l = Lettura.DallaBarra(testo);
+        Assert.Null(l.Dominio);
+        Assert.Null(l.CategoriaSito);
+        Assert.False(l.Fallita);
+        Assert.Equal(new Lettura(null, false, SenzaSito: l.SenzaSito), l);
     }
 
     [Fact]

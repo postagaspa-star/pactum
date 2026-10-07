@@ -17,6 +17,23 @@ public sealed class Faccenda
 
     /// <summary>Il nome di chi l'ha data (<c>creata_da.nome</c>), per "l'elenco con chi le ha date".</summary>
     [JsonPropertyName("data_da")] public string? DataDa { get; set; }
+
+    /// <summary>
+    /// (0.18, contratto v4.0) Lo stato del lavoro nel blocco: <c>"da_fare"</c> (ancora da fare) o
+    /// <c>"fatta"</c> (foto mandata, aspetta l'approvazione di un genitore). Un server v3.9 non lo manda:
+    /// vale <c>null</c>, e il lavoro si mostra come prima (solo da fare). I lavori vecchi restano bloccati.
+    /// </summary>
+    [JsonPropertyName("stato")] public string? Stato { get; set; }
+
+    /// <summary>
+    /// (0.18, contratto v4.0) Quando è arrivata la foto, per un lavoro che aspetta l'approvazione
+    /// (<c>stato = "fatta"</c>); <c>0</c> per un lavoro ancora da fare o per un server vecchio.
+    /// </summary>
+    [JsonPropertyName("foto_ts_ms")] public long FotoTsMs { get; set; }
+
+    /// <summary>(0.18) Il lavoro aspetta l'approvazione: ha mandato la foto ma nessun genitore l'ha ancora approvata.</summary>
+    [JsonIgnore]
+    public bool AspettaApprovazione => Stato == "fatta" && FotoTsMs > 0;
 }
 
 /// <summary>
@@ -98,6 +115,7 @@ public static class Blocco
             if (nodo is not JsonObject o) continue;
             if (Json.Intero(o["id"]) is not long id) continue;
             if (!Tempo.ProvaIsoMs(Json.Testo(o["blocco_da"]), out var bloccoDaMs)) continue;
+            Tempo.ProvaIsoMs(Json.Testo(o["foto_ts"]), out var fotoTsMs);
             stato.DaFare.Add(new Faccenda
             {
                 Id = id,
@@ -105,6 +123,9 @@ public static class Blocco
                 Nota = Json.Testo(o["nota"]),
                 BloccoDaMs = bloccoDaMs,
                 DataDa = Json.Testo((o["creata_da"] as JsonObject)?["nome"]),
+                // (0.18, contratto v4.0) stato/foto_ts: un server vecchio non li manda, restano null/0.
+                Stato = Json.Testo(o["stato"]),
+                FotoTsMs = fotoTsMs,
             });
         }
         return stato;

@@ -196,14 +196,107 @@ public class BloccoTest
     public void La_copertura_dice_lavori_di_casa_e_mai_faccende()
     {
         Assert.Equal("Prima i lavori di casa", Testi.TitoloBlocco);
-        Assert.Equal("Si sblocca da solo quando dal telefono hai mandato la foto di ogni lavoro.", Testi.SottoBlocco);
+        // (0.18, contratto v4.0) Non basta più mandare la foto: serve l'approvazione di un genitore.
+        Assert.Equal("Si sblocca da solo quando un genitore ha approvato la foto di ogni lavoro.", Testi.SottoBlocco);
         var testo = Testi.TestoBlocco(new[] { Faccenda(1, "Riordina la camera", Ora, "Papà", "anche sotto il letto") });
         Assert.Equal(string.Join(Environment.NewLine,
             "Prima i lavori di casa",
             "Riordina la camera — da Papà: anche sotto il letto",
-            "Si sblocca da solo quando dal telefono hai mandato la foto di ogni lavoro."), testo);
+            "Si sblocca da solo quando un genitore ha approvato la foto di ogni lavoro."), testo);
         Assert.DoesNotContain("faccend", testo, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("faccend", StatoBlocco.Generico().DaMostrare()[0].Titolo, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---------- (0.18, contratto v4.0) I lavori approvati: stato/foto_ts, "aspetta l'approvazione" ----------
+
+    [Fact]
+    public void Legge_stato_e_foto_ts_di_un_lavoro_che_aspetta_l_approvazione()
+    {
+        var json = new JsonObject
+        {
+            ["attivo"] = true,
+            ["da_fare"] = new JsonArray(
+                new JsonObject
+                {
+                    ["id"] = 5,
+                    ["titolo"] = "Svuota la lavastoviglie",
+                    ["blocco_da"] = "2026-10-07T14:00:00+00:00",
+                    ["stato"] = "fatta",
+                    ["foto_ts"] = "2026-10-07T13:10:00+00:00",
+                },
+                new JsonObject
+                {
+                    ["id"] = 6,
+                    ["titolo"] = "Spazza",
+                    ["blocco_da"] = "2026-10-07T14:00:00+00:00",
+                    ["stato"] = "da_fare",
+                }),
+        };
+        var s = Blocco.Leggi(json);
+        var conFoto = s.DaFare.Single(f => f.Id == 5);
+        Assert.Equal("fatta", conFoto.Stato);
+        Assert.Equal(Fuso.Ms("2026-10-07T15:10:00"), conFoto.FotoTsMs); // 13:10 UTC = 15:10 a Roma (ora legale)
+        Assert.True(conFoto.AspettaApprovazione);
+
+        var daFare = s.DaFare.Single(f => f.Id == 6);
+        Assert.Equal("da_fare", daFare.Stato);
+        Assert.Equal(0, daFare.FotoTsMs);
+        Assert.False(daFare.AspettaApprovazione);
+
+        // Un lavoro che aspetta l'approvazione, col blocco_da passato, copre come uno da fare.
+        Assert.True(s.AttivoA(Fuso.Ms("2026-10-07T16:30:00")));
+    }
+
+    [Fact]
+    public void Un_server_vecchio_senza_stato_ne_foto_ts_mostra_il_lavoro_come_da_fare()
+    {
+        var json = new JsonObject
+        {
+            ["da_fare"] = new JsonArray(new JsonObject
+            {
+                ["id"] = 1,
+                ["titolo"] = "Compiti",
+                ["blocco_da"] = "2026-10-07T14:00:00+00:00",
+            }),
+        };
+        var f = Assert.Single(Blocco.Leggi(json).DaFare);
+        Assert.Null(f.Stato);
+        Assert.Equal(0, f.FotoTsMs);
+        Assert.False(f.AspettaApprovazione);
+    }
+
+    [Fact]
+    public void La_copertura_dice_foto_mandata_aspetta_l_approvazione()
+    {
+        var conFoto = new Faccenda
+        {
+            Id = 5, Titolo = "Svuota la lavastoviglie", DataDa = "Mamma",
+            BloccoDaMs = Ora - 1000, Stato = "fatta", FotoTsMs = Ora - 500,
+        };
+        var testo = Testi.TestoBlocco(new[] { conFoto, Faccenda(6, "Spazza", Ora) });
+        Assert.Contains("Svuota la lavastoviglie — da Mamma (foto mandata, aspetta l'approvazione)", testo);
+        // Il lavoro ancora da fare non ha quella riga.
+        Assert.Equal(string.Join(Environment.NewLine,
+            "Prima i lavori di casa",
+            "Svuota la lavastoviglie — da Mamma (foto mandata, aspetta l'approvazione)",
+            "Spazza — da Mamma",
+            "Si sblocca da solo quando un genitore ha approvato la foto di ogni lavoro."), testo);
+    }
+
+    [Fact]
+    public void Lo_stato_e_la_foto_ts_si_salvano_e_si_rileggono()
+    {
+        using var c = new CartellaTemporanea();
+        var s = new StatoBlocco
+        {
+            DaFare = { new Faccenda { Id = 5, Titolo = "x", BloccoDaMs = Ora, Stato = "fatta", FotoTsMs = Ora - 1000 } },
+        };
+        Archivio.ScriviJson(c.File("blocco.json"), s);
+        var riletto = Archivio.LeggiJson<StatoBlocco>(c.File("blocco.json"))!;
+        var f = Assert.Single(riletto.DaFare);
+        Assert.Equal("fatta", f.Stato);
+        Assert.Equal(Ora - 1000, f.FotoTsMs);
+        Assert.True(f.AspettaApprovazione);
     }
 
     [Theory]

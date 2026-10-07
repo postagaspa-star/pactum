@@ -90,8 +90,14 @@ public static class Testi
     /// <summary>Il titolo della finestra che copre gli schermi quando ci sono lavori di casa da fare.</summary>
     public const string TitoloBlocco = "Prima i lavori di casa";
 
-    /// <summary>La frase che dice come ci si sblocca (le foto si mandano dal telefono).</summary>
-    public const string SottoBlocco = "Si sblocca da solo quando dal telefono hai mandato la foto di ogni lavoro.";
+    /// <summary>
+    /// (0.18, contratto v4.0) La frase che dice come ci si sblocca: non basta più mandare la foto, serve
+    /// che un genitore l'approvi. Le foto si mandano dal telefono.
+    /// </summary>
+    public const string SottoBlocco = "Si sblocca da solo quando un genitore ha approvato la foto di ogni lavoro.";
+
+    /// <summary>(0.18, contratto v4.0) Accanto a un lavoro che ha già la foto: aspetta che un genitore la approvi.</summary>
+    public const string FotoDaApprovare = "foto mandata, aspetta l'approvazione";
 
     /// <summary>L'elenco di ripiego quando lo stato salvato si è perso (v. <c>StatoBlocco.Generico</c>).</summary>
     public const string LavoriDaFare = "Ci sono lavori di casa da fare";
@@ -112,10 +118,53 @@ public static class Testi
             var chi = DaChi(f.DataDa);
             if (chi.Length > 0) riga += " — " + chi;
             if (!string.IsNullOrWhiteSpace(f.Nota)) riga += ": " + f.Nota!.Trim();
+            // (0.18) il lavoro con la foto già mandata aspetta l'approvazione di un genitore.
+            if (f.AspettaApprovazione) riga += " (" + FotoDaApprovare + ")";
             righe.Add(riga);
         }
         righe.Add(SottoBlocco);
         return string.Join(Environment.NewLine, righe);
+    }
+
+    // ---------- (0.18, contratto v4.0) La Sessione Studio ----------
+
+    /// <summary>Il titolo della copertura dello Studio.</summary>
+    public const string TitoloStudio = "Sei in Studio";
+
+    /// <summary>La frase sotto la copertura dello Studio: solo la lista, e si chiude dal telefono.</summary>
+    public const string SottoStudio = "Si usano solo le app, i programmi e i siti della lista. Lo Studio si chiude dal telefono.";
+
+    /// <summary>Quando non c'è niente in lista: solo le app sempre usabili.</summary>
+    public const string StudioListaVuota = "Per ora la lista è vuota: proponi programmi e siti dalla finestra di Pactum, poi un genitore li approva.";
+
+    /// <summary>Lo stato dello Studio nella finestra di Pactum: "si chiude dal telefono" (dal computer non si chiude).</summary>
+    public const string StudioSiChiudeDalTelefono = "Si chiude dal telefono";
+
+    // ---------- (0.18, contratto v4.0) Il guardiano ----------
+
+    /// <summary>La domanda di "Chiudi Pactum": dalla 0.18 dice anche che Pactum si riapre da solo entro un minuto.</summary>
+    public const string DomandaChiudiPactum =
+        "Se chiudi, i tuoi genitori vedranno un'interruzione nella registrazione.\n\nPactum si riapre da solo entro un minuto.\n\nChiudere Pactum?";
+
+    /// <summary>(correzione 0.18) «Sì» a «Chiudi Pactum» quando intanto è partito il blocco o lo Studio.</summary>
+    public const string ChiusuraNonAdesso = "Adesso Pactum non si chiude: c'è lo Studio o il blocco dei lavori di casa.";
+
+    /// <summary>Un avvio a mano di una versione più alta, con una più bassa ancora aperta (nessuna istanza chiude un'altra).</summary>
+    public const string VersionePiùVecchiaAperta =
+        "È aperta una versione più vecchia di Pactum. Chiudila dal menu (icona vicino all'orologio → Chiudi Pactum) e riapri questo entro un minuto.";
+
+    /// <summary>I nomi leggibili delle voci permesse dello Studio, per la copertura (dal più in alto). "Word", "classeviva.it"…</summary>
+    public static IReadOnlyList<string> VociStudio(IReadOnlyList<string> chiavi, IReadOnlyDictionary<string, string> nomi)
+    {
+        var righe = new List<string>();
+        foreach (var k in chiavi)
+        {
+            if (nomi.TryGetValue(k, out var nome) && !string.IsNullOrWhiteSpace(nome)) { righe.Add(nome); continue; }
+            if (k.StartsWith(Programma.PrefissoSito, StringComparison.Ordinal)) righe.Add(k[Programma.PrefissoSito.Length..]);
+            else if (k.StartsWith(Programma.Prefisso, StringComparison.Ordinal)) righe.Add(Programma.NomeDiRipiego(k));
+            else righe.Add(k);
+        }
+        return righe;
     }
 
     /// <summary>Il nome di una fascia oraria del computer: "Niente computer dalle 22:00 alle 07:00".</summary>

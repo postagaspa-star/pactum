@@ -27,6 +27,12 @@ public sealed class ContestoPactum : ApplicationContext
     private readonly Control invocatore;
     private readonly SentinellaSchermo schermo;
     private readonly GestoreBlocco gestoreBlocco = new();
+    private readonly GestoreStudio gestoreStudio = new();
+    private readonly SentinellaSpegnimento sentinellaSpegnimento;
+    // (0.18) Timer di riserva: se dopo 60 s dall'inizio dello spegnimento siamo ancora vivi, era annullato.
+    private readonly System.Windows.Forms.Timer timerSpegnimento;
+    // (0.18) WM_ENDSESSION ha detto che lo spegnimento avviene: il timer di riserva non riparte.
+    private bool spegnimentoConfermato;
     private readonly Queue<(string Titolo, string Testo, string? Url, string? Sezione)> fumetti = new();
     private readonly System.Windows.Forms.Timer timerFumetti;
     private readonly ToolStripMenuItem chiudiMenu;
@@ -75,6 +81,9 @@ public sealed class ContestoPactum : ApplicationContext
         motore.AvvisoAggiornamento += (titolo, testo, url) => SulFiloGrafico(() => AccodaFumetto(titolo, testo, url));
         // (0.13) Il blocco delle faccende: copre o scopre gli schermi. Mai durante le prove su file.
         motore.CambioBlocco += vista => SulFiloGrafico(() => AggiornaBlocco(vista));
+        // (0.18, contratto v4.0) La Sessione Studio: copre gli schermi fuori lista, o li libera a fine Studio.
+        motore.CambioStudio += vista => SulFiloGrafico(() => AggiornaStudio(vista));
+        motore.AvvisoStudioInArrivo += (titolo, testo) => SulFiloGrafico(() => AccodaFumetto(titolo, testo));
         schermo = new SentinellaSchermo(acceso => motore.SchermoAcceso(acceso));
 
         SystemEvents.PowerModeChanged += SuEnergia;
@@ -83,13 +92,23 @@ public sealed class ContestoPactum : ApplicationContext
         SystemEvents.SessionSwitch += SuCambioSessione;
         SystemEvents.TimeChanged += SuCambioOra;
         NetworkChange.NetworkAvailabilityChanged += SuRete;
+        // (0.18, contratto v4.0) WM_ENDSESSION: la prova vera dello spegnimento annullato (fEndSession=FALSE).
+        sentinellaSpegnimento = new SentinellaSpegnimento(avviene => SulFiloGrafico(() => SuEsitoSpegnimento(avviene)));
+        timerSpegnimento = new System.Windows.Forms.Timer { Interval = 60_000 };
+        timerSpegnimento.Tick += (_, _) => SuEsitoSpegnimento(false); // riserva: ancora vivi dopo 60 s = annullato
 
+        // (0.18) La prima istanza ascolta già da Main: qui si collega solo l'apertura della finestra.
         istanza.RichiestaApertura += () => SulFiloGrafico(Apri);
-        istanza.Ascolta();
+        istanza.SvuotaAperturaInSospeso();
 
         motore.Avvia();
+        // (0.18) Se lo Studio è già in corso all'avvio (ripresa senza rete), copri subito.
+        AggiornaStudio(motore.VistaStudioCorrente);
 
-        if (!motore.Abbinato || !opzioni.Avvio || opzioni.Apri) Apri();
+        // (correzione 0.18, contratto v4.0 parte B) Partito dal guardiano non apre mai la finestra, nemmeno se Pactum non
+        // è abbinato: ogni minuto si aprirebbe davanti a chi usa il computer. Lì basta un fumetto.
+        if (ApreLaFinestraAllAvvio(opzioni, motore.Abbinato)) Apri();
+        else if (opzioni.Guardiano && !motore.Abbinato) AccodaFumetto("Pactum", "Pactum non è collegato: aprilo per collegarlo.");
         if (opzioni.ProvaChiudiDopoSecondi is int dopo)
         {
             // Il collaudo senza clic: si esegue quello che fa il "Sì" della conferma di "Chiudi Pactum".
@@ -114,6 +133,18 @@ public sealed class ContestoPactum : ApplicationContext
             };
             t.Start();
         }
+    }
+
+    /// <summary>
+    /// (correzione 0.18) All'avvio si apre la finestra? Sì per un avvio a mano, con <c>--apri</c>, o all'avvio di Windows
+    /// se Pactum non è collegato. Mai quando parte dal guardiano (<c>--guardiano</c>): ogni minuto si aprirebbe davanti
+    /// a chi usa il computer. Logica pura.
+    /// </summary>
+    internal static bool ApreLaFinestraAllAvvio(Opzioni opzioni, bool abbinato)
+    {
+        if (opzioni.Apri) return true;
+        if (opzioni.Guardiano) return false;
+        return !abbinato || !opzioni.Avvio;
     }
 
     public static Icon CaricaIcona()
@@ -180,7 +211,8 @@ public sealed class ContestoPactum : ApplicationContext
     {
         // (0.13) Durante un blocco delle faccende non si chiude da qui (la voce è nascosta): e comunque la
         // domanda di conferma non deve mai finire sotto la copertura, dove sembrerebbe un blocco.
-        if (motore.Coperto) return;
+        // (0.18, contratto v4.0) Lo stesso durante lo Studio: dal computer lo Studio non si chiude.
+        if (motore.ChiusuraDaNascondere) return;
         // Nessuna domanda sotto l'avviso a tutto schermo (che resta sopra tutto, e che la domanda
         // disabiliterebbe: sembrerebbe un blocco). L'avviso si chiude prima, e finché la domanda è
         // aperta quelli nuovi aspettano: se Pactum resta aperto, compaiono dopo.
@@ -190,7 +222,7 @@ public sealed class ContestoPactum : ApplicationContext
         try
         {
             scelta = MessageBox.Show(
-                "Se chiudi, i tuoi genitori vedranno un'interruzione nella registrazione.\n\nChiudere Pactum?",
+                Testi.DomandaChiudiPactum,
                 "Chiudi Pactum",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning,
@@ -203,6 +235,16 @@ public sealed class ContestoPactum : ApplicationContext
         if (scelta != DialogResult.Yes)
         {
             Log.Info("chiusura annullata dal figlio");
+            MostraAvvisiInAttesa();
+            return;
+        }
+        // (correzione 0.18) Mentre la domanda era aperta può essere partito il blocco o lo Studio (o l'avvio aspetta
+        // ancora il server): adesso non si chiude.
+        if (motore.ChiusuraDaNascondere)
+        {
+            Log.Info("chiusura confermata ma non eseguita: blocco o Studio in corso");
+            AggiornaBlocco(motore.VistaBloccoCorrente);
+            AccodaFumetto("Pactum", Testi.ChiusuraNonAdesso);
             MostraAvvisiInAttesa();
             return;
         }
@@ -225,10 +267,13 @@ public sealed class ContestoPactum : ApplicationContext
         SystemEvents.TimeChanged -= SuCambioOra;
         NetworkChange.NetworkAvailabilityChanged -= SuRete;
         timerFumetti.Stop();
+        timerSpegnimento.Stop();
+        sentinellaSpegnimento.Dispose();
         finestra?.Close();
         ChiudiAvviso();
-        // Lo spegnimento non si blocca mai: le finestre del blocco si lasciano chiudere.
+        // Lo spegnimento non si blocca mai: le finestre del blocco e dello Studio si lasciano chiudere.
         gestoreBlocco.Dispose();
+        gestoreStudio.Dispose();
         icona.Visible = false;
         icona.Dispose();
         schermo.Dispose();
@@ -309,9 +354,11 @@ public sealed class ContestoPactum : ApplicationContext
         if (uscito) return;
         // (0.13) Non ci si fida dell'ordine degli eventi fra i fili: si rilegge lo stato attuale del motore.
         var vista = motore.VistaBloccoCorrente;
-        // Durante un blocco "Chiudi Pactum" sparisce dal menu; torna quando il blocco finisce.
-        chiudiMenu.Visible = !vista.Coperto;
-        separatoreChiudi.Visible = !vista.Coperto;
+        // Durante un blocco o uno Studio "Chiudi Pactum" sparisce dal menu; torna quando finiscono. (correzione 0.18)
+        // Anche nei secondi dell'avvio in cui si aspetta il server, se la copia salvata dice blocco o Studio.
+        bool nascondiChiudi = vista.Coperto || motore.ChiusuraDaNascondere;
+        chiudiMenu.Visible = !nascondiChiudi;
+        separatoreChiudi.Visible = !nascondiChiudi;
         if (opzioni.CartellaProvaAvvisi != null)
         {
             Log.Info(vista.Coperto ? $"blocco dei lavori di casa (prova): coprirebbe gli schermi, {vista.Faccende.Count} da fare" : "blocco dei lavori di casa (prova): toglierebbe la copertura");
@@ -325,6 +372,35 @@ public sealed class ContestoPactum : ApplicationContext
         catch (Exception e)
         {
             Log.Errore("blocco dei lavori di casa non aggiornato", e);
+        }
+    }
+
+    /// <summary>
+    /// (0.18, contratto v4.0) La Sessione Studio è cambiata: copre gli schermi fuori lista (barra libera) o
+    /// li libera a fine Studio. "Chiudi Pactum" sparisce durante lo Studio. Nelle prove su file non copre.
+    /// </summary>
+    private void AggiornaStudio(Pactum.Motore.VistaStudio _ignorata)
+    {
+        if (uscito) return;
+        // (correzione 0.18) Come per il blocco: non ci si fida dell'ordine degli eventi fra i fili (misura, rete,
+        // finestra), si rilegge lo stato attuale del motore.
+        var vista = motore.VistaStudioCorrente;
+        bool nascondiChiudi = motore.ChiusuraDaNascondere;
+        chiudiMenu.Visible = !nascondiChiudi;
+        separatoreChiudi.Visible = !nascondiChiudi;
+        if (opzioni.CartellaProvaAvvisi != null)
+        {
+            Log.Info(vista.InCorso ? "Sessione Studio (prova): coprirebbe gli schermi fuori lista" : "Sessione Studio (prova): toglierebbe la copertura");
+            return;
+        }
+        try
+        {
+            if (vista.InCorso) gestoreStudio.Studio(vista.Config, vista.InizioMs);
+            else gestoreStudio.Esci();
+        }
+        catch (Exception e)
+        {
+            Log.Errore("copertura dello Studio non aggiornata", e);
         }
     }
 
@@ -450,17 +526,71 @@ public sealed class ContestoPactum : ApplicationContext
 
     private void SuFineSessione(object? mittente, SessionEndingEventArgs e)
     {
+        // (correzione 0.18) Solo se Windows sta chiudendo davvero la sessione: un messaggio finto o un installatore
+        // che chiude le app (Restart Manager) non deve mandare una sospensione falsa né togliere le coperture.
+        if (!RegoleCopertura.FineSessioneVera(Win32.SessioneSiChiude()))
+        {
+            Log.Avviso("fine sessione annunciata ma Windows non si sta chiudendo: ignorata");
+            return;
+        }
+        // Un nuovo tentativo di spegnimento (anche dopo uno annullato): da capo.
+        spegnimentoConfermato = false;
         motore.FineSessione(spegnimento: e.Reason == SessionEndReasons.SystemShutdown);
+        // (0.18, contratto v4.0) Timer di riserva: se dopo 60 s siamo ancora vivi, lo spegnimento è stato
+        // annullato (serve quando WM_ENDSESSION fEndSession=FALSE non arriva, p.es. uno spegnimento forzato
+        // poi fermato). La prova vera resta WM_ENDSESSION, che ferma questo timer.
+        AvviaTimerSpegnimento();
     }
 
     private void SuSessioneFinita(object? mittente, SessionEndedEventArgs e)
     {
+        if (!RegoleCopertura.FineSessioneVera(Win32.SessioneSiChiude()))
+        {
+            Log.Avviso("fine sessione annunciata ma Windows non si sta chiudendo: ignorata");
+            return;
+        }
         Log.Info("sessione finita");
         bool spegnimento = e.Reason == SessionEndReasons.SystemShutdown;
-        // (0.14) In uno spegnimento forzato SessionEnding non arriva: la sospensione si accoda (e si prova a
-        // mandare) qui. Se SessionEnding c'è già stato, non si ripete.
+        // (0.14) In uno spegnimento forzato SessionEnding non arriva: la sospensione si accoda qui. Se
+        // SessionEnding c'è già stato, non si ripete.
+        // (0.18, contratto v4.0) NON si esce più qui: il programma non si chiude da solo. Lo chiude Windows
+        // se lo spegnimento va avanti; se è annullato, resta vivo (v. SuEsitoSpegnimento).
         motore.FineSessione(spegnimento, soloSeMancante: true);
-        Esci(spegnimento ? Chiusure.Spegnimento : Chiusure.Disconnessione);
+        AvviaTimerSpegnimento();
+    }
+
+    /// <summary>
+    /// (0.18) Il timer di riserva parte dal primo dei due eventi (SessionEnding o SessionEnded), ma non dopo che
+    /// WM_ENDSESSION ha già detto che lo spegnimento avviene davvero: lì Windows chiude il processo.
+    /// </summary>
+    private void AvviaTimerSpegnimento()
+    {
+        if (spegnimentoConfermato) return;
+        timerSpegnimento.Stop();
+        timerSpegnimento.Start();
+    }
+
+    /// <summary>
+    /// (0.18, contratto v4.0) L'esito dello spegnimento: da WM_ENDSESSION (fEndSession) o dal timer di
+    /// riserva. <paramref name="avviene"/> true = lo spegnimento va avanti (Windows chiuderà il processo:
+    /// non facciamo niente); false = annullato (il programma resta vivo e torna a coprire se serve).
+    /// </summary>
+    private void SuEsitoSpegnimento(bool avviene)
+    {
+        // (correzione 0.18) Un WM_ENDSESSION «avviene» finto (Windows non si sta chiudendo) non conta: niente cambia.
+        if (avviene && !RegoleCopertura.FineSessioneVera(Win32.SessioneSiChiude())) return;
+        timerSpegnimento.Stop();
+        if (avviene)
+        {
+            spegnimentoConfermato = true; // Windows chiude lui il processo
+            return;
+        }
+        spegnimentoConfermato = false;
+        if (uscito) return;
+        motore.SpegnimentoAnnullato();
+        // Ricontrolla blocco e Studio e torna a coprire se serve (il motore li ha già rivalutati: qui si rilegge).
+        AggiornaBlocco(motore.VistaBloccoCorrente);
+        AggiornaStudio(motore.VistaStudioCorrente);
     }
 
     private void SuCambioSessione(object? mittente, SessionSwitchEventArgs e)
@@ -491,6 +621,7 @@ public sealed class ContestoPactum : ApplicationContext
         if (disposing)
         {
             timerFumetti.Dispose();
+            timerSpegnimento.Dispose();
             invocatore.Dispose();
             immagine.Dispose();
         }

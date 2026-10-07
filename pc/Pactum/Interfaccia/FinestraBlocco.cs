@@ -26,7 +26,7 @@ namespace Pactum.Interfaccia;
 /// </list>
 /// È fatta in WinForms (come l'avviso): si disegna subito, anche senza rete e senza WebView2.
 /// </summary>
-public sealed class FinestraBlocco : Form
+public sealed class FinestraBlocco : Form, ICopertura
 {
     private readonly IReadOnlyList<Faccenda> faccende;
     private readonly bool contrasto = SystemInformation.HighContrast;
@@ -101,6 +101,14 @@ public sealed class FinestraBlocco : Form
     /// <summary>La finestra resta ferma e grande come il suo schermo: ogni tentativo di spostarla o ridimensionarla si annulla.</summary>
     protected override void WndProc(ref Message m)
     {
+        // (correzione 0.18) Un WM_QUERYENDSESSION/WM_ENDSESSION finto (Windows non si sta chiudendo) non arriva a
+        // WinForms, che per WM_ENDSESSION chiuderebbe la copertura senza passare da OnFormClosing.
+        if (RegoleCopertura.MessaggioDaIgnorare(m.Msg, m.Msg is Win32.WM_QUERYENDSESSION or Win32.WM_ENDSESSION && Win32.SessioneSiChiude()))
+        {
+            if (m.Msg == Win32.WM_QUERYENDSESSION) m.Result = (IntPtr)1;
+            Pactum.Motore.Log.Avviso("messaggio di fine sessione ignorato: Windows non si sta chiudendo");
+            return;
+        }
         if (!perImmagine && m.Msg == Win32.WM_WINDOWPOSCHANGING && m.LParam != IntPtr.Zero)
         {
             var pos = Marshal.PtrToStructure<Win32.WINDOWPOS>(m.LParam);
@@ -116,8 +124,9 @@ public sealed class FinestraBlocco : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        // Non si chiude a mano (Alt+F4, menu di sistema). Lo spegnimento e il Task Manager non si bloccano mai.
-        if (!consentiChiusura && e.CloseReason == CloseReason.UserClosing)
+        // Non si chiude a mano (Alt+F4, menu di sistema). (0.18, contratto v4.0) Né da fuori: nessuna richiesta di
+        // chiusura la chiude, tranne lo spegnimento di Windows. Chi la vuole togliere ferma Pactum (e resta traccia).
+        if (!RegoleCopertura.ChiusuraPermessa(consentiChiusura, e.CloseReason))
         {
             e.Cancel = true;
             return;
@@ -268,6 +277,9 @@ public sealed class GestoreBlocco : IDisposable
     private void InCima()
     {
         if (!Coperto) return;
+        // (0.18, contratto v4.0) Una copertura chiusa o nascosta da fuori: le chiuse escono dalla lista (e si
+        // rifanno qui sotto, entro un secondo), le nascoste si rimostrano.
+        RegoleCopertura.Ripulisci(finestre);
         // Copertura parziale (un monitor senza finestra): riprova a coprire tutto.
         if (finestre.Count < Screen.AllScreens.Length)
         {
@@ -474,6 +486,12 @@ internal sealed class FoglioBlocco : Control
         {
             y += a.Px(6);
             y += Testo(g, f.Nota!.Trim(), a.CarattereSecondario, a.TestoSecondario, x, y, larghezza);
+        }
+        // (0.18, contratto v4.0) Il lavoro con la foto già mandata: aspetta che un genitore la approvi.
+        if (f.AspettaApprovazione)
+        {
+            y += a.Px(6);
+            y += Testo(g, Testi.FotoDaApprovare, a.CarattereSecondario, a.TestoSecondario, x, y, larghezza);
         }
         return y - inizio;
     }

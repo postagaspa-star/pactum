@@ -241,6 +241,30 @@ public static class Domini
         NomeDaBarraIndirizzi(testo) is string nome ? DominioDellaPagina(nome) : null;
 
     /// <summary>
+    /// (correzione 0.18) Le pagine di una scheda nuova (o vuota) dei browser che Pactum sa leggere, scritte come le
+    /// mostra la barra. Chrome, Edge e Brave nella scheda nuova lasciano la barra vuota; Firefox anche.
+    /// </summary>
+    private static readonly HashSet<string> SchedeNuove = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "about:blank", "about:newtab", "about:home", "about:privatebrowsing",
+        "chrome://newtab", "chrome://new-tab-page", "chrome-search://local-ntp/local-ntp.html",
+        "edge://newtab", "brave://newtab",
+    };
+
+    /// <summary>
+    /// (correzione 0.18, contratto v4.0) La barra mostra una scheda nuova o vuota (la barra vuota, <c>about:blank</c>,
+    /// <c>chrome://newtab</c>…)? Nello Studio solo questa è usabile senza un sito della lista: un'altra pagina senza
+    /// un nome di sito (un indirizzo IP, <c>file://</c>, <c>edge://surf</c>, un'estensione) vuol dire che da lì è già
+    /// partita una navigazione. Il testo si guarda e si butta.
+    /// </summary>
+    public static bool ÈSchedaNuova(string? testo)
+    {
+        if (string.IsNullOrWhiteSpace(testo)) return true;
+        var t = testo.Trim().TrimEnd('/');
+        return SchedeNuove.Contains(t);
+    }
+
+    /// <summary>
     /// (02/10) Dal testo della barra degli indirizzi al nome intero del sito,
     /// minuscolo (<c>music.youtube.com</c>). Serve SOLO a decidere la categoria
     /// del sito (<c>Lettura.DallaBarra</c>), che per qualche servizio sta in un

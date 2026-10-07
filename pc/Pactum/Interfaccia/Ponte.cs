@@ -103,6 +103,8 @@ public sealed class Ponte
             "stato" => ("GET", () => Task.FromResult(motore.Stato())),
             "oggi" => ("GET", () => Task.Run(motore.Oggi)),
             "visti" => ("GET", () => Task.Run(motore.Visti)),
+            // (0.18, contratto v4.0) Le firme dei programmi che girano adesso, per proporre la lista dello Studio.
+            "studio-firme" => ("GET", () => Task.Run(() => new JsonObject { ["firme"] = motore.FirmeCorrenti() })),
             "serie" => ("GET", () => Task.Run(motore.SerieERecord)),
             "abbina" => ("POST", () =>
             {

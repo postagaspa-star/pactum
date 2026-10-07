@@ -140,14 +140,89 @@ public sealed partial class Motore : IDisposable
         Log.Info($"avvio Pactum {Versione.Nome}");
         var precedenteVivo = Archivio.LeggiJson<StatoVivo>(percorsi.Vivo);
         ValutaAvvio(precedenteVivo);
+        // (0.18, contratto v4.0) «All'avvio: prima il server, poi la copia»: per al massimo 5 secondi non si copre
+        // niente dalla copia salvata (blocco, Studio, stato generico), si aspetta GET /api/faccende/blocco.
+        IniziaAttesaServer(precedenteVivo);
         // (0.13) Il blocco: se blocco.json si è perso ma l'ultimo "sono vivo" diceva bloccato, resta coperto
         // con un elenco generico finché il server non risponde. Poi si valuta la copertura dallo stato salvato.
         PreparaBlocco(precedenteVivo, Tempo.AdessoUtcMs());
+        // (0.18, contratto v4.0) Lo Studio salvato: parte da solo all'ora giusta anche senza rete (le partenze
+        // sono nel file); la chiusura la sa solo dal server.
+        CaricaStudio(precedenteVivo);
+        ValutaStudio(OraServer());
         ScriviVivo(null);
+        // (0.18, contratto v4.0) Il guardiano: crea/ripara l'attività pianificata all'avvio (poi ogni 15 min dal ciclo di rete).
+        AvviaGuardiano();
         filoMisura = new Thread(CicloMisura) { IsBackground = true, Name = "Pactum misura" };
         filoMisura.SetApartmentState(ApartmentState.MTA);
         filoMisura.Start();
+        if (attesaServerAvvio) _ = Task.Run(() => SentiIlServerAllAvvioAsync());
         cicloRete = Task.Run(() => CicloReteAsync(fermaRete.Token));
+    }
+
+    // ---------- (0.18, contratto v4.0) All'avvio: prima il server, poi la copia ----------
+
+    /// <summary>Quanto si aspetta il server all'avvio prima di coprire con la copia salvata.</summary>
+    internal static readonly TimeSpan AttesaServerAvvio = TimeSpan.FromSeconds(5);
+
+    // Vero nei primi secondi dell'avvio, finché il server non risponde (o passano 5 s): non si copre niente.
+    private volatile bool attesaServerAvvio;
+    // I segni dell'ultimo "sono vivo" di prima, tenuti in vivo.json mentre si aspetta (un programma chiuso in
+    // quei secondi resta riconoscibile come chiuso durante un blocco o uno Studio).
+    private bool segnoBloccoPrima;
+    private bool segnoStudioPrima;
+    private long? studioInizioPrima;
+
+    /// <summary>(0.18) Si sta ancora aspettando il server all'avvio (per i test).</summary>
+    internal bool InAttesaDelServer => attesaServerAvvio;
+
+    /// <summary>(0.18) Comincia l'attesa del server: da qui, finché non finisce, blocco e Studio non coprono.</summary>
+    internal void IniziaAttesaServer(StatoVivo? precedenteVivo)
+    {
+        if (!Abbinato) return;
+        segnoBloccoPrima = precedenteVivo?.BloccatoFaccende ?? false;
+        segnoStudioPrima = precedenteVivo?.StudioInCorso ?? false;
+        studioInizioPrima = precedenteVivo?.StudioInizioMs;
+        attesaServerAvvio = true;
+    }
+
+    /// <summary>
+    /// (0.18, contratto v4.0) Chiede <c>GET /api/faccende/blocco</c> e aspetta al massimo
+    /// <paramref name="attesa"/> (5 secondi): con un <c>200</c> vale la risposta (e si salva); senza rete, con
+    /// un errore, un <c>5xx</c> o il tempo scaduto vale la copia (bloccato resta bloccato, in Studio resta in
+    /// Studio); <c>401</c> e <c>404</c>/<c>405</c> come dice la v3.6 (v. <see cref="AggiornaBloccoAsync"/>).
+    /// Poi l'attesa finisce e si decide la copertura.
+    /// </summary>
+    internal async Task SentiIlServerAllAvvioAsync(TimeSpan? attesa = null)
+    {
+        var tempo = attesa ?? AttesaServerAvvio;
+        try
+        {
+            var richiesta = AggiornaBloccoAsync(tempo);
+            await Task.WhenAny(richiesta, Task.Delay(tempo + TimeSpan.FromMilliseconds(250))).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            Log.Errore("blocco chiesto all'avvio", e);
+        }
+        finally
+        {
+            attesaServerAvvio = false;
+            Log.Info("avvio: sentito il server (o passati 5 secondi), adesso si decide la copertura");
+            ValutaStudio(OraServer());
+            ValutaBlocco(Tempo.AdessoUtcMs());
+            ScriviVivo(ChiusuraDaScrivere());
+            // (correzione 0.18) L'interfaccia rilegge lo stato anche se niente è cambiato: «Chiudi Pactum», nascosto
+            // durante l'attesa, torna se non c'è né blocco né Studio.
+            try
+            {
+                CambioStudio?.Invoke(VistaStudioCorrente);
+            }
+            catch (Exception e)
+            {
+                Log.Errore("fine dell'attesa non consegnata", e);
+            }
+        }
     }
 
     /// <summary>Ferma tutto e scrive come ci si è chiusi (<see cref="Chiusure"/>).</summary>
@@ -162,9 +237,29 @@ public sealed partial class Motore : IDisposable
         Log.Info($"fermo ({chiusura})");
     }
 
+    /// <summary>
+    /// (correzione 0.18) «Chiudi Pactum» non va offerto (né eseguito) adesso: c'è il blocco o lo Studio, oppure si sta
+    /// ancora aspettando il server all'avvio e l'ultimo «sono vivo» o la copia salvata dicono blocco o Studio.
+    /// </summary>
+    public bool ChiusuraDaNascondere
+    {
+        get
+        {
+            if (coperto || inStudio) return true;
+            if (!attesaServerAvvio) return false;
+            if (segnoBloccoPrima || segnoStudioPrima) return true;
+            long adesso = Tempo.AdessoUtcMs();
+            return statoBlocco?.AttivoA(adesso) == true || statoStudio.InCorsoA(OraServer(), FusoPatto()) != null;
+        }
+    }
+
     /// <summary>"Chiudi Pactum" dal menu, dopo la conferma: lo si dice subito al server, poi ci si ferma.</summary>
     public async Task ChiudiVolontariamenteAsync()
     {
+        // (correzione 0.18) Se in questo momento c'è il blocco o lo Studio (la domanda era rimasta aperta, o si chiude da
+        // un'altra via), la chiusura non si scrive «volontaria» in vivo.json: al riavvio risulta chiuso durante il
+        // blocco o lo Studio, come dal Task Manager.
+        bool protetto = ChiusuraDaNascondere;
         long adesso = Tempo.AdessoUtcMs();
         // Gli ultimi secondi contano: uno sforamento appena successo parte con la chiusura (senza avvisi a schermo).
         ValutaRegole(adesso, conAvvisi: false);
@@ -173,6 +268,11 @@ public sealed partial class Motore : IDisposable
         AccodaFotografie(adesso);
         await InviaCodaAsync(TimeSpan.FromSeconds(4)).ConfigureAwait(false);
         Ferma(Chiusure.Volontaria);
+        if (protetto)
+        {
+            Log.Avviso("chiusa durante il blocco o lo Studio: non si scrive come volontaria");
+            ScriviVivo(null);
+        }
     }
 
     // ---------- Il registro onesto: sospensione, spegnimento, ripresa ----------
@@ -268,6 +368,25 @@ public sealed partial class Motore : IDisposable
         if (resta > TimeSpan.FromMilliseconds(300)) AspettaAlPiù(InviaCodaAsync(resta), resta);
     }
 
+    /// <summary>
+    /// (0.18, contratto v4.0) Lo spegnimento è stato annullato (WM_ENDSESSION con fEndSession=FALSE, o il timer
+    /// di riserva di 60 s): il programma NON si chiude. Manda <c>ripresa spegnimento_annullato</c> (segno di
+    /// vita), <b>azzera il segno «fine sessione già fatta»</b> (così un vero spegnimento successivo rifà la
+    /// contabilità e rimanda la <c>sospensione</c>), e torna a coprire se blocco o Studio lo vogliono.
+    /// </summary>
+    public void SpegnimentoAnnullato()
+    {
+        lock (fineSessioneBlocco) fineSessioneTick = long.MinValue;
+        chiusuraInCorso = null;
+        long adesso = Tempo.AdessoUtcMs();
+        long tick = Environment.TickCount64;
+        if (Abbinato) coda.Accoda(Eventi.Ripresa("spegnimento_annullato", adesso - tick, adesso));
+        ScriviVivo(null);
+        Log.Info("spegnimento annullato: Pactum resta acceso");
+        ValutaStudio(OraServer());
+        ValutaBlocco(adesso);
+    }
+
     /// <summary>Aspetta un invio al massimo per quel tempo; un errore non ferma mai lo spegnimento.</summary>
     private static void AspettaAlPiù(Task compito, TimeSpan tempo)
     {
@@ -296,13 +415,16 @@ public sealed partial class Motore : IDisposable
                 : "il programma era stato chiuso mentre Windows era acceso");
         }
         if (esito.ChiusoDuranteBlocco) Log.Avviso("il programma era stato chiuso durante un blocco dei lavori di casa");
+        if (esito.ChiusoDuranteStudio) Log.Avviso("il programma era stato chiuso durante una Sessione Studio");
         if (esito.CambioOra != null) Log.Avviso("l'orologio è stato spostato mentre il programma era chiuso");
         if (!Abbinato) return;
         if (esito.ProgrammaChiuso != null) coda.Accoda(Eventi.Manomissione(esito.ProgrammaChiuso, adesso));
         // (0.13) Chiuso di colpo durante un blocco delle faccende (per esempio dal Task Manager): lo si dice.
         if (esito.ChiusoDuranteBlocco) coda.Accoda(Eventi.ChiusoDuranteBlocco(adesso));
+        // (0.18, contratto v4.0) Chiuso di colpo durante una Sessione Studio: lo si dice.
+        if (esito.ChiusoDuranteStudio) coda.Accoda(Eventi.ChiusoDuranteStudio(adesso));
         if (esito.CambioOra != null) coda.Accoda(Eventi.Manomissione(esito.CambioOra, adesso));
-        coda.Accoda(Eventi.Ripresa(esito.MotivoRipresa, esito.AvvioSistemaMs, adesso));
+        coda.Accoda(Eventi.Ripresa(esito.MotivoRipresa, esito.AvvioSistemaMs, adesso, esito.RipresaDalMs));
     }
 
     private void ScriviVivo(string? chiusura)
@@ -315,7 +437,12 @@ public sealed partial class Motore : IDisposable
                 TickMs = Environment.TickCount64,
                 BootId = IdAvvioWindows(),
                 Chiusura = chiusura,
-                BloccatoFaccende = coperto,
+                // (0.18) Mentre si aspetta il server all'avvio valgono i segni di prima (niente si è ancora deciso).
+                BloccatoFaccende = coperto || (attesaServerAvvio && segnoBloccoPrima),
+                StudioInCorso = inStudio || (attesaServerAvvio && segnoStudioPrima),
+                // (correzione 0.18) Per accorgersi al riavvio di uno studio.json cancellato o cambiato.
+                ProssimaPartenzaMs = ProssimaPartenzaNota(),
+                StudioInizioMs = InizioStudioNoto() ?? (attesaServerAvvio && segnoStudioPrima ? studioInizioPrima : null),
             });
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -435,6 +562,8 @@ public sealed partial class Motore : IDisposable
 
         // (0.13) Il blocco delle faccende: lo si guarda a ogni giro, così un blocco programmato parte
         // all'ora giusta anche senza rete (la copia non cambia da sola, ma l'ora passa).
+        // (0.18) Prima lo Studio: se è in corso il blocco aspetta (ValutaBlocco guarda inStudio).
+        ValutaStudio(OraServer());
         ValutaBlocco(utc);
 
         if (giri % GiriTraSalvataggi == 0 || esito.GiorniChiusi.Count > 0)
@@ -481,11 +610,37 @@ public sealed partial class Motore : IDisposable
             schermoIntero: finestra?.SchermoIntero ?? false);
         if (!attivo) return Osservazione.Assente;
         if (finestra == null) return new Osservazione(true, null, null);
-        if (!LettoreIndirizzi.ÈBrowser(finestra.Exe)) return new Osservazione(true, finestra.Chiave, finestra.Nome);
-        var lettura = lettore.Leggi(finestra.Hwnd, finestra.Exe, finestra.SchermoIntero);
-        if (lettura.Dominio != null && SitiSolo != null && !SitiSolo.Contains(lettura.Dominio))
-            lettura = lettura with { Dominio = null, CategoriaSito = null };
-        return new Osservazione(true, finestra.Chiave, finestra.Nome, true, lettura.Dominio, lettura.Fallita, lettura.CategoriaSito);
+        Osservazione osservazione;
+        if (!LettoreIndirizzi.ÈBrowser(finestra.Exe))
+        {
+            osservazione = new Osservazione(true, finestra.Chiave, finestra.Nome, Percorso: finestra.Percorso);
+        }
+        else
+        {
+            var lettura = lettore.Leggi(finestra.Hwnd, finestra.Exe, finestra.SchermoIntero);
+            if (lettura.Dominio != null && SitiSolo != null && !SitiSolo.Contains(lettura.Dominio))
+                lettura = lettura with { Dominio = null, CategoriaSito = null };
+            osservazione = new Osservazione(true, finestra.Chiave, finestra.Nome, true, lettura.Dominio, lettura.Fallita, lettura.CategoriaSito, Percorso: finestra.Percorso);
+        }
+        return InStudioConta(osservazione, finestra);
+    }
+
+    /// <summary>
+    /// (0.18, contratto v4.0, «Cosa conta durante lo Studio») Durante lo Studio il tempo nei programmi e nei siti
+    /// della lista non conta per limiti, categorie, totale e fasce (va in <c>sessioni_minuti</c>); fuori lista conta
+    /// sempre. La firma del file si legge solo per una voce che ne ha una (poi resta in cache).
+    /// </summary>
+    private Osservazione InStudioConta(Osservazione o, FinestraAttiva finestra)
+    {
+        ConfigStudio? config;
+        lock (studioLock) config = inStudio ? configStudioMostrata ?? new ConfigStudio() : null;
+        if (config == null || o.Programma == null) return o;
+        var percorso = finestra.Percorso ?? PrimoPiano.PercorsoDi(finestra.Pid);
+        // (correzione 0.18) Anche il nome originale del file: un browser rinominato col nome di un programma della lista
+        // non è «nella lista», e il suo tempo conta.
+        var info = !o.Browser && !CoperturaStudio.ÈSempreUsabile(finestra.Exe, percorso) ? Firma.Leggi(percorso) : null;
+        var vista = new FinestraStudio(o.Programma, finestra.Exe, info?.Soggetto, o.Browser, !o.LetturaFallita, o.Dominio, percorso, info?.NomeOriginale);
+        return ConteggioStudio.Applica(o, vista, config);
     }
 
     // ---------- I giorni su disco e le fotografie ----------
@@ -748,7 +903,11 @@ public sealed partial class Motore : IDisposable
     internal void ValutaBlocco(long adesso)
     {
         var s = statoBlocco;
-        bool nuovoCoperto = Abbinato && s != null && s.AttivoA(adesso);
+        // (0.18, contratto v4.0) Durante lo Studio il blocco dei lavori ASPETTA: non si copre. Il blocco
+        // resta "attivo" nel senso del server, ma il computer applica lo Studio, non il blocco; alla fine
+        // dello Studio questo giro ricalcola e il blocco parte allora.
+        // (0.18) E nei primi secondi dell'avvio si aspetta il server prima di coprire con la copia.
+        bool nuovoCoperto = Abbinato && !attesaServerAvvio && !inStudio && s != null && s.AttivoA(adesso);
         var faccende = nuovoCoperto ? s!.DaMostrare() : Array.Empty<Faccenda>();
 
         bool cambiaCopertura;
@@ -781,7 +940,9 @@ public sealed partial class Motore : IDisposable
         for (int i = 0; i < a.Count; i++)
         {
             if (a[i].Id != b[i].Id || a[i].Titolo != b[i].Titolo || a[i].Nota != b[i].Nota
-                || a[i].DataDa != b[i].DataDa || a[i].BloccoDaMs != b[i].BloccoDaMs) return false;
+                || a[i].DataDa != b[i].DataDa || a[i].BloccoDaMs != b[i].BloccoDaMs
+                // (0.18) un lavoro che passa da "da fare" a "aspetta l'approvazione" cambia l'elenco mostrato.
+                || a[i].Stato != b[i].Stato || a[i].FotoTsMs != b[i].FotoTsMs) return false;
         }
         return true;
     }

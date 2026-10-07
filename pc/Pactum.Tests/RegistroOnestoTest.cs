@@ -232,11 +232,69 @@ public class RegistroOnestoTest
     [Fact]
     public void Dopo_uno_spegnimento_pulito_niente_chiuso_durante_blocco_anche_se_era_bloccato()
     {
-        // Chiusura pulita (spegnimento): non è una manomissione, anche se il blocco era attivo.
-        var prima = VivoBloccato(Adesso - 30 * Minuto, 10 * Minuto, chiusura: Chiusure.Spegnimento, bloccato: true);
-        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 40 * Minuto, 121);
+        // Spegnimento vero: avvio di Windows DIVERSO (120 → 121), Pactum ripartito presto (2 min dall'accensione):
+        // non è una manomissione, anche se il blocco era attivo.
+        var prima = VivoBloccato(Adesso - 30 * Minuto, 300 * Minuto, boot: 120, chiusura: Chiusure.Spegnimento, bloccato: true);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 2 * Minuto, 121);
         Assert.Null(e.ProgrammaChiuso);
         Assert.False(e.ChiusoDuranteBlocco);
+    }
+
+    // ---------- (0.18, contratto v4.0) lo spegnimento che non avviene, e lo Studio ----------
+
+    private static StatoVivo VivoCoperto(long utc, long tick, long? boot = 121, string? chiusura = null, bool bloccato = false, bool studio = false) =>
+        new() { UtcMs = utc, TickMs = tick, BootId = boot, Chiusura = chiusura, BloccatoFaccende = bloccato, StudioInCorso = studio };
+
+    [Fact]
+    public void Chiusura_spegnimento_ma_stesso_avvio_di_Windows_e_uno_spegnimento_annullato()
+    {
+        // vivo.json diceva "spegnimento", ma l'avvio di Windows è lo stesso (121 = 121): lo spegnimento non è
+        // avvenuto (poi Pactum ucciso e riaperto). Ripresa spegnimento_annullato; programma_chiuso perché era in blocco.
+        var prima = VivoCoperto(Adesso - 30 * Minuto, 10 * Minuto, chiusura: Chiusure.Spegnimento, bloccato: true);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 40 * Minuto, 121);
+        Assert.Equal("spegnimento_annullato", e.MotivoRipresa);
+        Assert.Equal(Adesso - 30 * Minuto, e.RipresaDalMs); // ripresa { motivo: spegnimento_annullato, dal }
+        Assert.NotNull(e.ProgrammaChiuso);
+        Assert.Equal("programma_chiuso", Json.Testo(e.ProgrammaChiuso!["sotto_tipo"]));
+        Assert.Equal("spegnimento_annullato", Json.Testo(e.ProgrammaChiuso["causa"]));
+        Assert.True(e.ChiusoDuranteBlocco);
+    }
+
+    [Fact]
+    public void Spegnimento_annullato_fuori_da_blocco_e_studio_nessuna_manomissione()
+    {
+        // Stesso avvio, chiusura "spegnimento", ma NON era coperto: ripresa spegnimento_annullato senza manomissione.
+        var prima = VivoCoperto(Adesso - 30 * Minuto, 10 * Minuto, chiusura: Chiusure.Spegnimento, bloccato: false, studio: false);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 40 * Minuto, 121);
+        Assert.Equal("spegnimento_annullato", e.MotivoRipresa);
+        Assert.Equal(Adesso - 30 * Minuto, e.RipresaDalMs); // ripresa { motivo: spegnimento_annullato, dal }
+        Assert.Null(e.ProgrammaChiuso);
+        Assert.False(e.ChiusoDuranteBlocco);
+        Assert.False(e.ChiusoDuranteStudio);
+    }
+
+    [Fact]
+    public void Disconnessione_stesso_avvio_in_studio_e_programma_chiuso_con_causa_disconnessione()
+    {
+        var prima = VivoCoperto(Adesso - 30 * Minuto, 10 * Minuto, chiusura: Chiusure.Disconnessione, studio: true);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 40 * Minuto, 121);
+        Assert.Equal("accesso", e.MotivoRipresa);
+        Assert.NotNull(e.ProgrammaChiuso);
+        Assert.Equal("disconnessione", Json.Testo(e.ProgrammaChiuso!["causa"]));
+        Assert.True(e.ChiusoDuranteStudio);
+        Assert.False(e.ChiusoDuranteBlocco);
+    }
+
+    [Fact]
+    public void Chiuso_a_forza_durante_uno_studio_si_dice_al_riavvio()
+    {
+        // Chiusura null (ucciso di colpo), stesso avvio, era in Studio: programma_chiuso + chiuso_durante_studio.
+        var prima = VivoCoperto(Adesso - 30 * Minuto, 10 * Minuto, bloccato: false, studio: true);
+        var e = Nucleo.Vivo.ValutaAvvio(prima, Adesso, 40 * Minuto, 121);
+        Assert.NotNull(e.ProgrammaChiuso);
+        Assert.True(e.ChiusoDuranteStudio);
+        var evento = Eventi.ChiusoDuranteStudio(Adesso);
+        Assert.Equal("chiuso_durante_studio", Json.Testo(evento.Dettagli["sotto_tipo"]));
     }
 
     [Fact]

@@ -5,7 +5,12 @@ using System.Text;
 namespace Pactum.Motore;
 
 /// <summary>Una risposta del server. <see cref="Stato"/> 0 = il server non ha risposto (rete, tempo scaduto).</summary>
-public readonly record struct Risposta(int Stato, string Corpo)
+/// <param name="OraServerMs">
+/// (0.18, contratto v4.0) L'ora del server quando la risposta è arrivata (dall'intestazione <c>Date</c>, che ha i
+/// secondi interi: più mezzo secondo), e <paramref name="TickMs"/> il cronometro di Windows in quel momento. Servono
+/// ad agganciare l'ora del server all'orologio che non si sposta (le partenze dello Studio).
+/// </param>
+public readonly record struct Risposta(int Stato, string Corpo, long? OraServerMs = null, long TickMs = 0)
 {
     public bool Ok => Stato is >= 200 and < 300;
     public bool Rete => Stato == 0;
@@ -71,7 +76,9 @@ public sealed class Postino : IDisposable
         {
             using var risposta = await (modifica ? modifiche : letture).SendAsync(richiesta, HttpCompletionOption.ResponseContentRead, scadenza.Token).ConfigureAwait(false);
             var corpo = await risposta.Content.ReadAsStringAsync(scadenza.Token).ConfigureAwait(false);
-            return new Risposta((int)risposta.StatusCode, corpo);
+            long tick = Environment.TickCount64;
+            long? oraServer = risposta.Headers.Date is DateTimeOffset data ? data.ToUnixTimeMilliseconds() + 500 : null;
+            return new Risposta((int)risposta.StatusCode, corpo, oraServer, tick);
         }
         catch (HttpRequestException)
         {

@@ -50,6 +50,20 @@ public class OpzioniTest
         Assert.Equal("", o.SuffissoIstanza);
     }
 
+    [Fact]
+    public void Il_guardiano_e_come_l_avvio_ma_segnato()
+    {
+        // (0.18, contratto v4.0) --guardiano: la finestra non si apre da sola (come --avvio), ma fa l'arbitraggio.
+        var o = Opzioni.Da(new[] { "--guardiano" });
+        Assert.True(o.Guardiano);
+        Assert.True(o.Avvio);
+        Assert.False(o.Apri);
+        // --avvio da solo non è un guardiano.
+        var a = Opzioni.Da(new[] { "--avvio" });
+        Assert.True(a.Avvio);
+        Assert.False(a.Guardiano);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

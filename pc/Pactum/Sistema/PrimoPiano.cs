@@ -6,7 +6,12 @@ using Pactum.Nucleo;
 namespace Pactum.Sistema;
 
 /// <summary>Il programma della finestra in primo piano. Nessun titolo: solo processo, classe e rettangolo.</summary>
-public sealed record FinestraAttiva(IntPtr Hwnd, int Pid, string Exe, string Chiave, string Nome, bool SchermoIntero);
+/// <param name="Percorso">(0.18) Il percorso del file del programma, se si legge: serve alla firma (Studio) e resta solo sul computer.</param>
+public sealed record FinestraAttiva(IntPtr Hwnd, int Pid, string Exe, string Chiave, string Nome, bool SchermoIntero, string? Percorso = null);
+
+/// <summary>(0.18) Una finestra visibile vista durante lo Studio: processo, chiave <c>exe:</c> e percorso del file (per la firma).</summary>
+/// <param name="Rettangolo">(correzione 0.18) Il rettangolo visibile della finestra: serve a sapere su quali schermi sta.</param>
+public sealed record FinestraVista(IntPtr Hwnd, int Pid, string Exe, string Chiave, string? Percorso, bool SchermoIntero, System.Drawing.Rectangle Rettangolo = default);
 
 public static class PrimoPiano
 {
@@ -21,6 +26,83 @@ public static class PrimoPiano
 
     /// <summary>La finestra in primo piano, oppure null (nessuna, oppure è Pactum stesso).</summary>
     public static FinestraAttiva? Leggi() => DaFinestra(Win32.GetForegroundWindow());
+
+    /// <summary>
+    /// (0.18, contratto v4.0) Le finestre visibili «vere» di tutti gli schermi (per lo Studio: si copre uno
+    /// schermo se vi è visibile una finestra fuori lista). Solo finestre in primo livello, visibili, non
+    /// ridotte a icona, con dimensione non minima e non finestre-strumento (<c>WS_EX_TOOLWINDOW</c>). Mai
+    /// Pactum stesso. Porta il percorso del file, che serve a leggere la firma Authenticode.
+    /// </summary>
+    public static IReadOnlyList<FinestraVista> Visibili()
+    {
+        var trovate = new List<FinestraVista>();
+        var primoPiano = Win32.GetForegroundWindow();
+        Win32.EnumWindows((h, _) =>
+        {
+            if (!ÈFinestraDApp(h, h == primoPiano, out var r)) return true;
+            var v = VistaDa(h, r);
+            if (v != null) trovate.Add(v);
+            return true;
+        }, IntPtr.Zero);
+        return trovate;
+    }
+
+    private static bool ÈFinestraDApp(IntPtr hwnd, bool inPrimoPiano, out System.Drawing.Rectangle rettangolo)
+    {
+        rettangolo = default;
+        if (!Win32.IsWindowVisible(hwnd) || Win32.IsIconic(hwnd)) return false;
+        // Nascoste da Windows (su un altro desktop virtuale, app sospese): non si vedono, non contano.
+        if (Win32.Nascosta(hwnd)) return false;
+        if (Win32.RettangoloVisibile(hwnd) is not Win32.RECT r) return false;
+        long ex = (long)Win32.GetWindowLongPtr(hwnd, Win32.GWL_EXSTYLE);
+        if (!FinestraCheConta(ex, r.Right - r.Left, r.Bottom - r.Top, inPrimoPiano)) return false;
+        rettangolo = System.Drawing.Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
+        return true;
+    }
+
+    /// <summary>Sotto questa misura una finestra-strumento non in primo piano non conta (tavolozze, fumetti, icone).</summary>
+    public const int LarghezzaMinimaStrumento = 300;
+    public const int AltezzaMinimaStrumento = 200;
+
+    /// <summary>
+    /// (correzione 0.18) Una finestra visibile conta per lo Studio? Logica pura. Lo stile di una finestra si può
+    /// cambiare da un altro programma, quindi da solo non basta a scartarla:
+    /// <list type="bullet">
+    /// <item>le finestrelle sotto i 32 px non contano mai;</item>
+    /// <item>quella <b>in primo piano</b> (dove vanno tastiera e mouse) conta sempre, qualunque stile abbia;</item>
+    /// <item>una finestra che lascia passare i clic (<c>WS_EX_TRANSPARENT</c>: le sovrapposizioni delle schede video e
+    /// dei giochi) e non è in primo piano non conta: non si usa, e non deve far coprire lo schermo per sempre;</item>
+    /// <item>una finestra-strumento (<c>WS_EX_TOOLWINDOW</c>) non in primo piano conta se è grande (da 300×200 px).</item>
+    /// </list>
+    /// </summary>
+    public static bool FinestraCheConta(long stileEsteso, int larghezza, int altezza, bool inPrimoPiano)
+    {
+        if (larghezza < 32 || altezza < 32) return false;
+        if (inPrimoPiano) return true;
+        if ((stileEsteso & Win32.WS_EX_TRANSPARENT) != 0) return false;
+        if ((stileEsteso & Win32.WS_EX_TOOLWINDOW) != 0)
+            return larghezza >= LarghezzaMinimaStrumento && altezza >= AltezzaMinimaStrumento;
+        return true;
+    }
+
+    private static FinestraVista? VistaDa(IntPtr hwnd, System.Drawing.Rectangle rettangolo)
+    {
+        Win32.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == 0) return null;
+        var (exe, percorso) = Processo(pid);
+        if (exe == null) return null;
+        if (exe == "applicationframehost.exe")
+        {
+            uint vero = ProcessoFiglio(hwnd, pid);
+            if (vero != 0) { pid = vero; (exe, percorso) = Processo(vero); if (exe == null) return null; }
+        }
+        if (pid == MioPid) return null;
+        bool schermoIntero = !ClassiDesktop.Contains(Win32.ClasseDi(hwnd)) && SchermoIntero(hwnd);
+        string chiave = (exe == "javaw.exe" || exe == "java.exe") && Programma.ÈMinecraftJava(exe, Win32.TitoloDi(hwnd))
+            ? Programma.Chiave(Programma.MinecraftJava)
+            : Programma.Chiave(exe);
+        return new FinestraVista(hwnd, (int)pid, exe, chiave, percorso, schermoIntero, rettangolo);
+    }
 
     /// <summary>
     /// (0.13) Una finestra è a schermo intero su un monitor (e non è il desktop o la barra)? Serve al blocco
@@ -83,10 +165,13 @@ public static class PrimoPiano
         if ((exe == "javaw.exe" || exe == "java.exe") && Programma.ÈMinecraftJava(exe, Win32.TitoloDi(hwnd)))
         {
             return new FinestraAttiva(hwnd, (int)pid, Programma.MinecraftJava,
-                Programma.Chiave(Programma.MinecraftJava), Programma.NomeMinecraftJava, schermoIntero);
+                Programma.Chiave(Programma.MinecraftJava), Programma.NomeMinecraftJava, schermoIntero, percorso);
         }
-        return new FinestraAttiva(hwnd, (int)pid, exe, Programma.Chiave(exe), NomeLeggibile(percorso, exe), schermoIntero);
+        return new FinestraAttiva(hwnd, (int)pid, exe, Programma.Chiave(exe), NomeLeggibile(percorso, exe), schermoIntero, percorso);
     }
+
+    /// <summary>(0.18) Il percorso del file di un processo (per la firma e per la cartella di Windows), o null.</summary>
+    public static string? PercorsoDi(int pid) => pid > 0 ? Processo((uint)pid).Percorso : null;
 
     private static (string? Exe, string? Percorso) Processo(uint pid)
     {

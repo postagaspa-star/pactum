@@ -30,6 +30,12 @@ public sealed class Giornata
     /// <summary>I browser già dichiarati non leggibili oggi (un evento al giorno per browser).</summary>
     [JsonPropertyName("browser_non_leggibili")] public List<string> BrowserNonLeggibili { get; set; } = new();
 
+    /// <summary>
+    /// (0.18, contratto v4.0) Millisecondi passati nei programmi e nei siti della lista della Sessione Studio:
+    /// non contano per limiti, categorie, totale e fasce. Vanno nella fotografia come <c>sessioni_minuti</c>.
+    /// </summary>
+    [JsonPropertyName("ms_studio")] public long MsStudio { get; set; }
+
     /// <summary>Cresce a ogni cambiamento: se è diversa da <see cref="RevisioneFotografata"/> serve una fotografia nuova.</summary>
     [JsonPropertyName("revisione")] public long Revisione { get; set; }
 
@@ -45,7 +51,8 @@ public sealed class Giornata
     {
         Giorno = Giorno,
         MsAttivi = MsAttivi,
-        Programmi = Programmi.ToDictionary(p => p.Key, p => new VoceProgramma { Nome = p.Value.Nome, Ms = p.Value.Ms }),
+        MsStudio = MsStudio,
+        Programmi = Programmi.ToDictionary(p => p.Key, p => new VoceProgramma { Nome = p.Value.Nome, Ms = p.Value.Ms, Percorso = p.Value.Percorso }),
         Siti = Siti.ToDictionary(s => s.Key, s => new VoceSito { Ms = s.Value.Ms, Visite = s.Value.Visite }),
         MsPerCategoria = new Dictionary<string, long>(MsPerCategoria),
         MsPerMinuto = new Dictionary<long, long>(MsPerMinuto),
@@ -59,6 +66,10 @@ public sealed class Giornata
 
     [JsonIgnore]
     public long MinutiTotali => Minuti(MsAttivi);
+
+    /// <summary>(0.18) I minuti di Studio del giorno (<c>sessioni_minuti</c>), da 0 a 1440.</summary>
+    [JsonIgnore]
+    public long MinutiStudio => Math.Clamp(Minuti(MsStudio), 0, 1440);
 
     /// <summary>
     /// I minuti di oggi su una chiave di regola <c>app_o_categoria</c> (match esatto, contratto v3):
@@ -101,6 +112,14 @@ public sealed class VoceProgramma
 {
     [JsonPropertyName("nome")] public string Nome { get; set; } = "";
     [JsonPropertyName("ms")] public long Ms { get; set; }
+
+    /// <summary>
+    /// (0.18) L'ultimo percorso del file visto girare, solo sul computer (mai nelle fotografie): serve a leggere la
+    /// firma Authenticode quando si propone la lista dello Studio dai programmi visti negli ultimi 30 giorni.
+    /// </summary>
+    [JsonPropertyName("percorso")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Percorso { get; set; }
 }
 
 public sealed class VoceSito

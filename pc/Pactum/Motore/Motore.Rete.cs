@@ -25,6 +25,16 @@ public sealed partial class Motore
     private static readonly TimeSpan IntervalloBloccoCoperto = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan IntervalloBlocco = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// Ogni quanto si chiede <c>GET /api/faccende/blocco</c>: 30 secondi quando si è coperti dal blocco o in Studio
+    /// (contratto v4.0: «chiesto ogni 30 secondi in Studio e almeno ogni minuto fuori»), altrimenti un minuto.
+    /// </summary>
+    internal static TimeSpan IntervalloDelBlocco(bool coperto, bool inStudio) =>
+        coperto || inStudio ? IntervalloBloccoCoperto : IntervalloBlocco;
+
+    /// <summary>(0.18, contratto v4.0) Ogni quanto il guardiano controlla l'attività pianificata.</summary>
+    private static readonly TimeSpan IntervalloGuardiano = TimeSpan.FromMinutes(15);
+
     // Protegge config, token e lo stato della rete.
     private readonly object stato = new();
     private readonly SemaphoreSlim giroRete = new(1, 1);
@@ -67,8 +77,15 @@ public sealed partial class Motore
             await Task.Delay(TimeSpan.FromSeconds(3), annulla).ConfigureAwait(false);
             long prossimoGiro = long.MinValue;
             long prossimoBlocco = long.MinValue;
+            long prossimoGuardiano = Environment.TickCount64 + (long)IntervalloGuardiano.TotalMilliseconds;
             while (!annulla.IsCancellationRequested)
             {
+                if (Environment.TickCount64 >= prossimoGuardiano)
+                {
+                    // (0.18, contratto v4.0) Il guardiano: controllo ogni 15 minuti (l'attività si ricrea se tolta).
+                    ControllaGuardiano();
+                    prossimoGuardiano = Environment.TickCount64 + (long)IntervalloGuardiano.TotalMilliseconds;
+                }
                 if (Environment.TickCount64 >= prossimoGiro)
                 {
                     await SincronizzaAsync("periodico").ConfigureAwait(false);
@@ -82,8 +99,9 @@ public sealed partial class Motore
                 if (Environment.TickCount64 >= prossimoBlocco)
                 {
                     // (0.13) La risposta piccola del blocco: più spesso quando si è bloccati.
+                    // (0.18, contratto v4.0) e durante lo Studio (ogni 30 s): è da qui che si sa quando lo Studio finisce.
                     await AggiornaBloccoAsync().ConfigureAwait(false);
-                    prossimoBlocco = Environment.TickCount64 + (long)(coperto ? IntervalloBloccoCoperto : IntervalloBlocco).TotalMilliseconds;
+                    prossimoBlocco = Environment.TickCount64 + (long)IntervalloDelBlocco(coperto, inStudio).TotalMilliseconds;
                 }
                 long prossimo = Math.Min(prossimoGiro, prossimoBlocco);
                 long resta = prossimo - Environment.TickCount64;
@@ -193,17 +211,25 @@ public sealed partial class Motore
             var (server, tok) = Credenziali();
             if (server == null || tok == null) return;
             long chiestoTick = Environment.TickCount64;
+            long chiestoAlle = Tempo.AdessoUtcMs();
             var r = await postino.InviaAsync("GET", server, "api/faccende/blocco", tok, null, tempoMassimo).ConfigureAwait(false);
             Annota(r);
             if (r.Rete || r.Stato is 500 or 502 or 503 or 504) return; // senza rete: resta com'era
             if (r.Ok && Json.Analizza(r.Corpo) is JsonObject o)
             {
                 SegnaBloccoVisto();
+                // (0.18, contratto v4.0) Prima lo "studio" del blocco (in_corso/id/inizio: il segnale di chiusura, più
+                // fresco), poi il blocco: così all'inizio dello Studio la copertura del blocco non lampeggia.
+                AdottaStudioDaBlocco(o["studio"] as JsonObject, orologioServer.Adesso(chiestoTick, chiestoAlle), chiestoTick);
                 AdottaBlocco(Blocco.Leggi(o), chiestoTick);
             }
             else if (r.Stato == 401)
             {
                 AdottaBlocco(StatoBlocco.Vuoto, chiestoTick); // dispositivo revocato
+                // (0.18, contratto v4.0) Anche lo Studio finisce con un 401 (il token rifiutato toglie l'abbinamento).
+                // (correzione 0.18) Si svuota tutto, come il blocco: via anche le partenze salvate, altrimenti un computer
+                // revocato tornerebbe in Studio ogni giorno alle 15:00 per i 14 giorni delle partenze.
+                SvuotaStudio(chiestoTick);
             }
             else if (r.Stato is 404 or 405 && !BloccoVisto && ÈNonTrovatoDiFastApi(r))
             {
@@ -357,6 +383,10 @@ public sealed partial class Motore
         // fresco anche al giro della finestra (ogni minuto). Un patto di un server vecchio non ha il campo:
         // lì il blocco lo tiene aggiornato il giro dedicato (AggiornaBloccoAsync). Si passa il tick della
         // richiesta del patto: un patto vecchio arrivato dopo non scavalca una risposta più fresca di /blocco.
+        // (0.18, contratto v4.0) Prima lo Studio dal patto (config, in_corso, prossime_partenze), poi il blocco: il
+        // blocco aspetta lo Studio. Un patto senza il campo (server più vecchio della v4.0) spegne lo Studio
+        // (Studio.DaPatto(null) dà uno stato vuoto).
+        AdottaStudioDaPatto(dati["studio"] as JsonObject, orologioServer.Adesso(chiestoTick, chiestoAlle), chiestoTick);
         if (dati["blocco"] is JsonObject bloccoJson)
         {
             SegnaBloccoVisto();
@@ -442,6 +472,8 @@ public sealed partial class Motore
     /// <summary>Tiene nota dello stato della rete e del token dopo ogni risposta.</summary>
     private void Annota(Risposta r)
     {
+        // (0.18, contratto v4.0) Ogni risposta con la data aggancia l'ora del server (partenze dello Studio).
+        if (r.OraServerMs is long oraServer) orologioServer.Aggancia(oraServer, r.TickMs);
         lock (stato)
         {
             reteOk = !r.Rete;

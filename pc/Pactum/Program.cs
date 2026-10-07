@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows.Forms;
 using Pactum.Interfaccia;
 using Pactum.Motore;
+using Pactum.Nucleo;
 using Pactum.Sistema;
 
 namespace Pactum;
@@ -11,6 +12,9 @@ public sealed class Opzioni
 {
     /// <summary>Avviato da Windows al login: la finestra non si apre da sola.</summary>
     public bool Avvio { get; private set; }
+
+    /// <summary>(0.18, contratto v4.0) Avviato dall'attività pianificata ogni minuto: come <c>--avvio</c>, ma fa l'arbitraggio del mutex.</summary>
+    public bool Guardiano { get; private set; }
 
     /// <summary>Apre comunque la finestra.</summary>
     public bool Apri { get; private set; }
@@ -56,6 +60,7 @@ public sealed class Opzioni
             switch (args[i])
             {
                 case "--avvio": o.Avvio = true; break;
+                case "--guardiano": o.Guardiano = true; o.Avvio = true; break;
                 case "--apri": o.Apri = true; break;
                 case "--no-installa": o.NonInstallare = true; break;
                 case "--dati":
@@ -177,11 +182,51 @@ internal static class Program
         var eseguibile = Environment.ProcessPath!;
 
         using var istanza = new Istanza(opzioni.SuffissoIstanza);
+        bool mandaIstanzaOccupata = false;
 
-        if (!istanza.Prima)
+        if (istanza.Prima)
         {
-            istanza.ChiediApertura();
-            return 0;
+            // (0.18, contratto v4.0) La prima istanza ascolta SUBITO, prima di ogni altro lavoro: risponde
+            // «sono vivo» ai guardiani senza aprire la finestra.
+            istanza.Ascolta();
+        }
+        else
+        {
+            // (0.18, contratto v4.0) Il mutex è già preso. Il guardiano non si fida del solo mutex: chiede e aspetta
+            // 2 s, riprova una volta dopo 10 s (all'accesso la prima istanza può essere lenta). La risposta da sola non
+            // prova niente (il repo è pubblico, chiunque la imita): conta se è vivo un altro Pactum.exe.
+            if (opzioni.Guardiano && !istanza.SonoVivo(TimeSpan.FromSeconds(2)))
+            {
+                Thread.Sleep(10_000);
+                istanza.SonoVivo(TimeSpan.FromSeconds(2));
+            }
+            switch (ArbitroIstanza.ConMutexPreso(opzioni.Avvio, opzioni.Guardiano, AltriPactum.Vivo()))
+            {
+                case AzioneAvvio.EsciInSilenzio:
+                    // --avvio e --guardiano con un'istanza viva: escono senza aprire niente.
+                    return 0;
+                case AzioneAvvio.MostraQuellaViva:
+                {
+                    // Avvio a mano con un Pactum vivo. Nessuna istanza chiude un'altra: se quella viva è una versione più
+                    // vecchia, si spiega come aggiornare e si esce; altrimenti le si chiede di mostrarsi.
+                    var mia = typeof(Program).Assembly.GetName().Version ?? new Version(0, 0);
+                    if (AltriPactum.UnaÈPiùVecchia(AltriPactum.Versioni(), new Version(mia.Major, mia.Minor, Math.Max(0, mia.Build))))
+                    {
+                        MessageBox.Show(Testi.VersionePiùVecchiaAperta, "Pactum", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return 0;
+                    }
+                    istanza.ChiediApertura();
+                    return 0;
+                }
+                default:
+                    // Nessun Pactum.exe vivo: chi tiene il mutex non è Pactum. Si parte lo stesso col mutex di riserva,
+                    // da cui si risponde ai guardiani dei minuti dopo. Se la riserva non è nostra e intanto è nato un
+                    // Pactum (un altro guardiano), si esce; se la tiene un estraneo, si parte lo stesso.
+                    if (!istanza.PrendiRiserva() && AltriPactum.Vivo()) return 0;
+                    mandaIstanzaOccupata = true;
+                    istanza.Ascolta();
+                    break;
+            }
         }
 
         var cartellaExe = AppContext.BaseDirectory;
@@ -205,6 +250,13 @@ internal static class Program
 
         using var motore = new Motore.Motore(new Percorsi(opzioni.CartellaDati));
         motorePerCrash = motore;
+        // (0.18, contratto v4.0) Il guardiano (attività pianificata) solo dal pacchetto vero, come l'avvio al
+        // login: una build di sviluppo e i test non toccano l'Utilità di pianificazione.
+        if (!opzioni.NonInstallare && Installazione.ÈPacchetto)
+        {
+            motore.Pianificatore = new PianificatoreSchtasks(eseguibile, PianificatoreSchtasks.UtenteCorrente());
+        }
+        if (mandaIstanzaOccupata) motore.SegnalaIstanzaOccupata();
         if (opzioni.OpzioniIgnorate.Count > 0)
         {
             Log.Avviso($"opzioni di prova ignorate (valgono solo con --dati su una cartella di prova): {string.Join(", ", opzioni.OpzioniIgnorate)}");

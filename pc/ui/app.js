@@ -24,6 +24,7 @@
     { id: 'regole', titolo: 'Le mie regole', icona: 'regole', gruppo: 1 },
     { id: 'proposte', titolo: 'Proposte', icona: 'proposte', gruppo: 1 },
     { id: 'faccende', titolo: 'Lavori di casa', icona: 'faccende', gruppo: 1 },
+    { id: 'studio', titolo: 'Sessione Studio', icona: 'studio', gruppo: 1 },
     { id: 'diario', titolo: 'Diario', icona: 'diario', gruppo: 1 },
     { id: 'siti', titolo: 'Siti', icona: 'siti', gruppo: 2 },
     { id: 'cosa-vede', titolo: 'Cosa vedono i tuoi genitori', icona: 'occhio', gruppo: 2 },
@@ -96,6 +97,7 @@
     proposte: [['path', { d: 'M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5z' }], ['path', { d: 'M8.5 8.5h7M8.5 11.5h4.5' }]],
     faccende: [['rect', { x: 6, y: 4.5, width: 12, height: 16.5, rx: 2.2 }], ['path', { d: 'M9.3 4.5h5.4a1 1 0 0 1 1 1V7H8.3V5.5a1 1 0 0 1 1-1z' }], ['path', { d: 'M9 12.2l2 2 4-4' }]],
     diario: [['path', { d: 'M5 4.5h11.5A2.5 2.5 0 0 1 19 7v12.5H7.5A2.5 2.5 0 0 1 5 17z' }], ['path', { d: 'M5 17a2.5 2.5 0 0 1 2.5-2.5H19M9 8.5h6' }]],
+    studio: [['path', { d: 'M5 4.5h9A2.5 2.5 0 0 1 16.5 7v12.5H7.5A2.5 2.5 0 0 1 5 17z' }], ['circle', { cx: 17.5, cy: 15.5, r: 4 }], ['path', { d: 'M17.5 13.5v2l1.3 1' }]],
     siti: [['circle', { cx: 12, cy: 12, r: 8.5 }], ['path', { d: 'M3.5 12h17M12 3.5c2.4 2.6 3.6 5.4 3.6 8.5s-1.2 5.9-3.6 8.5M12 3.5C9.6 6.1 8.4 8.9 8.4 12s1.2 5.9 3.6 8.5' }]],
     occhio: [['path', { d: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z' }], ['circle', { cx: 12, cy: 12, r: 3 }]],
     impostazioni: [['path', { d: 'M4 7h8M17 7h3M4 17h3M12 17h8' }], ['circle', { cx: 14.5, cy: 7, r: 2.3 }], ['circle', { cx: 9.5, cy: 17, r: 2.3 }]],
@@ -692,6 +694,7 @@
       case 'regole': parti.push(...sezioneRegole()); break;
       case 'proposte': parti.push(...sezioneProposte()); break;
       case 'faccende': parti.push(...sezioneFaccende()); break;
+      case 'studio': parti.push(...sezioneStudio()); break;
       case 'diario': parti.push(...sezioneDiario()); break;
       case 'siti': parti.push(...sezioneSiti()); break;
       case 'cosa-vede': parti.push(...sezioneCosaVede()); break;
@@ -1420,9 +1423,19 @@
     return S.patto && S.patto.blocco && typeof S.patto.blocco === 'object' ? S.patto.blocco : null;
   }
 
-  /** Quanti lavori di casa restano da fare: per il numero accanto a "Lavori di casa" nel menu. */
+  /** (0.18) Un lavoro aspetta l'approvazione: ha mandato la foto ma nessun genitore l'ha ancora approvata. */
+  function aspettaApprovazione(f) {
+    return f.stato === 'fatta' && f.da_approvare === true;
+  }
+
+  /** Un lavoro è ancora aperto (blocca): da fare, oppure in attesa di approvazione. */
+  function faccendaAperta(f) {
+    return f.stato === 'da_fare' || aspettaApprovazione(f);
+  }
+
+  /** Quanti lavori di casa restano aperti: per il numero accanto a "Lavori di casa" nel menu. */
   function faccendeDaFare() {
-    return (faccendeDelPatto() || []).filter((f) => f.stato === 'da_fare').length;
+    return (faccendeDelPatto() || []).filter(faccendaAperta).length;
   }
 
   function sezioneFaccende() {
@@ -1441,10 +1454,17 @@
     parti.push(schedaBlocco(blocco));
 
     const daFare = (faccende || []).filter((f) => f.stato === 'da_fare');
-    const chiuse = (faccende || []).filter((f) => f.stato !== 'da_fare');
+    const daApprovare = (faccende || []).filter(aspettaApprovazione);
+    const chiuse = (faccende || []).filter((f) => !faccendaAperta(f));
     parti.push(titoloSezione('Da fare'));
-    if (!daFare.length) parti.push(rigaVuota('spunta', 'Nessun lavoro di casa da fare. Tutto a posto.'));
+    if (!daFare.length) parti.push(rigaVuota('spunta', 'Nessun lavoro di casa da fare.'));
     else daFare.forEach((f) => parti.push(cardFaccenda(f)));
+
+    if (daApprovare.length) {
+      // (0.18, contratto v4.0) La foto è arrivata ma aspetta che un genitore la approvi: il computer resta coperto.
+      parti.push(titoloSezione('Aspettano l\'approvazione'));
+      daApprovare.forEach((f) => parti.push(cardFaccenda(f)));
+    }
 
     if (chiuse.length) {
       parti.push(titoloSezione('Chiusi di recente'));
@@ -1456,19 +1476,26 @@
   /** La scheda in cima: se il computer è bloccato, da quando, o quando partirà il blocco. */
   function schedaBlocco(blocco) {
     const scheda = h('section', { class: 'card', 'aria-label': 'Stato del blocco' });
-    if (blocco && blocco.attivo) {
+    // (correzione 0.18, contratto v4.0) Durante lo Studio il blocco aspetta: il computer non è coperto per i lavori.
+    const motoreStudio = studioDelMotore();
+    const inStudio = !!(blocco && blocco.rimandato) || !!(motoreStudio && motoreStudio.in_corso);
+    if (blocco && blocco.attivo && inStudio) {
+      scheda.append(
+        h('p', { class: 'card-titolo' }, 'Il blocco dei lavori di casa parte a fine Studio.'),
+        h('p', { class: 'secondario' }, 'Se un genitore approva la foto di ogni lavoro prima della fine dello Studio, il blocco non parte.'));
+    } else if (blocco && blocco.attivo) {
       const dal = T.quando(blocco.dal);
       scheda.append(
         h('p', { class: 'card-titolo' }, 'Il computer è bloccato: prima i lavori di casa.'),
-        h('p', { class: 'secondario' }, (dal ? 'Bloccato ' + dal + '. ' : '') + 'Si sblocca da solo quando dal telefono hai mandato la foto di ogni lavoro.'));
+        h('p', { class: 'secondario' }, (dal ? 'Bloccato ' + dal + '. ' : '') + 'Si sblocca da solo quando un genitore ha approvato la foto di ogni lavoro.'));
     } else if (blocco && blocco.prossimo) {
       scheda.append(
         h('p', { class: 'card-titolo' }, 'Il blocco parte ' + (T.dalQuando(blocco.prossimo) || 'più tardi') + '.'),
-        h('p', { class: 'secondario' }, 'Se li fai prima e mandi le foto dal telefono, il blocco non parte.'));
+        h('p', { class: 'secondario' }, 'Se li fai prima e un genitore approva le foto, il blocco non parte.'));
     } else {
       scheda.append(
         h('p', { class: 'card-titolo' }, 'Nessun blocco in corso.'),
-        h('p', { class: 'secondario' }, 'Quando un genitore ti dà dei lavori di casa, finché non li fai il computer resta bloccato.'));
+        h('p', { class: 'secondario' }, 'Quando un genitore ti dà dei lavori di casa, il computer resta bloccato finché un genitore non approva le foto.'));
     }
     return scheda;
   }
@@ -1483,7 +1510,9 @@
     if (T.numero(f.bocciature) > 0) {
       card.append(h('p', { class: 'piccolo secondario' }, 'Il genitore l\'ha rimandato: rifallo e manda una foto nuova dal telefono.'));
     }
-    card.append(h('p', { class: 'piccolo secondario' }, 'La foto si manda dal telefono.'));
+    // (0.18, contratto v4.0) La foto è già arrivata: aspetta l'approvazione di un genitore. Altrimenti va mandata.
+    card.append(h('p', { class: 'piccolo secondario' },
+      aspettaApprovazione(f) ? 'Foto mandata, aspetta l\'approvazione.' : 'La foto si manda dal telefono.'));
     return card;
   }
 
@@ -1491,6 +1520,278 @@
     const li = h('li', { class: 'riga-dichiarazione' }, h('p', { class: 'riga-titolo' }, f.titolo || 'Lavoro di casa'));
     li.append(h('p', { class: 'secondario' }, f.stato === 'annullata' ? 'Annullato dal genitore.' : 'Fatto.'));
     return li;
+  }
+
+  // --- Sessione Studio (contratto v4.0) -------------------------------------------------------
+
+  /**
+   * I browser: nella lista dello Studio si scrivono i siti, mai il browser come programma (il server lo rifiuta).
+   * (correzione 0.18) Lo stesso elenco del server (server/app/studio.py, BROWSER) e del motore (CoperturaStudio.cs).
+   */
+  const BROWSER_STUDIO = new Set(['exe:chrome.exe', 'exe:msedge.exe', 'exe:firefox.exe', 'exe:brave.exe', 'exe:opera.exe',
+    'exe:opera_gx.exe', 'exe:vivaldi.exe', 'exe:arc.exe', 'exe:chromium.exe', 'exe:iexplore.exe', 'exe:waterfox.exe',
+    'exe:librewolf.exe', 'exe:tor.exe', 'exe:yandex.exe', 'exe:browser.exe', 'exe:seamonkey.exe', 'exe:palemoon.exe',
+    'exe:floorp.exe', 'exe:thorium.exe', 'exe:zen.exe', 'exe:maxthon.exe', 'exe:duckduckgo.exe']);
+
+  /** Lo "studio" del patto (GET /api/patto → studio: { config, in_corso, prossime_partenze }), o null. */
+  function studioDelPatto() {
+    return S.patto && S.patto.studio && typeof S.patto.studio === 'object' ? S.patto.studio : null;
+  }
+
+  /** La configurazione del computer approvata (lista e firme), o null. */
+  function computerStudio() {
+    const s = studioDelPatto();
+    const a = s && s.config && s.config.approvata ? s.config.approvata : null;
+    return a && a.computer ? a.computer : null;
+  }
+
+  /** Lo Studio come lo sa il motore del computer (anche partito senza rete): GET /locale/stato → studio. */
+  function studioDelMotore() {
+    return S.motore && S.motore.studio && typeof S.motore.studio === 'object' ? S.motore.studio : null;
+  }
+
+  /** "15:00" da un'ora ISO, o null. */
+  function oraDi(ts) {
+    const d = T.istante(ts);
+    return d ? T.orario(d) : null;
+  }
+
+  /**
+   * La riga dello stato: «Studio dalle 15:00 · 42 min su 60 · si chiude dopo le 16:00». I minuti fatti li sa solo
+   * il server (li cronometra il telefono): senza, si dice solo il minimo.
+   */
+  function rigaStatoStudio(inizio, minuti, minimi, chiudibileDal) {
+    const parti = [];
+    const da = oraDi(inizio);
+    parti.push(da ? 'Studio dalle ' + da : 'Studio in corso');
+    if (typeof minuti === 'number' && typeof minimi === 'number') parti.push(minuti + ' min su ' + minimi);
+    else if (typeof minimi === 'number') parti.push('almeno ' + minimi + ' min');
+    const chiude = oraDi(chiudibileDal);
+    if (chiude) parti.push('si chiude dopo le ' + chiude);
+    return parti.join(' · ');
+  }
+
+  const TIPI_TRATTO = { compiti: 'Compiti', lavori_di_casa: 'Lavori di casa', altro: 'Altro' };
+
+  /** Un tratto del timer del telefono, in sola lettura: «Altro (allenamento) · 40 min». */
+  function rigaTratto(t) {
+    let nome = TIPI_TRATTO[t.tipo] || 'Attività';
+    if (t.parola) nome += ' (' + t.parola + ')';
+    let dettaglio = T.numero(t.minuti) + ' min';
+    if (t.esito === 'in_corso') dettaglio = 'in corso';
+    else if (t.esito === 'interrotto') dettaglio += ' · interrotto';
+    return h('li', { class: 'riga-dichiarazione' }, h('p', { class: 'riga-titolo' }, nome), h('p', { class: 'piccolo secondario' }, dettaglio));
+  }
+
+  function sezioneStudio() {
+    const parti = [h('p', { class: 'intro' }, 'Nei giorni dello Studio, all\'ora decisa, parte la Sessione Studio: restano usabili solo i programmi e i siti della lista. Qui vedi lo stato e proponi la lista. Lo Studio si chiude dal telefono, non dal computer.')];
+    const patto = S.patto;
+    if (!patto) {
+      const locale = studioDelMotore();
+      if (locale && locale.in_corso) parti.push(schedaStudio(null));
+      else if (!S.pattoNonAggiornato) parti.push(caricamento('Sto leggendo lo Studio…'));
+      return parti;
+    }
+    const studio = studioDelPatto();
+    if (!studio) {
+      parti.push(rigaVuota('info', 'Per lo Studio serve aggiornare il server di Pactum.'));
+      return parti;
+    }
+    parti.push(schedaStudio(studio));
+    const config = studio.config || {};
+    if (config.in_attesa) {
+      parti.push(h('p', { class: 'secondario' }, 'Hai una proposta che aspetta l\'approvazione di un genitore.'));
+    } else if (config.motivazione) {
+      parti.push(h('p', { class: 'secondario' }, 'L\'ultima proposta non è stata approvata: ' + config.motivazione));
+    }
+    if (!config.approvata) {
+      parti.push(h('p', { class: 'secondario' }, 'Lo Studio non è ancora approvato: finché un genitore non lo approva, non parte.'));
+    }
+    parti.push(titoloSezione('La lista del computer'));
+    parti.push(listaComputerStudio(studio.in_corso && studio.in_corso.liste ? studio.in_corso.liste.computer : null));
+    parti.push(h('p', null, h('button', { type: 'button', class: 'bottone', chiave: 'proponi-studio', onclick: () => apriListaStudio() }, 'Proponi una lista nuova')));
+    return parti;
+  }
+
+  function schedaStudio(studio) {
+    const scheda = h('section', { class: 'card', 'aria-label': 'Stato dello Studio' });
+    const inCorso = studio && studio.in_corso ? studio.in_corso : null;
+    const locale = studioDelMotore();
+    if (inCorso && inCorso.inizio_ts) {
+      // Lo Studio come lo dice il server: minuti fatti col timer del telefono, minimo, ora da cui si chiude.
+      scheda.append(
+        h('p', { class: 'card-titolo' }, 'Sei in Studio.'),
+        h('p', null, rigaStatoStudio(inCorso.inizio_ts, T.numero(inCorso.minuti_attivita), T.numero(inCorso.minuti_minimi), inCorso.chiudibile_dal)),
+        h('p', { class: 'secondario' }, 'Si chiude dal telefono.'));
+      const tratti = Array.isArray(inCorso.tratti) ? inCorso.tratti : [];
+      if (tratti.length) {
+        scheda.append(h('p', { class: 'piccolo secondario' }, 'Attività col timer del telefono:'),
+          h('ul', { class: 'lista-dichiarazioni' }, tratti.map(rigaTratto)));
+      }
+    } else if (locale && locale.in_corso) {
+      // Partito senza rete (o il server non ha ancora risposto): il computer lo sa dalle partenze salvate.
+      scheda.append(
+        h('p', { class: 'card-titolo' }, 'Sei in Studio.'),
+        h('p', null, rigaStatoStudio(locale.inizio, null, typeof locale.minuti_minimi === 'number' ? locale.minuti_minimi : null, locale.chiudibile_dal)),
+        h('p', { class: 'secondario' }, 'Si chiude dal telefono. I minuti di attività li conta il telefono.'));
+    } else {
+      const prossime = studio && Array.isArray(studio.prossime_partenze) ? studio.prossime_partenze : [];
+      const prima = prossime.find((p) => p && T.istante(p.inizio_ts) && T.istante(p.inizio_ts).getTime() > Date.now());
+      if (prima) {
+        scheda.append(
+          h('p', { class: 'card-titolo' }, 'Nessuno Studio in corso.'),
+          h('p', { class: 'secondario' }, 'Il prossimo parte ' + (T.dalQuando(prima.inizio_ts) || 'più tardi') + '.'));
+      } else {
+        scheda.append(
+          h('p', { class: 'card-titolo' }, 'Nessuno Studio in programma.'),
+          h('p', { class: 'secondario' }, 'Lo Studio parte solo con un telefono con Pactum aggiornato e un genitore che l\'ha approvato.'));
+      }
+    }
+    return scheda;
+  }
+
+  /** La lista del computer: quella dello Studio in corso (resta quella con cui è partito) o quella approvata. */
+  function listaComputerStudio(listaInCorso) {
+    const computer = listaInCorso || computerStudio();
+    const programmi = computer && Array.isArray(computer.programmi) ? computer.programmi : [];
+    const nomi = (computer && computer.nomi) || {};
+    const firme = (computer && computer.firme) || {};
+    if (!programmi.length) return rigaVuota('info', 'Lista vuota: durante lo Studio si usano solo le app di sistema. Proponi la tua lista qui sotto.');
+    const ul = h('ul', { class: 'lista-dichiarazioni' });
+    programmi.forEach((k) => {
+      const nome = nomi[k] || (k.indexOf('sito:') === 0 ? k.slice(5) : (k.indexOf('exe:') === 0 ? k.slice(4) : k));
+      const li = h('li', { class: 'riga-dichiarazione' }, h('p', { class: 'riga-titolo' }, nome));
+      li.append(h('p', { class: 'piccolo secondario' }, (k.indexOf('sito:') === 0 ? 'sito' : 'programma') + (firme[k] ? ' · firmato da ' + firme[k] : '')));
+      ul.append(li);
+    });
+    if (listaInCorso) return h('div', null, ul, h('p', { class: 'piccolo secondario' }, 'È la lista con cui è partito questo Studio: una lista nuova vale dal prossimo.'));
+    return ul;
+  }
+
+  async function apriListaStudio() {
+    // Servono i programmi e i siti visti negli ultimi 30 giorni, e le firme dei programmi.
+    await caricaVisti();
+    let firmeViste = {};
+    const rf = await Api.get('/locale/studio-firme');
+    if (rf.ok && rf.dati && rf.dati.firme) firmeViste = rf.dati.firme;
+    dialogoListaStudio(firmeViste);
+  }
+
+  function rigaScelta(id, testo, acceso, cambia) {
+    const cb = h('input', { type: 'checkbox', id, chiave: id });
+    cb.checked = acceso;
+    cb.addEventListener('change', () => cambia(cb.checked));
+    return h('label', { class: 'riga-scelta', for: id }, cb, h('span', null, testo));
+  }
+
+  /** Un sito scritto a mano: solo il nome (classeviva.it), senza https:// né percorso. Null se non è un nome. */
+  function sitoScritto(testo) {
+    let t = String(testo || '').trim().toLowerCase();
+    if (!t) return null;
+    t = t.replace(/^[a-z]+:\/\//, '').replace(/^www\./, '');
+    t = t.split(/[\/?#:\s]/)[0];
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(t) ? t : null;
+  }
+
+  /** (correzione 0.18) La parte computer della proposta che aspetta l'approvazione, o null. */
+  function computerInAttesa() {
+    const s = studioDelPatto();
+    const a = s && s.config && s.config.in_attesa ? s.config.in_attesa : null;
+    return a && a.computer ? a.computer : null;
+  }
+
+  function dialogoListaStudio(firmeViste) {
+    // (correzione 0.18) Se c'è già una proposta che aspetta, si parte da quella (il PATCH la sostituisce per intero).
+    const inAttesa = computerInAttesa();
+    const computer = inAttesa || computerStudio() || {};
+    const attuali = Array.isArray(computer.programmi) ? computer.programmi.slice() : [];
+    const nomiNoti = Object.assign({}, computer.nomi || {});
+    const firmeNote = Object.assign({}, computer.firme || {});
+    const scelti = new Set(attuali);
+    const programmiVisti = ((S.visti && S.visti.programmi) || []).filter((p) => p && p.chiave && !BROWSER_STUDIO.has(p.chiave));
+    const sitiVisti = (S.visti && S.visti.siti) || [];
+    // Programmi: quelli visti più quelli già in lista. Siti: quelli visti più quelli già in lista.
+    const chiaviProgrammi = [];
+    programmiVisti.forEach((p) => { if (chiaviProgrammi.indexOf(p.chiave) < 0) chiaviProgrammi.push(p.chiave); });
+    attuali.filter((k) => k.indexOf('exe:') === 0 && !BROWSER_STUDIO.has(k)).forEach((k) => { if (chiaviProgrammi.indexOf(k) < 0) chiaviProgrammi.push(k); });
+    const siti = [];
+    sitiVisti.forEach((d) => { if (siti.indexOf(d) < 0) siti.push(d); });
+    attuali.filter((k) => k.indexOf('sito:') === 0).forEach((k) => { if (siti.indexOf(k.slice(5)) < 0) siti.push(k.slice(5)); });
+
+    apriDialogo({
+      titolo: 'Proponi la lista dello Studio',
+      fuoco: 'input, textarea, button',
+      costruisci(d) {
+        d.corpo.append(h('p', { class: 'piccolo secondario' }, 'Spunta i programmi e i siti che ti servono per studiare: sono quelli usati negli ultimi 30 giorni. Un genitore deve approvare la lista.'));
+        if (inAttesa) d.corpo.append(h('p', { class: 'piccolo' }, 'Stai cambiando la proposta che aspetta l\'approvazione: quella di prima viene sostituita.'));
+        const listaProg = h('div', { class: 'lista-scelte' });
+        chiaviProgrammi.forEach((chiave) => {
+          const visto = programmiVisti.find((p) => p.chiave === chiave);
+          if (visto && visto.nome) nomiNoti[chiave] = visto.nome;
+          const nome = nomiNoti[chiave] || chiave.slice(4);
+          const firma = firmeViste[chiave] || firmeNote[chiave];
+          listaProg.append(rigaScelta('studio-' + chiave.replace(/[^a-z0-9]/gi, '_'), nome + (firma ? ' · firmato da ' + firma : ''),
+            scelti.has(chiave), (si) => { if (si) scelti.add(chiave); else scelti.delete(chiave); }));
+        });
+        if (!chiaviProgrammi.length) listaProg.append(h('p', { class: 'piccolo secondario' }, 'Nessun programma usato negli ultimi 30 giorni.'));
+        const listaSiti = h('div', { class: 'lista-scelte' });
+        siti.forEach((dominio) => {
+          const chiave = 'sito:' + dominio;
+          listaSiti.append(rigaScelta('studio-' + chiave.replace(/[^a-z0-9]/gi, '_'), dominio, scelti.has(chiave),
+            (si) => { if (si) scelti.add(chiave); else scelti.delete(chiave); }));
+        });
+        d.corpo.append(h('h3', { class: 'sottotitolo' }, 'Programmi'), listaProg);
+        d.corpo.append(h('p', { class: 'piccolo secondario' }, 'I browser non si scelgono: si scelgono i siti.'));
+        d.corpo.append(h('h3', { class: 'sottotitolo' }, 'Siti'), listaSiti);
+        d.corpo.append(h('label', { class: 'piccolo secondario', for: 'studio-siti' }, 'Altri siti, uno per riga (per esempio classeviva.it):'),
+          h('textarea', { class: 'campo', id: 'studio-siti', chiave: 'studio-siti', rows: '3', placeholder: 'classeviva.it' }));
+        d.corpo.append(d.messaggio);
+        const annulla = h('button', { type: 'button', class: 'bottone fantasma', onclick: () => d.chiudi() }, 'Annulla');
+        const invia = h('button', { type: 'button', class: 'bottone', chiave: 'studio-invia', onclick: salva }, 'Proponi');
+        d.corpo.append(bottoniDialogo(annulla, invia));
+
+        async function salva() {
+          if (d.occupato) return;
+          const righe = (d.cerca('#studio-siti').value || '').split('\n').map((t) => t.trim()).filter(Boolean);
+          const altri = righe.map(sitoScritto);
+          if (altri.some((s) => !s)) {
+            d.errore('Scrivi solo il nome dei siti, uno per riga, per esempio classeviva.it.');
+            return;
+          }
+          const programmi = [];
+          chiaviProgrammi.forEach((k) => { if (scelti.has(k)) programmi.push(k); });
+          siti.forEach((dominio) => { if (scelti.has('sito:' + dominio)) programmi.push('sito:' + dominio); });
+          altri.forEach((dominio) => { if (programmi.indexOf('sito:' + dominio) < 0) programmi.push('sito:' + dominio); });
+          const firme = {};
+          const nomi = {};
+          programmi.forEach((k) => {
+            if (k.indexOf('exe:') !== 0) return;
+            const firma = firmeViste[k] || firmeNote[k];
+            if (firma) firme[k] = firma;
+            if (nomiNoti[k]) nomi[k] = nomiNoti[k];
+          });
+          const corpo = { computer: { programmi: programmi, nomi: nomi, firme: firme } };
+          d.occupato = true;
+          d.aggiorna();
+          const r = await Api.patch('/server/api/studio/config', corpo);
+          d.occupato = false;
+          if (r.ok) {
+            d.chiudi();
+            await aggiornaTutto({ fresco: true });
+            avviso('Proposta mandata: ora un genitore deve approvarla.');
+          } else if (r.stato === 404 || r.stato === 405) {
+            d.errore('Per lo Studio serve aggiornare il server di Pactum.');
+          } else if (r.stato === 422) {
+            // (correzione 0.18) Un browser nella lista ha il suo codice: dirlo, invece di far cercare un sito sbagliato.
+            const e = T.erroreDi(r.dati);
+            if (e && e.errore === 'browser_nella_lista') d.errore('Nella lista c\'è un browser: toglilo e scrivi i siti che ti servono.');
+            else d.errore('Il server non ha accettato la lista: controlla i siti scritti.');
+          } else {
+            d.errore('Non sono riuscito a mandare la proposta: riprova.');
+          }
+        }
+      },
+    });
   }
 
   function sezioneDiario() {

@@ -38,6 +38,8 @@ public sealed partial class Motore
                 ["ultimo_invio_ok"] = ultimoInvioOkMs is long u ? Tempo.IsoLocale(u, zona) : null,
                 ["rete_ok"] = reteOk,
                 ["patto_aggiornato"] = patto is { } p ? Tempo.IsoLocale(p.AggiornatoUtcMs, zona) : null,
+                // (0.18, contratto v4.0) Lo Studio come lo sa il computer (anche partito senza rete).
+                ["studio"] = StudioPerLaFinestra(),
             };
         }
     }

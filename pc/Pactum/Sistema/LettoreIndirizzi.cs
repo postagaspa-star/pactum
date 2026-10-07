@@ -8,7 +8,12 @@ namespace Pactum.Sistema;
 /// Il sito in primo piano: solo il dominio registrabile e la categoria del sito (null se non ne ha una),
 /// oppure "non sono riuscito a leggere".
 /// </summary>
-public readonly record struct Lettura(string? Dominio, bool Fallita, string? CategoriaSito = null)
+/// <param name="SenzaSito">
+/// (correzione 0.18) La barra si è letta ma non mostra un sito con un nome, e non è nemmeno una scheda nuova: un
+/// indirizzo IP, un file aperto dal disco, una pagina interna come <c>edge://surf</c>, una pagina di un'estensione.
+/// Fuori dallo Studio non cambia niente (non è un sito, non si registra); nello Studio copre.
+/// </param>
+public readonly record struct Lettura(string? Dominio, bool Fallita, string? CategoriaSito = null, bool SenzaSito = false)
 {
     public static readonly Lettura NonLeggibile = new(null, true);
 
@@ -21,7 +26,9 @@ public readonly record struct Lettura(string? Dominio, bool Fallita, string? Cat
     {
         var nome = Domini.NomeDaBarraIndirizzi(testo);
         var dominio = nome == null ? null : Domini.DominioDellaPagina(nome);
-        return dominio == null ? new Lettura(null, false) : new Lettura(dominio, false, Categorie.DelSito(nome!));
+        return dominio == null
+            ? new Lettura(null, false, SenzaSito: !Domini.ÈSchedaNuova(testo))
+            : new Lettura(dominio, false, Categorie.DelSito(nome!));
     }
 }
 
@@ -54,10 +61,15 @@ public sealed class LettoreIndirizzi
     /// La lettura con un tempo massimo: un browser bloccato non deve fermare la misura.
     /// Se la lettura precedente non è ancora finita, questa vale come non riuscita.
     /// </summary>
-    public Lettura Leggi(IntPtr hwnd, string exe, bool schermoIntero)
+    /// <param name="rigoroso">
+    /// (0.18, contratto v4.0) Durante lo Studio: una barra che non si legge <b>adesso</b> è una lettura mancata — schermo
+    /// intero/F11, cursore nella barra mentre si scrive, lettura fallita — senza il ripiego sull'ultimo sito letto (fuori
+    /// dallo Studio resta la regola della v3: vale l'ultimo sito letto).
+    /// </param>
+    public Lettura Leggi(IntPtr hwnd, string exe, bool schermoIntero, bool rigoroso = false)
     {
         if (inCorso != null && !inCorso.IsCompleted) return Lettura.NonLeggibile;
-        var compito = Task.Run(() => LeggiOra(hwnd, exe, schermoIntero));
+        var compito = Task.Run(() => LeggiOra(hwnd, exe, schermoIntero, rigoroso));
         inCorso = compito;
         try
         {
@@ -69,20 +81,22 @@ public sealed class LettoreIndirizzi
         }
     }
 
-    private Lettura LeggiOra(IntPtr hwnd, string exe, bool schermoIntero)
+    private Lettura LeggiOra(IntPtr hwnd, string exe, bool schermoIntero, bool rigoroso)
     {
+        // (0.18) Nello Studio una finestra a schermo intero (F11, un video) non mostra la barra: non si legge adesso.
+        if (rigoroso && schermoIntero) return Lettura.NonLeggibile;
         try
         {
             if (!barre.TryGetValue(hwnd, out var barra))
             {
                 long adesso = Environment.TickCount64;
-                if (prossimaRicerca.TryGetValue(hwnd, out var quando) && adesso < quando) return Ripiego(hwnd, schermoIntero);
+                if (prossimaRicerca.TryGetValue(hwnd, out var quando) && adesso < quando) return rigoroso ? Lettura.NonLeggibile : Ripiego(hwnd, schermoIntero);
                 if (barre.Count > 64) Dimentica();
                 barra = Trova(hwnd, exe);
                 if (barra == null)
                 {
                     prossimaRicerca[hwnd] = adesso + MsPausaDopoRicercaVana;
-                    return Ripiego(hwnd, schermoIntero);
+                    return rigoroso ? Lettura.NonLeggibile : Ripiego(hwnd, schermoIntero);
                 }
                 barre[hwnd] = barra;
                 prossimaRicerca.Remove(hwnd);
@@ -91,6 +105,8 @@ public sealed class LettoreIndirizzi
             // Il cursore è nella barra: la persona sta scrivendo, la pagina è ancora quella di prima.
             if (barra.GetCurrentPropertyValue(AutomationElement.HasKeyboardFocusProperty) is true)
             {
+                // (0.18) Nello Studio il cursore nella barra copre: si potrebbe navigare altrove senza che si legga.
+                if (rigoroso) return Lettura.NonLeggibile;
                 return ultimaLettura.TryGetValue(hwnd, out var prima) ? prima : new Lettura(null, false);
             }
 
@@ -101,7 +117,7 @@ public sealed class LettoreIndirizzi
         catch (Exception e) when (e is ElementNotAvailableException or COMException or InvalidOperationException or ArgumentException or TimeoutException)
         {
             barre.Remove(hwnd);
-            return Ripiego(hwnd, schermoIntero);
+            return rigoroso ? Lettura.NonLeggibile : Ripiego(hwnd, schermoIntero);
         }
     }
 

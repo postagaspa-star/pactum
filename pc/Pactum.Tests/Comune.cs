@@ -78,6 +78,9 @@ internal sealed class ServerFinto : IAsyncDisposable
 
     public Func<Richiesta, (int Stato, string Corpo)> Risponde { get; set; }
 
+    /// <summary>(0.18) Se c'è, l'intestazione <c>Date</c> delle risposte (l'ora del server, per agganciarla).</summary>
+    public DateTimeOffset? DataServer { get; set; }
+
     public string Indirizzo => $"http://127.0.0.1:{((IPEndPoint)ascolto.LocalEndpoint).Port}";
 
     public IReadOnlyList<Richiesta> Ricevute => ricevute.ToList();
@@ -139,7 +142,8 @@ internal sealed class ServerFinto : IAsyncDisposable
 
             var (stato, risposta) = Risponde(richiesta);
             var byteCorpo = Encoding.UTF8.GetBytes(risposta);
-            var testa = $"HTTP/1.1 {stato} Pactum\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {byteCorpo.Length}\r\nConnection: close\r\n\r\n";
+            var data = DataServer is DateTimeOffset d ? "Date: " + d.ToUniversalTime().ToString("r", CultureInfo.InvariantCulture) + "\r\n" : "";
+            var testa = $"HTTP/1.1 {stato} Pactum\r\nContent-Type: application/json; charset=utf-8\r\n{data}Content-Length: {byteCorpo.Length}\r\nConnection: close\r\n\r\n";
             await flusso.WriteAsync(Encoding.ASCII.GetBytes(testa), fine.Token);
             await flusso.WriteAsync(byteCorpo, fine.Token);
         }

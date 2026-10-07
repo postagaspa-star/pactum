@@ -11,6 +11,15 @@ namespace Pactum.Nucleo;
 /// (02/10) La categoria del sito decisa dal nome intero della pagina (<c>music.youtube.com</c> → musica,
 /// v. <c>Lettura.DallaBarra</c>); null se il sito non ne ha una o se non la si è data: allora decide il dominio.
 /// </param>
+/// <param name="Percorso">
+/// (0.18) Il percorso del file del programma, se si legge. Resta solo sul computer (mai nelle fotografie): serve a
+/// leggere la firma dei programmi visti quando si propone la lista dello Studio.
+/// </param>
+/// <param name="Studio">
+/// (0.18, contratto v4.0) Il programma o il sito in primo piano è nella lista della Sessione Studio in corso:
+/// il tempo <b>non conta</b> per limiti, categorie, totale e fasce (come le sessioni del telefono), e va solo
+/// nei minuti di Studio del giorno (<c>sessioni_minuti</c> della fotografia).
+/// </param>
 public sealed record Osservazione(
     bool Attivo,
     string? Programma,
@@ -18,7 +27,9 @@ public sealed record Osservazione(
     bool Browser = false,
     string? Dominio = null,
     bool LetturaFallita = false,
-    string? CategoriaSito = null)
+    string? CategoriaSito = null,
+    bool Studio = false,
+    string? Percorso = null)
 {
     public static readonly Osservazione Assente = new(false, null, null);
 }
@@ -89,6 +100,15 @@ public sealed class Contatore
 
     private void Accumula(Giornata g, long fineMs, long ms, Osservazione o, EsitoGiro esito)
     {
+        if (o.Studio)
+        {
+            // (0.18, contratto v4.0) Nella lista dello Studio il tempo non conta: niente totale, niente minuti
+            // delle fasce, niente programmi, siti o categorie. Solo i minuti di Studio del giorno.
+            g.MsStudio += ms;
+            ultimoDominio = null;
+            g.Revisione++;
+            return;
+        }
         g.MsAttivi += ms;
         long minuto = (fineMs - 1) / 60_000;
         g.MsPerMinuto[minuto] = Math.Min(60_000, g.MsPerMinuto.GetValueOrDefault(minuto) + ms);
@@ -105,6 +125,7 @@ public sealed class Contatore
             {
                 voce.Nome = o.NomeProgramma;
             }
+            if (o.Percorso != null) voce.Percorso = o.Percorso;
             voce.Ms += ms;
             categoriaProgramma = Categorie.DiProgramma(o.Programma);
         }

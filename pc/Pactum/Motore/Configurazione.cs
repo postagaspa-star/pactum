@@ -25,6 +25,13 @@ public sealed class Percorsi
     public string Sforamenti => Path.Combine(Radice, "sforamenti.json");
     public string Notifiche => Path.Combine(Radice, "notifiche.json");
     public string Blocco => Path.Combine(Radice, "blocco.json");
+    public string Studio => Path.Combine(Radice, "studio.json");
+
+    /// <summary>(0.18) Quando si è già detto istanza_occupata: una volta sola per accensione di Windows.</summary>
+    public string IstanzaOccupata => Path.Combine(Radice, "istanza-occupata.json");
+
+    /// <summary>(correzione 0.18) La memoria del guardiano: attività già creata una volta, ultimo <c>non_creata</c>.</summary>
+    public string Guardiano => Path.Combine(Radice, "guardiano.json");
     public string Serie => Path.Combine(Radice, "serie.json");
     public string Log => Path.Combine(Radice, "log");
     public string WebView => Path.Combine(Radice, "WebView2");

@@ -1,15 +1,15 @@
 {
   "figlio": {
-    "versione_code": 18,
-    "versione_nome": "0.18.0",
+    "versione_code": 19,
+    "versione_nome": "0.19.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.18.0: i lavori di casa bloccano anche il computer e si sbloccano solo quando un genitore approva la foto; nuova Sessione Studio: dal lunedì al venerdì parte da sola alle 15, si chiude dopo le 16 quando hai segnato almeno 1 ora di attività col timer (compiti, lavori di casa o altro) e scritto cosa hai fatto; durante lo Studio restano aperte solo le app approvate. Le app e i siti dello Studio li proponi tu e li approva un genitore. Una fascia oraria usata per meno di 1 minuto non viene segnata."
+    "note": "v0.19.0: l'app è più colorata e viva: ogni sezione ha il suo colore e i suoi adesivi, le schede rimbalzano quando le tocchi, i grafici si riempiono e i numeri salgono contando; lo Studio ha un anello colorato che si riempie verso l'ora, un colore per attività. Con «Rimuovi animazioni» di Android resta tutto fermo."
   },
   "genitore": {
-    "versione_code": 18,
-    "versione_nome": "0.18.0",
+    "versione_code": 19,
+    "versione_nome": "0.19.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.18.0: i lavori di casa si sbloccano solo quando approvi la foto (basta un genitore); nuova Sessione Studio: dal lunedì al venerdì dalle 15, chiudibile dal figlio dopo le 16 e dopo almeno 1 ora di attività dichiarata; tu approvi le app, i programmi e i siti dello Studio e puoi chiuderlo scrivendo il motivo. IMPORTANTE: aggiornate questa app su tutti i telefoni dei genitori prima delle 15 di domani."
+    "note": "v0.19.0: l'app è più colorata e viva: ogni sezione ha il suo colore e i suoi adesivi, le schede rimbalzano quando le tocchi, i grafici si riempiono e i numeri salgono contando; nella pagina dello Studio un anello colorato mostra quanto manca all'ora. Con «Rimuovi animazioni» di Android resta tutto fermo."
   },
   "computer": {
     "versione_code": 18,

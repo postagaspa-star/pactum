@@ -1,5 +1,6 @@
 package eu.stgm.pactum.genitore.sync
 
+import androidx.core.app.NotificationManagerCompat
 import eu.stgm.pactum.genitore.MainActivity
 import eu.stgm.pactum.genitore.dati.Notifica
 import org.junit.Assert.assertEquals
@@ -272,5 +273,17 @@ class GiroVedettaTest {
         // Le notifiche delle sessioni si avvisano e si ricordano come tutte le altre.
         val sessione = Notifica(id = 41, tipo = "sessione_da_approvare", messaggio = "m", tsServer = "2026-10-01T10:00:00+00:00")
         assertEquals(listOf(41L), novitaDaAvvisare(listOf(sessione, sessione), setOf(40L)).map { it.id })
+    }
+
+    // (0.21) Gli avvisi a comparsa: il canale nuovo è ad importanza alta, ma chi aveva
+    // spento quello vecchio lo ritrova spento.
+    @Test
+    fun `il canale nuovo degli avvisi compare in alto, spento resta spento`() {
+        assertEquals(NotificationManagerCompat.IMPORTANCE_HIGH, importanzaCanaleNuovo(null))
+        assertEquals(NotificationManagerCompat.IMPORTANCE_HIGH, importanzaCanaleNuovo(NotificationManagerCompat.IMPORTANCE_DEFAULT))
+        assertEquals(NotificationManagerCompat.IMPORTANCE_HIGH, importanzaCanaleNuovo(NotificationManagerCompat.IMPORTANCE_LOW))
+        assertEquals(NotificationManagerCompat.IMPORTANCE_NONE, importanzaCanaleNuovo(NotificationManagerCompat.IMPORTANCE_NONE))
+        // Il canale nuovo ha un nome nuovo: Android non lascia alzare l'importanza di uno già creato.
+        assertTrue(Vedetta.CANALE_ID != Vedetta.CANALE_VECCHIO)
     }
 }

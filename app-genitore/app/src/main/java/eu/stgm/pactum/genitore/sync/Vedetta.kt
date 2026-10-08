@@ -634,6 +634,8 @@ class Vedetta(context: Context) {
             .setStyle(NotificationCompat.BigTextStyle().bigText(testo))
             .setContentIntent(apriApp)
             .setAutoCancel(true)
+            // (0.21) A comparsa anche sui telefoni che guardano la priorità della notifica.
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
     }
 
@@ -647,7 +649,17 @@ class Vedetta(context: Context) {
     }
 
     companion object {
-        const val CANALE_ID = "avvisi_patto"
+        /**
+         * (0.21) Il canale degli avvisi del patto, a importanza ALTA: le notifiche
+         * compaiono in alto sopra l'app in uso (a comparsa), non solo nella tendina.
+         * Quello di prima ("avvisi_patto") era a importanza normale e Android non
+         * lascia alzarla a un canale già creato: perciò un canale nuovo, e il
+         * vecchio si toglie ([creaCanale]).
+         */
+        const val CANALE_ID = "avvisi_patto_2"
+
+        /** (0.21) Il canale delle versioni fino alla 0.20, a importanza normale: si toglie. */
+        const val CANALE_VECCHIO = "avvisi_patto"
 
         // Gli id degli avvisi (silenzio per dispositivo, digest per figlio,
         // riassunto) e la chiave del server 0.7 stanno in LogicaFamiglia.kt,
@@ -677,17 +689,27 @@ class Vedetta(context: Context) {
 
         private fun SilenzioAttuale.noto(): SilenzioNoto = SilenzioNoto(allarme, ultimoBattito, spento)
 
-        /** Canale creato pigramente, solo quando c'è davvero qualcosa da dire. */
+        /**
+         * Il canale degli avvisi. (0.21) Nasce a importanza alta; se c'era quello
+         * vecchio, chi l'aveva spento lo ritrova spento (una scelta del genitore
+         * non si cancella con un aggiornamento) e il vecchio si toglie. Lo chiama
+         * il servizio quando parte (così dopo l'aggiornamento il canale è subito
+         * quello nuovo) e ogni avviso.
+         */
         fun creaCanale(context: Context) {
-            NotificationManagerCompat.from(context).createNotificationChannel(
-                NotificationChannelCompat.Builder(
-                    CANALE_ID,
-                    NotificationManagerCompat.IMPORTANCE_DEFAULT,
+            val gestore = NotificationManagerCompat.from(context)
+            if (gestore.getNotificationChannelCompat(CANALE_ID) == null) {
+                val vecchio = gestore.getNotificationChannelCompat(CANALE_VECCHIO)
+                gestore.createNotificationChannel(
+                    NotificationChannelCompat.Builder(CANALE_ID, importanzaCanaleNuovo(vecchio?.importance))
+                        .setName(context.getString(R.string.canale_patto_nome))
+                        .setDescription(context.getString(R.string.canale_patto_descrizione))
+                        .build(),
                 )
-                    .setName(context.getString(R.string.canale_patto_nome))
-                    .setDescription(context.getString(R.string.canale_patto_descrizione))
-                    .build(),
-            )
+            }
+            if (gestore.getNotificationChannelCompat(CANALE_VECCHIO) != null) {
+                gestore.deleteNotificationChannel(CANALE_VECCHIO)
+            }
         }
 
         fun puoAvvisare(context: Context): Boolean =
@@ -709,7 +731,10 @@ class Vedetta(context: Context) {
             if (!puoAvvisare(context)) return false
             val gestore = NotificationManagerCompat.from(context)
             if (!gestore.areNotificationsEnabled()) return false
-            val canale = gestore.getNotificationChannelCompat(CANALE_ID) ?: return true
+            // (0.21) Prima che nasca quello nuovo, conta quello vecchio (se l'avevi spento).
+            val canale = gestore.getNotificationChannelCompat(CANALE_ID)
+                ?: gestore.getNotificationChannelCompat(CANALE_VECCHIO)
+                ?: return true
             return canale.importance != NotificationManagerCompat.IMPORTANCE_NONE
         }
 

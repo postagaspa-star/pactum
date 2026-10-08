@@ -1,15 +1,15 @@
 {
   "figlio": {
-    "versione_code": 20,
-    "versione_nome": "0.20.0",
+    "versione_code": 21,
+    "versione_nome": "0.21.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.20.0: via le emoji dalle schermate, lo stile resta colorato: ogni sezione ha il suo colore, le schede rimbalzano quando le tocchi, i grafici si riempiono, i numeri salgono contando e lo Studio ha il suo anello colorato."
+    "note": "v0.21.0: niente di nuovo per te: esce insieme all'app dei genitori, che ora mostra gli avvisi a comparsa."
   },
   "genitore": {
-    "versione_code": 20,
-    "versione_nome": "0.20.0",
+    "versione_code": 21,
+    "versione_nome": "0.21.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.20.0: via le emoji dalle schermate, lo stile resta colorato: ogni sezione ha il suo colore, le schede rimbalzano quando le tocchi, i grafici si riempiono, i numeri salgono contando e lo Studio ha il suo anello colorato."
+    "note": "v0.21.0: gli avvisi del patto ora compaiono in alto sopra l'app che stai usando (prima finivano solo nella tendina). Se avevi spento gli avvisi, restano spenti."
   },
   "computer": {
     "versione_code": 18,

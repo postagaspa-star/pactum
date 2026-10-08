@@ -1,5 +1,6 @@
 package eu.stgm.pactum.genitore.sync
 
+import androidx.core.app.NotificationManagerCompat
 import eu.stgm.pactum.genitore.dati.Notifica
 
 // Logica pura del giro della vedetta (0.9): niente Android, così si prova con
@@ -104,6 +105,18 @@ object CadenzaVedetta {
  * Un server vecchio ignora il parametro e manda tutto: il ricordo fa il resto.
  */
 fun dopoIdPerIlGiroVeloce(giaAvvisate: Set<Long>?): Long? = giaAvvisate?.maxOrNull()
+
+/**
+ * (0.21) L'importanza del canale nuovo degli avvisi, da quella del vecchio
+ * ([vecchia], null = non c'era): alta, così le notifiche compaiono in alto
+ * sopra l'app in uso; spento resta spento (la scelta era del genitore).
+ */
+fun importanzaCanaleNuovo(vecchia: Int?): Int =
+    if (vecchia == NotificationManagerCompat.IMPORTANCE_NONE) {
+        NotificationManagerCompat.IMPORTANCE_NONE
+    } else {
+        NotificationManagerCompat.IMPORTANCE_HIGH
+    }
 
 /**
  * Le notifiche da avvisare a questo giro: le non lette mai avvisate prima, una

@@ -68,6 +68,8 @@ class VedettaService : Service() {
     override fun onCreate() {
         super.onCreate()
         creaCanale(this)
+        // (0.21) Il canale degli avvisi a comparsa subito, anche prima del primo avviso.
+        Vedetta.creaCanale(this)
         attivo = true
     }
 

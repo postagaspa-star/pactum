@@ -40,6 +40,9 @@ import eu.stgm.pactum.design.RigaToccabile
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.CodiciErrore
 import kotlinx.coroutines.delay
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
 
 // (0.15) "Da decidere": UNA lista di tutto quello che aspetta il genitore per il
 // figlio scelto, dal più vecchio al più nuovo — proposte del figlio (Accetta /
@@ -187,63 +190,66 @@ fun DaDecidereScreen(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = { BarraScheda(stringResource(R.string.da_decidere_titolo), onAggiorna = aggiorna) },
-    ) { padding ->
-        // Solo i dati DI QUESTO figlio: finché non arrivano, la rotella.
-        val delFiglio = proposte.di(figlioId) && verdetti.di(figlioId)
-        // "Niente in mano": né regole, né proposte, né dichiarazioni lette finora.
-        val nienteInMano = proposte.proposte.isEmpty() &&
-            proposte.regoleAttive.isEmpty() &&
-            verdetti.dichiarazioni.isEmpty()
-        // (0.15) La scelta del figlio: fissa in cima mentre si carica, con un errore o
-        // senza elenco (si cambia figlio anche quando i dati di uno non arrivano);
-        // con l'elenco è la sua prima riga e scorre col resto.
-        val conElenco = !famiglia.collegamentoNonValido &&
-            !(proposte.configurazioneMancante || verdetti.configurazioneMancante) &&
-            delFiglio &&
-            !(nienteInMano && (proposte.caricamento || verdetti.caricamento || proposte.errore || verdetti.errore))
-        ConSceltaFiglio(famiglia, fissa = !conElenco, modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                famiglia.collegamentoNonValido -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
-                    testo = stringResource(R.string.collegamento_non_valido),
-                    azione = stringResource(R.string.azione_collega_di_nuovo),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+    SchermataColorata(Sezione.DECIDERE) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = { BarraScheda(stringResource(R.string.da_decidere_titolo), onAggiorna = aggiorna) },
+        ) { padding ->
+            // Solo i dati DI QUESTO figlio: finché non arrivano, la rotella.
+            val delFiglio = proposte.di(figlioId) && verdetti.di(figlioId)
+            // "Niente in mano": né regole, né proposte, né dichiarazioni lette finora.
+            val nienteInMano = proposte.proposte.isEmpty() &&
+                proposte.regoleAttive.isEmpty() &&
+                verdetti.dichiarazioni.isEmpty()
+            // (0.15) La scelta del figlio: fissa in cima mentre si carica, con un errore o
+            // senza elenco (si cambia figlio anche quando i dati di uno non arrivano);
+            // con l'elenco è la sua prima riga e scorre col resto.
+            val conElenco = !famiglia.collegamentoNonValido &&
+                !(proposte.configurazioneMancante || verdetti.configurazioneMancante) &&
+                delFiglio &&
+                !(nienteInMano && (proposte.caricamento || verdetti.caricamento || proposte.errore || verdetti.errore))
+            ConSceltaFiglio(famiglia, fissa = !conElenco, modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    famiglia.collegamentoNonValido -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                        testo = stringResource(R.string.collegamento_non_valido),
+                        azione = stringResource(R.string.azione_collega_di_nuovo),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                proposte.configurazioneMancante || verdetti.configurazioneMancante -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.config_mancante_titolo),
-                    testo = stringResource(R.string.turno_config_mancante),
-                    azione = stringResource(R.string.azione_collega),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+                    proposte.configurazioneMancante || verdetti.configurazioneMancante -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.config_mancante_titolo),
+                        testo = stringResource(R.string.turno_config_mancante),
+                        azione = stringResource(R.string.azione_collega),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                !delFiglio || (nienteInMano && (proposte.caricamento || verdetti.caricamento)) ->
-                    Caricamento(testo = stringResource(R.string.turno_caricamento))
+                    !delFiglio || (nienteInMano && (proposte.caricamento || verdetti.caricamento)) ->
+                        Caricamento(testo = stringResource(R.string.turno_caricamento))
 
-                nienteInMano && (proposte.errore || verdetti.errore) -> StatoVuoto(stringResource(R.string.turno_errore), centrato = true)
+                    nienteInMano && (proposte.errore || verdetti.errore) -> StatoVuoto(stringResource(R.string.turno_errore), centrato = true)
 
-                else -> ListaDaDecidere(
-                    proposte = proposte,
-                    verdetti = verdetti,
-                    statoFinestra = statoFinestra,
-                    famiglia = famiglia,
-                    onDecidiProposta = { proposta, esito, motivazione ->
-                        proposteVm.decidi(figlioId, proposta, esito, motivazione, da = ProposteViewModel.Schermata.PROPOSTE)
-                    },
-                    onRitira = { proposteVm.ritira(figlioId, it) },
-                    onDecidiSessione = { richiesta, esito, motivazione ->
-                        finestraVm.decidiSessione(figlioId, richiesta, esito, motivazione)
-                    },
-                    onAvvisoSessione = { messaggi.mostra(testi.testo(it)) },
-                    onVerdetto = { id, verdetto, nota -> verdettiVm.emettiVerdetto(figlioId, id, verdetto, nota) },
-                    statoStudio = statoStudio,
-                    onDecidiStudio = { versione, esito, motivazione -> studioVm.rispondi(figlioId, versione, esito, motivazione) },
-                )
+                    else -> ListaDaDecidere(
+                        proposte = proposte,
+                        verdetti = verdetti,
+                        statoFinestra = statoFinestra,
+                        famiglia = famiglia,
+                        onDecidiProposta = { proposta, esito, motivazione ->
+                            proposteVm.decidi(figlioId, proposta, esito, motivazione, da = ProposteViewModel.Schermata.PROPOSTE)
+                        },
+                        onRitira = { proposteVm.ritira(figlioId, it) },
+                        onDecidiSessione = { richiesta, esito, motivazione ->
+                            finestraVm.decidiSessione(figlioId, richiesta, esito, motivazione)
+                        },
+                        onAvvisoSessione = { messaggi.mostra(testi.testo(it)) },
+                        onVerdetto = { id, verdetto, nota -> verdettiVm.emettiVerdetto(figlioId, id, verdetto, nota) },
+                        statoStudio = statoStudio,
+                        onDecidiStudio = { versione, esito, motivazione -> studioVm.rispondi(figlioId, versione, esito, motivazione) },
+                    )
+                }
             }
         }
     }
@@ -351,6 +357,7 @@ private fun ListaDaDecidere(
                     stringResource(R.string.da_decidere_vuoto),
                     icona = Icons.Outlined.CheckCircle,
                     modifier = Modifier.padding(vertical = Spazi.s),
+                    emoji = "☕",
                 )
             }
         }

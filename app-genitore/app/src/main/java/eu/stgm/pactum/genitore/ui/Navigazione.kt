@@ -3,6 +3,7 @@ package eu.stgm.pactum.genitore.ui
 import eu.stgm.pactum.genitore.MainActivity
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.sync.Vedetta
+import eu.stgm.pactum.design.Sezione
 
 // (0.15) Dove si va nell'app del genitore, detto con logica pura (provata in
 // NavigazioneTest): le quattro schede fisse della barra in basso, le pagine che
@@ -236,4 +237,23 @@ fun destinazioneDellaRiga(notifica: Notifica): ApriDaNotifica {
 fun Navigazione.dopoLaRiga(apri: ApriDaNotifica): Navigazione = when (val s = apri.schermo) {
     is Schermo.SuScheda -> apriScheda(s.scheda)
     is Schermo.SuPagina -> apri(s.pagina)
+}
+
+/** (0.19) Il colore e gli adesivi di ogni schermata. */
+fun sezioneDi(schermo: Schermo): Sezione = when (schermo) {
+    is Schermo.SuScheda -> when (schermo.scheda) {
+        Scheda.PANORAMICA -> Sezione.PANORAMICA
+        Scheda.DA_DECIDERE -> Sezione.DECIDERE
+        Scheda.LAVORI -> Sezione.LAVORI
+        Scheda.TEMPO -> Sezione.TEMPO
+    }
+    is Schermo.SuPagina -> when (schermo.pagina) {
+        Pagina.Notifiche -> Sezione.NOTIFICHE
+        is Pagina.Impostazioni -> Sezione.IMPOSTAZIONI
+        Pagina.Storico -> Sezione.STORICO
+        is Pagina.Regola, Pagina.TutteLeRegole -> Sezione.REGOLE
+        Pagina.DaiLavori, is Pagina.ModificaLavoro -> Sezione.LAVORI
+        Pagina.Sessioni -> Sezione.SESSIONI
+        Pagina.Studio -> Sezione.STUDIO
+    }
 }

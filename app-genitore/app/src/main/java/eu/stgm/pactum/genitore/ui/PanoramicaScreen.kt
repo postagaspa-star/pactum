@@ -82,6 +82,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
 import java.time.LocalDate
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.rememberContatore
 
 // (0.15) La Panoramica risponde a UNA domanda: "com'è andata, e c'è qualcosa per
 // me?". Dall'alto:
@@ -172,64 +175,67 @@ fun PanoramicaScreen(
         if (famiglia.pronta) vm.aggiorna(figlioId)
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = { BarraScheda(stringResource(R.string.finestra_titolo), onAggiorna = aggiorna) },
-    ) { padding ->
-        // (0.15) La scelta del figlio: fissa in cima mentre si carica, con un errore o
-        // senza elenco (si cambia figlio anche quando i dati di uno non arrivano);
-        // con l'elenco è la sua prima riga e scorre col resto.
-        val conElenco = !famiglia.collegamentoNonValido && !stato.configurazioneMancante && stato.finestra != null && stato.di(figlioId)
-        ConSceltaFiglio(famiglia, fissa = !conElenco, modifier = Modifier.padding(padding).fillMaxSize()) {
-            // Solo i dati DI QUESTO figlio: finché non arrivano, la rotella.
-            val finestra = stato.finestra.takeIf { stato.di(figlioId) }
-            when {
-                // (0.13) 401: il collegamento di questo telefono non vale più (un
-                // altro genitore l'ha tolto). Non è la rete, e i dati di prima non
-                // si mostrano come se valessero.
-                famiglia.collegamentoNonValido -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
-                    testo = stringResource(R.string.collegamento_non_valido),
-                    azione = stringResource(R.string.azione_collega_di_nuovo),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+    SchermataColorata(Sezione.PANORAMICA) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = { BarraScheda(stringResource(R.string.finestra_titolo), onAggiorna = aggiorna) },
+        ) { padding ->
+            // (0.15) La scelta del figlio: fissa in cima mentre si carica, con un errore o
+            // senza elenco (si cambia figlio anche quando i dati di uno non arrivano);
+            // con l'elenco è la sua prima riga e scorre col resto.
+            val conElenco = !famiglia.collegamentoNonValido && !stato.configurazioneMancante && stato.finestra != null && stato.di(figlioId)
+            ConSceltaFiglio(famiglia, fissa = !conElenco, modifier = Modifier.padding(padding).fillMaxSize()) {
+                // Solo i dati DI QUESTO figlio: finché non arrivano, la rotella.
+                val finestra = stato.finestra.takeIf { stato.di(figlioId) }
+                when {
+                    // (0.13) 401: il collegamento di questo telefono non vale più (un
+                    // altro genitore l'ha tolto). Non è la rete, e i dati di prima non
+                    // si mostrano come se valessero.
+                    famiglia.collegamentoNonValido -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                        testo = stringResource(R.string.collegamento_non_valido),
+                        azione = stringResource(R.string.azione_collega_di_nuovo),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                !stato.di(figlioId) || (stato.caricamento && finestra == null && !stato.configurazioneMancante) ->
-                    Caricamento(testo = stringResource(R.string.finestra_caricamento))
+                    !stato.di(figlioId) || (stato.caricamento && finestra == null && !stato.configurazioneMancante) ->
+                        Caricamento(testo = stringResource(R.string.finestra_caricamento))
 
-                // Primo avvio: manca il collegamento. Il pulsante porta dove si fa.
-                stato.configurazioneMancante -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.config_mancante_titolo),
-                    testo = stringResource(R.string.finestra_config_mancante),
-                    azione = stringResource(R.string.azione_collega),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+                    // Primo avvio: manca il collegamento. Il pulsante porta dove si fa.
+                    stato.configurazioneMancante -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.config_mancante_titolo),
+                        testo = stringResource(R.string.finestra_config_mancante),
+                        azione = stringResource(R.string.azione_collega),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
+                    finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
 
-                else -> ContenutoPanoramica(
-                    finestra = finestra,
-                    giro = giro,
-                    famiglia = famiglia,
-                    errore = stato.errore,
-                    ricevutaAlle = stato.ricevutaAlle,
-                    // Lo stesso conto della barra e di "Da decidere" (stesse letture).
-                    daDecidere = quanteDaDecidereDellaFinestra(
+                    else -> ContenutoPanoramica(
                         finestra = finestra,
-                        giaChiuse = proposte.giaChiuse,
-                        sessioniDecise = stato.sessioniDecise,
-                        lettaAlle = stato.lettaAlle,
-                        dichiarazioni = verdetti.dichiarazioni.takeIf { verdetti.di(figlioId) },
-                        studioDecisaVersione = statoStudio.decise[figlioId],
-                    ),
-                    segnoSpento = segnoGiaMandato(finestra.segnoOggi, stato.segnoMandatoIl, LocalDate.now()),
-                    invioSegno = stato.invioSegno,
-                    onMandaSegno = { vm.mandaSegno(figlioId) },
-                    invioStudio = statoStudio.invio,
-                    onChiudiStudio = { studioId, motivo -> studioVm.chiudi(figlioId, studioId, motivo) },
-                )
+                        giro = giro,
+                        famiglia = famiglia,
+                        errore = stato.errore,
+                        ricevutaAlle = stato.ricevutaAlle,
+                        // Lo stesso conto della barra e di "Da decidere" (stesse letture).
+                        daDecidere = quanteDaDecidereDellaFinestra(
+                            finestra = finestra,
+                            giaChiuse = proposte.giaChiuse,
+                            sessioniDecise = stato.sessioniDecise,
+                            lettaAlle = stato.lettaAlle,
+                            dichiarazioni = verdetti.dichiarazioni.takeIf { verdetti.di(figlioId) },
+                            studioDecisaVersione = statoStudio.decise[figlioId],
+                        ),
+                        segnoSpento = segnoGiaMandato(finestra.segnoOggi, stato.segnoMandatoIl, LocalDate.now()),
+                        invioSegno = stato.invioSegno,
+                        onMandaSegno = { vm.mandaSegno(figlioId) },
+                        invioStudio = statoStudio.invio,
+                        onChiudiStudio = { studioId, motivo -> studioVm.chiudi(figlioId, studioId, motivo) },
+                    )
+                }
             }
         }
     }
@@ -372,6 +378,7 @@ private fun ContenutoPanoramica(
                     testo = stringResource(R.string.nessun_dispositivo),
                     azione = stringResource(R.string.famiglia_aggiungi_dispositivo),
                     onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.FAMIGLIA)) },
+                    emoji = "📱",
                 )
             }
         }
@@ -383,6 +390,7 @@ private fun ContenutoPanoramica(
                     StatoVuoto(
                         titolo = stringResource(R.string.regole_vuoto_titolo),
                         testo = stringResource(R.string.regole_vuoto),
+                        emoji = "📜",
                     )
                 }
             }
@@ -594,8 +602,10 @@ private fun CardPatto(
                 val senzaDati = giorni.size - conDati
                 Spacer(Modifier.height(Spazi.s))
                 if (conDati > 0) {
+                    // (0.19) I giorni mantenuti salgono contando.
+                    val mantenutiVisti = rememberContatore(mantenuti)
                     Text(
-                        text = stringResource(R.string.patto_su, mantenuti, conDati),
+                        text = stringResource(R.string.patto_su, mantenutiVisti, conDati),
                         style = MaterialTheme.typography.displaySmall,
                     )
                     Text(

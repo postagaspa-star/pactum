@@ -62,6 +62,9 @@ import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
 
 // (0.15) "Dai lavori di casa", a pagina intera (prima era un dialogo che con la
 // tastiera aperta non entrava: B21/B36). Gli stessi campi, la stessa validazione,
@@ -162,134 +165,137 @@ fun DaiLavoriScreen(
     val recenti = remember(storia, titoli) { titoliRecenti(storia, titoli) }
     val disponibile = figlioId != null && stato.di(figlioId) && !stato.serverVecchio
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            BarraPagina(
-                nomeDaScrivere(nomeFiglio)?.let { stringResource(R.string.dai_titolo, it) }
-                    ?: stringResource(R.string.dai_titolo_senza_nome),
-            )
-        },
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            if (!disponibile) {
-                if (stato.serverVecchio) {
-                    StatoVuoto(stringResource(R.string.faccende_server_vecchio), centrato = true)
-                } else {
-                    Caricamento(testo = stringResource(R.string.faccende_caricamento))
-                }
-                return@Box
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .imePadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(Spazi.l),
-                verticalArrangement = Arrangement.spacedBy(Spazi.s),
-            ) {
-                senzaBlocco.forEach { RigaStato(testoDispositivoSenzaBlocco(p, it)) }
-                titoli.forEachIndexed { indice, titolo ->
-                    Row(verticalAlignment = Alignment.Top) {
-                        // Il problema si dice solo su una riga già scritta: una riga vuota appena aggiunta non è un errore.
-                        val avviso = testoProblemaTitolo(p, problemi[indice]).takeIf { titolo.isNotEmpty() }
-                        OutlinedTextField(
-                            value = titolo,
-                            onValueChange = { nuovo -> titoli = titoli.toMutableList().also { it[indice] = nuovo } },
-                            label = { Text(stringResource(R.string.dai_campo_faccenda, indice + 1)) },
-                            placeholder = { Text(stringResource(R.string.dai_faccenda_esempio)) },
-                            singleLine = true,
-                            isError = avviso != null,
-                            supportingText = if (avviso != null) {
-                                { Text(avviso) }
-                            } else {
-                                null
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (titoli.size > 1) {
-                            IconButton(onClick = { titoli = titoli.toMutableList().also { it.removeAt(indice) } }) {
-                                Icon(Icons.Filled.Close, stringResource(R.string.dai_togli_riga))
-                            }
-                        }
+    SchermataColorata(Sezione.LAVORI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = {
+                BarraPagina(
+                    nomeDaScrivere(nomeFiglio)?.let { stringResource(R.string.dai_titolo, it) }
+                        ?: stringResource(R.string.dai_titolo_senza_nome),
+                )
+            },
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                if (!disponibile) {
+                    if (stato.serverVecchio) {
+                        StatoVuoto(stringResource(R.string.faccende_server_vecchio), centrato = true)
+                    } else {
+                        Caricamento(testo = stringResource(R.string.faccende_caricamento))
                     }
+                    return@Box
                 }
-                if (titoli.size < MASSIMO_FACCENDE_PER_VOLTA) {
-                    TextButton(onClick = { titoli = titoli + "" }) { Text(stringResource(R.string.dai_aggiungi)) }
-                } else {
-                    Text(
-                        text = stringResource(R.string.dai_massimo, MASSIMO_FACCENDE_PER_VOLTA),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                // I lavori usati di recente: un tocco li mette nella prima riga vuota (o in una nuova).
-                if (recenti.isNotEmpty()) {
-                    SopraTitolo(stringResource(R.string.dai_recenti))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spazi.s)) {
-                        recenti.forEach { recente ->
-                            SuggestionChip(
-                                onClick = {
-                                    val vuota = titoli.indexOfFirst { it.isBlank() }
-                                    titoli = when {
-                                        vuota >= 0 -> titoli.toMutableList().also { it[vuota] = recente }
-                                        titoli.size < MASSIMO_FACCENDE_PER_VOLTA -> titoli + recente
-                                        else -> titoli
-                                    }
-                                },
-                                label = { Text(recente) },
-                            )
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = nota,
-                    onValueChange = { nota = it },
-                    label = { Text(stringResource(R.string.dai_nota)) },
-                    isError = problemaDellaNota != null,
-                    supportingText = {
-                        Text(testoProblemaNota(p, problemaDellaNota) ?: stringResource(R.string.dai_nota_spiega))
-                    },
-                    maxLines = 4,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                SopraTitolo(stringResource(R.string.dai_blocco), modifier = Modifier.padding(top = Spazi.s))
-                RigaScelta(selezionata = subito, testo = stringResource(R.string.dai_subito), onClick = { subito = true })
-                RigaScelta(
-                    selezionata = !subito,
-                    testo = testoDalle(p, ora),
-                    onClick = { subito = false },
-                    azione = stringResource(R.string.dai_cambia_ora),
-                    onAzione = { sceltaOra = true },
-                )
-                // Che cosa succede, prima del tocco: domani si dice in evidenza.
-                Text(
-                    text = testoInizioBlocco(p, inizio, nomeFiglio, stato.conApprovazione, inStudio(stato.blocco.takeIf { stato.di(figlioId) })),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (inizio?.domani == true) FontWeight.SemiBold else null,
-                    color = if (inizio?.domani == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                errore?.let {
-                    Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                }
-                Button(
-                    enabled = valido && !stato.invio,
-                    onClick = {
-                        errore = null
-                        // L'istante vero, adesso: se non è quello che la pagina mostra
-                        // (mezzanotte passata con la pagina aperta, un'ora intanto passata),
-                        // niente parte e la pagina mostra la data nuova.
-                        val adessoVero = ZonedDateTime.now()
-                        when (val controllo = controlloPrimaDiMandare(inizio, ora.takeIf { !subito }, adessoVero)) {
-                            is ControlloInvio.Cambiato -> adesso = adessoVero
-                            is ControlloInvio.Manda -> if (figlioId != null) {
-                                vm.daiFaccende(figlioId, scritti, nota.ifBlank { null }, controllo.bloccoDa, famiglia.io)
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(top = Spazi.s),
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(Spazi.l),
+                    verticalArrangement = Arrangement.spacedBy(Spazi.s),
                 ) {
-                    Text(stringResource(R.string.dai_manda))
+                    senzaBlocco.forEach { RigaStato(testoDispositivoSenzaBlocco(p, it)) }
+                    titoli.forEachIndexed { indice, titolo ->
+                        Row(verticalAlignment = Alignment.Top) {
+                            // Il problema si dice solo su una riga già scritta: una riga vuota appena aggiunta non è un errore.
+                            val avviso = testoProblemaTitolo(p, problemi[indice]).takeIf { titolo.isNotEmpty() }
+                            OutlinedTextField(
+                                value = titolo,
+                                onValueChange = { nuovo -> titoli = titoli.toMutableList().also { it[indice] = nuovo } },
+                                label = { Text(stringResource(R.string.dai_campo_faccenda, indice + 1)) },
+                                placeholder = { Text(stringResource(R.string.dai_faccenda_esempio)) },
+                                singleLine = true,
+                                isError = avviso != null,
+                                supportingText = if (avviso != null) {
+                                    { Text(avviso) }
+                                } else {
+                                    null
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (titoli.size > 1) {
+                                IconButton(onClick = { titoli = titoli.toMutableList().also { it.removeAt(indice) } }) {
+                                    Icon(Icons.Filled.Close, stringResource(R.string.dai_togli_riga))
+                                }
+                            }
+                        }
+                    }
+                    if (titoli.size < MASSIMO_FACCENDE_PER_VOLTA) {
+                        TextButton(onClick = { titoli = titoli + "" }) { Text(stringResource(R.string.dai_aggiungi)) }
+                    } else {
+                        Text(
+                            text = stringResource(R.string.dai_massimo, MASSIMO_FACCENDE_PER_VOLTA),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    // I lavori usati di recente: un tocco li mette nella prima riga vuota (o in una nuova).
+                    if (recenti.isNotEmpty()) {
+                        SopraTitolo(stringResource(R.string.dai_recenti))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(Spazi.s)) {
+                            recenti.forEach { recente ->
+                                SuggestionChip(
+                                    onClick = {
+                                        val vuota = titoli.indexOfFirst { it.isBlank() }
+                                        titoli = when {
+                                            vuota >= 0 -> titoli.toMutableList().also { it[vuota] = recente }
+                                            titoli.size < MASSIMO_FACCENDE_PER_VOLTA -> titoli + recente
+                                            else -> titoli
+                                        }
+                                    },
+                                    label = { Text(recente) },
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = nota,
+                        onValueChange = { nota = it },
+                        label = { Text(stringResource(R.string.dai_nota)) },
+                        isError = problemaDellaNota != null,
+                        supportingText = {
+                            Text(testoProblemaNota(p, problemaDellaNota) ?: stringResource(R.string.dai_nota_spiega))
+                        },
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    SopraTitolo(stringResource(R.string.dai_blocco), modifier = Modifier.padding(top = Spazi.s))
+                    RigaScelta(selezionata = subito, testo = stringResource(R.string.dai_subito), onClick = { subito = true })
+                    RigaScelta(
+                        selezionata = !subito,
+                        testo = testoDalle(p, ora),
+                        onClick = { subito = false },
+                        azione = stringResource(R.string.dai_cambia_ora),
+                        onAzione = { sceltaOra = true },
+                    )
+                    // Che cosa succede, prima del tocco: domani si dice in evidenza.
+                    Text(
+                        text = testoInizioBlocco(p, inizio, nomeFiglio, stato.conApprovazione, inStudio(stato.blocco.takeIf { stato.di(figlioId) })),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (inizio?.domani == true) FontWeight.SemiBold else null,
+                        color = if (inizio?.domani == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    errore?.let {
+                        Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    }
+                    Button(
+                        enabled = valido && !stato.invio,
+                        onClick = {
+                            errore = null
+                            // L'istante vero, adesso: se non è quello che la pagina mostra
+                            // (mezzanotte passata con la pagina aperta, un'ora intanto passata),
+                            // niente parte e la pagina mostra la data nuova.
+                            val adessoVero = ZonedDateTime.now()
+                            when (val controllo = controlloPrimaDiMandare(inizio, ora.takeIf { !subito }, adessoVero)) {
+                                is ControlloInvio.Cambiato -> adesso = adessoVero
+                                is ControlloInvio.Manda -> if (figlioId != null) {
+                                    vm.daiFaccende(figlioId, scritti, nota.ifBlank { null }, controllo.bloccoDa, famiglia.io)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = Spazi.s),
+                    ) {
+                        Text(stringResource(R.string.dai_manda))
+                    }
                 }
             }
         }
@@ -455,105 +461,108 @@ fun ModificaLavoroScreen(
     val problemaDellaNota = problemaNota(nota)
     val valido = problemaDelTitolo == null && problemaDellaNota == null
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = { BarraPagina(stringResource(R.string.modifica_titolo)) },
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                // Senza collegamento non c'è niente da cambiare: si dice dove si fa.
-                stato.configurazioneMancante -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.config_mancante_titolo),
-                    testo = stringResource(R.string.faccende_config_mancante),
-                    azione = stringResource(R.string.azione_collega),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
-                elenco == null && stato.serverVecchio -> StatoVuoto(stringResource(R.string.faccende_server_vecchio), centrato = true)
-                elenco == null -> Caricamento(testo = stringResource(R.string.faccende_caricamento))
-                // Non c'è più, o non è più da fare (è arrivata la foto, l'hanno tolto).
-                faccenda == null || faccenda.stato != StatiFaccenda.DA_FARE ->
-                    StatoVuoto(stringResource(R.string.modifica_non_trovato), centrato = true)
-                else -> Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .imePadding()
-                        .verticalScroll(rememberScrollState())
-                        .padding(Spazi.l),
-                    verticalArrangement = Arrangement.spacedBy(Spazi.s),
-                ) {
-                    val avviso = testoProblemaTitolo(p, problemaDelTitolo)
-                    OutlinedTextField(
-                        value = titolo,
-                        onValueChange = { titolo = it },
-                        label = { Text(stringResource(R.string.modifica_campo)) },
-                        singleLine = true,
-                        isError = avviso != null,
-                        supportingText = avviso?.let { { Text(it) } },
-                        modifier = Modifier.fillMaxWidth(),
+    SchermataColorata(Sezione.LAVORI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = { BarraPagina(stringResource(R.string.modifica_titolo)) },
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    // Senza collegamento non c'è niente da cambiare: si dice dove si fa.
+                    stato.configurazioneMancante -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.config_mancante_titolo),
+                        testo = stringResource(R.string.faccende_config_mancante),
+                        azione = stringResource(R.string.azione_collega),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
                     )
-                    OutlinedTextField(
-                        value = nota,
-                        onValueChange = { nota = it },
-                        label = { Text(stringResource(R.string.dai_nota)) },
-                        isError = problemaDellaNota != null,
-                        // Un lavoro solo: niente "vale per tutti i lavori di questa volta".
-                        supportingText = testoProblemaNota(p, problemaDellaNota)?.let { { Text(it) } },
-                        maxLines = 4,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    SopraTitolo(stringResource(R.string.dai_blocco), modifier = Modifier.padding(top = Spazi.s))
-                    RigaScelta(selezionata = subito, testo = stringResource(R.string.dai_subito), onClick = { subito = true })
-                    RigaScelta(
-                        selezionata = !subito,
-                        testo = testoDalle(p, ora),
-                        onClick = { subito = false },
-                        azione = stringResource(R.string.dai_cambia_ora),
-                        onAzione = { sceltaOra = true },
-                    )
-                    // Che cosa succede: com'è adesso se non si cambia, se no come sarà.
-                    Text(
-                        text = if (bloccoInvariato) {
-                            testoOraBlocco(p, faccenda).orEmpty()
-                        } else {
-                            testoInizioBlocco(p, inizio, nomeFiglio, stato.conApprovazione, inStudio(stato.blocco.takeIf { stato.di(figlioId) }))
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (inizio?.domani == true) FontWeight.SemiBold else null,
-                        color = if (inizio?.domani == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = stringResource(R.string.modifica_sposta_blocco),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    errore?.let {
-                        Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                    }
-                    Button(
-                        enabled = valido && !stato.invio,
-                        onClick = {
-                            errore = null
-                            val adessoVero = ZonedDateTime.now()
-                            val blocco: BloccoModificato? = when {
-                                bloccoInvariato -> BloccoModificato.Invariato
-                                subito -> BloccoModificato.Subito
-                                else -> when (val controllo = controlloPrimaDiMandare(inizio, ora, adessoVero)) {
-                                    // L'istante vero non è quello mostrato: niente parte, si mostra il nuovo.
-                                    is ControlloInvio.Cambiato -> {
-                                        adesso = adessoVero
-                                        null
-                                    }
-                                    is ControlloInvio.Manda -> controllo.bloccoDa?.let { BloccoModificato.Dalle(it) } ?: BloccoModificato.Subito
-                                }
-                            }
-                            if (blocco != null) {
-                                vm.modifica(figlioId, faccenda, cambiDellaModifica(titoloPrima, notaPrima, titolo, nota, blocco))
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().padding(top = Spazi.s),
+                    elenco == null && stato.serverVecchio -> StatoVuoto(stringResource(R.string.faccende_server_vecchio), centrato = true)
+                    elenco == null -> Caricamento(testo = stringResource(R.string.faccende_caricamento))
+                    // Non c'è più, o non è più da fare (è arrivata la foto, l'hanno tolto).
+                    faccenda == null || faccenda.stato != StatiFaccenda.DA_FARE ->
+                        StatoVuoto(stringResource(R.string.modifica_non_trovato), centrato = true)
+                    else -> Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .imePadding()
+                            .verticalScroll(rememberScrollState())
+                            .padding(Spazi.l),
+                        verticalArrangement = Arrangement.spacedBy(Spazi.s),
                     ) {
-                        Text(stringResource(R.string.modifica_salva))
+                        val avviso = testoProblemaTitolo(p, problemaDelTitolo)
+                        OutlinedTextField(
+                            value = titolo,
+                            onValueChange = { titolo = it },
+                            label = { Text(stringResource(R.string.modifica_campo)) },
+                            singleLine = true,
+                            isError = avviso != null,
+                            supportingText = avviso?.let { { Text(it) } },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = nota,
+                            onValueChange = { nota = it },
+                            label = { Text(stringResource(R.string.dai_nota)) },
+                            isError = problemaDellaNota != null,
+                            // Un lavoro solo: niente "vale per tutti i lavori di questa volta".
+                            supportingText = testoProblemaNota(p, problemaDellaNota)?.let { { Text(it) } },
+                            maxLines = 4,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        SopraTitolo(stringResource(R.string.dai_blocco), modifier = Modifier.padding(top = Spazi.s))
+                        RigaScelta(selezionata = subito, testo = stringResource(R.string.dai_subito), onClick = { subito = true })
+                        RigaScelta(
+                            selezionata = !subito,
+                            testo = testoDalle(p, ora),
+                            onClick = { subito = false },
+                            azione = stringResource(R.string.dai_cambia_ora),
+                            onAzione = { sceltaOra = true },
+                        )
+                        // Che cosa succede: com'è adesso se non si cambia, se no come sarà.
+                        Text(
+                            text = if (bloccoInvariato) {
+                                testoOraBlocco(p, faccenda).orEmpty()
+                            } else {
+                                testoInizioBlocco(p, inizio, nomeFiglio, stato.conApprovazione, inStudio(stato.blocco.takeIf { stato.di(figlioId) }))
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (inizio?.domani == true) FontWeight.SemiBold else null,
+                            color = if (inizio?.domani == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = stringResource(R.string.modifica_sposta_blocco),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        errore?.let {
+                            Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        }
+                        Button(
+                            enabled = valido && !stato.invio,
+                            onClick = {
+                                errore = null
+                                val adessoVero = ZonedDateTime.now()
+                                val blocco: BloccoModificato? = when {
+                                    bloccoInvariato -> BloccoModificato.Invariato
+                                    subito -> BloccoModificato.Subito
+                                    else -> when (val controllo = controlloPrimaDiMandare(inizio, ora, adessoVero)) {
+                                        // L'istante vero non è quello mostrato: niente parte, si mostra il nuovo.
+                                        is ControlloInvio.Cambiato -> {
+                                            adesso = adessoVero
+                                            null
+                                        }
+                                        is ControlloInvio.Manda -> controllo.bloccoDa?.let { BloccoModificato.Dalle(it) } ?: BloccoModificato.Subito
+                                    }
+                                }
+                                if (blocco != null) {
+                                    vm.modifica(figlioId, faccenda, cambiDellaModifica(titoloPrima, notaPrima, titolo, nota, blocco))
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(top = Spazi.s),
+                        ) {
+                            Text(stringResource(R.string.modifica_salva))
+                        }
                     }
                 }
             }

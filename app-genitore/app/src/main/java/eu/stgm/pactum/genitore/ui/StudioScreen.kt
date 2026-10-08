@@ -47,6 +47,17 @@ import eu.stgm.pactum.genitore.dati.StudioSvolto
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDate
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.AnelloAttivita
+import eu.stgm.pactum.design.ColoriAttivita
+import eu.stgm.pactum.design.FettaAttivita
+import eu.stgm.pactum.design.rememberContatore
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.Alignment
+import eu.stgm.pactum.genitore.dati.TipiTratto
 
 // (0.18, contratto v4.0, parte C) La pagina della Sessione Studio del figlio
 // scelto: lo Studio in corso (con "Chiudi lo Studio"), dove lo Studio non c'è
@@ -99,44 +110,47 @@ fun StudioScreen(
 
     var daChiudere by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = { BarraPagina(stringResource(R.string.studio_titolo)) },
-    ) { padding ->
-        val pacco = stato.pacco.takeIf { stato.di(figlioId) }
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                famiglia.collegamentoNonValido || stato.collegamentoNonValido -> StatoVuoto(
-                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
-                    testo = stringResource(R.string.collegamento_non_valido),
-                    centrato = true,
-                )
-                stato.configurazioneMancante -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.config_mancante_titolo),
-                    testo = stringResource(R.string.finestra_config_mancante),
-                )
-                stato.serverVecchio && stato.di(figlioId) -> StatoVuoto(
-                    titolo = stringResource(R.string.faccende_server_vecchio_titolo),
-                    testo = stringResource(R.string.studio_server_vecchio),
-                    centrato = true,
-                )
-                pacco == null && (stato.caricamento || !stato.di(figlioId)) ->
-                    Caricamento(testo = stringResource(R.string.studio_caricamento))
-                pacco == null -> StatoVuoto(stringResource(R.string.studio_errore), centrato = true)
-                else -> ContenutoStudio(
-                    stato = stato,
-                    famiglia = famiglia,
-                    nomeFiglio = nomeFiglio,
-                    adesso = adesso,
-                    titoloLavoro = { id ->
-                        statoFinestra.finestra?.takeIf { statoFinestra.di(figlioId) }?.faccende
-                            ?.firstOrNull { it.id == id }?.titolo
-                    },
-                    onChiudi = { daChiudere = it.id },
-                    onAltri = { vm.altri(figlioId) },
-                    onDaDecidere = { cornice.vaiAScheda(Scheda.DA_DECIDERE) },
-                )
+    SchermataColorata(Sezione.STUDIO) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = { BarraPagina(stringResource(R.string.studio_titolo)) },
+        ) { padding ->
+            val pacco = stato.pacco.takeIf { stato.di(figlioId) }
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    famiglia.collegamentoNonValido || stato.collegamentoNonValido -> StatoVuoto(
+                        titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                        testo = stringResource(R.string.collegamento_non_valido),
+                        centrato = true,
+                    )
+                    stato.configurazioneMancante -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.config_mancante_titolo),
+                        testo = stringResource(R.string.finestra_config_mancante),
+                    )
+                    stato.serverVecchio && stato.di(figlioId) -> StatoVuoto(
+                        titolo = stringResource(R.string.faccende_server_vecchio_titolo),
+                        testo = stringResource(R.string.studio_server_vecchio),
+                        centrato = true,
+                    )
+                    pacco == null && (stato.caricamento || !stato.di(figlioId)) ->
+                        Caricamento(testo = stringResource(R.string.studio_caricamento))
+                    pacco == null -> StatoVuoto(stringResource(R.string.studio_errore), centrato = true)
+                    else -> ContenutoStudio(
+                        stato = stato,
+                        famiglia = famiglia,
+                        nomeFiglio = nomeFiglio,
+                        adesso = adesso,
+                        titoloLavoro = { id ->
+                            statoFinestra.finestra?.takeIf { statoFinestra.di(figlioId) }?.faccende
+                                ?.firstOrNull { it.id == id }?.titolo
+                        },
+                        onChiudi = { daChiudere = it.id },
+                        onAltri = { vm.altri(figlioId) },
+                        onDaDecidere = { cornice.vaiAScheda(Scheda.DA_DECIDERE) },
+                    )
+                }
             }
         }
     }
@@ -197,6 +211,8 @@ private fun ContenutoStudio(
                     testoChiudibile(p, inCorso, nomeFiglio)?.let {
                         Text(text = it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = Spazi.xs))
                     }
+                    // (0.19) L'anello: quanto manca al minimo, a colori per attività (come sul telefono del figlio).
+                    AnelloStudioInCorso(inCorso)
                     Column(modifier = Modifier.padding(top = Spazi.s), verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
                         val tratti = trattiInOrdine(inCorso)
                         if (tratti.isEmpty()) {
@@ -266,7 +282,7 @@ private fun ContenutoStudio(
         // --- Gli Studi fatti -------------------------------------------------------------------
         item(key = "svolti-titolo") { TitoloSezione(stringResource(R.string.studio_svolti_titolo)) }
         if (svolte.isEmpty()) {
-            item(key = "svolti-vuoto") { StatoVuoto(stringResource(R.string.studio_svolti_vuoto)) }
+            item(key = "svolti-vuoto") { StatoVuoto(stringResource(R.string.studio_svolti_vuoto), emoji = "📚") }
         }
         items(svolte, key = { "svolto-${it.id}" }) { studio ->
             CardStudioSvolto(studio = studio, io = io, nomeFiglio = nomeFiglio, adesso = adesso, titoloLavoro = titoloLavoro)
@@ -314,4 +330,38 @@ private fun RigaVersioneStudio(versione: eu.stgm.pactum.genitore.dati.ContenutoS
             )
         }
     }
+}
+
+/**
+ * (0.19) L'anello dello Studio in corso: si riempie verso il minimo di attività,
+ * un colore per tipo (compiti blu, lavori di casa verde, il resto arancio), coi
+ * minuti nel mezzo. I minuti sono quelli del server; le fette i secondi contati
+ * dei tratti.
+ */
+@Composable
+private fun AnelloStudioInCorso(studio: StudioSvolto) {
+    val minuti = studio.minutiAttivita ?: 0
+    val minimi = (studio.minutiMinimi ?: 60).coerceAtLeast(1)
+    val perTipo = studio.tratti.groupBy { coloreTratto(it.tipo) }
+        .map { (colore, tratti) -> FettaAttivita(colore, tratti.sumOf { it.secondiContati ?: it.secondi ?: 0L }) }
+    val descrizione = stringResource(R.string.studio_anello_descrizione, minuti, minimi)
+    AnelloAttivita(
+        fette = perTipo,
+        progresso = minuti.toFloat() / minimi,
+        modifier = Modifier
+            .padding(top = Spazi.m)
+            .clearAndSetSemantics { contentDescription = descrizione },
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = rememberContatore(minuti).toString(), style = MaterialTheme.typography.headlineMedium)
+            Text(text = stringResource(R.string.studio_anello_di, minimi), style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+/** (0.19) Il colore di un tipo di tratto nell'anello. */
+private fun coloreTratto(tipo: String) = when (tipo) {
+    TipiTratto.COMPITI -> ColoriAttivita.Compiti
+    TipiTratto.LAVORI_DI_CASA -> ColoriAttivita.LavoriDiCasa
+    else -> ColoriAttivita.Altro
 }

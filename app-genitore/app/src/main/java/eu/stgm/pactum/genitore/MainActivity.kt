@@ -91,6 +91,7 @@ import eu.stgm.pactum.genitore.ui.testoCollegato
 import eu.stgm.pactum.genitore.ui.theme.PactumTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import eu.stgm.pactum.genitore.ui.sezioneDi
 
 class MainActivity : ComponentActivity() {
     // La scheda su cui aprirsi quando si arriva da una notifica di sistema
@@ -396,6 +397,9 @@ private fun GenitoreRoot(
 
     CompositionLocalProvider(LocalCornice provides cornice) {
         Scaffold(
+            // (0.19) Sotto la barra di stato di Android il colore della schermata
+            // in cima: la sfumatura della sezione parte da lì.
+            containerColor = sezioneDi(navigazione.inCima).fondo,
             bottomBar = {
                 if (!navigazione.suUnaPagina) {
                     BarraInBasso(
@@ -470,6 +474,7 @@ private fun BarraInBasso(scelta: Scheda, daDecidere: Int, onScegli: (Scheda) -> 
             icona = painterResource(icona),
             badge = daDecidere.takeIf { scheda == Scheda.DA_DECIDERE && it > 0 },
             descrizioneBadge = descrizioneBadge.takeIf { scheda == Scheda.DA_DECIDERE },
+            sezione = sezioneDi(Schermo.SuScheda(scheda)),
         )
     }
     BarraSchede(

@@ -44,6 +44,9 @@ import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.TipiRegola
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
 
 // (0.15) Il dettaglio di UNA regola, aperto toccandola nella card del patto (o da
 // una notifica che ne parla): che cosa dice, la sua striscia degli 8 giorni, com'è
@@ -117,23 +120,26 @@ fun RegolaScreen(
     val finestra = statoFinestra.finestra.takeIf { statoFinestra.di(figlioId) }
     val regola = finestra?.regole?.firstOrNull { it.id == regolaId }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = { BarraPagina(stringResource(R.string.regola_titolo)) },
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                finestra == null && (statoFinestra.caricamento || !statoFinestra.di(figlioId)) ->
-                    Caricamento(testo = stringResource(R.string.finestra_caricamento))
-                finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
-                regola == null -> StatoVuoto(stringResource(R.string.regola_non_trovata), centrato = true)
-                else -> DettaglioRegola(
-                    finestra = finestra,
-                    regola = regola,
-                    proposte = proposte.takeIf { it.di(figlioId) },
-                    nomeFiglio = famiglia.figlioScelto?.nome,
-                    onProponi = { proponi = true },
-                )
+    SchermataColorata(Sezione.REGOLE) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = { BarraPagina(stringResource(R.string.regola_titolo)) },
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    finestra == null && (statoFinestra.caricamento || !statoFinestra.di(figlioId)) ->
+                        Caricamento(testo = stringResource(R.string.finestra_caricamento))
+                    finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
+                    regola == null -> StatoVuoto(stringResource(R.string.regola_non_trovata), centrato = true)
+                    else -> DettaglioRegola(
+                        finestra = finestra,
+                        regola = regola,
+                        proposte = proposte.takeIf { it.di(figlioId) },
+                        nomeFiglio = famiglia.figlioScelto?.nome,
+                        onProponi = { proponi = true },
+                    )
+                }
             }
         }
     }

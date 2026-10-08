@@ -29,6 +29,9 @@ import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import java.time.Instant
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
 
 // (0.16) Le sessioni del figlio scelto, in una pagina loro (nella 0.15 stavano
 // solo nello Storico): quelle in corso adesso, quelle approvate (con le app e chi
@@ -51,22 +54,25 @@ fun SessioniScreen(
         onPauseOrDispose { }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = { BarraPagina(stringResource(R.string.sezione_sessioni)) },
-    ) { padding ->
-        val finestra = statoFinestra.finestra.takeIf { statoFinestra.di(figlioId) }
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                famiglia.collegamentoNonValido -> StatoVuoto(
-                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
-                    testo = stringResource(R.string.collegamento_non_valido),
-                    centrato = true,
-                )
-                finestra == null && (statoFinestra.caricamento || !statoFinestra.di(figlioId)) ->
-                    Caricamento(testo = stringResource(R.string.sessioni_caricamento))
-                finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
-                else -> ContenutoSessioni(finestra = finestra, io = famiglia.io, errore = statoFinestra.errore)
+    SchermataColorata(Sezione.SESSIONI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = { BarraPagina(stringResource(R.string.sezione_sessioni)) },
+        ) { padding ->
+            val finestra = statoFinestra.finestra.takeIf { statoFinestra.di(figlioId) }
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    famiglia.collegamentoNonValido -> StatoVuoto(
+                        titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                        testo = stringResource(R.string.collegamento_non_valido),
+                        centrato = true,
+                    )
+                    finestra == null && (statoFinestra.caricamento || !statoFinestra.di(figlioId)) ->
+                        Caricamento(testo = stringResource(R.string.sessioni_caricamento))
+                    finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
+                    else -> ContenutoSessioni(finestra = finestra, io = famiglia.io, errore = statoFinestra.errore)
+                }
             }
         }
     }
@@ -94,7 +100,7 @@ private fun ContenutoSessioni(finestra: Finestra, io: RiferimentoGenitore?, erro
         if (errore) item(key = "dati-vecchi") { RigaStato(stringResource(R.string.turno_dati_vecchi)) }
 
         if (inCorso.isEmpty() && fatte.isEmpty() && approvate.isEmpty() && nonPiuValide.isEmpty()) {
-            item(key = "nessuna") { StatoVuoto(stringResource(R.string.sessioni_nessuna)) }
+            item(key = "nessuna") { StatoVuoto(stringResource(R.string.sessioni_nessuna), emoji = "🎯") }
             return@LazyColumn
         }
 
@@ -105,7 +111,7 @@ private fun ContenutoSessioni(finestra: Finestra, io: RiferimentoGenitore?, erro
 
         item(key = "approvate-titolo") { TitoloSezione(stringResource(R.string.sessioni_approvate_titolo)) }
         if (approvate.isEmpty()) {
-            item(key = "approvate-vuoto") { StatoVuoto(stringResource(R.string.sessioni_nessuna_approvata)) }
+            item(key = "approvate-vuoto") { StatoVuoto(stringResource(R.string.sessioni_nessuna_approvata), emoji = "🎯") }
         } else {
             items(approvate, key = { "approvata-${it.id}" }) { sessione ->
                 RigaSessioneApprovata(
@@ -119,7 +125,7 @@ private fun ContenutoSessioni(finestra: Finestra, io: RiferimentoGenitore?, erro
 
         item(key = "fatte-titolo") { TitoloSezione(stringResource(R.string.sessioni_fatte_titolo)) }
         if (fatte.isEmpty()) {
-            item(key = "fatte-vuoto") { StatoVuoto(stringResource(R.string.sessioni_nessuna_svolta)) }
+            item(key = "fatte-vuoto") { StatoVuoto(stringResource(R.string.sessioni_nessuna_svolta), emoji = "🎯") }
         } else {
             items(fatte, key = { "fatta-${it.svolta.id}" }) { RigaSessioneSvolta(it, telefonoDi(it.svolta.dispositivoId)) }
         }

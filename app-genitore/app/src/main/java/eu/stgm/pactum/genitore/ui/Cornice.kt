@@ -19,8 +19,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.sp
-import eu.stgm.pactum.design.TestoSuUnaRiga
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
 import eu.stgm.pactum.genitore.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -69,7 +69,9 @@ fun BarraScheda(titolo: String, onAggiorna: () -> Unit) {
     val cornice = LocalCornice.current
     TopAppBar(
         // Il titolo sta su una riga anche col testo grande: si rimpicciolisce, non si tronca (B32).
-        title = { TestoSuUnaRiga(titolo, style = MaterialTheme.typography.titleLarge, minimo = 16.sp) },
+        // (0.19) Accanto gli adesivi della sezione, e la barra nei suoi colori.
+        title = { TitoloBarra(titolo) },
+        colors = coloriBarra(),
         actions = {
             PulsanteNotifiche(cornice.notificheNonLette) { cornice.apri(Pagina.Notifiche) }
             IconButton(onClick = onAggiorna) {
@@ -88,7 +90,8 @@ fun BarraScheda(titolo: String, onAggiorna: () -> Unit) {
 fun BarraPagina(titolo: String, azioni: @Composable RowScope.() -> Unit = {}) {
     val cornice = LocalCornice.current
     TopAppBar(
-        title = { TestoSuUnaRiga(titolo, style = MaterialTheme.typography.titleLarge, minimo = 16.sp) },
+        title = { TitoloBarra(titolo) },
+        colors = coloriBarra(),
         navigationIcon = {
             IconButton(onClick = cornice.indietro) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))

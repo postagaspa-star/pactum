@@ -38,6 +38,9 @@ import eu.stgm.pactum.design.StrisciaGiorni
 import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Finestra
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
 
 // (0.16) Tutte le regole del figlio scelto, come l'elenco della Panoramica della
 // 0.14: per dispositivo (o gli Impegni), ciascuna con la sua striscia piccola,
@@ -58,22 +61,25 @@ fun TutteLeRegoleScreen(
         onPauseOrDispose { }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = { BarraPagina(stringResource(R.string.tutte_le_regole)) },
-    ) { padding ->
-        val finestra = statoFinestra.finestra.takeIf { statoFinestra.di(figlioId) }
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                famiglia.collegamentoNonValido -> StatoVuoto(
-                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
-                    testo = stringResource(R.string.collegamento_non_valido),
-                    centrato = true,
-                )
-                finestra == null && (statoFinestra.caricamento || !statoFinestra.di(figlioId)) ->
-                    Caricamento(testo = stringResource(R.string.tutte_le_regole_caricamento))
-                finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
-                else -> ElencoRegole(finestra = finestra, errore = statoFinestra.errore)
+    SchermataColorata(Sezione.REGOLE) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = { BarraPagina(stringResource(R.string.tutte_le_regole)) },
+        ) { padding ->
+            val finestra = statoFinestra.finestra.takeIf { statoFinestra.di(figlioId) }
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    famiglia.collegamentoNonValido -> StatoVuoto(
+                        titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                        testo = stringResource(R.string.collegamento_non_valido),
+                        centrato = true,
+                    )
+                    finestra == null && (statoFinestra.caricamento || !statoFinestra.di(figlioId)) ->
+                        Caricamento(testo = stringResource(R.string.tutte_le_regole_caricamento))
+                    finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
+                    else -> ElencoRegole(finestra = finestra, errore = statoFinestra.errore)
+                }
             }
         }
     }

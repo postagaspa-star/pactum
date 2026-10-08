@@ -345,6 +345,7 @@ private fun BloccoFigli(
             testo = stringResource(R.string.famiglia_nessun_figlio),
             azione = stringResource(R.string.famiglia_aggiungi_figlio),
             onAzione = if (stato.lavoroInCorso) null else onAggiungiFiglio,
+            emoji = "🏡",
         )
 
         stato.figli.isEmpty() -> Caricamento(testo = stringResource(R.string.famiglia_caricamento), centrato = false)
@@ -499,7 +500,7 @@ private fun CardFiglio(
                 )
             }
             if (figlio.dispositivi.isEmpty()) {
-                StatoVuoto(stringResource(R.string.famiglia_nessun_dispositivo))
+                StatoVuoto(stringResource(R.string.famiglia_nessun_dispositivo), emoji = "📱")
             } else {
                 ListaRighe(figlio.dispositivi) { dispositivo ->
                     RigaDispositivoFamiglia(

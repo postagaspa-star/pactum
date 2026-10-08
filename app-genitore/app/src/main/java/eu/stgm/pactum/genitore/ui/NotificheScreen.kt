@@ -52,6 +52,9 @@ import eu.stgm.pactum.genitore.R
 import eu.stgm.pactum.genitore.dati.Figlio
 import eu.stgm.pactum.genitore.dati.Notifica
 import eu.stgm.pactum.genitore.dati.TipiDispositivo
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
 
 /**
  * Le notifiche non lette del patto, di tutti i figli. (0.15) È una pagina che si
@@ -118,103 +121,107 @@ fun NotificheScreen(
         )
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            BarraPagina(stringResource(R.string.notifiche_titolo)) {
-                IconButton(onClick = { vm.aggiorna() }) {
-                    Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
+    SchermataColorata(Sezione.NOTIFICHE) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = {
+                BarraPagina(stringResource(R.string.notifiche_titolo)) {
+                    IconButton(onClick = { vm.aggiorna() }) {
+                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
+                    }
                 }
-            }
-        },
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                // (0.15) 401: il collegamento di questo telefono non vale più. Non è la rete (B26).
-                famiglia.collegamentoNonValido -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
-                    testo = stringResource(R.string.collegamento_non_valido),
-                    azione = stringResource(R.string.azione_collega_di_nuovo),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+            },
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    // (0.15) 401: il collegamento di questo telefono non vale più. Non è la rete (B26).
+                    famiglia.collegamentoNonValido -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                        testo = stringResource(R.string.collegamento_non_valido),
+                        azione = stringResource(R.string.azione_collega_di_nuovo),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                stato.configurazioneMancante -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.config_mancante_titolo),
-                    testo = stringResource(R.string.notifiche_config_mancante),
-                    azione = stringResource(R.string.azione_collega),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+                    stato.configurazioneMancante -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.config_mancante_titolo),
+                        testo = stringResource(R.string.notifiche_config_mancante),
+                        azione = stringResource(R.string.azione_collega),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                // Solo la prima lettura: dopo, le riletture del badge (ogni
-                // minuto) aggiornano la lista senza coprirla con la rotella.
-                stato.caricamento && !stato.primaLetturaFatta ->
-                    Caricamento(testo = stringResource(R.string.notifiche_caricamento))
+                    // Solo la prima lettura: dopo, le riletture del badge (ogni
+                    // minuto) aggiornano la lista senza coprirla con la rotella.
+                    stato.caricamento && !stato.primaLetturaFatta ->
+                        Caricamento(testo = stringResource(R.string.notifiche_caricamento))
 
-                stato.errore && stato.notifiche.isEmpty() -> StatoVuoto(stringResource(R.string.notifiche_errore), centrato = true)
+                    stato.errore && stato.notifiche.isEmpty() -> StatoVuoto(stringResource(R.string.notifiche_errore), centrato = true)
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = Spazi.s),
-                ) {
-                    // Aggiornamento fallito con una lista già in mano: si dice che i
-                    // dati sono vecchi, invece di spacciarli per freschi in silenzio.
-                    if (stato.errore) {
-                        item(key = "dati-vecchi") {
-                            Box(modifier = Modifier.padding(horizontal = Spazi.l, vertical = Spazi.s)) {
-                                RigaStato(stringResource(R.string.notifiche_dati_vecchi))
+                    else -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = Spazi.s),
+                    ) {
+                        // Aggiornamento fallito con una lista già in mano: si dice che i
+                        // dati sono vecchi, invece di spacciarli per freschi in silenzio.
+                        if (stato.errore) {
+                            item(key = "dati-vecchi") {
+                                Box(modifier = Modifier.padding(horizontal = Spazi.l, vertical = Spazi.s)) {
+                                    RigaStato(stringResource(R.string.notifiche_dati_vecchi))
+                                }
                             }
                         }
-                    }
-                    if (stato.notifiche.isEmpty()) {
-                        item(key = "vuoto") {
-                            StatoVuoto(
-                                stringResource(R.string.notifiche_vuoto),
-                                icona = Icons.Outlined.CheckCircle,
-                                modifier = Modifier.padding(Spazi.l),
+                        if (stato.notifiche.isEmpty()) {
+                            item(key = "vuoto") {
+                                StatoVuoto(
+                                    stringResource(R.string.notifiche_vuoto),
+                                    icona = Icons.Outlined.CheckCircle,
+                                    modifier = Modifier.padding(Spazi.l),
+                                    emoji = "📭",
+                                )
+                            }
+                        } else if (stato.notifiche.size > 1) {
+                            // (0.9) Con più di una, tutte insieme (dopo una conferma).
+                            item(key = "segna-tutte") {
+                                TextButton(
+                                    onClick = { confermaTutte = true },
+                                    enabled = !stato.segnaturaInCorso,
+                                    modifier = Modifier.padding(horizontal = Spazi.s),
+                                ) {
+                                    Text(stringResource(R.string.notifiche_segna_tutte))
+                                }
+                            }
+                        }
+                        // (0.15) Una riga per notifica, ciascuna un elemento suo (B16), e
+                        // ciascuna si tocca per andare dove si guarda il fatto (B38).
+                        items(stato.notifiche, key = { "notifica-${it.id}" }) { notifica ->
+                            RigaNotifica(
+                                notifica = notifica,
+                                // (0.10) Con la famiglia (chi propone), le proposte
+                                // (che cosa) e i nomi delle app (mai un pacchetto);
+                                // (0.11) e le sessioni (quali app chiede).
+                                testo = testoNotifica(
+                                    parole(),
+                                    notifica,
+                                    stato.regolePerId,
+                                    famiglia.figli,
+                                    stato.propostePerId,
+                                    stato.nomi,
+                                    stato.sessioniPerId,
+                                    // (0.13) Qui la riga dice il fatto; il tocco porta alla foto.
+                                    nellaTendina = false,
+                                ),
+                                diChi = etichettaNotifica(notifica, famiglia.figli),
+                                icona = iconaTipo(notifica, famiglia.figli),
+                                onApri = { onApri(destinazioneDellaRiga(notifica)) },
+                                onSegnaLetta = { vm.segnaLetta(notifica) },
+                            )
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                modifier = Modifier.padding(horizontal = Spazi.l),
                             )
                         }
-                    } else if (stato.notifiche.size > 1) {
-                        // (0.9) Con più di una, tutte insieme (dopo una conferma).
-                        item(key = "segna-tutte") {
-                            TextButton(
-                                onClick = { confermaTutte = true },
-                                enabled = !stato.segnaturaInCorso,
-                                modifier = Modifier.padding(horizontal = Spazi.s),
-                            ) {
-                                Text(stringResource(R.string.notifiche_segna_tutte))
-                            }
-                        }
-                    }
-                    // (0.15) Una riga per notifica, ciascuna un elemento suo (B16), e
-                    // ciascuna si tocca per andare dove si guarda il fatto (B38).
-                    items(stato.notifiche, key = { "notifica-${it.id}" }) { notifica ->
-                        RigaNotifica(
-                            notifica = notifica,
-                            // (0.10) Con la famiglia (chi propone), le proposte
-                            // (che cosa) e i nomi delle app (mai un pacchetto);
-                            // (0.11) e le sessioni (quali app chiede).
-                            testo = testoNotifica(
-                                parole(),
-                                notifica,
-                                stato.regolePerId,
-                                famiglia.figli,
-                                stato.propostePerId,
-                                stato.nomi,
-                                stato.sessioniPerId,
-                                // (0.13) Qui la riga dice il fatto; il tocco porta alla foto.
-                                nellaTendina = false,
-                            ),
-                            diChi = etichettaNotifica(notifica, famiglia.figli),
-                            icona = iconaTipo(notifica, famiglia.figli),
-                            onApri = { onApri(destinazioneDellaRiga(notifica)) },
-                            onSegnaLetta = { vm.segnaLetta(notifica) },
-                        )
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            modifier = Modifier.padding(horizontal = Spazi.l),
-                        )
                     }
                 }
             }

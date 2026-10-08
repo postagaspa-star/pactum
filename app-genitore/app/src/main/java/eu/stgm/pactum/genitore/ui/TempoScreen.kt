@@ -77,6 +77,10 @@ import eu.stgm.pactum.genitore.dati.TipiRegola
 import eu.stgm.pactum.genitore.dati.UsoGiorno
 import kotlinx.coroutines.delay
 import java.time.Instant
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.rememberContatore
 
 // Tempo risponde a una domanda sola: quanto ha usato il telefono (o il
 // computer). (0.15) Dall'alto: il dispositivo (se più d'uno), UNA fila per
@@ -124,50 +128,53 @@ fun TempoScreen(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            BarraScheda(stringResource(R.string.tempo_titolo)) {
-                famigliaVm.aggiorna()
-                if (famiglia.pronta) vm.aggiorna(figlioId)
-            }
-        },
-    ) { padding ->
-        val finestra = stato.finestra.takeIf { stato.di(figlioId) }
-        // (0.15) La scelta del figlio: fissa in cima mentre si carica, con un errore o
-        // senza elenco (si cambia figlio anche quando i dati di uno non arrivano);
-        // con l'elenco è la sua prima riga e scorre col resto.
-        val conElenco = !famiglia.collegamentoNonValido && !stato.configurazioneMancante && finestra != null
-        ConSceltaFiglio(famiglia, fissa = !conElenco, modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                // (0.15) 401: non è "non riesco a raggiungere il server" (B26).
-                famiglia.collegamentoNonValido -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
-                    testo = stringResource(R.string.collegamento_non_valido),
-                    azione = stringResource(R.string.azione_collega_di_nuovo),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+    SchermataColorata(Sezione.TEMPO) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = {
+                BarraScheda(stringResource(R.string.tempo_titolo)) {
+                    famigliaVm.aggiorna()
+                    if (famiglia.pronta) vm.aggiorna(figlioId)
+                }
+            },
+        ) { padding ->
+            val finestra = stato.finestra.takeIf { stato.di(figlioId) }
+            // (0.15) La scelta del figlio: fissa in cima mentre si carica, con un errore o
+            // senza elenco (si cambia figlio anche quando i dati di uno non arrivano);
+            // con l'elenco è la sua prima riga e scorre col resto.
+            val conElenco = !famiglia.collegamentoNonValido && !stato.configurazioneMancante && finestra != null
+            ConSceltaFiglio(famiglia, fissa = !conElenco, modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    // (0.15) 401: non è "non riesco a raggiungere il server" (B26).
+                    famiglia.collegamentoNonValido -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                        testo = stringResource(R.string.collegamento_non_valido),
+                        azione = stringResource(R.string.azione_collega_di_nuovo),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                stato.configurazioneMancante -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.config_mancante_titolo),
-                    testo = stringResource(R.string.tempo_config_mancante),
-                    azione = stringResource(R.string.azione_collega),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+                    stato.configurazioneMancante -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.config_mancante_titolo),
+                        testo = stringResource(R.string.tempo_config_mancante),
+                        azione = stringResource(R.string.azione_collega),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                !stato.di(figlioId) || (stato.caricamento && finestra == null) ->
-                    Caricamento(testo = stringResource(R.string.tempo_caricamento))
+                    !stato.di(figlioId) || (stato.caricamento && finestra == null) ->
+                        Caricamento(testo = stringResource(R.string.tempo_caricamento))
 
-                finestra == null -> StatoVuoto(stringResource(R.string.tempo_errore), centrato = true)
+                    finestra == null -> StatoVuoto(stringResource(R.string.tempo_errore), centrato = true)
 
-                else -> ContenutoTempo(
-                    finestra = finestra,
-                    famiglia = famiglia,
-                    mostraErrore = stato.errore,
-                    ricevutaAlle = stato.ricevutaAlle,
-                )
+                    else -> ContenutoTempo(
+                        finestra = finestra,
+                        famiglia = famiglia,
+                        mostraErrore = stato.errore,
+                        ricevutaAlle = stato.ricevutaAlle,
+                    )
+                }
             }
         }
     }
@@ -737,7 +744,8 @@ private fun TotaleGiorno(giorno: UsoGiorno, oggi: Boolean, computer: Boolean) {
             modifier = Modifier.padding(top = Spazi.xs),
         )
     } else {
-        Text(text = testoDurata(totale.toLong()), style = MaterialTheme.typography.displaySmall)
+        // (0.19) Il totale sale contando quando compare.
+        Text(text = testoDurata(rememberContatore(totale.toLong())), style = MaterialTheme.typography.displaySmall)
         val limiteTotale = voceTotale(giorno)
         if (limiteTotale != null) LimiteDelTotale(limiteTotale)
         testoInSessione(parole(), giorno.sessioniMinuti)?.let {

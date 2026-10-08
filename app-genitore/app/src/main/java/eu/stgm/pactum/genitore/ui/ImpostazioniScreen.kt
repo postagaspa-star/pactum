@@ -73,6 +73,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.util.Locale
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
 
 /**
  * (0.15) Le Impostazioni, una pagina che si apre dall'icona in alto di ogni
@@ -189,172 +192,119 @@ fun ImpostazioniScreen(
     // Collegato e valido: il collegamento sta chiuso in una riga, finché non si tocca "Cambia".
     val collegamentoChiuso = configurato && !famiglia.collegamentoNonValido && !collegamentoAperto
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = { BarraPagina(stringResource(R.string.impostazioni_titolo)) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .imePadding()
-                .verticalScroll(scorrimento)
-                .padding(Spazi.l),
-            verticalArrangement = Arrangement.spacedBy(Spazi.m),
-        ) {
-            // --- 1. La famiglia (la parte che si usa) -----------------------------------
+    SchermataColorata(Sezione.IMPOSTAZIONI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = { BarraPagina(stringResource(R.string.impostazioni_titolo)) },
+        ) { padding ->
             Column(
-                modifier = Modifier.fillMaxWidth().inizio(inizioSezione, SezioneImpostazioni.FAMIGLIA),
+                modifier = Modifier
+                    .padding(padding)
+                    .imePadding()
+                    .verticalScroll(scorrimento)
+                    .padding(Spazi.l),
                 verticalArrangement = Arrangement.spacedBy(Spazi.m),
             ) {
-                SezioneFamiglia(
-                    famigliaVm = famigliaVm,
-                    indirizzoServer = configurazioneSalvata?.serverUrl?.takeIf { it.isNotBlank() },
-                    mostraMessaggio = messaggi::mostra,
-                )
-            }
-
-            // --- 2. Gli avvisi del patto (0.9) --------------------------------------------
-            Divisore()
-            Column(
-                modifier = Modifier.fillMaxWidth().inizio(inizioSezione, SezioneImpostazioni.AVVISI),
-                verticalArrangement = Arrangement.spacedBy(Spazi.m),
-            ) {
-                SezioneAvvisi()
-            }
-
-            // --- 3. Il riassunto della sera ------------------------------------------------
-            Divisore()
-            SezioneDigest(impostazioni)
-
-            // --- 4. Il collegamento ---------------------------------------------------------
-            Divisore()
-            Column(
-                modifier = Modifier.fillMaxWidth().inizio(inizioSezione, SezioneImpostazioni.COLLEGAMENTO),
-                verticalArrangement = Arrangement.spacedBy(Spazi.m),
-            ) {
-                TitoloSezione(stringResource(R.string.impostazioni_connessione_titolo))
-                // (0.13) Chi sei tu, quando il server lo dice (contratto v3.6); o che il
-                // collegamento di questo telefono non vale più (401).
-                val io = famiglia.io?.takeIf { configurato && !famiglia.collegamentoNonValido }
-                if (famiglia.collegamentoNonValido && configurato) {
-                    RigaStato(stringResource(R.string.collegamento_non_valido))
+                // --- 1. La famiglia (la parte che si usa) -----------------------------------
+                Column(
+                    modifier = Modifier.fillMaxWidth().inizio(inizioSezione, SezioneImpostazioni.FAMIGLIA),
+                    verticalArrangement = Arrangement.spacedBy(Spazi.m),
+                ) {
+                    SezioneFamiglia(
+                        famigliaVm = famigliaVm,
+                        indirizzoServer = configurazioneSalvata?.serverUrl?.takeIf { it.isNotBlank() },
+                        mostraMessaggio = messaggi::mostra,
+                    )
                 }
-                if (collegamentoChiuso) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (io != null) {
-                                stringResource(R.string.connessione_collegato_come, nomeDelGenitore(p, io.nome))
-                            } else {
-                                stringResource(R.string.connessione_collegato)
-                            },
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { collegamentoAperto = true }) {
-                            Text(stringResource(R.string.connessione_cambia))
-                        }
-                    }
-                } else {
-                    if (io != null) {
-                        Text(
-                            text = stringResource(R.string.connessione_collegato_come, nomeDelGenitore(p, io.nome)),
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.connessione_codice_spiega),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    OutlinedTextField(
-                        value = serverUrl,
-                        onValueChange = {
-                            serverUrl = it
-                            urlNonValido = false
-                        },
-                        label = { Text(stringResource(R.string.impostazioni_server_url)) },
-                        placeholder = { Text(stringResource(R.string.impostazioni_server_url_esempio)) },
-                        isError = urlNonValido,
-                        supportingText = if (urlNonValido) {
-                            { Text(stringResource(R.string.impostazioni_url_non_valido)) }
-                        } else {
-                            null
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    // (0.13) Il codice di 6 cifre (contratto v3.6, POST /api/abbina col tipo
-                    // "genitore"): lo crea un genitore già collegato. Solo cifre, al massimo 6.
-                    // Collegamento e salvataggio li fa CollegamentoViewModel, in un blocco che
-                    // la pagina non interrompe; l'esito lo dice la radice (MainActivity), che
-                    // dopo un collegamento riuscito torna alla Panoramica.
-                    OutlinedTextField(
-                        value = codiceSei,
-                        onValueChange = { codiceSei = soloCifre(it) },
-                        label = { Text(stringResource(R.string.connessione_codice)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Button(
-                        enabled = codiceCompleto(codiceSei) && !collegamento.inCorso,
-                        onClick = {
-                            // Un URL scritto male e accettato in silenzio = un binocolo
-                            // che non vede mai niente senza dirlo: si rifiuta subito.
-                            val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
-                            if (urlNormalizzato == null) {
-                                urlNonValido = true
-                                messaggi.mostra(messaggioUrlNonValido)
-                            } else {
-                                urlNonValido = false
-                                serverUrl = urlNormalizzato
-                                // Già collegato: prima una domanda (smetterà di essere chi è adesso).
-                                if (domandaPrimaDiCollegare(p, configurato, famiglia.io) != null) {
-                                    domandaCollega = true
-                                } else {
-                                    collegamentoVm.collega(urlNormalizzato, codiceSei)
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            stringResource(if (collegamento.inCorso) R.string.connessione_in_corso else R.string.connessione_collega),
-                        )
-                    }
 
-                    // Il codice d'accesso lungo, come prima della 0.13: per il primo genitore.
-                    TextButton(onClick = { codiceLungoAperto = !codiceLungoAperto }) {
-                        Text(
-                            stringResource(
-                                if (codiceLungoAperto) R.string.connessione_codice_lungo_chiudi else R.string.connessione_codice_lungo_apri,
-                            ),
-                        )
+                // --- 2. Gli avvisi del patto (0.9) --------------------------------------------
+                Divisore()
+                Column(
+                    modifier = Modifier.fillMaxWidth().inizio(inizioSezione, SezioneImpostazioni.AVVISI),
+                    verticalArrangement = Arrangement.spacedBy(Spazi.m),
+                ) {
+                    SezioneAvvisi()
+                }
+
+                // --- 3. Il riassunto della sera ------------------------------------------------
+                Divisore()
+                SezioneDigest(impostazioni)
+
+                // --- 4. Il collegamento ---------------------------------------------------------
+                Divisore()
+                Column(
+                    modifier = Modifier.fillMaxWidth().inizio(inizioSezione, SezioneImpostazioni.COLLEGAMENTO),
+                    verticalArrangement = Arrangement.spacedBy(Spazi.m),
+                ) {
+                    TitoloSezione(stringResource(R.string.impostazioni_connessione_titolo))
+                    // (0.13) Chi sei tu, quando il server lo dice (contratto v3.6); o che il
+                    // collegamento di questo telefono non vale più (401).
+                    val io = famiglia.io?.takeIf { configurato && !famiglia.collegamentoNonValido }
+                    if (famiglia.collegamentoNonValido && configurato) {
+                        RigaStato(stringResource(R.string.collegamento_non_valido))
                     }
-                    if (codiceLungoAperto) {
+                    if (collegamentoChiuso) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (io != null) {
+                                    stringResource(R.string.connessione_collegato_come, nomeDelGenitore(p, io.nome))
+                                } else {
+                                    stringResource(R.string.connessione_collegato)
+                                },
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { collegamentoAperto = true }) {
+                                Text(stringResource(R.string.connessione_cambia))
+                            }
+                        }
+                    } else {
+                        if (io != null) {
+                            Text(
+                                text = stringResource(R.string.connessione_collegato_come, nomeDelGenitore(p, io.nome)),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
                         Text(
-                            text = stringResource(R.string.impostazioni_descrizione),
+                            text = stringResource(R.string.connessione_codice_spiega),
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         OutlinedTextField(
-                            value = token,
-                            onValueChange = { token = it },
-                            label = { Text(stringResource(R.string.impostazioni_token)) },
-                            singleLine = true,
-                            visualTransformation = if (codiceLungoVisibile) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                IconButton(onClick = { codiceLungoVisibile = !codiceLungoVisibile }) {
-                                    Icon(
-                                        painterResource(if (codiceLungoVisibile) R.drawable.ic_occhio_chiuso else R.drawable.ic_occhio),
-                                        contentDescription = stringResource(
-                                            if (codiceLungoVisibile) R.string.codice_lungo_nascondi else R.string.codice_lungo_mostra,
-                                        ),
-                                    )
-                                }
+                            value = serverUrl,
+                            onValueChange = {
+                                serverUrl = it
+                                urlNonValido = false
                             },
+                            label = { Text(stringResource(R.string.impostazioni_server_url)) },
+                            placeholder = { Text(stringResource(R.string.impostazioni_server_url_esempio)) },
+                            isError = urlNonValido,
+                            supportingText = if (urlNonValido) {
+                                { Text(stringResource(R.string.impostazioni_url_non_valido)) }
+                            } else {
+                                null
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        // (0.13) Il codice di 6 cifre (contratto v3.6, POST /api/abbina col tipo
+                        // "genitore"): lo crea un genitore già collegato. Solo cifre, al massimo 6.
+                        // Collegamento e salvataggio li fa CollegamentoViewModel, in un blocco che
+                        // la pagina non interrompe; l'esito lo dice la radice (MainActivity), che
+                        // dopo un collegamento riuscito torna alla Panoramica.
+                        OutlinedTextField(
+                            value = codiceSei,
+                            onValueChange = { codiceSei = soloCifre(it) },
+                            label = { Text(stringResource(R.string.connessione_codice)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Button(
+                            enabled = codiceCompleto(codiceSei) && !collegamento.inCorso,
                             onClick = {
+                                // Un URL scritto male e accettato in silenzio = un binocolo
+                                // che non vede mai niente senza dirlo: si rifiuta subito.
                                 val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
                                 if (urlNormalizzato == null) {
                                     urlNonValido = true
@@ -362,135 +312,191 @@ fun ImpostazioniScreen(
                                 } else {
                                     urlNonValido = false
                                     serverUrl = urlNormalizzato
-                                    val primoCollegamento = !configurato
-                                    ambito.launch {
-                                        impostazioni.salvaConfigurazione(urlNormalizzato, token)
-                                        messaggi.mostra(messaggioSalvato)
-                                        // (0.15) Al primo collegamento si torna alla Panoramica.
-                                        if (primoCollegamento) cornice.allaPanoramica()
+                                    // Già collegato: prima una domanda (smetterà di essere chi è adesso).
+                                    if (domandaPrimaDiCollegare(p, configurato, famiglia.io) != null) {
+                                        domandaCollega = true
+                                    } else {
+                                        collegamentoVm.collega(urlNormalizzato, codiceSei)
                                     }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text(stringResource(R.string.azione_salva))
+                            Text(
+                                stringResource(if (collegamento.inCorso) R.string.connessione_in_corso else R.string.connessione_collega),
+                            )
                         }
+
+                        // Il codice d'accesso lungo, come prima della 0.13: per il primo genitore.
+                        TextButton(onClick = { codiceLungoAperto = !codiceLungoAperto }) {
+                            Text(
+                                stringResource(
+                                    if (codiceLungoAperto) R.string.connessione_codice_lungo_chiudi else R.string.connessione_codice_lungo_apri,
+                                ),
+                            )
+                        }
+                        if (codiceLungoAperto) {
+                            Text(
+                                text = stringResource(R.string.impostazioni_descrizione),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            OutlinedTextField(
+                                value = token,
+                                onValueChange = { token = it },
+                                label = { Text(stringResource(R.string.impostazioni_token)) },
+                                singleLine = true,
+                                visualTransformation = if (codiceLungoVisibile) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { codiceLungoVisibile = !codiceLungoVisibile }) {
+                                        Icon(
+                                            painterResource(if (codiceLungoVisibile) R.drawable.ic_occhio_chiuso else R.drawable.ic_occhio),
+                                            contentDescription = stringResource(
+                                                if (codiceLungoVisibile) R.string.codice_lungo_nascondi else R.string.codice_lungo_mostra,
+                                            ),
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Button(
+                                onClick = {
+                                    val urlNormalizzato = PostinoClient.normalizzaUrlServer(serverUrl)
+                                    if (urlNormalizzato == null) {
+                                        urlNonValido = true
+                                        messaggi.mostra(messaggioUrlNonValido)
+                                    } else {
+                                        urlNonValido = false
+                                        serverUrl = urlNormalizzato
+                                        val primoCollegamento = !configurato
+                                        ambito.launch {
+                                            impostazioni.salvaConfigurazione(urlNormalizzato, token)
+                                            messaggi.mostra(messaggioSalvato)
+                                            // (0.15) Al primo collegamento si torna alla Panoramica.
+                                            if (primoCollegamento) cornice.allaPanoramica()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.azione_salva))
+                            }
+                        }
+                    }
+
+                    // Verifica onesta del canale: quando il server ha risposto l'ultima
+                    // volta e un pulsante per provare adesso, con esito esplicito.
+                    Text(
+                        text = stringResource(
+                            R.string.impostazioni_ultima_verifica,
+                            ultimaVerifica?.let { testoQuando(p, Instant.ofEpochMilli(it)) }
+                                ?: stringResource(R.string.impostazioni_ultima_verifica_mai),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(
+                        enabled = !provaInCorso,
+                        onClick = {
+                            // La prova usa quello che c'è SULLO SCHERMO, non l'ultima
+                            // configurazione salvata: altrimenti si prova un indirizzo
+                            // vecchio credendo di provare quello appena scritto.
+                            val urlProva = PostinoClient.normalizzaUrlServer(serverUrl)
+                            val tokenProva = token.trim()
+                            when {
+                                serverUrl.isBlank() || tokenProva.isEmpty() -> messaggi.mostra(messaggioConfigIncompleta)
+
+                                urlProva == null -> {
+                                    urlNonValido = true
+                                    messaggi.mostra(messaggioUrlNonValido)
+                                }
+
+                                else -> ambito.launch {
+                                    provaInCorso = true
+                                    try {
+                                        val provata = ConfigurazionePostino(urlProva, tokenProva)
+                                        val finestra = PostinoClient(provata).leggiFinestra()
+                                        val esito = if (finestra != null) {
+                                            // "Ultima verifica riuscita" racconta il canale
+                                            // configurato: si registra solo se la prova ha
+                                            // usato esattamente la configurazione salvata.
+                                            if (provata == impostazioni.leggiConfigurazione()) {
+                                                impostazioni.registraVerificaRiuscita()
+                                            }
+                                            messaggioProvaOk
+                                        } else {
+                                            messaggioProvaFallita
+                                        }
+                                        messaggi.mostra(esito)
+                                    } finally {
+                                        provaInCorso = false
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.impostazioni_prova_adesso))
                     }
                 }
 
-                // Verifica onesta del canale: quando il server ha risposto l'ultima
-                // volta e un pulsante per provare adesso, con esito esplicito.
+                // --- 5. La versione dell'app (tappa 6) -------------------------------------------
+                // La versione installata e un controllo manuale. La vedetta lo fa anche da
+                // sola a ogni giro; questo è per chi non vuole aspettare.
+                Divisore()
+                TitoloSezione(stringResource(R.string.impostazioni_aggiornamenti_titolo))
                 Text(
-                    text = stringResource(
-                        R.string.impostazioni_ultima_verifica,
-                        ultimaVerifica?.let { testoQuando(p, Instant.ofEpochMilli(it)) }
-                            ?: stringResource(R.string.impostazioni_ultima_verifica_mai),
-                    ),
+                    text = stringResource(R.string.impostazioni_versione_attuale, BuildConfig.VERSION_NAME),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedButton(
-                    enabled = !provaInCorso,
+                    enabled = !controlloInCorso,
                     onClick = {
-                        // La prova usa quello che c'è SULLO SCHERMO, non l'ultima
-                        // configurazione salvata: altrimenti si prova un indirizzo
-                        // vecchio credendo di provare quello appena scritto.
-                        val urlProva = PostinoClient.normalizzaUrlServer(serverUrl)
-                        val tokenProva = token.trim()
-                        when {
-                            serverUrl.isBlank() || tokenProva.isEmpty() -> messaggi.mostra(messaggioConfigIncompleta)
+                        ambito.launch {
+                            controlloInCorso = true
+                            try {
+                                // forza=true: il gesto esplicito del genitore può
+                                // ritentare anche una versione già tentata (es. un
+                                // dialogo di sistema chiuso per sbaglio).
+                                val messaggio = when (val esito = aggiornatore.controlla(forza = true)) {
+                                    is EsitoAggiornamento.Avviato -> context.getString(
+                                        R.string.aggiornamento_avviato,
+                                        esito.versioneNome,
+                                    )
 
-                            urlProva == null -> {
-                                urlNonValido = true
-                                messaggi.mostra(messaggioUrlNonValido)
-                            }
+                                    EsitoAggiornamento.GiaAggiornato ->
+                                        context.getString(R.string.aggiornamento_gia_aggiornato)
 
-                            else -> ambito.launch {
-                                provaInCorso = true
-                                try {
-                                    val provata = ConfigurazionePostino(urlProva, tokenProva)
-                                    val finestra = PostinoClient(provata).leggiFinestra()
-                                    val esito = if (finestra != null) {
-                                        // "Ultima verifica riuscita" racconta il canale
-                                        // configurato: si registra solo se la prova ha
-                                        // usato esattamente la configurazione salvata.
-                                        if (provata == impostazioni.leggiConfigurazione()) {
-                                            impostazioni.registraVerificaRiuscita()
-                                        }
-                                        messaggioProvaOk
-                                    } else {
-                                        messaggioProvaFallita
-                                    }
-                                    messaggi.mostra(esito)
-                                } finally {
-                                    provaInCorso = false
+                                    EsitoAggiornamento.InstallazionePendente ->
+                                        context.getString(R.string.aggiornamento_installazione_pendente)
+
+                                    EsitoAggiornamento.ConfigMancante ->
+                                        context.getString(R.string.aggiornamento_config_mancante)
+
+                                    EsitoAggiornamento.Irraggiungibile ->
+                                        context.getString(R.string.aggiornamento_irraggiungibile)
+
+                                    EsitoAggiornamento.Fallito ->
+                                        context.getString(R.string.aggiornamento_fallito)
                                 }
+                                messaggi.mostra(messaggio)
+                            } finally {
+                                controlloInCorso = false
                             }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(stringResource(R.string.impostazioni_prova_adesso))
+                    Text(stringResource(R.string.impostazioni_controlla_aggiornamenti))
                 }
+
+                // --- 6. Come funziona Pactum ----------------------------------------------------
+                // La cornice (prima una card in mezzo alla Panoramica): cos'è Pactum, perché
+                // non impone il genitore le regole, e chi è l'arbitro delle regole di vita reale.
+                Divisore()
+                TitoloSezione(stringResource(R.string.intro_titolo))
+                Text(text = stringResource(R.string.intro_testo), style = MaterialTheme.typography.bodyMedium)
+                Text(text = stringResource(R.string.intro_arbitro), style = MaterialTheme.typography.bodyMedium)
             }
-
-            // --- 5. La versione dell'app (tappa 6) -------------------------------------------
-            // La versione installata e un controllo manuale. La vedetta lo fa anche da
-            // sola a ogni giro; questo è per chi non vuole aspettare.
-            Divisore()
-            TitoloSezione(stringResource(R.string.impostazioni_aggiornamenti_titolo))
-            Text(
-                text = stringResource(R.string.impostazioni_versione_attuale, BuildConfig.VERSION_NAME),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            OutlinedButton(
-                enabled = !controlloInCorso,
-                onClick = {
-                    ambito.launch {
-                        controlloInCorso = true
-                        try {
-                            // forza=true: il gesto esplicito del genitore può
-                            // ritentare anche una versione già tentata (es. un
-                            // dialogo di sistema chiuso per sbaglio).
-                            val messaggio = when (val esito = aggiornatore.controlla(forza = true)) {
-                                is EsitoAggiornamento.Avviato -> context.getString(
-                                    R.string.aggiornamento_avviato,
-                                    esito.versioneNome,
-                                )
-
-                                EsitoAggiornamento.GiaAggiornato ->
-                                    context.getString(R.string.aggiornamento_gia_aggiornato)
-
-                                EsitoAggiornamento.InstallazionePendente ->
-                                    context.getString(R.string.aggiornamento_installazione_pendente)
-
-                                EsitoAggiornamento.ConfigMancante ->
-                                    context.getString(R.string.aggiornamento_config_mancante)
-
-                                EsitoAggiornamento.Irraggiungibile ->
-                                    context.getString(R.string.aggiornamento_irraggiungibile)
-
-                                EsitoAggiornamento.Fallito ->
-                                    context.getString(R.string.aggiornamento_fallito)
-                            }
-                            messaggi.mostra(messaggio)
-                        } finally {
-                            controlloInCorso = false
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.impostazioni_controlla_aggiornamenti))
-            }
-
-            // --- 6. Come funziona Pactum ----------------------------------------------------
-            // La cornice (prima una card in mezzo alla Panoramica): cos'è Pactum, perché
-            // non impone il genitore le regole, e chi è l'arbitro delle regole di vita reale.
-            Divisore()
-            TitoloSezione(stringResource(R.string.intro_titolo))
-            Text(text = stringResource(R.string.intro_testo), style = MaterialTheme.typography.bodyMedium)
-            Text(text = stringResource(R.string.intro_arbitro), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

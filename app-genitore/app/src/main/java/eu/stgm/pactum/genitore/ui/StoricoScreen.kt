@@ -38,6 +38,9 @@ import eu.stgm.pactum.genitore.dati.ModificaStorico
 import eu.stgm.pactum.genitore.dati.RegolaFinestra
 import eu.stgm.pactum.genitore.dati.StatiDichiarazione
 import java.time.Instant
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
 
 // (0.15) Lo Storico del patto, a pagina intera: le quattro storie che prima
 // stavano sparse in tre posti — le regole cambiate (in fondo alla Panoramica), le
@@ -69,29 +72,32 @@ fun StoricoScreen(
         onPauseOrDispose { }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = { BarraPagina(stringResource(R.string.sezione_storico)) },
-    ) { padding ->
-        val finestra = statoFinestra.finestra.takeIf { statoFinestra.di(figlioId) }
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                famiglia.collegamentoNonValido -> StatoVuoto(
-                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
-                    testo = stringResource(R.string.collegamento_non_valido),
-                    centrato = true,
-                )
-                finestra == null && (statoFinestra.caricamento || !statoFinestra.di(figlioId)) ->
-                    Caricamento(testo = stringResource(R.string.storico_caricamento))
-                finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
-                else -> ContenutoStorico(
-                    finestra = finestra,
-                    proposte = proposte.takeIf { it.di(figlioId) },
-                    verdetti = verdetti.takeIf { it.di(figlioId) },
-                    nomeFiglio = famiglia.figlioScelto?.nome,
-                    io = famiglia.io,
-                    errore = statoFinestra.errore || proposte.errore || verdetti.errore,
-                )
+    SchermataColorata(Sezione.STORICO) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = { BarraPagina(stringResource(R.string.sezione_storico)) },
+        ) { padding ->
+            val finestra = statoFinestra.finestra.takeIf { statoFinestra.di(figlioId) }
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    famiglia.collegamentoNonValido -> StatoVuoto(
+                        titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                        testo = stringResource(R.string.collegamento_non_valido),
+                        centrato = true,
+                    )
+                    finestra == null && (statoFinestra.caricamento || !statoFinestra.di(figlioId)) ->
+                        Caricamento(testo = stringResource(R.string.storico_caricamento))
+                    finestra == null -> StatoVuoto(stringResource(R.string.finestra_errore_nessun_dato), centrato = true)
+                    else -> ContenutoStorico(
+                        finestra = finestra,
+                        proposte = proposte.takeIf { it.di(figlioId) },
+                        verdetti = verdetti.takeIf { it.di(figlioId) },
+                        nomeFiglio = famiglia.figlioScelto?.nome,
+                        io = famiglia.io,
+                        errore = statoFinestra.errore || proposte.errore || verdetti.errore,
+                    )
+                }
             }
         }
     }
@@ -132,7 +138,7 @@ private fun ContenutoStorico(
         // 1. Le regole cambiate.
         item(key = "regole-titolo") { TitoloSezione(stringResource(R.string.storico_regole)) }
         if (finestra.storicoModifiche.isEmpty()) {
-            item(key = "regole-vuoto") { StatoVuoto(stringResource(R.string.storico_regole_vuoto)) }
+            item(key = "regole-vuoto") { StatoVuoto(stringResource(R.string.storico_regole_vuoto), emoji = "📜") }
         } else {
             items(finestra.storicoModifiche, key = { "modifica-${it.id}" }) {
                 RigaStorico(it, regolePerId, mostraDispositivo = piuDispositivi)
@@ -161,7 +167,7 @@ private fun ContenutoStorico(
         if (proposte == null) {
             item(key = "proposte-caricamento") { Caricamento(testo = stringResource(R.string.turno_caricamento), centrato = false) }
         } else if (chiuse.isEmpty()) {
-            item(key = "proposte-vuoto") { StatoVuoto(stringResource(R.string.storico_proposte_vuoto)) }
+            item(key = "proposte-vuoto") { StatoVuoto(stringResource(R.string.storico_proposte_vuoto), emoji = "📭") }
         } else {
             items(chiuse, key = { "proposta-${it.id}" }) {
                 RigaPropostaChiusa(it, regolePerId[it.regolaId] ?: proposte.regolePerId[it.regolaId], nomeFiglio, piuDispositivi, nomi, io)
@@ -173,7 +179,7 @@ private fun ContenutoStorico(
         if (verdetti == null) {
             item(key = "dichiarazioni-caricamento") { Caricamento(testo = stringResource(R.string.turno_caricamento), centrato = false) }
         } else if (registro.isEmpty()) {
-            item(key = "dichiarazioni-vuoto") { StatoVuoto(stringResource(R.string.storico_dichiarazioni_vuoto)) }
+            item(key = "dichiarazioni-vuoto") { StatoVuoto(stringResource(R.string.storico_dichiarazioni_vuoto), emoji = "📖") }
         } else {
             items(registro, key = { "dichiarazione-${it.id}" }) {
                 RigaRisolta(it, regolePerId[it.regolaId] ?: verdetti.regolePerId[it.regolaId], io)

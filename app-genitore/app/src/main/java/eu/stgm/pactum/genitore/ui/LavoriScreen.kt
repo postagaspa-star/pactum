@@ -80,6 +80,8 @@ import eu.stgm.pactum.genitore.dati.MASSIMO_NOTA_FACCENDA
 import eu.stgm.pactum.genitore.dati.RiferimentoGenitore
 import kotlinx.coroutines.delay
 import java.time.Instant
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
 
 // (0.13) I lavori di casa (contratto v3.6), per il figlio scelto in cima. (0.15)
 // Sono una scheda della barra, "Lavori" (titolo "Lavori di casa"): in alto "Dai
@@ -208,76 +210,79 @@ fun LavoriScreen(
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalConApprovazione provides stato.conApprovazione) {
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            BarraScheda(stringResource(R.string.faccende_titolo)) {
-                famigliaVm.aggiorna()
-                if (famiglia.pronta) vm.aggiorna(figlioId)
-            }
-        },
-    ) { padding ->
-        // (0.15) La scelta del figlio: fissa in cima mentre si carica, con un errore o
-        // senza elenco (si cambia figlio anche quando i dati di uno non arrivano);
-        // con l'elenco è la sua prima riga e scorre col resto.
-        val conElenco = !famiglia.collegamentoNonValido && !stato.collegamentoNonValido && !stato.configurazioneMancante &&
-            stato.di(figlioId) && faccende != null && !stato.serverVecchio
-        ConSceltaFiglio(famiglia, fissa = !conElenco, modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                // (0.13) 401: il collegamento di questo telefono non vale più. Non è la rete.
-                famiglia.collegamentoNonValido || stato.collegamentoNonValido -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.collegamento_non_valido_titolo),
-                    testo = stringResource(R.string.collegamento_non_valido),
-                    azione = stringResource(R.string.azione_collega_di_nuovo),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+    SchermataColorata(Sezione.LAVORI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = {
+                BarraScheda(stringResource(R.string.faccende_titolo)) {
+                    famigliaVm.aggiorna()
+                    if (famiglia.pronta) vm.aggiorna(figlioId)
+                }
+            },
+        ) { padding ->
+            // (0.15) La scelta del figlio: fissa in cima mentre si carica, con un errore o
+            // senza elenco (si cambia figlio anche quando i dati di uno non arrivano);
+            // con l'elenco è la sua prima riga e scorre col resto.
+            val conElenco = !famiglia.collegamentoNonValido && !stato.collegamentoNonValido && !stato.configurazioneMancante &&
+                stato.di(figlioId) && faccende != null && !stato.serverVecchio
+            ConSceltaFiglio(famiglia, fissa = !conElenco, modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    // (0.13) 401: il collegamento di questo telefono non vale più. Non è la rete.
+                    famiglia.collegamentoNonValido || stato.collegamentoNonValido -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.collegamento_non_valido_titolo),
+                        testo = stringResource(R.string.collegamento_non_valido),
+                        azione = stringResource(R.string.azione_collega_di_nuovo),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                stato.configurazioneMancante -> StatoVuoto(
-                    centrato = true,
-                    titolo = stringResource(R.string.config_mancante_titolo),
-                    testo = stringResource(R.string.faccende_config_mancante),
-                    azione = stringResource(R.string.azione_collega),
-                    onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
-                )
+                    stato.configurazioneMancante -> StatoVuoto(
+                        centrato = true,
+                        titolo = stringResource(R.string.config_mancante_titolo),
+                        testo = stringResource(R.string.faccende_config_mancante),
+                        azione = stringResource(R.string.azione_collega),
+                        onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.COLLEGAMENTO)) },
+                    )
 
-                !stato.di(figlioId) || (stato.caricamento && faccende == null) ->
-                    Caricamento(testo = stringResource(R.string.faccende_caricamento))
+                    !stato.di(figlioId) || (stato.caricamento && faccende == null) ->
+                        Caricamento(testo = stringResource(R.string.faccende_caricamento))
 
-                stato.serverVecchio -> StatoVuoto(
-                    titolo = stringResource(R.string.faccende_server_vecchio_titolo),
-                    testo = stringResource(R.string.faccende_server_vecchio),
-                    centrato = true,
-                )
+                    stato.serverVecchio -> StatoVuoto(
+                        titolo = stringResource(R.string.faccende_server_vecchio_titolo),
+                        testo = stringResource(R.string.faccende_server_vecchio),
+                        centrato = true,
+                    )
 
-                faccende == null -> StatoVuoto(stringResource(R.string.faccende_errore), centrato = true)
+                    faccende == null -> StatoVuoto(stringResource(R.string.faccende_errore), centrato = true)
 
-                else -> ElencoFaccende(
-                    faccende = faccende,
-                    famiglia = famiglia,
-                    errore = stato.errore,
-                    nomeFiglio = nomeFiglio,
-                    senzaBlocco = senzaBlocco,
-                    adesso = adesso,
-                    invio = stato.invio,
-                    conModifiche = stato.conModifiche,
-                    // (0.18, v4.0) Il blocco del server, mai ricalcolato (null = server più vecchio).
-                    bloccoServer = stato.blocco,
-                    conApprovazione = stato.conApprovazione,
-                    fotoViste = fotoViste,
-                    cercato = cercato,
-                    ricerca = ricerca,
-                    onCerca = { cercato = it.take(MASSIMO_RICERCA) },
-                    onDai = { cornice.apri(Pagina.DaiLavori) },
-                    onModifica = { cornice.apri(Pagina.ModificaLavoro(it.id)) },
-                    onTogli = { togliId = it.id },
-                    onGuardaFoto = { vm.apriFoto(it.id, it.fotoTs) },
-                    onSvolto = { svoltoId = it.id },
-                    onBoccia = {
-                        bocciaId = it.id
-                        bocciaFotoTs = it.fotoTs
-                    },
-                )
+                    else -> ElencoFaccende(
+                        faccende = faccende,
+                        famiglia = famiglia,
+                        errore = stato.errore,
+                        nomeFiglio = nomeFiglio,
+                        senzaBlocco = senzaBlocco,
+                        adesso = adesso,
+                        invio = stato.invio,
+                        conModifiche = stato.conModifiche,
+                        // (0.18, v4.0) Il blocco del server, mai ricalcolato (null = server più vecchio).
+                        bloccoServer = stato.blocco,
+                        conApprovazione = stato.conApprovazione,
+                        fotoViste = fotoViste,
+                        cercato = cercato,
+                        ricerca = ricerca,
+                        onCerca = { cercato = it.take(MASSIMO_RICERCA) },
+                        onDai = { cornice.apri(Pagina.DaiLavori) },
+                        onModifica = { cornice.apri(Pagina.ModificaLavoro(it.id)) },
+                        onTogli = { togliId = it.id },
+                        onGuardaFoto = { vm.apriFoto(it.id, it.fotoTs) },
+                        onSvolto = { svoltoId = it.id },
+                        onBoccia = {
+                            bocciaId = it.id
+                            bocciaFotoTs = it.fotoTs
+                        },
+                    )
+                }
             }
         }
     }
@@ -490,7 +495,7 @@ private fun ElencoFaccende(
         if (faccende.isEmpty()) {
             item(key = "nessuna") {
                 Column {
-                    StatoVuoto(stringResource(R.string.faccende_nessuna))
+                    StatoVuoto(stringResource(R.string.faccende_nessuna), emoji = "🛋️")
                     Text(
                         text = spiegaFaccende(p, nomeFiglio, conApprovazione),
                         style = MaterialTheme.typography.bodyMedium,
@@ -791,7 +796,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.risultatiRicerca(
         risultati == null ->
             item(key = "ricerca-caricamento") { Caricamento(testo = stringResource(R.string.ricerca_caricamento), centrato = false) }
         risultati.isEmpty() && !ricerca.caricamento ->
-            item(key = "ricerca-vuota") { StatoVuoto(stringResource(R.string.ricerca_nessuno, ricerca.testo)) }
+            item(key = "ricerca-vuota") { StatoVuoto(stringResource(R.string.ricerca_nessuno, ricerca.testo), emoji = "🔍") }
         else -> {
             items(risultati, key = { "trovato-${it.id}" }) { faccenda ->
                 if (faccenda.stato == eu.stgm.pactum.genitore.dati.StatiFaccenda.FATTA) {

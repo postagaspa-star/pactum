@@ -28,7 +28,8 @@ fun BarraUso(
     modifier: Modifier = Modifier,
 ) {
     val denominatore = (limite ?: massimoDelGiorno).coerceAtLeast(1)
-    val frazione = (minuti.toFloat() / denominatore).coerceIn(0f, 1f)
+    // (0.19) La barra si riempie quando compare.
+    val frazione = (minuti.toFloat() / denominatore).coerceIn(0f, 1f) * rememberComparsa()
     Box(
         modifier = modifier
             .fillMaxWidth()

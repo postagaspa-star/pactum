@@ -148,6 +148,8 @@ data class VoceBarra(
     val icona: Painter,
     val badge: Int? = null,
     val descrizioneBadge: String? = null,
+    /** (0.19) La sezione della scheda: scelta, la pillola dietro l'icona prende il suo colore. */
+    val sezione: Sezione? = null,
 )
 
 /**
@@ -174,6 +176,18 @@ fun BarraSchede(
         unselectedIconColor = schema.onSurfaceVariant,
         unselectedTextColor = schema.onSurfaceVariant,
     )
+    // (0.19) Ogni scheda col colore della sua sezione: si capisce dove si è anche solo dal colore.
+    val coloriVoci = voci.map { voce ->
+        voce.sezione?.let { sezione ->
+            NavigationBarItemDefaults.colors(
+                selectedIconColor = sezione.inchiostro,
+                selectedTextColor = sezione.inchiostro,
+                indicatorColor = sezione.fondo,
+                unselectedIconColor = schema.onSurfaceVariant,
+                unselectedTextColor = schema.onSurfaceVariant,
+            )
+        } ?: colori
+    }
     // La misura di cui ha bisogno ogni etichetta: tutte prendono la più piccola,
     // così una barra non ha "Panoramica" piccola e "Tempo" grande.
     val misure = remember { mutableStateMapOf<Int, Float>() }
@@ -196,7 +210,7 @@ fun BarraSchede(
                     )
                 },
                 alwaysShowLabel = true,
-                colors = colori,
+                colors = coloriVoci[indice],
             )
         }
     }

@@ -1,6 +1,7 @@
 package eu.stgm.pactum.design
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -43,10 +45,13 @@ fun CardNormale(
     val schema = MaterialTheme.colorScheme
     val forma = MaterialTheme.shapes.medium
     val bordo = BorderStroke(BordoSottile, schema.outlineVariant)
+    // (0.19) Entra a cascata con la schermata; se si tocca, si schiaccia e rimbalza.
     if (onClick != null) {
+        val sorgente = remember { MutableInteractionSource() }
         Surface(
             onClick = onClick,
-            modifier = modifier,
+            modifier = modifier.entrata().rimbalzoTocco(sorgente),
+            interactionSource = sorgente,
             shape = forma,
             color = schema.surfaceContainerLowest,
             contentColor = schema.onSurface,
@@ -56,7 +61,7 @@ fun CardNormale(
         }
     } else {
         Surface(
-            modifier = modifier,
+            modifier = modifier.entrata(),
             shape = forma,
             color = schema.surfaceContainerLowest,
             contentColor = schema.onSurface,
@@ -91,9 +96,11 @@ fun CardEvidenza(
     val (fondo, testo) = coloriEvidenza(tono, MaterialTheme.colorScheme)
     val forma = MaterialTheme.shapes.large
     if (onClick != null) {
+        val sorgente = remember { MutableInteractionSource() }
         Surface(
             onClick = onClick,
-            modifier = modifier,
+            modifier = modifier.entrata().rimbalzoTocco(sorgente),
+            interactionSource = sorgente,
             shape = forma,
             color = fondo,
             contentColor = testo,
@@ -102,7 +109,7 @@ fun CardEvidenza(
         }
     } else {
         Surface(
-            modifier = modifier,
+            modifier = modifier.entrata(),
             shape = forma,
             color = fondo,
             contentColor = testo,

@@ -189,6 +189,8 @@ fun AnelloCategorie(
 ) {
     val binario = MaterialTheme.colorScheme.surfaceVariant
     val unica = MaterialTheme.colorScheme.primary
+    // (0.19) L'anello si disegna girando, la prima volta che compare.
+    val giro = rememberComparsa()
 
     Box(modifier = modifier.size(diametro)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -209,7 +211,7 @@ fun AnelloCategorie(
                     drawArc(
                         color = unica,
                         startAngle = -90f,
-                        sweepAngle = 360f,
+                        sweepAngle = 360f * giro,
                         useCenter = false,
                         topLeft = angolo,
                         size = misura,
@@ -229,7 +231,7 @@ fun AnelloCategorie(
                 fette.size == 1 -> drawArc(
                     color = fette.first().colore,
                     startAngle = -90f,
-                    sweepAngle = 360f,
+                    sweepAngle = 360f * giro,
                     useCenter = false,
                     topLeft = angolo,
                     size = misura,
@@ -242,9 +244,12 @@ fun AnelloCategorie(
                     val stacco = 3f
                     var inizio = -90f
                     fette.forEach { fetta ->
-                        val giro = 360f * fetta.minuti / totale
+                        val fettaGiro = 360f * fetta.minuti / totale
+                        // Le fette compaiono una dopo l'altra mentre l'anello gira.
+                        val fino = (-90f + 360f * giro - inizio).coerceIn(0f, fettaGiro)
+                        if (fino <= 0f) return@forEach
                         val disegnato =
-                            (giro - stacco - gradiCappuccio * 2f).coerceAtLeast(0.5f)
+                            (fino - stacco - gradiCappuccio * 2f).coerceAtLeast(0.5f)
                         drawArc(
                             color = fetta.colore,
                             startAngle = inizio + stacco / 2f + gradiCappuccio,
@@ -254,7 +259,7 @@ fun AnelloCategorie(
                             size = misura,
                             style = tondo,
                         )
-                        inizio += giro
+                        inizio += fettaGiro
                     }
                 }
             }
@@ -341,6 +346,8 @@ fun BarreGiorni(
 ) {
     if (giorni.isEmpty()) return
     val massimo = giorni.mapNotNull { it.minuti }.maxOrNull() ?: 0
+    // (0.19) Le barre crescono dal basso quando il grafico compare, una dopo l'altra.
+    val crescita = rememberComparsa()
     val acceso = MaterialTheme.colorScheme.primary
     val spento = MaterialTheme.colorScheme.outline
     val assente = MaterialTheme.colorScheme.outline
@@ -419,7 +426,8 @@ fun BarreGiorni(
                             }
                         } else {
                             val frazione =
-                                if (massimo > 0) minuti.toFloat() / massimo else 0f
+                                (if (massimo > 0) minuti.toFloat() / massimo else 0f) *
+                                    Movimento.crescitaColonna(crescita, indice, giorni.size)
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 if (valore != null) {
                                     TestoSuUnaRiga(

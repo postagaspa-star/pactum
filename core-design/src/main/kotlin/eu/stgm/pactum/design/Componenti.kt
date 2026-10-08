@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -37,6 +39,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +73,10 @@ private val LatoRotella = 32.dp
 
 /** L'icona dello [StatoVuoto] a tutto schermo; in linea resta la misura normale delle icone (24). */
 private val LatoIconaGrande = 48.dp
+
+/** (0.19) L'adesivo dello [StatoVuoto] a tutto schermo e quello in linea (l'emoji è poco più di metà del lato). */
+private val LatoAdesivoGrande = 112.dp
+private val LatoAdesivoInLinea = 48.dp
 
 // --- Titolo di sezione ---------------------------------------------------------
 
@@ -164,7 +171,16 @@ fun RigaStato(
         }
     }
     if (onClick != null) {
-        Surface(onClick = onClick, modifier = modifier, shape = forma, color = colori.fondo, contentColor = colori.testo) {
+        // (0.19) Toccata si schiaccia e rimbalza, come le card.
+        val sorgente = remember { MutableInteractionSource() }
+        Surface(
+            onClick = onClick,
+            modifier = modifier.rimbalzoTocco(sorgente),
+            interactionSource = sorgente,
+            shape = forma,
+            color = colori.fondo,
+            contentColor = colori.testo,
+        ) {
             contenuto()
         }
     } else {
@@ -260,8 +276,13 @@ fun StatoVuoto(
     azione: String? = null,
     onAzione: (() -> Unit)? = null,
     centrato: Boolean = false,
+    emoji: String? = null,
 ) {
     val schema = MaterialTheme.colorScheme
+    // (0.19) Al posto dell'icona grigia un adesivo, se chi la usa ne sceglie uno:
+    // solo per le pagine davvero vuote ("Nessun lavoro di casa da fare"), mai
+    // per un errore o un collegamento da sistemare (lì resta l'icona).
+    val adesivo = emoji
     if (centrato) {
         Column(
             modifier = modifier
@@ -270,7 +291,10 @@ fun StatoVuoto(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            if (icona != null) {
+            if (adesivo != null) {
+                AdesivoGrande(adesivo, lato = LatoAdesivoGrande)
+                Spacer(Modifier.height(Spazi.s))
+            } else if (icona != null) {
                 Icon(icona, contentDescription = null, tint = schema.onSurfaceVariant, modifier = Modifier.size(LatoIconaGrande))
                 Spacer(Modifier.height(Spazi.l))
             }
@@ -304,7 +328,11 @@ fun StatoVuoto(
                 .padding(vertical = Spazi.m),
             verticalAlignment = Alignment.Top,
         ) {
-            if (icona != null) {
+            if (adesivo != null) {
+                // L'adesivo è più grande dell'icona (ha il bordo e l'aria intorno):
+                // si sposta un poco perché l'emoji stia all'altezza della prima riga.
+                AdesivoGrande(adesivo, lato = LatoAdesivoInLinea, modifier = Modifier.offset(x = -Spazi.s, y = -Spazi.m))
+            } else if (icona != null) {
                 Icon(icona, contentDescription = null, tint = schema.onSurfaceVariant)
                 Spacer(Modifier.width(Spazi.m))
             }
@@ -473,11 +501,14 @@ fun RigaToccabile(
     inizio: (@Composable () -> Unit)? = null,
     fine: (@Composable () -> Unit)? = null,
 ) {
+    // (0.19) Toccata si schiaccia e rimbalza, come le card.
+    val sorgente = remember { MutableInteractionSource() }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = if (sottotitolo != null) AreaToccoDueRighe else AreaTocco)
-            .clickable(role = Role.Button, onClick = onClick)
+            .rimbalzoTocco(sorgente)
+            .clickable(interactionSource = sorgente, indication = ripple(), role = Role.Button, onClick = onClick)
             .padding(vertical = Spazi.s),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spazi.m),

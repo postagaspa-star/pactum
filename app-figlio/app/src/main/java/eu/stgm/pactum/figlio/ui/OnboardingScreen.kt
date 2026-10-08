@@ -21,6 +21,11 @@ import androidx.compose.ui.res.stringResource
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.permessi.StatoPermessi
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
 
 /**
  * (0.15) Primo passo del primo avvio: chi è Pactum, in una frase, e il
@@ -30,28 +35,31 @@ import eu.stgm.pactum.figlio.permessi.StatoPermessi
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PassoCollegaScreen() {
-    Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.onboarding_titolo)) }) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .consumeWindowInsets(padding)
-                .fillMaxSize()
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            Text(
-                text = stringResource(R.string.onboarding_intro),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                text = stringResource(R.string.prima_regola_config_intro),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            ModuloCollegamento(origine = OriginiCollegamento.PRIMO_AVVIO, onCollegato = {})
+    SchermataColorata(Sezione.IMPOSTAZIONI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = { TopAppBar(title = { TitoloBarra(stringResource(R.string.onboarding_titolo)) }, colors = coloriBarra()) },
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .consumeWindowInsets(padding)
+                    .fillMaxSize()
+                    .imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(Spazi.l + Spazi.xs),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                Text(
+                    text = stringResource(R.string.onboarding_intro),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = stringResource(R.string.prima_regola_config_intro),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                ModuloCollegamento(origine = OriginiCollegamento.PRIMO_AVVIO, onCollegato = {})
+            }
         }
     }
 }
@@ -65,29 +73,32 @@ fun PassoCollegaScreen() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(statoPermessi: StatoPermessi, onAggiorna: () -> Unit) {
-    Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.permessi_titolo)) }) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            Text(
-                text = stringResource(R.string.permessi_intro),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            ElencoPermessi(stato = statoPermessi, onAggiorna = onAggiorna)
-            OutlinedButton(onClick = onAggiorna, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.onboarding_ricontrolla))
+    SchermataColorata(Sezione.IMPOSTAZIONI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = { TopAppBar(title = { TitoloBarra(stringResource(R.string.permessi_titolo)) }, colors = coloriBarra()) },
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(Spazi.l + Spazi.xs),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                Text(
+                    text = stringResource(R.string.permessi_intro),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                ElencoPermessi(stato = statoPermessi, onAggiorna = onAggiorna)
+                OutlinedButton(onClick = onAggiorna, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.onboarding_ricontrolla))
+                }
+                Text(
+                    text = stringResource(R.string.onboarding_nota_avvio),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Text(
-                text = stringResource(R.string.onboarding_nota_avvio),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

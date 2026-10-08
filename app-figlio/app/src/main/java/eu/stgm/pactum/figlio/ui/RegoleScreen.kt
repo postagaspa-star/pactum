@@ -121,6 +121,11 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
 
 /**
  * (0.15) La scheda Regole. In cima, solo se ci sono, le proposte del genitore
@@ -313,159 +318,163 @@ fun RegoleScreen(
     var altezzaPulsante by remember { mutableIntStateOf(0) }
     val spazioInFondo = with(densita) { altezzaPulsante.toDp() } + Spazi.l * 2
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.regole_titolo)) },
-                actions = {
-                    AzioniBarra(
-                        onAggiorna = {
-                            vm.aggiorna()
-                            proposteVm.aggiorna()
-                        },
-                        onApriImpostazioni = onApriImpostazioni,
-                    )
-                },
-            )
-        },
-        floatingActionButton = {
-            if (!stato.configurazioneMancante) {
-                ExtendedFloatingActionButton(
-                    onClick = { dialogoRegolaId = NUOVA_REGOLA },
-                    // La scritta del pulsante allungato non arriva a TalkBack (Material la
-                    // nasconde): la dice l'icona.
-                    icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.regole_nuova)) },
-                    text = { Text(stringResource(R.string.regole_nuova), maxLines = 1) },
-                    modifier = Modifier.onSizeChanged { altezzaPulsante = it.height },
+    SchermataColorata(Sezione.REGOLE) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.regole_titolo)) },
+                    colors = coloriBarra(),
+                    actions = {
+                        AzioniBarra(
+                            onAggiorna = {
+                                vm.aggiorna()
+                                proposteVm.aggiorna()
+                            },
+                            onApriImpostazioni = onApriImpostazioni,
+                        )
+                    },
                 )
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                stato.caricamento && stato.regole.isEmpty() ->
-                    Caricamento(testo = stringResource(R.string.regole_caricamento))
+            },
+            floatingActionButton = {
+                if (!stato.configurazioneMancante) {
+                    ExtendedFloatingActionButton(
+                        onClick = { dialogoRegolaId = NUOVA_REGOLA },
+                        // La scritta del pulsante allungato non arriva a TalkBack (Material la
+                        // nasconde): la dice l'icona.
+                        icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.regole_nuova)) },
+                        text = { Text(stringResource(R.string.regole_nuova), maxLines = 1) },
+                        modifier = Modifier.onSizeChanged { altezzaPulsante = it.height },
+                    )
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    stato.caricamento && stato.regole.isEmpty() ->
+                        Caricamento(testo = stringResource(R.string.regole_caricamento))
 
-                stato.configurazioneMancante ->
-                    StatoVuoto(stringResource(R.string.regole_config_mancante), centrato = true, modifier = Modifier.padding(Spazi.xl))
+                    stato.configurazioneMancante ->
+                        StatoVuoto(stringResource(R.string.regole_config_mancante), centrato = true, modifier = Modifier.padding(Spazi.xl))
 
-                else -> LazyColumn(
-                    state = lista,
-                    // (0.15) La "motivazione" di una proposta da decidere resta sopra
-                    // la tastiera (la barra in basso è già tolta dallo Scaffold fuori).
-                    modifier = Modifier.fillMaxSize().imePadding(),
-                    // Densità del figlio: 20 attorno, 16 tra i blocchi; in fondo lo
-                    // spazio misurato del pulsante, perché non copra l'ultima regola.
-                    contentPadding = PaddingValues(
-                        start = Spazi.l + Spazi.xs,
-                        end = Spazi.l + Spazi.xs,
-                        top = Spazi.l + Spazi.xs,
-                        bottom = spazioInFondo,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(Spazi.l),
-                ) {
-                    if (stato.errore) {
-                        item(key = "dati-fermi") { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
-                    }
-
-                    // In cima, solo se ci sono: le proposte del genitore da decidere.
-                    val daDecidere = statoProposte.daDecidere
-                    if (daDecidere.isNotEmpty()) {
-                        item(key = "da-decidere") { TitoloSezione(stringResource(R.string.proposte_sezione_pendenti)) }
-                        items(daDecidere, key = { "pendente-${it.id}" }) { proposta ->
-                            CardPropostaPendente(
-                                proposta = proposta,
-                                regole = statoProposte.regole,
-                                contesto = statoProposte.contesto,
-                                invioInCorso = statoProposte.invioInCorso,
-                                onRispondi = { id, esito, motivazione -> proposteVm.rispondi(id, esito, motivazione) },
-                            )
+                    else -> LazyColumn(
+                        state = lista,
+                        // (0.15) La "motivazione" di una proposta da decidere resta sopra
+                        // la tastiera (la barra in basso è già tolta dallo Scaffold fuori).
+                        modifier = Modifier.fillMaxSize().imePadding(),
+                        // Densità del figlio: 20 attorno, 16 tra i blocchi; in fondo lo
+                        // spazio misurato del pulsante, perché non copra l'ultima regola.
+                        contentPadding = PaddingValues(
+                            start = Spazi.l + Spazi.xs,
+                            end = Spazi.l + Spazi.xs,
+                            top = Spazi.l + Spazi.xs,
+                            bottom = spazioInFondo,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(Spazi.l),
+                    ) {
+                        if (stato.errore) {
+                            item(key = "dati-fermi") { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
                         }
-                        item(key = "le-tue-regole") { TitoloSezione(stringResource(R.string.regole_sezione_tue)) }
-                    }
 
-                    if (stato.regole.isEmpty()) {
-                        // (v3) Il figlio può avere regole solo sul computer: il patto
-                        // c'è, su questo telefono no.
-                        val vuoto = if (stato.regoleAltrove > 0) {
-                            R.string.regole_vuoto_questo_telefono
+                        // In cima, solo se ci sono: le proposte del genitore da decidere.
+                        val daDecidere = statoProposte.daDecidere
+                        if (daDecidere.isNotEmpty()) {
+                            item(key = "da-decidere") { TitoloSezione(stringResource(R.string.proposte_sezione_pendenti)) }
+                            items(daDecidere, key = { "pendente-${it.id}" }) { proposta ->
+                                CardPropostaPendente(
+                                    proposta = proposta,
+                                    regole = statoProposte.regole,
+                                    contesto = statoProposte.contesto,
+                                    invioInCorso = statoProposte.invioInCorso,
+                                    onRispondi = { id, esito, motivazione -> proposteVm.rispondi(id, esito, motivazione) },
+                                )
+                            }
+                            item(key = "le-tue-regole") { TitoloSezione(stringResource(R.string.regole_sezione_tue)) }
+                        }
+
+                        if (stato.regole.isEmpty()) {
+                            // (v3) Il figlio può avere regole solo sul computer: il patto
+                            // c'è, su questo telefono no.
+                            val vuoto = if (stato.regoleAltrove > 0) {
+                                R.string.regole_vuoto_questo_telefono
+                            } else {
+                                R.string.regole_vuoto
+                            }
+                            item(key = "vuoto") { StatoVuoto(stringResource(vuoto)) }
                         } else {
-                            R.string.regole_vuoto
-                        }
-                        item(key = "vuoto") { StatoVuoto(stringResource(vuoto)) }
-                    } else {
-                        items(stato.regole, key = { it.id }) { regola ->
-                            CardRegola(
-                                regola = regola,
-                                concordata = regola.id in stato.concordate,
-                                inAttesa = stato.proposteInAttesa[regola.id],
-                                // "L'ultima non si toglie" vale per il figlio, su tutti i
-                                // suoi dispositivi (contratto v3): conta anche il computer.
-                                eliminabile = stato.totaleFiglio > 1,
-                                diOggi = if (regola.tipo == TipiRegola.VITA_REALE) {
-                                    dichiarazioneDiOggi(regola, statoDiario.tutte, oggiPatto)
-                                } else {
-                                    null
-                                },
-                                onModifica = {
-                                    ricorda(regola)
-                                    dialogoRegolaId = regola.id
-                                },
-                                onElimina = {
-                                    ricorda(regola)
-                                    regolaDaEliminareId = regola.id
-                                },
-                                onProponi = {
-                                    ricorda(regola)
-                                    vm.dimenticaEsitoProposta()
-                                    regolaDaProporreId = regola.id
-                                },
-                                onRitira = { proposta ->
-                                    proposteViste[proposta.id] = proposta
-                                    daRitirareId = proposta.id
-                                },
-                                onDichiara = { esito -> dichiarare.apri(regola, esito) },
-                                onApriProposta = { proposta ->
-                                    proposteViste[proposta.id] = proposta
-                                    propostaApertaId = proposta.id
-                                },
-                            )
-                        }
-                    }
-
-                    // Le proposte del figlio su regole che qui non ci sono (di un
-                    // altro dispositivo): restano visibili, e si possono ritirare.
-                    val qui = stato.regole.map { it.id }.toSet()
-                    val altrove = statoProposte.inviate.filter { it.regolaId !in qui }
-                    if (altrove.isNotEmpty()) {
-                        item(key = "tue-altrove") { TitoloSezione(stringResource(R.string.proposte_sezione_tue)) }
-                        items(altrove, key = { "tua-${it.id}" }) { proposta ->
-                            CardPropostaTua(proposta, statoProposte.regole, statoProposte.contesto, statoProposte.invioInCorso) {
-                                proposteViste[proposta.id] = proposta
-                                daRitirareId = proposta.id
+                            items(stato.regole, key = { it.id }) { regola ->
+                                CardRegola(
+                                    regola = regola,
+                                    concordata = regola.id in stato.concordate,
+                                    inAttesa = stato.proposteInAttesa[regola.id],
+                                    // "L'ultima non si toglie" vale per il figlio, su tutti i
+                                    // suoi dispositivi (contratto v3): conta anche il computer.
+                                    eliminabile = stato.totaleFiglio > 1,
+                                    diOggi = if (regola.tipo == TipiRegola.VITA_REALE) {
+                                        dichiarazioneDiOggi(regola, statoDiario.tutte, oggiPatto)
+                                    } else {
+                                        null
+                                    },
+                                    onModifica = {
+                                        ricorda(regola)
+                                        dialogoRegolaId = regola.id
+                                    },
+                                    onElimina = {
+                                        ricorda(regola)
+                                        regolaDaEliminareId = regola.id
+                                    },
+                                    onProponi = {
+                                        ricorda(regola)
+                                        vm.dimenticaEsitoProposta()
+                                        regolaDaProporreId = regola.id
+                                    },
+                                    onRitira = { proposta ->
+                                        proposteViste[proposta.id] = proposta
+                                        daRitirareId = proposta.id
+                                    },
+                                    onDichiara = { esito -> dichiarare.apri(regola, esito) },
+                                    onApriProposta = { proposta ->
+                                        proposteViste[proposta.id] = proposta
+                                        propostaApertaId = proposta.id
+                                    },
+                                )
                             }
                         }
-                    }
 
-                    // (v3) Qui ci sono le regole di questo telefono e la vita reale;
-                    // quelle degli altri dispositivi si vedono e si cambiano da lì.
-                    if (stato.regoleAltrove > 0) {
-                        item(key = "altrove") {
-                            Text(
-                                text = pluralStringResource(
-                                    R.plurals.regole_altri_dispositivi,
-                                    stato.regoleAltrove,
-                                    stato.regoleAltrove,
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        // Le proposte del figlio su regole che qui non ci sono (di un
+                        // altro dispositivo): restano visibili, e si possono ritirare.
+                        val qui = stato.regole.map { it.id }.toSet()
+                        val altrove = statoProposte.inviate.filter { it.regolaId !in qui }
+                        if (altrove.isNotEmpty()) {
+                            item(key = "tue-altrove") { TitoloSezione(stringResource(R.string.proposte_sezione_tue)) }
+                            items(altrove, key = { "tua-${it.id}" }) { proposta ->
+                                CardPropostaTua(proposta, statoProposte.regole, statoProposte.contesto, statoProposte.invioInCorso) {
+                                    proposteViste[proposta.id] = proposta
+                                    daRitirareId = proposta.id
+                                }
+                            }
                         }
-                    }
-                    item(key = "storico") {
-                        RigaToccabile(titolo = stringResource(R.string.regole_storico), onClick = onApriStorico)
+
+                        // (v3) Qui ci sono le regole di questo telefono e la vita reale;
+                        // quelle degli altri dispositivi si vedono e si cambiano da lì.
+                        if (stato.regoleAltrove > 0) {
+                            item(key = "altrove") {
+                                Text(
+                                    text = pluralStringResource(
+                                        R.plurals.regole_altri_dispositivi,
+                                        stato.regoleAltrove,
+                                        stato.regoleAltrove,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        item(key = "storico") {
+                            RigaToccabile(titolo = stringResource(R.string.regole_storico), onClick = onApriStorico)
+                        }
                     }
                 }
             }
@@ -1295,45 +1304,47 @@ fun PrimaRegolaScreen(vm: RegoleViewModel) {
 
     // La prima impressione dell'app: il titolo È l'eroe della schermata, quindi
     // niente barra in alto che lo ripeta.
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .consumeWindowInsets(padding)
-                .fillMaxSize()
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Spazi.l + Spazi.xs, vertical = Spazi.xl),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            Text(
-                text = stringResource(R.string.prima_regola_titolo),
-                style = MaterialTheme.typography.displaySmall,
-            )
-            if (stato.configurazioneMancante) {
+    SchermataColorata(Sezione.REGOLE) {
+        Scaffold(containerColor = Color.Transparent, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .consumeWindowInsets(padding)
+                    .fillMaxSize()
+                    .imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Spazi.l + Spazi.xs, vertical = Spazi.xl),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
                 Text(
-                    text = stringResource(R.string.prima_regola_config_intro),
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = stringResource(R.string.prima_regola_titolo),
+                    style = MaterialTheme.typography.displaySmall,
                 )
-                ModuloCollegamento(origine = OriginiCollegamento.PRIMA_REGOLA, onCollegato = { vm.aggiorna() })
-            } else {
-                // Appena collegato: il ragazzo vede con che nome lo vede il patto.
-                RigaCollegatoCome()
-                Text(
-                    text = stringResource(R.string.prima_regola_intro),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = stringResource(R.string.prima_regola_spiegazione),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Button(
-                    onClick = { dialogoAperto = true },
-                    enabled = !stato.invioInCorso,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.prima_regola_crea))
+                if (stato.configurazioneMancante) {
+                    Text(
+                        text = stringResource(R.string.prima_regola_config_intro),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    ModuloCollegamento(origine = OriginiCollegamento.PRIMA_REGOLA, onCollegato = { vm.aggiorna() })
+                } else {
+                    // Appena collegato: il ragazzo vede con che nome lo vede il patto.
+                    RigaCollegatoCome()
+                    Text(
+                        text = stringResource(R.string.prima_regola_intro),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.prima_regola_spiegazione),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(
+                        onClick = { dialogoAperto = true },
+                        enabled = !stato.invioInCorso,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.prima_regola_crea))
+                    }
                 }
             }
         }

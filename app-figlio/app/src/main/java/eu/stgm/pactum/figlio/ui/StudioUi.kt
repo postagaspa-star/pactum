@@ -62,6 +62,18 @@ import eu.stgm.pactum.figlio.studio.TrattoLocale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.ZoneId
+import eu.stgm.pactum.design.AnelloAttivita
+import eu.stgm.pactum.design.ColoriAttivita
+import eu.stgm.pactum.design.FettaAttivita
+import eu.stgm.pactum.design.rememberContatore
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 
 /** (0.18) Le parole dello Studio da strings.xml. */
 fun paroleStudio(context: Context) = ParoleStudio(
@@ -144,6 +156,8 @@ fun CardStudioOggi(adesso: StudioAdesso, onMessaggio: (String) -> Unit) {
                     text = TestoStudio.stato(studio, minuti, chiudibile, zona, paroleStudio(context)),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                // (0.19) L'anello: quanto manca all'ora, a colori per attività.
+                AnelloStudio(adesso, studio, minuti)
                 if (tratto != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -215,6 +229,74 @@ fun CardStudioOggi(adesso: StudioAdesso, onMessaggio: (String) -> Unit) {
             },
         )
     }
+}
+
+/**
+ * (0.19) L'anello dello Studio: si riempie verso il minimo di attività, un
+ * colore per tipo (compiti, lavori di casa, altro), coi minuti nel mezzo e
+ * accanto quanto di ogni tipo. I secondi per tipo sono quelli del riepilogo di
+ * «Chiudi lo Studio»: i tratti di questo telefono più quelli che il server sa.
+ */
+@Composable
+private fun AnelloStudio(adesso: StudioAdesso, studio: StudioAttivo, minuti: Int) {
+    val context = LocalContext.current
+    val m = adesso.memoria
+    val miei: List<TrattoLocale> = m.trattiDi(studio)
+    val idMiei = miei.map { it.id }.toSet()
+    val tratti = miei.map { it.tipo to it.secondiAdesso(adesso.ora.ora) } +
+        studio.trattiServer.filter { it.id !in idMiei }.map { it.tipo to (it.secondiContati ?: it.secondi) }
+    val perTipo = tratti.groupBy({ gruppoAttivita(it.first) }, { it.second }).mapValues { it.value.sum() }
+    val voci = GruppoAttivita.entries.mapNotNull { g -> perTipo[g]?.takeIf { it > 0 }?.let { g to it } }
+    val minimi = studio.minutiMinimi.coerceAtLeast(1)
+    val descrizione = stringResource(R.string.studio_anello_descrizione, minuti, minimi)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spazi.l),
+        modifier = Modifier.padding(vertical = Spazi.xs),
+    ) {
+        AnelloAttivita(
+            fette = voci.map { (g, secondi) -> FettaAttivita(g.colore, secondi) },
+            progresso = minuti.toFloat() / minimi,
+            modifier = Modifier.clearAndSetSemantics { contentDescription = descrizione },
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = rememberContatore(minuti).toString(), style = MaterialTheme.typography.headlineMedium)
+                Text(text = stringResource(R.string.studio_anello_di, minimi), style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs), modifier = Modifier.weight(1f)) {
+            voci.forEach { (g, secondi) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(g.colore, CircleShape))
+                    Spacer(Modifier.width(Spazi.s))
+                    Text(
+                        text = when (g) {
+                            GruppoAttivita.COMPITI -> paroleStudio(context).compiti
+                            GruppoAttivita.LAVORI -> paroleStudio(context).lavori
+                            GruppoAttivita.ALTRO -> stringResource(R.string.studio_anello_altro)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(text = paroleStudio(context).minuti.format((secondi / 60).toInt()), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
+}
+
+/** (0.19) I tre gruppi dell'anello, coi loro colori. */
+internal enum class GruppoAttivita(val colore: androidx.compose.ui.graphics.Color) {
+    COMPITI(ColoriAttivita.Compiti),
+    LAVORI(ColoriAttivita.LavoriDiCasa),
+    ALTRO(ColoriAttivita.Altro),
+}
+
+/** (0.19) Il gruppo dell'anello di un tipo di tratto: tutto quello che non è compiti o lavori è «altro». */
+internal fun gruppoAttivita(tipo: String): GruppoAttivita = when (tipo) {
+    eu.stgm.pactum.figlio.studio.TipiTratto.COMPITI -> GruppoAttivita.COMPITI
+    eu.stgm.pactum.figlio.studio.TipiTratto.LAVORI_DI_CASA -> GruppoAttivita.LAVORI
+    else -> GruppoAttivita.ALTRO
 }
 
 /** (0.18) La card dello Studio in Oggi c'è: in corso, in partenza entro un'ora, o una chiusura non arrivata da dire. */

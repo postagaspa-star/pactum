@@ -71,6 +71,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import eu.stgm.pactum.design.Sezione
 
 class MainActivity : ComponentActivity() {
     // Dove aprirsi quando si arriva da una notifica locale o da "Apri Pactum"
@@ -382,6 +383,9 @@ private fun PactumRoot(
     }
 
     Scaffold(
+        // (0.19) Sotto la barra di stato di Android il colore della scheda: la
+        // sfumatura della sezione parte da lì.
+        containerColor = sezioneDi(scheda).fondo,
         bottomBar = {
             // (0.15) Quattro schede fisse, etichette sempre su una riga (B1).
             BarraSchede(
@@ -403,6 +407,7 @@ private fun PactumRoot(
                             Scheda.LAVORI -> pluralStringResource(R.plurals.badge_lavori, inAttesa, inAttesa)
                             else -> null
                         },
+                        sezione = sezioneDi(voce),
                     )
                 },
                 selezionata = scheda.ordinal,
@@ -464,4 +469,12 @@ private fun AttesaAvvio() {
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (lunga) Caricamento()
     }
+}
+
+/** (0.19) Il colore e gli adesivi di ogni scheda. */
+internal fun sezioneDi(scheda: Scheda): Sezione = when (scheda) {
+    Scheda.OGGI -> Sezione.OGGI
+    Scheda.REGOLE -> Sezione.REGOLE
+    Scheda.SESSIONI -> Sezione.SESSIONI
+    Scheda.LAVORI -> Sezione.LAVORI
 }

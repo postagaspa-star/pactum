@@ -56,6 +56,12 @@ import eu.stgm.pactum.design.VoceCategoria
 import eu.stgm.pactum.design.fetteConResto
 import eu.stgm.pactum.figlio.R
 import eu.stgm.pactum.figlio.catalogo.CatalogoApp
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
+import eu.stgm.pactum.design.rememberContatore
 
 /**
  * (0.16, contratto v3.8) La pagina Tempo, da "Vedi tutto" in Oggi: la stessa
@@ -76,71 +82,76 @@ fun TempoScreen(onChiudi: () -> Unit, vm: OggiViewModel = viewModel()) {
         vm.aggiorna()
         onPauseOrDispose { }
     }
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.tempo_titolo)) },
-                navigationIcon = {
-                    IconButton(onClick = onChiudi) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        val tempi = stato.tempi
-        var dispositivoScelto by rememberSaveable { mutableStateOf<Long?>(null) }
-        val dispositivo = tempi.firstOrNull { it.id == dispositivoScelto && it.id != null } ?: tempi.firstOrNull()
-        if (dispositivo == null) {
-            Box(modifier = Modifier.padding(padding).fillMaxSize().padding(Spazi.l + Spazi.xs)) {
-                StatoVuoto(stringResource(R.string.oggi_vuoto))
+    SchermataColorata(Sezione.TEMPO) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.tempo_titolo)) },
+                    colors = coloriBarra(),
+                    navigationIcon = {
+                        IconButton(onClick = onChiudi) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            val tempi = stato.tempi
+            var dispositivoScelto by rememberSaveable { mutableStateOf<Long?>(null) }
+            val dispositivo = tempi.firstOrNull { it.id == dispositivoScelto && it.id != null } ?: tempi.firstOrNull()
+            if (dispositivo == null) {
+                Box(modifier = Modifier.padding(padding).fillMaxSize().padding(Spazi.l + Spazi.xs)) {
+                    StatoVuoto(stringResource(R.string.oggi_vuoto), emoji = "🌱")
+                }
+                return@Scaffold
             }
-            return@Scaffold
-        }
-        // Il giorno scelto; null = oggi (l'ultimo). Se sparisce (giorno nuovo), si torna a oggi.
-        var giornoScelto by rememberSaveable(dispositivo.id) { mutableStateOf<String?>(null) }
-        val giorni = dispositivo.giorni
-        val giorno = giorni.firstOrNull { it.giorno == giornoScelto } ?: giorni.last()
-        val oggi = giorno.giorno == giorni.last().giorno
+            // Il giorno scelto; null = oggi (l'ultimo). Se sparisce (giorno nuovo), si torna a oggi.
+            var giornoScelto by rememberSaveable(dispositivo.id) { mutableStateOf<String?>(null) }
+            val giorni = dispositivo.giorni
+            val giorno = giorni.firstOrNull { it.giorno == giornoScelto } ?: giorni.last()
+            val oggi = giorno.giorno == giorni.last().giorno
 
-        LazyColumn(
-            modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            if (tempi.size > 1) {
-                item(key = "dispositivi") {
-                    SceltaDispositivo(tempi, dispositivo) { dispositivoScelto = it }
+            LazyColumn(
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                contentPadding = PaddingValues(Spazi.l + Spazi.xs),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                if (tempi.size > 1) {
+                    item(key = "dispositivi") {
+                        SceltaDispositivo(tempi, dispositivo) { dispositivoScelto = it }
+                    }
                 }
-            }
-            if (giorni.size > 1) {
-                item(key = "giorni") {
-                    SceltaGiorno(giorni, giorno.giorno) { giornoScelto = it }
+                if (giorni.size > 1) {
+                    item(key = "giorni") {
+                        SceltaGiorno(giorni, giorno.giorno) { giornoScelto = it }
+                    }
                 }
-            }
-            item(key = "giorno") { SchedaGiorno(giorno, oggi, dispositivo.computer) }
-            if (dispositivo.storico && giorni.size > 1) {
-                item(key = "otto-giorni") { SchedaOttoGiorni(giorni, giorno.giorno, dispositivo.medie) }
-            }
-            if (giorno.totaleMinuti != null) {
-                item(key = "app-titolo") {
-                    TitoloSezione(
-                        stringResource(if (dispositivo.computer) R.string.tempo_programmi_titolo else R.string.tempo_app_titolo),
-                    )
+                item(key = "giorno") { SchedaGiorno(giorno, oggi, dispositivo.computer) }
+                if (dispositivo.storico && giorni.size > 1) {
+                    item(key = "otto-giorni") { SchedaOttoGiorni(giorni, giorno.giorno, dispositivo.medie) }
                 }
-                if (giorno.app.isEmpty()) {
-                    item(key = "app-vuoto") {
-                        StatoVuoto(
-                            stringResource(if (dispositivo.computer) R.string.tempo_programmi_vuoto else R.string.tempo_app_vuoto),
+                if (giorno.totaleMinuti != null) {
+                    item(key = "app-titolo") {
+                        TitoloSezione(
+                            stringResource(if (dispositivo.computer) R.string.tempo_programmi_titolo else R.string.tempo_app_titolo),
                         )
                     }
-                } else {
-                    // Un blocco solo, come in Oggi: le righe una sotto l'altra, una linea fra due.
-                    item(key = "app") {
-                        Column {
-                            giorno.app.forEachIndexed { indice, app ->
-                                if (indice > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                                RigaAppTempo(app)
+                    if (giorno.app.isEmpty()) {
+                        item(key = "app-vuoto") {
+                            StatoVuoto(
+                                stringResource(if (dispositivo.computer) R.string.tempo_programmi_vuoto else R.string.tempo_app_vuoto),
+                                emoji = "📱",
+                            )
+                        }
+                    } else {
+                        // Un blocco solo, come in Oggi: le righe una sotto l'altra, una linea fra due.
+                        item(key = "app") {
+                            Column {
+                                giorno.app.forEachIndexed { indice, app ->
+                                    if (indice > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                    RigaAppTempo(app)
+                                }
                             }
                         }
                     }
@@ -277,7 +288,8 @@ private fun SchedaGiorno(giorno: GiornoTempo, oggi: Boolean, computer: Boolean) 
             )
             return@CardEvidenza
         }
-        Text(text = testoDurata(totale.toLong()), style = MaterialTheme.typography.displaySmall)
+        // (0.19) Il totale sale contando quando compare.
+        Text(text = testoDurata(rememberContatore(totale.toLong())), style = MaterialTheme.typography.displaySmall)
         val inSessione = giorno.sessioniMinuti ?: 0
         if (inSessione > 0) {
             Text(

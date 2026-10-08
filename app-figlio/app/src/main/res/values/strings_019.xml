@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- (0.19) Le parole nuove della 0.19: l'anello dello Studio. -->
+<resources>
+    <!-- Sotto il numero dei minuti, nel mezzo dell'anello: "di 60 min". -->
+    <string name="studio_anello_di">di %1$d min</string>
+    <!-- Cosa legge TalkBack sull'anello. -->
+    <string name="studio_anello_descrizione">%1$d minuti di attività su %2$d</string>
+    <!-- Il gruppo delle attività che non sono compiti né lavori di casa. -->
+    <string name="studio_anello_altro">Altro</string>
+</resources>

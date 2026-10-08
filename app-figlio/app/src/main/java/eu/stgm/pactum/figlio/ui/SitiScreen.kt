@@ -62,6 +62,11 @@ import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
 
 /**
  * I siti visitati, dalla parte del figlio: **la stessa identica lista che vede
@@ -119,66 +124,70 @@ fun SitiScreen(
         return
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.siti_titolo)) },
-                navigationIcon = {
-                    IconButton(onClick = onChiudi) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            stringResource(R.string.azione_indietro),
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { vm.aggiorna() }) {
-                        Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
-                    }
-                },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize(),
-            // (0.15) La densità del figlio: 20 attorno, 16 tra i blocchi.
-            contentPadding = PaddingValues(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            item(key = "stato") {
-                SchedaStato(
-                    attiva = stato.osservazioneAttiva,
-                    dominiOggi = stato.dominiOggi,
-                    onAttiva = { mostraAttivazione = true },
-                    onSpegni = { vm.spegni() },
+    SchermataColorata(Sezione.SITI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.siti_titolo)) },
+                    colors = coloriBarra(),
+                    navigationIcon = {
+                        IconButton(onClick = onChiudi) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                stringResource(R.string.azione_indietro),
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { vm.aggiorna() }) {
+                            Icon(Icons.Filled.Refresh, stringResource(R.string.azione_aggiorna))
+                        }
+                    },
                 )
-            }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize(),
+                // (0.15) La densità del figlio: 20 attorno, 16 tra i blocchi.
+                contentPadding = PaddingValues(Spazi.l + Spazi.xs),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                item(key = "stato") {
+                    SchedaStato(
+                        attiva = stato.osservazioneAttiva,
+                        dominiOggi = stato.dominiOggi,
+                        onAttiva = { mostraAttivazione = true },
+                        onSpegni = { vm.spegni() },
+                    )
+                }
 
-            item(key = "tavola-rotonda") {
-                Nota(stringResource(R.string.siti_tavola_rotonda))
-            }
+                item(key = "tavola-rotonda") {
+                    Nota(stringResource(R.string.siti_tavola_rotonda))
+                }
 
-            if (stato.configurazioneMancante) {
-                item(key = "config") { RigaStato(stringResource(R.string.siti_config_mancante)) }
-            } else if (stato.datiVecchi) {
-                item(key = "dati-vecchi") { RigaStato(stringResource(R.string.dati_vecchi)) }
-            }
+                if (stato.configurazioneMancante) {
+                    item(key = "config") { RigaStato(stringResource(R.string.siti_config_mancante)) }
+                } else if (stato.datiVecchi) {
+                    item(key = "dati-vecchi") { RigaStato(stringResource(R.string.dati_vecchi)) }
+                }
 
-            if (stato.caricamento && stato.giorni.isEmpty()) {
-                item(key = "caricamento") { Caricamento(testo = stringResource(R.string.siti_caricamento), centrato = false) }
-            } else if (stato.giorni.isEmpty()) {
-                item(key = "vuoto") { StatoVuoto(stringResource(R.string.siti_vuoto)) }
-            } else {
-                // Il server manda dal più vecchio a oggi; qui oggi sta in cima.
-                // (0.15) Un elemento della lista per riga (anche 200 domini in un
-                // giorno scorrono leggeri), senza chiavi: la lista viene dal server
-                // e un giorno doppio farebbe cadere la schermata invece di mostrarla storta.
-                stato.giorni.reversed().forEach { giorno ->
-                    item { IntestazioneGiorno(giorno) }
-                    items(giorno.domini) { voce -> RigaDominio(voce) }
+                if (stato.caricamento && stato.giorni.isEmpty()) {
+                    item(key = "caricamento") { Caricamento(testo = stringResource(R.string.siti_caricamento), centrato = false) }
+                } else if (stato.giorni.isEmpty()) {
+                    item(key = "vuoto") { StatoVuoto(stringResource(R.string.siti_vuoto), emoji = "🌐") }
+                } else {
+                    // Il server manda dal più vecchio a oggi; qui oggi sta in cima.
+                    // (0.15) Un elemento della lista per riga (anche 200 domini in un
+                    // giorno scorrono leggeri), senza chiavi: la lista viene dal server
+                    // e un giorno doppio farebbe cadere la schermata invece di mostrarla storta.
+                    stato.giorni.reversed().forEach { giorno ->
+                        item { IntestazioneGiorno(giorno) }
+                        items(giorno.domini) { voce -> RigaDominio(voce) }
+                    }
                 }
             }
         }
@@ -321,50 +330,54 @@ fun AttivazioneSitiScreen(
         if (risultato.resultCode == Activity.RESULT_OK) onConsensoDato() else onConsensoNegato()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.siti_consenso_titolo)) },
-                navigationIcon = {
-                    IconButton(onClick = onAnnulla) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            stringResource(R.string.azione_indietro),
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            Text(
-                text = stringResource(R.string.siti_consenso_intro),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            BloccoConsenso(R.string.siti_consenso_si_titolo, R.string.siti_consenso_si)
-            BloccoConsenso(R.string.siti_consenso_no_titolo, R.string.siti_consenso_no)
-            BloccoConsenso(R.string.siti_consenso_come_titolo, R.string.siti_consenso_come)
-            BloccoConsenso(R.string.siti_consenso_patto_titolo, R.string.siti_consenso_patto)
-
-            FilaPulsanti {
-                Button(
-                    onClick = {
-                        // Se il consenso c'è già (riattivazione), Android non
-                        // chiede niente: si accende e basta.
-                        val intent = OsservazioneSiti.intentConsenso(context)
-                        if (intent == null) onConsensoDato() else richiestaConsenso.launch(intent)
+    SchermataColorata(Sezione.SITI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.siti_consenso_titolo)) },
+                    colors = coloriBarra(),
+                    navigationIcon = {
+                        IconButton(onClick = onAnnulla) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                stringResource(R.string.azione_indietro),
+                            )
+                        }
                     },
-                ) {
-                    Text(stringResource(R.string.siti_consenso_attiva), maxLines = 1)
-                }
-                OutlinedButton(onClick = onAnnulla) {
-                    Text(stringResource(R.string.siti_consenso_rifiuta), maxLines = 1)
+                )
+            },
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(Spazi.l + Spazi.xs),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                Text(
+                    text = stringResource(R.string.siti_consenso_intro),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                BloccoConsenso(R.string.siti_consenso_si_titolo, R.string.siti_consenso_si)
+                BloccoConsenso(R.string.siti_consenso_no_titolo, R.string.siti_consenso_no)
+                BloccoConsenso(R.string.siti_consenso_come_titolo, R.string.siti_consenso_come)
+                BloccoConsenso(R.string.siti_consenso_patto_titolo, R.string.siti_consenso_patto)
+
+                FilaPulsanti {
+                    Button(
+                        onClick = {
+                            // Se il consenso c'è già (riattivazione), Android non
+                            // chiede niente: si accende e basta.
+                            val intent = OsservazioneSiti.intentConsenso(context)
+                            if (intent == null) onConsensoDato() else richiestaConsenso.launch(intent)
+                        },
+                    ) {
+                        Text(stringResource(R.string.siti_consenso_attiva), maxLines = 1)
+                    }
+                    OutlinedButton(onClick = onAnnulla) {
+                        Text(stringResource(R.string.siti_consenso_rifiuta), maxLines = 1)
+                    }
                 }
             }
         }

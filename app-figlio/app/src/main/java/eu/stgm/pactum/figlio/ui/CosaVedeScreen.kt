@@ -27,6 +27,11 @@ import eu.stgm.pactum.design.CardNormale
 import eu.stgm.pactum.design.Spazi
 import eu.stgm.pactum.design.TitoloSezione
 import eu.stgm.pactum.figlio.R
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
 
 /**
  * "Cosa vedono i tuoi genitori" (redesign C6): l'elenco letterale di ciò che arriva
@@ -47,56 +52,60 @@ import eu.stgm.pactum.figlio.R
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CosaVedeScreen(onChiudi: (() -> Unit)? = null, onHoCapito: (() -> Unit)? = null) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.cosa_vede_titolo), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    if (onChiudi != null) {
-                        IconButton(onClick = onChiudi) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                stringResource(R.string.azione_indietro),
-                            )
+    SchermataColorata(Sezione.COSA_VEDE) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.cosa_vede_titolo)) },
+                    colors = coloriBarra(),
+                    navigationIcon = {
+                        if (onChiudi != null) {
+                            IconButton(onClick = onChiudi) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    stringResource(R.string.azione_indietro),
+                                )
+                            }
                         }
+                    },
+                )
+            },
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(Spazi.l + Spazi.xs),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                Text(
+                    text = stringResource(R.string.cosa_vede_intro),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Blocco(
+                    titolo = stringResource(R.string.cosa_vede_si_titolo),
+                    voci = stringArrayResource(R.array.cosa_vede_si).toList(),
+                )
+                Blocco(
+                    titolo = stringResource(R.string.cosa_vede_no_titolo),
+                    voci = stringArrayResource(R.array.cosa_vede_no).toList(),
+                )
+                // (v3) Sul computer la promessa è diversa da quella del telefono: il
+                // contratto vuole che si dica qui, chiara ("Siti visitati · Sul computer").
+                Blocco(
+                    titolo = stringResource(R.string.cosa_vede_computer_titolo),
+                    voci = stringArrayResource(R.array.cosa_vede_computer).toList(),
+                )
+                Blocco(
+                    titolo = stringResource(R.string.cosa_vede_tuo_titolo),
+                    voci = stringArrayResource(R.array.cosa_vede_tuo).toList(),
+                )
+                if (onHoCapito != null) {
+                    Button(onClick = onHoCapito, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.cosa_vede_ho_capito))
                     }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            Text(
-                text = stringResource(R.string.cosa_vede_intro),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Blocco(
-                titolo = stringResource(R.string.cosa_vede_si_titolo),
-                voci = stringArrayResource(R.array.cosa_vede_si).toList(),
-            )
-            Blocco(
-                titolo = stringResource(R.string.cosa_vede_no_titolo),
-                voci = stringArrayResource(R.array.cosa_vede_no).toList(),
-            )
-            // (v3) Sul computer la promessa è diversa da quella del telefono: il
-            // contratto vuole che si dica qui, chiara ("Siti visitati · Sul computer").
-            Blocco(
-                titolo = stringResource(R.string.cosa_vede_computer_titolo),
-                voci = stringArrayResource(R.array.cosa_vede_computer).toList(),
-            )
-            Blocco(
-                titolo = stringResource(R.string.cosa_vede_tuo_titolo),
-                voci = stringArrayResource(R.array.cosa_vede_tuo).toList(),
-            )
-            if (onHoCapito != null) {
-                Button(onClick = onHoCapito, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.cosa_vede_ho_capito))
                 }
             }
         }

@@ -45,6 +45,11 @@ import eu.stgm.pactum.figlio.dati.ProposteDelFiglio
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.StatiDichiarazione
 import java.time.LocalDate
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
 
 /**
  * (0.15) Lo Storico, aperto da Regole: le proposte chiuse (di tutti e due) e
@@ -90,62 +95,66 @@ fun StoricoScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.storico_titolo)) },
-                navigationIcon = {
-                    IconButton(onClick = onChiudi) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))
+    SchermataColorata(Sezione.STORICO) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.storico_titolo)) },
+                    colors = coloriBarra(),
+                    navigationIcon = {
+                        IconButton(onClick = onChiudi) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            LazyColumn(
+                state = lista,
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                contentPadding = PaddingValues(Spazi.l + Spazi.xs),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                item(key = "titolo-proposte") { TitoloSezione(stringResource(R.string.storico_sezione_proposte)) }
+                if (storia.isEmpty()) {
+                    item(key = "proposte-vuoto") {
+                        if (statoProposte.caricamento) {
+                            Caricamento(centrato = false)
+                        } else {
+                            StatoVuoto(stringResource(R.string.proposte_storia_vuota), emoji = "📭")
+                        }
                     }
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            state = lista,
-            modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            item(key = "titolo-proposte") { TitoloSezione(stringResource(R.string.storico_sezione_proposte)) }
-            if (storia.isEmpty()) {
-                item(key = "proposte-vuoto") {
-                    if (statoProposte.caricamento) {
-                        Caricamento(centrato = false)
-                    } else {
-                        StatoVuoto(stringResource(R.string.proposte_storia_vuota))
+                } else {
+                    items(storia, key = { "storia-${it.id}" }) { proposta ->
+                        CardPropostaStorica(
+                            proposta,
+                            statoProposte.regole.firstOrNull { it.id == proposta.regolaId },
+                            statoProposte.contesto,
+                        )
                     }
                 }
-            } else {
-                items(storia, key = { "storia-${it.id}" }) { proposta ->
-                    CardPropostaStorica(
-                        proposta,
-                        statoProposte.regole.firstOrNull { it.id == proposta.regolaId },
-                        statoProposte.contesto,
-                    )
-                }
-            }
 
-            item(key = "titolo-dichiarazioni") { TitoloSezione(stringResource(R.string.storico_sezione_dichiarazioni)) }
-            if (dichiarazioni.isEmpty()) {
-                item(key = "dichiarazioni-vuoto") {
-                    if (statoDiario.caricamento) {
-                        Caricamento(centrato = false)
-                    } else {
-                        StatoVuoto(stringResource(R.string.diario_dichiarazioni_vuoto))
+                item(key = "titolo-dichiarazioni") { TitoloSezione(stringResource(R.string.storico_sezione_dichiarazioni)) }
+                if (dichiarazioni.isEmpty()) {
+                    item(key = "dichiarazioni-vuoto") {
+                        if (statoDiario.caricamento) {
+                            Caricamento(centrato = false)
+                        } else {
+                            StatoVuoto(stringResource(R.string.diario_dichiarazioni_vuoto), emoji = "📖")
+                        }
                     }
-                }
-            } else {
-                // In attesa della conferma: già riconosciute, in evidenza.
-                items(inAttesa, key = { "attesa-${it.id}" }) { dichiarazione ->
-                    CardFatto(regole.firstOrNull { it.id == dichiarazione.regolaId }, dichiarazione, oggi)
-                }
-                // Le altre: una riga ciascuna, con la linea sottile. Nessun contatore.
-                items(risolte, key = { "risolta-${it.id}" }) { dichiarazione ->
-                    Column {
-                        RigaDichiarazione(dichiarazione, regole.firstOrNull { it.id == dichiarazione.regolaId }, oggi)
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                } else {
+                    // In attesa della conferma: già riconosciute, in evidenza.
+                    items(inAttesa, key = { "attesa-${it.id}" }) { dichiarazione ->
+                        CardFatto(regole.firstOrNull { it.id == dichiarazione.regolaId }, dichiarazione, oggi)
+                    }
+                    // Le altre: una riga ciascuna, con la linea sottile. Nessun contatore.
+                    items(risolte, key = { "risolta-${it.id}" }) { dichiarazione ->
+                        Column {
+                            RigaDichiarazione(dichiarazione, regole.firstOrNull { it.id == dichiarazione.regolaId }, oggi)
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
                     }
                 }
             }

@@ -2,17 +2,13 @@ package eu.stgm.pactum.figlio.sessione
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BlurMaskFilter
-import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffColorFilter
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import eu.stgm.pactum.design.Adesivi
 import eu.stgm.pactum.design.attivaBordoPieno
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -54,7 +50,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -278,7 +273,7 @@ private fun PaginaSessione(dati: DatiPagina, statiche: Boolean, durata: Long, on
     var immagini by remember(tema, latoPx) { mutableStateOf<List<ImageBitmap>?>(null) }
     LaunchedEffect(tema, latoPx) {
         immagini = withContext(Dispatchers.Default) {
-            tema.emoji.mapNotNull { emoji -> runCatching { disegnaAdesivo(emoji, latoPx) }.getOrNull() }
+            tema.emoji.mapNotNull { emoji -> runCatching { Adesivi.disegna(emoji, latoPx) }.getOrNull() }
         }
     }
 
@@ -474,50 +469,7 @@ private fun nomeDelTema(tema: TemaSessione): Int = when (tema) {
 /** Quanto dondola un adesivo, in gradi, da una parte e dall'altra. */
 private const val DONDOLIO_GRADI = 7f
 
-/**
- * Un adesivo: l'emoji con il bordo bianco e un'ombra morbida, disegnata una
- * volta sola in un quadrato di [lato] px. Il bordo è l'emoji tinta di bianco e
- * ripetuta tutto intorno; l'ombra è quella sagoma sfocata, un po' più in basso.
- */
-private fun disegnaAdesivo(emoji: String, lato: Int): ImageBitmap {
-    val misura = lato * 0.56f
-    val bordo = misura * 0.09f
-    val pennello = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = misura
-        textAlign = Paint.Align.CENTER
-    }
-    val cx = lato / 2f
-    val cy = lato / 2f - (pennello.descent() + pennello.ascent()) / 2f
-
-    val sagoma = Bitmap.createBitmap(lato, lato, Bitmap.Config.ARGB_8888)
-    val bianco = Paint(pennello).apply {
-        colorFilter = PorterDuffColorFilter(android.graphics.Color.WHITE, PorterDuff.Mode.SRC_IN)
-    }
-    android.graphics.Canvas(sagoma).apply {
-        for (k in 0 until PASSI_BORDO) {
-            val angolo = (2.0 * Math.PI * k / PASSI_BORDO).toFloat()
-            drawText(emoji, cx + cos(angolo) * bordo, cy + sin(angolo) * bordo, bianco)
-        }
-        drawText(emoji, cx, cy, bianco)
-    }
-
-    val sfocatura = Paint().apply { maskFilter = BlurMaskFilter(bordo * 1.5f, BlurMaskFilter.Blur.NORMAL) }
-    val scarto = IntArray(2)
-    val ombra = sagoma.extractAlpha(sfocatura, scarto)
-
-    val adesivo = Bitmap.createBitmap(lato, lato, Bitmap.Config.ARGB_8888)
-    android.graphics.Canvas(adesivo).apply {
-        drawBitmap(ombra, scarto[0].toFloat(), scarto[1] + bordo * 0.8f, Paint().apply { color = COLORE_OMBRA })
-        drawBitmap(sagoma, 0f, 0f, null)
-        drawText(emoji, cx, cy, pennello)
-    }
-    ombra.recycle()
-    sagoma.recycle()
-    return adesivo.asImageBitmap()
-}
-
-private const val PASSI_BORDO = 16
-private const val COLORE_OMBRA = 0x47000000
+// (0.19) Il disegno dell'adesivo è passato in core-design (Adesivi): lo usa tutta l'app.
 
 /**
  * (0.12) "45 minuti di Studio", "Un'ora e 20 minuti di Studio", "Meno di un

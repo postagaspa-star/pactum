@@ -93,6 +93,12 @@ import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
+import eu.stgm.pactum.design.rememberContatore
 
 /**
  * (0.15) Oggi risponde a UNA domanda: "com'è oggi?". Dall'alto: al massimo
@@ -188,212 +194,216 @@ fun OggiScreen(
     val primaLettura = stato.caricamento && stato.striscia.isEmpty() && stato.regole.isEmpty() &&
         stato.righe.isEmpty() && stato.minutiTotali == 0L
 
-    Scaffold(
-        // Le barre di sistema le copre lo Scaffold esterno (MainActivity).
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.oggi_titolo)) },
-                actions = { AzioniBarra(onAggiorna = { vm.aggiorna() }, onApriImpostazioni = onApriImpostazioni) },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        LazyColumn(
-            state = rememberLazyListState(),
-            modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            // 0. (0.18) La Sessione Studio, in corso o che sta per partire.
-            if (haCardStudio(studio)) {
-                item(key = "studio") {
-                    CardStudioOggi(studio) { messaggio -> ambitoSnackbar.launch { snackbarHostState.showSnackbar(messaggio) } }
+    SchermataColorata(Sezione.OGGI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            // Le barre di sistema le copre lo Scaffold esterno (MainActivity).
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.oggi_titolo)) },
+                    colors = coloriBarra(),
+                    actions = { AzioniBarra(onAggiorna = { vm.aggiorna() }, onApriImpostazioni = onApriImpostazioni) },
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            LazyColumn(
+                state = rememberLazyListState(),
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                contentPadding = PaddingValues(Spazi.l + Spazi.xs),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                // 0. (0.18) La Sessione Studio, in corso o che sta per partire.
+                if (haCardStudio(studio)) {
+                    item(key = "studio") {
+                        CardStudioOggi(studio) { messaggio -> ambitoSnackbar.launch { snackbarHostState.showSnackbar(messaggio) } }
+                    }
                 }
-            }
-            // 1. Una sola card di stato, solo se c'è qualcosa.
-            when (cima.card) {
-                CardCima.BLOCCO -> item(key = "blocco") {
-                    CardBloccoLavori(
-                        daFare = daFare.size,
-                        daApprovare = VistaFaccende.inApprovazione(memoria).size,
-                        onApriLavori = onApriLavori,
-                    )
-                }
-                CardCima.SESSIONE -> inSessione.attiva?.let { attiva ->
-                    item(key = "sessione-in-corso") {
-                        SchedaSessioneInCorso(
-                            attiva = attiva,
-                            adesso = inSessione.adesso,
-                            onTerminata = {
-                                ambitoSnackbar.launch {
-                                    snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
-                                }
-                                vm.aggiorna()
-                            },
+                // 1. Una sola card di stato, solo se c'è qualcosa.
+                when (cima.card) {
+                    CardCima.BLOCCO -> item(key = "blocco") {
+                        CardBloccoLavori(
+                            daFare = daFare.size,
+                            daApprovare = VistaFaccende.inApprovazione(memoria).size,
+                            onApriLavori = onApriLavori,
                         )
                     }
-                }
-                null -> Unit
-            }
-
-            // 2. Le righe di stato, una per cosa e solo se servono.
-            if (cima.sessioneInRiga) {
-                inSessione.attiva?.let { attiva ->
-                    item(key = "sessione-riga") {
-                        RigaSessioneInCorso(
-                            attiva = attiva,
-                            adesso = inSessione.adesso,
-                            onTerminata = {
-                                ambitoSnackbar.launch {
-                                    snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
-                                }
-                                vm.aggiorna()
-                            },
-                        )
-                    }
-                }
-            }
-            if (cima.bloccoProgrammatoInRiga) {
-                memoria.prossimo?.let { prossimo ->
-                    item(key = "blocco-programmato") {
-                        RigaStato(
-                            testo = testoBloccoProgrammato(context, prossimo, memoria.oraServer(eu.stgm.pactum.figlio.faccende.Orologio.adesso())),
-                            tono = Tono.Attenzione,
-                            azione = stringResource(R.string.oggi_vai_ai_lavori_breve),
-                            onAzione = onApriLavori,
-                        )
-                    }
-                }
-            }
-            // (0.11) Un "Inizia" rimasto senza risposta: si dice finché non si chiarisce.
-            avvioIncerto?.let { incerto -> item(key = "sessione-incerta") { RigaAvvioIncerto(incerto) } }
-            if (stato.scollegato) {
-                // (v3) Non è un'età dei dati: il telefono va ricollegato, e si dice come.
-                item(key = "scollegato") {
-                    RigaStato(
-                        testo = stringResource(R.string.scollegato),
-                        azione = stringResource(R.string.azione_collega),
-                        onAzione = onApriImpostazioni,
-                    )
-                }
-            } else if (stato.datiFermi) {
-                item(key = "dati-fermi") { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
-            }
-            // (0.15) Un permesso che manca (batteria, notifiche, "Mostra sopra le
-            // altre app"): una riga, e "Risolvi" porta ai Permessi.
-            if (permessiMancanti.isNotEmpty()) {
-                item(key = "permessi") {
-                    RigaStato(
-                        testo = testoPermessiMancanti(permessiMancanti),
-                        tono = Tono.Attenzione,
-                        azione = stringResource(R.string.azione_risolvi),
-                        onAzione = onApriPermessi,
-                    )
-                }
-            }
-
-            if (primaLettura) {
-                item(key = "caricamento") {
-                    Caricamento(testo = stringResource(R.string.oggi_caricamento), centrato = false)
-                }
-                return@LazyColumn
-            }
-
-            // 3. La card del patto.
-            if (stato.striscia.isNotEmpty()) {
-                item(key = "patto") {
-                    SchedaPatto(
-                        striscia = stato.striscia,
-                        riepilogo = stato.riepilogo,
-                        serie = stato.serie,
-                        record = stato.record,
-                        righeDispositivi = stato.righeDispositivi,
-                    )
-                }
-            }
-
-            // 4. Le regole di oggi, una riga per regola.
-            if (stato.regole.isNotEmpty()) {
-                item(key = "regole-titolo") {
-                    Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
-                        TitoloSezione(stringResource(R.string.oggi_sezione_regole))
-                        // (0.16) Il bonus di oggi, una riga sola (non sotto ogni regola).
-                        val bonus = stato.bonus
-                        if (bonus != null && stato.regole.any { it is RigaRegola.Tempo }) {
-                            Nota(
-                                stringResource(
-                                    if (stato.altriDispositivi) R.string.oggi_bonus_tetti_telefono else R.string.oggi_bonus_tetti,
-                                    bonus.giorno.residui,
-                                    bonus.giorno.tetto,
-                                    bonus.settimana.residui,
-                                    bonus.settimana.tetto,
-                                ),
-                            )
-                        }
-                    }
-                }
-                item(key = "regole") {
-                    Column {
-                        stato.regole.forEachIndexed { indice, riga ->
-                            if (indice > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            RigaDellaRegola(
-                                riga = riga,
-                                sospeso = sospeso,
-                                diOggi = (riga as? RigaRegola.VitaReale)?.let {
-                                    dichiarazioneDiOggi(it.regola, statoDiario.tutte, oggiDelPatto(statoDiario.fuso))
+                    CardCima.SESSIONE -> inSessione.attiva?.let { attiva ->
+                        item(key = "sessione-in-corso") {
+                            SchedaSessioneInCorso(
+                                attiva = attiva,
+                                adesso = inSessione.adesso,
+                                onTerminata = {
+                                    ambitoSnackbar.launch {
+                                        snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
+                                    }
+                                    vm.aggiorna()
                                 },
-                                onBonus = { foglioBonusId = riga.regola.id },
-                                onSegna = { dichiarare.apri(riga.regola) },
+                            )
+                        }
+                    }
+                    null -> Unit
+                }
+
+                // 2. Le righe di stato, una per cosa e solo se servono.
+                if (cima.sessioneInRiga) {
+                    inSessione.attiva?.let { attiva ->
+                        item(key = "sessione-riga") {
+                            RigaSessioneInCorso(
+                                attiva = attiva,
+                                adesso = inSessione.adesso,
+                                onTerminata = {
+                                    ambitoSnackbar.launch {
+                                        snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
+                                    }
+                                    vm.aggiorna()
+                                },
                             )
                         }
                     }
                 }
-            }
-
-            // 5. Dove è finito il tempo: il totale, (0.16) gli 8 giorni coi totali
-            // di 7 e 30 giorni, le prime 3 app e "Vedi tutto" (la pagina Tempo).
-            item(key = "tempo-titolo") {
-                Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
-                    TitoloSezione(
-                        // (v3) Con altri dispositivi: questi minuti sono solo del telefono.
-                        testo = stringResource(
-                            if (stato.altriDispositivi) R.string.oggi_sezione_tempo_telefono else R.string.oggi_sezione_tempo,
-                        ),
-                    )
-                    Text(
-                        text = stringResource(R.string.oggi_tempo_totale, testoDurata(stato.minutiTotali)),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
-            }
-            // (0.16) Gli 8 giorni e i totali, come li vede il genitore (server v3.8).
-            stato.tempi.firstOrNull()?.takeIf { it.storico && it.giorni.size > 1 }?.let { questo ->
-                item(key = "tempo-giorni") { TempoInOggi(questo) }
-            }
-            // (0.11) Il tempo passato in sessione: c'è, ma non conta. Lo si dice.
-            if (stato.minutiInSessione > 0) {
-                item(key = "tempo-sessione") {
-                    Text(
-                        text = stringResource(R.string.oggi_in_sessione_non_contati, testoDurata(stato.minutiInSessione)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            item(key = "tempo-app") {
-                Column {
-                    if (stato.righe.isEmpty()) {
-                        if (!stato.caricamento) {
-                            StatoVuoto(stringResource(R.string.oggi_vuoto), icona = Icons.Outlined.CheckCircle)
+                if (cima.bloccoProgrammatoInRiga) {
+                    memoria.prossimo?.let { prossimo ->
+                        item(key = "blocco-programmato") {
+                            RigaStato(
+                                testo = testoBloccoProgrammato(context, prossimo, memoria.oraServer(eu.stgm.pactum.figlio.faccende.Orologio.adesso())),
+                                tono = Tono.Attenzione,
+                                azione = stringResource(R.string.oggi_vai_ai_lavori_breve),
+                                onAzione = onApriLavori,
+                            )
                         }
-                    } else {
-                        ElencoApp(stato.righe.take(APP_IN_OGGI))
                     }
-                    // (0.16) Sempre: la pagina Tempo ha anche le categorie, gli altri giorni, il computer.
-                    if (!stato.caricamento || stato.tempi.isNotEmpty()) {
-                        TextButton(onClick = onApriTempo, contentPadding = PaddingValues(horizontal = 0.dp, vertical = Spazi.s)) {
-                            Text(stringResource(R.string.oggi_vedi_tutto))
+                }
+                // (0.11) Un "Inizia" rimasto senza risposta: si dice finché non si chiarisce.
+                avvioIncerto?.let { incerto -> item(key = "sessione-incerta") { RigaAvvioIncerto(incerto) } }
+                if (stato.scollegato) {
+                    // (v3) Non è un'età dei dati: il telefono va ricollegato, e si dice come.
+                    item(key = "scollegato") {
+                        RigaStato(
+                            testo = stringResource(R.string.scollegato),
+                            azione = stringResource(R.string.azione_collega),
+                            onAzione = onApriImpostazioni,
+                        )
+                    }
+                } else if (stato.datiFermi) {
+                    item(key = "dati-fermi") { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
+                }
+                // (0.15) Un permesso che manca (batteria, notifiche, "Mostra sopra le
+                // altre app"): una riga, e "Risolvi" porta ai Permessi.
+                if (permessiMancanti.isNotEmpty()) {
+                    item(key = "permessi") {
+                        RigaStato(
+                            testo = testoPermessiMancanti(permessiMancanti),
+                            tono = Tono.Attenzione,
+                            azione = stringResource(R.string.azione_risolvi),
+                            onAzione = onApriPermessi,
+                        )
+                    }
+                }
+
+                if (primaLettura) {
+                    item(key = "caricamento") {
+                        Caricamento(testo = stringResource(R.string.oggi_caricamento), centrato = false)
+                    }
+                    return@LazyColumn
+                }
+
+                // 3. La card del patto.
+                if (stato.striscia.isNotEmpty()) {
+                    item(key = "patto") {
+                        SchedaPatto(
+                            striscia = stato.striscia,
+                            riepilogo = stato.riepilogo,
+                            serie = stato.serie,
+                            record = stato.record,
+                            righeDispositivi = stato.righeDispositivi,
+                        )
+                    }
+                }
+
+                // 4. Le regole di oggi, una riga per regola.
+                if (stato.regole.isNotEmpty()) {
+                    item(key = "regole-titolo") {
+                        Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                            TitoloSezione(stringResource(R.string.oggi_sezione_regole))
+                            // (0.16) Il bonus di oggi, una riga sola (non sotto ogni regola).
+                            val bonus = stato.bonus
+                            if (bonus != null && stato.regole.any { it is RigaRegola.Tempo }) {
+                                Nota(
+                                    stringResource(
+                                        if (stato.altriDispositivi) R.string.oggi_bonus_tetti_telefono else R.string.oggi_bonus_tetti,
+                                        bonus.giorno.residui,
+                                        bonus.giorno.tetto,
+                                        bonus.settimana.residui,
+                                        bonus.settimana.tetto,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    item(key = "regole") {
+                        Column {
+                            stato.regole.forEachIndexed { indice, riga ->
+                                if (indice > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                RigaDellaRegola(
+                                    riga = riga,
+                                    sospeso = sospeso,
+                                    diOggi = (riga as? RigaRegola.VitaReale)?.let {
+                                        dichiarazioneDiOggi(it.regola, statoDiario.tutte, oggiDelPatto(statoDiario.fuso))
+                                    },
+                                    onBonus = { foglioBonusId = riga.regola.id },
+                                    onSegna = { dichiarare.apri(riga.regola) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 5. Dove è finito il tempo: il totale, (0.16) gli 8 giorni coi totali
+                // di 7 e 30 giorni, le prime 3 app e "Vedi tutto" (la pagina Tempo).
+                item(key = "tempo-titolo") {
+                    Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                        TitoloSezione(
+                            // (v3) Con altri dispositivi: questi minuti sono solo del telefono.
+                            testo = stringResource(
+                                if (stato.altriDispositivi) R.string.oggi_sezione_tempo_telefono else R.string.oggi_sezione_tempo,
+                            ),
+                        )
+                        Text(
+                            text = stringResource(R.string.oggi_tempo_totale, testoDurata(stato.minutiTotali)),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+                // (0.16) Gli 8 giorni e i totali, come li vede il genitore (server v3.8).
+                stato.tempi.firstOrNull()?.takeIf { it.storico && it.giorni.size > 1 }?.let { questo ->
+                    item(key = "tempo-giorni") { TempoInOggi(questo) }
+                }
+                // (0.11) Il tempo passato in sessione: c'è, ma non conta. Lo si dice.
+                if (stato.minutiInSessione > 0) {
+                    item(key = "tempo-sessione") {
+                        Text(
+                            text = stringResource(R.string.oggi_in_sessione_non_contati, testoDurata(stato.minutiInSessione)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                item(key = "tempo-app") {
+                    Column {
+                        if (stato.righe.isEmpty()) {
+                            if (!stato.caricamento) {
+                                StatoVuoto(stringResource(R.string.oggi_vuoto), icona = Icons.Outlined.CheckCircle, emoji = "🌱")
+                            }
+                        } else {
+                            ElencoApp(stato.righe.take(APP_IN_OGGI))
+                        }
+                        // (0.16) Sempre: la pagina Tempo ha anche le categorie, gli altri giorni, il computer.
+                        if (!stato.caricamento || stato.tempi.isNotEmpty()) {
+                            TextButton(onClick = onApriTempo, contentPadding = PaddingValues(horizontal = 0.dp, vertical = Spazi.s)) {
+                                Text(stringResource(R.string.oggi_vedi_tutto))
+                            }
                         }
                     }
                 }
@@ -511,11 +521,13 @@ private fun SchedaPatto(
     record: Int,
     righeDispositivi: List<RigaDispositivo>,
 ) {
+    // (0.19) I giorni di fila salgono contando (da 1: mai "0 giorni di fila").
+    val serieVista = rememberContatore(serie).coerceAtLeast(1)
     CardEvidenza(tono = Tono.Positivo) {
         // La serie non va mai a capo (B6): se non ci sta si rimpicciolisce.
         TestoSuUnaRiga(
             testo = if (serie > 0) {
-                pluralStringResource(R.plurals.oggi_serie, serie, serie)
+                pluralStringResource(R.plurals.oggi_serie, serieVista, serieVista)
             } else {
                 // Serie a zero: il numero grande non deve dare torto al ragazzo.
                 stringResource(if (record > 0) R.string.oggi_si_riparte else R.string.oggi_si_comincia)

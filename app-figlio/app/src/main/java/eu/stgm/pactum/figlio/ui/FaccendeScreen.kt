@@ -96,6 +96,11 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
 
 /**
  * (0.13) Il telefono è bloccato dalle faccende adesso? Per le schermate: segue
@@ -244,109 +249,114 @@ fun FaccendeScreen(
     val inApprovazione = VistaFaccende.inApprovazione(memoria)
     val chiuse = VistaFaccende.chiuse(memoria)
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.faccende_titolo)) },
-                actions = { AzioniBarra(onAggiorna = { vm.aggiorna() }, onApriImpostazioni = onApriImpostazioni) },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                stato.caricamento && !stato.letto && daFare.isEmpty() && inApprovazione.isEmpty() && chiuse.isEmpty() ->
-                    Caricamento(testo = stringResource(R.string.faccende_caricamento))
+    SchermataColorata(Sezione.LAVORI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.faccende_titolo)) },
+                    colors = coloriBarra(),
+                    actions = { AzioniBarra(onAggiorna = { vm.aggiorna() }, onApriImpostazioni = onApriImpostazioni) },
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    stato.caricamento && !stato.letto && daFare.isEmpty() && inApprovazione.isEmpty() && chiuse.isEmpty() ->
+                        Caricamento(testo = stringResource(R.string.faccende_caricamento))
 
-                stato.configurazioneMancante ->
-                    StatoVuoto(stringResource(R.string.regole_config_mancante), centrato = true)
+                    stato.configurazioneMancante ->
+                        StatoVuoto(stringResource(R.string.regole_config_mancante), centrato = true)
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(Spazi.l + Spazi.xs),
-                    verticalArrangement = Arrangement.spacedBy(Spazi.l),
-                ) {
-                    if (stato.scollegato || memoria.scollegato) {
-                        // Questo telefono non è più collegato (401): il blocco è tolto, e lo si dice.
-                        item {
-                            RigaStato(
-                                testo = stringResource(R.string.faccende_scollegato),
-                                azione = onApriImpostazioni?.let { stringResource(R.string.azione_collega) },
-                                onAzione = onApriImpostazioni,
-                            )
-                        }
-                    } else if (stato.datiFermi) {
-                        // Un'ora salvata nel futuro (l'orologio spostato) non si mostra.
-                        item { RigaStato(testoDatiVecchi(listOfNotNull(memoria.sentitoIl, memoria.elencoIl).filter { it <= orologio }.maxOrNull())) }
-                    }
-                    if (stato.serverDaAggiornare) {
-                        // Mai "errore": il server va aggiornato, il resto dell'app funziona.
-                        item { RigaStato(stringResource(R.string.faccende_server_da_aggiornare)) }
-                    }
-                    // (0.15) Lo stato del blocco, compatto: la card quando il telefono
-                    // è bloccato, una riga quando è programmato, niente se non c'è.
-                    if (bloccato || (memoria.prossimo != null && (daFare.isNotEmpty() || inApprovazione.isNotEmpty()))) {
-                        item(key = "stato-blocco") { SchedaBlocco(bloccato, memoria, adesso, daFare) }
-                    }
-                    if (daFare.isEmpty() && inApprovazione.isEmpty()) {
-                        if (!stato.serverDaAggiornare) {
-                            // La spiegazione solo qui, quando non c'è niente da fare.
+                    else -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(Spazi.l + Spazi.xs),
+                        verticalArrangement = Arrangement.spacedBy(Spazi.l),
+                    ) {
+                        if (stato.scollegato || memoria.scollegato) {
+                            // Questo telefono non è più collegato (401): il blocco è tolto, e lo si dice.
                             item {
-                                StatoVuoto(
-                                    titolo = stringResource(R.string.faccende_vuoto),
-                                    testo = stringResource(if (memoria.approvazione) R.string.faccende_intro_approvazione else R.string.faccende_intro),
+                                RigaStato(
+                                    testo = stringResource(R.string.faccende_scollegato),
+                                    azione = onApriImpostazioni?.let { stringResource(R.string.azione_collega) },
+                                    onAzione = onApriImpostazioni,
                                 )
                             }
+                        } else if (stato.datiFermi) {
+                            // Un'ora salvata nel futuro (l'orologio spostato) non si mostra.
+                            item { RigaStato(testoDatiVecchi(listOfNotNull(memoria.sentitoIl, memoria.elencoIl).filter { it <= orologio }.maxOrNull())) }
                         }
-                    } else {
-                        if (daFare.isNotEmpty()) {
-                            item { TitoloSezione(stringResource(R.string.faccende_sezione_da_fare)) }
-                            items(daFare, key = { "da-fare-${it.id}" }) { faccenda ->
-                                CardDaFare(
-                                    faccenda = faccenda,
-                                    foto = VistaFaccende.foto(faccenda, coda),
-                                    adesso = adesso,
-                                    occupato = stato.preparazioneInCorso || scattoFaccenda != null,
-                                    onScatta = { scatta(faccenda) },
-                                )
+                        if (stato.serverDaAggiornare) {
+                            // Mai "errore": il server va aggiornato, il resto dell'app funziona.
+                            item { RigaStato(stringResource(R.string.faccende_server_da_aggiornare)) }
+                        }
+                        // (0.15) Lo stato del blocco, compatto: la card quando il telefono
+                        // è bloccato, una riga quando è programmato, niente se non c'è.
+                        if (bloccato || (memoria.prossimo != null && (daFare.isNotEmpty() || inApprovazione.isNotEmpty()))) {
+                            item(key = "stato-blocco") { SchedaBlocco(bloccato, memoria, adesso, daFare) }
+                        }
+                        if (daFare.isEmpty() && inApprovazione.isEmpty()) {
+                            if (!stato.serverDaAggiornare) {
+                                // La spiegazione solo qui, quando non c'è niente da fare.
+                                item {
+                                    StatoVuoto(
+                                        titolo = stringResource(R.string.faccende_vuoto),
+                                        testo = stringResource(if (memoria.approvazione) R.string.faccende_intro_approvazione else R.string.faccende_intro),
+                                        emoji = "🛋️",
+                                    )
+                                }
+                            }
+                        } else {
+                            if (daFare.isNotEmpty()) {
+                                item { TitoloSezione(stringResource(R.string.faccende_sezione_da_fare)) }
+                                items(daFare, key = { "da-fare-${it.id}" }) { faccenda ->
+                                    CardDaFare(
+                                        faccenda = faccenda,
+                                        foto = VistaFaccende.foto(faccenda, coda),
+                                        adesso = adesso,
+                                        occupato = stato.preparazioneInCorso || scattoFaccenda != null,
+                                        onScatta = { scatta(faccenda) },
+                                    )
+                                }
+                            }
+                            // (0.18, contratto v4.0) La foto è arrivata: niente "Scatta la foto",
+                            // si aspetta che un genitore la approvi.
+                            if (inApprovazione.isNotEmpty()) {
+                                item { TitoloSezione(stringResource(R.string.faccende_sezione_approvazione)) }
+                                items(inApprovazione, key = { "approvazione-${it.id}" }) { faccenda ->
+                                    CardInApprovazione(faccenda = faccenda, adesso = adesso)
+                                }
                             }
                         }
-                        // (0.18, contratto v4.0) La foto è arrivata: niente "Scatta la foto",
-                        // si aspetta che un genitore la approvi.
-                        if (inApprovazione.isNotEmpty()) {
-                            item { TitoloSezione(stringResource(R.string.faccende_sezione_approvazione)) }
-                            items(inApprovazione, key = { "approvazione-${it.id}" }) { faccenda ->
-                                CardInApprovazione(faccenda = faccenda, adesso = adesso)
-                            }
-                        }
-                    }
-                    // (0.15) Fatti e annullati: chiusi, si aprono quando servono.
-                    // (0.17, contratto v3.9) Dentro, "Cerca un lavoro" su tutta la storia:
-                    // c'è anche senza chiusi negli ultimi 30 giorni (i vecchi si trovano lo stesso).
-                    val conRicerca = memoria.conosciuto && !stato.serverDaAggiornare
-                    if (chiuse.isNotEmpty() || conRicerca || stato.ricerca.attiva) {
-                        item(key = "chiuse") {
-                            SezioneEspandibile(
-                                titolo = stringResource(R.string.faccende_sezione_chiuse),
-                                conteggio = chiuse.size.takeIf { it > 0 },
-                                chiave = "faccende-chiuse",
-                            ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(Spazi.m)) {
-                                    if (conRicerca || stato.ricerca.attiva) {
-                                        CampoRicerca(stato.ricerca.testo, onCambia = { vm.cerca(it) })
-                                    }
-                                    val vedi = { faccenda: FaccendaLocale -> vm.apriFoto(faccenda.id, faccenda.titolo) }
-                                    if (stato.ricerca.attiva) {
-                                        RisultatiRicerca(stato.ricerca, stato.scaricamentoInCorso, vedi)
-                                    } else {
-                                        chiuse.forEach { faccenda ->
-                                            CardChiusa(
-                                                faccenda = faccenda,
-                                                scaricando = stato.scaricamentoInCorso == faccenda.id,
-                                                onVediFoto = { vedi(faccenda) },
-                                                approvazione = memoria.approvazione,
-                                            )
+                        // (0.15) Fatti e annullati: chiusi, si aprono quando servono.
+                        // (0.17, contratto v3.9) Dentro, "Cerca un lavoro" su tutta la storia:
+                        // c'è anche senza chiusi negli ultimi 30 giorni (i vecchi si trovano lo stesso).
+                        val conRicerca = memoria.conosciuto && !stato.serverDaAggiornare
+                        if (chiuse.isNotEmpty() || conRicerca || stato.ricerca.attiva) {
+                            item(key = "chiuse") {
+                                SezioneEspandibile(
+                                    titolo = stringResource(R.string.faccende_sezione_chiuse),
+                                    conteggio = chiuse.size.takeIf { it > 0 },
+                                    chiave = "faccende-chiuse",
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(Spazi.m)) {
+                                        if (conRicerca || stato.ricerca.attiva) {
+                                            CampoRicerca(stato.ricerca.testo, onCambia = { vm.cerca(it) })
+                                        }
+                                        val vedi = { faccenda: FaccendaLocale -> vm.apriFoto(faccenda.id, faccenda.titolo) }
+                                        if (stato.ricerca.attiva) {
+                                            RisultatiRicerca(stato.ricerca, stato.scaricamentoInCorso, vedi)
+                                        } else {
+                                            chiuse.forEach { faccenda ->
+                                                CardChiusa(
+                                                    faccenda = faccenda,
+                                                    scaricando = stato.scaricamentoInCorso == faccenda.id,
+                                                    onVediFoto = { vedi(faccenda) },
+                                                    approvazione = memoria.approvazione,
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -592,7 +602,7 @@ private fun RisultatiRicerca(
         null -> Unit
         is RicercaFaccende.Esito.Trovati -> {
             if (esito.faccende.isEmpty()) {
-                StatoVuoto(stringResource(R.string.faccende_cerca_nessuno, ricerca.cercato.orEmpty()))
+                StatoVuoto(stringResource(R.string.faccende_cerca_nessuno, ricerca.cercato.orEmpty()), emoji = "🔍")
             } else {
                 esito.faccende.forEach { faccenda ->
                     CardChiusa(

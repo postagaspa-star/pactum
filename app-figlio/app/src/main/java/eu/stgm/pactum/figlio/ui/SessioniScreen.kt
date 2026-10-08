@@ -97,6 +97,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
 
 /**
  * (0.11) Le Sessioni (contratto v3.5): "Studio", "Lavoro". Le scrive il
@@ -192,132 +197,137 @@ fun SessioniScreen(
     var altezzaPulsante by remember { mutableIntStateOf(0) }
     val spazioInFondo = with(densita) { altezzaPulsante.toDp() } + Spazi.l * 2
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.sessioni_titolo)) },
-                actions = { AzioniBarra(onAggiorna = { vm.aggiorna() }, onApriImpostazioni = onApriImpostazioni) },
-            )
-        },
-        floatingActionButton = {
-            if (stato.letto && !stato.configurazioneMancante && !stato.serverDaAggiornare) {
-                ExtendedFloatingActionButton(
-                    onClick = {
-                        if (stato.sessioni.size >= SESSIONI_MASSIME) {
-                            // Il server ne tiene al massimo 20 per telefono: lo si dice prima.
-                            ambito.launch { snackbarHostState.showSnackbar(context.getString(R.string.sessione_esito_troppe)) }
-                        } else {
-                            vm.dimenticaEsiti()
-                            moduloId = NUOVA_SESSIONE
-                        }
-                    },
-                    // La scritta del pulsante allungato non arriva a TalkBack (Material la
-                    // nasconde): la dice l'icona.
-                    icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sessioni_nuova)) },
-                    text = { Text(stringResource(R.string.sessioni_nuova), maxLines = 1) },
-                    modifier = Modifier.onSizeChanged { altezzaPulsante = it.height },
+    SchermataColorata(Sezione.SESSIONI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.sessioni_titolo)) },
+                    colors = coloriBarra(),
+                    actions = { AzioniBarra(onAggiorna = { vm.aggiorna() }, onApriImpostazioni = onApriImpostazioni) },
                 )
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when {
-                stato.caricamento && !stato.letto ->
-                    Caricamento(testo = stringResource(R.string.sessioni_caricamento))
+            },
+            floatingActionButton = {
+                if (stato.letto && !stato.configurazioneMancante && !stato.serverDaAggiornare) {
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            if (stato.sessioni.size >= SESSIONI_MASSIME) {
+                                // Il server ne tiene al massimo 20 per telefono: lo si dice prima.
+                                ambito.launch { snackbarHostState.showSnackbar(context.getString(R.string.sessione_esito_troppe)) }
+                            } else {
+                                vm.dimenticaEsiti()
+                                moduloId = NUOVA_SESSIONE
+                            }
+                        },
+                        // La scritta del pulsante allungato non arriva a TalkBack (Material la
+                        // nasconde): la dice l'icona.
+                        icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sessioni_nuova)) },
+                        text = { Text(stringResource(R.string.sessioni_nuova), maxLines = 1) },
+                        modifier = Modifier.onSizeChanged { altezzaPulsante = it.height },
+                    )
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when {
+                    stato.caricamento && !stato.letto ->
+                        Caricamento(testo = stringResource(R.string.sessioni_caricamento))
 
-                stato.configurazioneMancante ->
-                    StatoVuoto(stringResource(R.string.regole_config_mancante), centrato = true, modifier = Modifier.padding(Spazi.xl))
+                    stato.configurazioneMancante ->
+                        StatoVuoto(stringResource(R.string.regole_config_mancante), centrato = true, modifier = Modifier.padding(Spazi.xl))
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    // In fondo lo spazio di "Nuova sessione", perché non copra l'ultima.
-                    contentPadding = PaddingValues(
-                        start = Spazi.l + Spazi.xs,
-                        end = Spazi.l + Spazi.xs,
-                        top = Spazi.l + Spazi.xs,
-                        bottom = spazioInFondo,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(Spazi.l),
-                ) {
-                    if (stato.scollegato) {
-                        item {
-                            RigaStato(
-                                testo = stringResource(R.string.scollegato),
-                                azione = stringResource(R.string.azione_collega),
-                                onAzione = onApriImpostazioni,
-                            )
-                        }
-                    } else if (stato.datiFermi) {
-                        item { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
-                    }
-                    // (0.18, contratto v4.0) La Sessione Studio, in cima alla scheda.
-                    item(key = "studio") {
-                        SezioneStudio(statoStudio, studio, studioVm) { messaggio ->
-                            ambito.launch { snackbarHostState.showSnackbar(messaggio) }
-                        }
-                    }
-                    item(key = "titolo-sessioni") { TitoloSezione(stringResource(R.string.sessioni_le_tue)) }
-                    inCorso.attiva?.let { attiva ->
-                        item(key = "in-corso") {
-                            SchedaSessioneInCorso(
-                                attiva = attiva,
-                                adesso = inCorso.adesso,
-                                // "Termina la sessione" della notifica porta a Oggi: qui non si ascolta.
-                                ascoltaNotifica = false,
-                                // Le app stanno già sulla card della sessione, qui sotto.
-                                mostraApp = false,
-                                onTerminata = {
-                                    ambito.launch {
-                                        snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
-                                    }
-                                },
-                            )
-                        }
-                    }
-                    // Un "Inizia" rimasto senza risposta: si dice finché non si chiarisce.
-                    avvioIncerto?.let { incerto -> item(key = "incerta") { RigaAvvioIncerto(incerto) } }
-                    if (stato.serverDaAggiornare) {
-                        // Mai "errore": il server va aggiornato, il resto dell'app funziona.
-                        item { RigaStato(stringResource(R.string.sessioni_server_da_aggiornare)) }
-                    } else {
-                        if (stato.sessioni.isEmpty()) {
-                            // Cos'è una sessione, detto una volta: qui, quando non ce n'è nessuna.
+                    else -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        // In fondo lo spazio di "Nuova sessione", perché non copra l'ultima.
+                        contentPadding = PaddingValues(
+                            start = Spazi.l + Spazi.xs,
+                            end = Spazi.l + Spazi.xs,
+                            top = Spazi.l + Spazi.xs,
+                            bottom = spazioInFondo,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(Spazi.l),
+                    ) {
+                        if (stato.scollegato) {
                             item {
-                                StatoVuoto(
-                                    titolo = stringResource(R.string.sessioni_vuoto_titolo),
-                                    testo = stringResource(R.string.sessioni_vuoto),
+                                RigaStato(
+                                    testo = stringResource(R.string.scollegato),
+                                    azione = stringResource(R.string.azione_collega),
+                                    onAzione = onApriImpostazioni,
                                 )
                             }
-                        } else {
-                            items(stato.sessioni, key = { it.id }) { sessione ->
-                                CardSessione(
-                                    sessione = sessione,
-                                    inCorsoQuesta = inCorso.attiva?.sessioneId == sessione.id,
-                                    unaInCorso = inCorso.attiva != null,
-                                    invioInCorso = stato.invioInCorso,
-                                    bloccoFaccende = bloccoFaccende,
-                                    inStudio = studio.studio != null,
-                                    onInizia = {
-                                        ricorda(sessione)
-                                        vm.dimenticaEsiti()
-                                        daAvviareId = sessione.id
-                                    },
-                                    onModifica = {
-                                        ricorda(sessione)
-                                        vm.dimenticaEsiti()
-                                        moduloId = sessione.id
-                                    },
-                                    onElimina = {
-                                        ricorda(sessione)
-                                        daEliminareId = sessione.id
-                                    },
-                                    onRitiraCambio = {
-                                        ricorda(sessione)
-                                        cambioDaRitirareId = sessione.id
+                        } else if (stato.datiFermi) {
+                            item { RigaStato(testoDatiVecchi(stato.datiFermiAlle)) }
+                        }
+                        // (0.18, contratto v4.0) La Sessione Studio, in cima alla scheda.
+                        item(key = "studio") {
+                            SezioneStudio(statoStudio, studio, studioVm) { messaggio ->
+                                ambito.launch { snackbarHostState.showSnackbar(messaggio) }
+                            }
+                        }
+                        item(key = "titolo-sessioni") { TitoloSezione(stringResource(R.string.sessioni_le_tue)) }
+                        inCorso.attiva?.let { attiva ->
+                            item(key = "in-corso") {
+                                SchedaSessioneInCorso(
+                                    attiva = attiva,
+                                    adesso = inCorso.adesso,
+                                    // "Termina la sessione" della notifica porta a Oggi: qui non si ascolta.
+                                    ascoltaNotifica = false,
+                                    // Le app stanno già sulla card della sessione, qui sotto.
+                                    mostraApp = false,
+                                    onTerminata = {
+                                        ambito.launch {
+                                            snackbarHostState.showSnackbar(context.getString(R.string.sessione_terminata))
+                                        }
                                     },
                                 )
+                            }
+                        }
+                        // Un "Inizia" rimasto senza risposta: si dice finché non si chiarisce.
+                        avvioIncerto?.let { incerto -> item(key = "incerta") { RigaAvvioIncerto(incerto) } }
+                        if (stato.serverDaAggiornare) {
+                            // Mai "errore": il server va aggiornato, il resto dell'app funziona.
+                            item { RigaStato(stringResource(R.string.sessioni_server_da_aggiornare)) }
+                        } else {
+                            if (stato.sessioni.isEmpty()) {
+                                // Cos'è una sessione, detto una volta: qui, quando non ce n'è nessuna.
+                                item {
+                                    StatoVuoto(
+                                        titolo = stringResource(R.string.sessioni_vuoto_titolo),
+                                        testo = stringResource(R.string.sessioni_vuoto),
+                                        emoji = "🎯",
+                                    )
+                                }
+                            } else {
+                                items(stato.sessioni, key = { it.id }) { sessione ->
+                                    CardSessione(
+                                        sessione = sessione,
+                                        inCorsoQuesta = inCorso.attiva?.sessioneId == sessione.id,
+                                        unaInCorso = inCorso.attiva != null,
+                                        invioInCorso = stato.invioInCorso,
+                                        bloccoFaccende = bloccoFaccende,
+                                        inStudio = studio.studio != null,
+                                        onInizia = {
+                                            ricorda(sessione)
+                                            vm.dimenticaEsiti()
+                                            daAvviareId = sessione.id
+                                        },
+                                        onModifica = {
+                                            ricorda(sessione)
+                                            vm.dimenticaEsiti()
+                                            moduloId = sessione.id
+                                        },
+                                        onElimina = {
+                                            ricorda(sessione)
+                                            daEliminareId = sessione.id
+                                        },
+                                        onRitiraCambio = {
+                                            ricorda(sessione)
+                                            cambioDaRitirareId = sessione.id
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

@@ -66,6 +66,11 @@ import eu.stgm.pactum.figlio.siti.OsservazioneSiti
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
+import androidx.compose.ui.graphics.Color
+import eu.stgm.pactum.design.SchermataColorata
+import eu.stgm.pactum.design.Sezione
+import eu.stgm.pactum.design.TitoloBarra
+import eu.stgm.pactum.design.coloriBarra
 
 /**
  * (0.15) Le Impostazioni del figlio, da ⚙ in ogni scheda, in quest'ordine: il
@@ -133,172 +138,176 @@ fun ImpostazioniScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.impostazioni_titolo)) },
-                navigationIcon = {
-                    IconButton(onClick = onChiudi) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))
-                    }
-                },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .consumeWindowInsets(padding)
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(Spazi.l + Spazi.xs),
-            verticalArrangement = Arrangement.spacedBy(Spazi.l),
-        ) {
-            // 1. Il collegamento. configurazione null = non ancora letta dal disco:
-            // il modulo aspetta, così i campi partono già con l'indirizzo salvato.
-            TitoloSezione(stringResource(R.string.impostazioni_sezione_collegamento))
-            configurazione?.let { attuale ->
-                if (attuale.completa && !cambiaCollegamento) {
-                    avvisoCollegamento?.let {
-                        RigaStato(testo = it, tono = if (avvisoCambioDispositivo) Tono.Attenzione else Tono.Neutro)
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            RigaCollegatoCome(alternativa = stringResource(R.string.impostazioni_collegato))
-                        }
-                        TextButton(onClick = { cambiaCollegamento = true }) {
-                            Text(stringResource(R.string.impostazioni_cambia))
-                        }
-                    }
-                } else {
-                    ModuloCollegamento(
-                        origine = OriginiCollegamento.IMPOSTAZIONI,
-                        onCollegato = { avviso ->
-                            avvisoCollegamento = avviso.testo
-                            avvisoCambioDispositivo = avviso.cambioDispositivo
-                            cambiaCollegamento = false
-                        },
-                        giaCollegato = attuale.completa,
-                    )
-                }
-            }
-
-            // 2. I permessi: tutti e quattro, ognuno col suo stato.
-            Column(
-                modifier = Modifier.bringIntoViewRequester(versoPermessi),
-                verticalArrangement = Arrangement.spacedBy(Spazi.s),
-            ) {
-                TitoloSezione(stringResource(R.string.permessi_titolo))
-                ElencoPermessi(stato = permessi, onAggiorna = { permessi = StatoPermessi.leggi(context) })
-            }
-
-            // 3. La chiusura della sera (C5): una notifica sola, all'ora scelta.
-            TitoloSezione(stringResource(R.string.impostazioni_sezione_serale))
-            serale?.let { config ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.impostazioni_serale_attiva),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(
-                        checked = config.attiva,
-                        onCheckedChange = { attiva ->
-                            ambito.launch { impostazioni.salvaChiusuraSerale(attiva, config.minuti) }
-                        },
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.impostazioni_serale_ora),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(enabled = config.attiva, onClick = { sceltaOra = true }) {
-                        Text(testoOra(config.minuti))
-                    }
-                }
-                Text(
-                    text = stringResource(R.string.impostazioni_serale_spiegazione),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (sceltaOra) {
-                    DialogoOra(
-                        minuti = config.minuti,
-                        onAnnulla = { sceltaOra = false },
-                        onScegli = { minuti ->
-                            sceltaOra = false
-                            ambito.launch { impostazioni.salvaChiusuraSerale(config.attiva, minuti) }
-                        },
-                    )
-                }
-            }
-
-            // 4. I siti visitati (v2.3): il SUO registro, che lui condivide.
-            // 5. Cosa vedono i genitori, per sempre a un tocco (C6).
-            Column {
-                RigaToccabile(
-                    titolo = stringResource(R.string.siti_titolo),
-                    sottotitolo = sitiAttivi?.let { stringResource(if (it) R.string.siti_stato_attiva else R.string.siti_stato_spenta) },
-                    onClick = onApriSiti,
-                )
-                RigaToccabile(
-                    titolo = stringResource(R.string.cosa_vede_titolo),
-                    onClick = onApriCosaVede,
-                )
-            }
-
-            // 6. In fondo, piccolo: la verifica onesta del canale.
-            Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
-                Text(
-                    text = stringResource(
-                        R.string.impostazioni_ultimo_battito,
-                        ultimoBattito?.let { quandoLocale(Instant.ofEpochMilli(it)) }
-                            ?: stringResource(R.string.impostazioni_ultimo_battito_mai),
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                TextButton(
-                    enabled = !provaInCorso,
-                    onClick = {
-                        ambito.launch {
-                            provaInCorso = true
-                            try {
-                                val attuale = impostazioni.leggiConfigurazione()
-                                val esito = if (!attuale.completa) {
-                                    messaggioConfigIncompleta
-                                } else {
-                                    val codice = PostinoClient(attuale).provaBattito(
-                                        Battito(
-                                            tsDevice = System.currentTimeMillis(),
-                                            versioneApp = BuildConfig.VERSION_NAME,
-                                            elapsedRealtime = SystemClock.elapsedRealtime(),
-                                        ),
-                                    )
-                                    when (codice) {
-                                        in 200..299 -> {
-                                            impostazioni.registraBattitoConsegnato()
-                                            messaggioProvaOk
-                                        }
-                                        // Token revocato, o sostituito da un codice nuovo.
-                                        401 -> messaggioProvaScollegato
-                                        else -> messaggioProvaFallita
-                                    }
-                                }
-                                snackbarHostState.showSnackbar(esito)
-                            } finally {
-                                provaInCorso = false
-                            }
+    SchermataColorata(Sezione.IMPOSTAZIONI) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { TitoloBarra(stringResource(R.string.impostazioni_titolo)) },
+                    colors = coloriBarra(),
+                    navigationIcon = {
+                        IconButton(onClick = onChiudi) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.azione_indietro))
                         }
                     },
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .consumeWindowInsets(padding)
+                    .imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(Spazi.l + Spazi.xs),
+                verticalArrangement = Arrangement.spacedBy(Spazi.l),
+            ) {
+                // 1. Il collegamento. configurazione null = non ancora letta dal disco:
+                // il modulo aspetta, così i campi partono già con l'indirizzo salvato.
+                TitoloSezione(stringResource(R.string.impostazioni_sezione_collegamento))
+                configurazione?.let { attuale ->
+                    if (attuale.completa && !cambiaCollegamento) {
+                        avvisoCollegamento?.let {
+                            RigaStato(testo = it, tono = if (avvisoCambioDispositivo) Tono.Attenzione else Tono.Neutro)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                RigaCollegatoCome(alternativa = stringResource(R.string.impostazioni_collegato))
+                            }
+                            TextButton(onClick = { cambiaCollegamento = true }) {
+                                Text(stringResource(R.string.impostazioni_cambia))
+                            }
+                        }
+                    } else {
+                        ModuloCollegamento(
+                            origine = OriginiCollegamento.IMPOSTAZIONI,
+                            onCollegato = { avviso ->
+                                avvisoCollegamento = avviso.testo
+                                avvisoCambioDispositivo = avviso.cambioDispositivo
+                                cambiaCollegamento = false
+                            },
+                            giaCollegato = attuale.completa,
+                        )
+                    }
+                }
+
+                // 2. I permessi: tutti e quattro, ognuno col suo stato.
+                Column(
+                    modifier = Modifier.bringIntoViewRequester(versoPermessi),
+                    verticalArrangement = Arrangement.spacedBy(Spazi.s),
                 ) {
-                    Text(stringResource(R.string.impostazioni_prova_adesso))
+                    TitoloSezione(stringResource(R.string.permessi_titolo))
+                    ElencoPermessi(stato = permessi, onAggiorna = { permessi = StatoPermessi.leggi(context) })
+                }
+
+                // 3. La chiusura della sera (C5): una notifica sola, all'ora scelta.
+                TitoloSezione(stringResource(R.string.impostazioni_sezione_serale))
+                serale?.let { config ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.impostazioni_serale_attiva),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = config.attiva,
+                            onCheckedChange = { attiva ->
+                                ambito.launch { impostazioni.salvaChiusuraSerale(attiva, config.minuti) }
+                            },
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.impostazioni_serale_ora),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(enabled = config.attiva, onClick = { sceltaOra = true }) {
+                            Text(testoOra(config.minuti))
+                        }
+                    }
+                    Text(
+                        text = stringResource(R.string.impostazioni_serale_spiegazione),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (sceltaOra) {
+                        DialogoOra(
+                            minuti = config.minuti,
+                            onAnnulla = { sceltaOra = false },
+                            onScegli = { minuti ->
+                                sceltaOra = false
+                                ambito.launch { impostazioni.salvaChiusuraSerale(config.attiva, minuti) }
+                            },
+                        )
+                    }
+                }
+
+                // 4. I siti visitati (v2.3): il SUO registro, che lui condivide.
+                // 5. Cosa vedono i genitori, per sempre a un tocco (C6).
+                Column {
+                    RigaToccabile(
+                        titolo = stringResource(R.string.siti_titolo),
+                        sottotitolo = sitiAttivi?.let { stringResource(if (it) R.string.siti_stato_attiva else R.string.siti_stato_spenta) },
+                        onClick = onApriSiti,
+                    )
+                    RigaToccabile(
+                        titolo = stringResource(R.string.cosa_vede_titolo),
+                        onClick = onApriCosaVede,
+                    )
+                }
+
+                // 6. In fondo, piccolo: la verifica onesta del canale.
+                Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+                    Text(
+                        text = stringResource(
+                            R.string.impostazioni_ultimo_battito,
+                            ultimoBattito?.let { quandoLocale(Instant.ofEpochMilli(it)) }
+                                ?: stringResource(R.string.impostazioni_ultimo_battito_mai),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(
+                        enabled = !provaInCorso,
+                        onClick = {
+                            ambito.launch {
+                                provaInCorso = true
+                                try {
+                                    val attuale = impostazioni.leggiConfigurazione()
+                                    val esito = if (!attuale.completa) {
+                                        messaggioConfigIncompleta
+                                    } else {
+                                        val codice = PostinoClient(attuale).provaBattito(
+                                            Battito(
+                                                tsDevice = System.currentTimeMillis(),
+                                                versioneApp = BuildConfig.VERSION_NAME,
+                                                elapsedRealtime = SystemClock.elapsedRealtime(),
+                                            ),
+                                        )
+                                        when (codice) {
+                                            in 200..299 -> {
+                                                impostazioni.registraBattitoConsegnato()
+                                                messaggioProvaOk
+                                            }
+                                            // Token revocato, o sostituito da un codice nuovo.
+                                            401 -> messaggioProvaScollegato
+                                            else -> messaggioProvaFallita
+                                        }
+                                    }
+                                    snackbarHostState.showSnackbar(esito)
+                                } finally {
+                                    provaInCorso = false
+                                }
+                            }
+                        },
+                    ) {
+                        Text(stringResource(R.string.impostazioni_prova_adesso))
+                    }
                 }
             }
         }

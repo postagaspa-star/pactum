@@ -378,7 +378,6 @@ private fun ContenutoPanoramica(
                     testo = stringResource(R.string.nessun_dispositivo),
                     azione = stringResource(R.string.famiglia_aggiungi_dispositivo),
                     onAzione = { cornice.apri(Pagina.Impostazioni(SezioneImpostazioni.FAMIGLIA)) },
-                    emoji = "📱",
                 )
             }
         }
@@ -390,7 +389,6 @@ private fun ContenutoPanoramica(
                     StatoVuoto(
                         titolo = stringResource(R.string.regole_vuoto_titolo),
                         testo = stringResource(R.string.regole_vuoto),
-                        emoji = "📜",
                     )
                 }
             }

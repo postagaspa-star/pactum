@@ -178,7 +178,6 @@ fun NotificheScreen(
                                     stringResource(R.string.notifiche_vuoto),
                                     icona = Icons.Outlined.CheckCircle,
                                     modifier = Modifier.padding(Spazi.l),
-                                    emoji = "📭",
                                 )
                             }
                         } else if (stato.notifiche.size > 1) {

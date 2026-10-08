@@ -138,7 +138,7 @@ private fun ContenutoStorico(
         // 1. Le regole cambiate.
         item(key = "regole-titolo") { TitoloSezione(stringResource(R.string.storico_regole)) }
         if (finestra.storicoModifiche.isEmpty()) {
-            item(key = "regole-vuoto") { StatoVuoto(stringResource(R.string.storico_regole_vuoto), emoji = "📜") }
+            item(key = "regole-vuoto") { StatoVuoto(stringResource(R.string.storico_regole_vuoto)) }
         } else {
             items(finestra.storicoModifiche, key = { "modifica-${it.id}" }) {
                 RigaStorico(it, regolePerId, mostraDispositivo = piuDispositivi)
@@ -167,7 +167,7 @@ private fun ContenutoStorico(
         if (proposte == null) {
             item(key = "proposte-caricamento") { Caricamento(testo = stringResource(R.string.turno_caricamento), centrato = false) }
         } else if (chiuse.isEmpty()) {
-            item(key = "proposte-vuoto") { StatoVuoto(stringResource(R.string.storico_proposte_vuoto), emoji = "📭") }
+            item(key = "proposte-vuoto") { StatoVuoto(stringResource(R.string.storico_proposte_vuoto)) }
         } else {
             items(chiuse, key = { "proposta-${it.id}" }) {
                 RigaPropostaChiusa(it, regolePerId[it.regolaId] ?: proposte.regolePerId[it.regolaId], nomeFiglio, piuDispositivi, nomi, io)
@@ -179,7 +179,7 @@ private fun ContenutoStorico(
         if (verdetti == null) {
             item(key = "dichiarazioni-caricamento") { Caricamento(testo = stringResource(R.string.turno_caricamento), centrato = false) }
         } else if (registro.isEmpty()) {
-            item(key = "dichiarazioni-vuoto") { StatoVuoto(stringResource(R.string.storico_dichiarazioni_vuoto), emoji = "📖") }
+            item(key = "dichiarazioni-vuoto") { StatoVuoto(stringResource(R.string.storico_dichiarazioni_vuoto)) }
         } else {
             items(registro, key = { "dichiarazione-${it.id}" }) {
                 RigaRisolta(it, regolePerId[it.regolaId] ?: verdetti.regolePerId[it.regolaId], io)

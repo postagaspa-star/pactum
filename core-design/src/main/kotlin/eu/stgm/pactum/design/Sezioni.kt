@@ -3,9 +3,7 @@ package eu.stgm.pactum.design
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -15,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -28,65 +25,61 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 // (0.19) Pactum più vivo e colorato (richiesta di Andrea, 08/10): ogni sezione
-// delle due app ha il suo colore pastello e i suoi adesivi, nello stesso stile
-// delle pagine animate delle Sessioni (fondi pastello, emoji col bordo bianco
-// che entrano e galleggiano). Qui il colore; gli adesivi in Adesivi.kt, i
-// movimenti in Movimento.kt. Le schermate di blocco NON usano niente di questo:
-// restano calme (una festa mentre sei bloccato sembrerebbe una presa in giro).
+// delle due app ha il suo colore, nella famiglia dei fondi delle pagine delle
+// Sessioni. Niente emoji nelle schermate (Andrea, 08/10: «le troppe emoji sono il
+// problema», un'app per adolescenti non deve sembrare per bambini). Qui il
+// colore; i movimenti in Movimento.kt. Le schermate di blocco NON usano niente
+// di questo: restano calme.
 
 /**
  * Una sezione delle app: il [fondo] pastello (la barra in alto e la sfumatura
- * sotto), l'[inchiostro] scuro della stessa famiglia (titolo e icone sopra il
- * fondo, contrasto ≥ 4,5:1, lo prova SezioniTest) e le sue [emoji] (la prima è
- * quella delle pagine vuote). I fondi sono della stessa famiglia di quelli
- * delle Sessioni ([TemaSessione]): lo Studio ha proprio lo stesso verde acqua.
+ * sotto) e l'[inchiostro] scuro della stessa famiglia (titolo e icone sopra il
+ * fondo, contrasto ≥ 4,5:1, lo prova VivaceTest). I fondi sono della stessa
+ * famiglia di quelli delle Sessioni ([TemaSessione]): lo Studio ha proprio lo
+ * stesso verde acqua.
  *
  * I colori del patto (la striscia degli 8 giorni) restano quelli di
  * [ColoriPatto]: qui niente verde "mantenuta" né terracotta.
  */
-enum class Sezione(val fondo: Color, val inchiostro: Color, val emoji: List<String>) {
+enum class Sezione(val fondo: Color, val inchiostro: Color) {
     /** Oggi (figlio). */
-    OGGI(Color(0xFFFBE9B7), Color(0xFF574000), listOf("☀️", "🌈", "⭐")),
+    OGGI(Color(0xFFFBE9B7), Color(0xFF574000)),
 
     /** La Panoramica del genitore. */
-    PANORAMICA(Color(0xFFFBE9B7), Color(0xFF574000), listOf("🔭", "🏡", "⭐")),
+    PANORAMICA(Color(0xFFFBE9B7), Color(0xFF574000)),
 
     /** Il tempo d'uso. */
-    TEMPO(Color(0xFFD7E5F2), Color(0xFF1A3A5C), listOf("⏱️", "📊", "⌛")),
+    TEMPO(Color(0xFFD7E5F2), Color(0xFF1A3A5C)),
 
     /** Le regole del patto. */
-    REGOLE(Color(0xFFE6DFF5), Color(0xFF3F2E6E), listOf("🤝", "📜", "✅")),
+    REGOLE(Color(0xFFE6DFF5), Color(0xFF3F2E6E)),
 
     /** Le Sessioni. */
-    SESSIONI(Color(0xFFF7E0CF), Color(0xFF6A3418), listOf("🎯", "🎧", "⏳")),
+    SESSIONI(Color(0xFFF7E0CF), Color(0xFF6A3418)),
 
     /** I lavori di casa. */
-    LAVORI(Color(0xFFDDECC8), Color(0xFF2F4A14), listOf("🧽", "🧺", "🪴")),
+    LAVORI(Color(0xFFDDECC8), Color(0xFF2F4A14)),
 
     /** La Sessione Studio: lo stesso fondo del tema Studio delle Sessioni. */
-    STUDIO(Color(0xFFCFE9E1), Color(0xFF124D40), listOf("📚", "✏️", "🧠")),
+    STUDIO(Color(0xFFCFE9E1), Color(0xFF124D40)),
 
     /** "Da decidere" del genitore: proposte, approvazioni. */
-    DECIDERE(Color(0xFFF6DCE3), Color(0xFF6B2238), listOf("💬", "🤔", "📨")),
+    DECIDERE(Color(0xFFF6DCE3), Color(0xFF6B2238)),
 
     /** Le notifiche. */
-    NOTIFICHE(Color(0xFFF3E3C4), Color(0xFF5A4214), listOf("🔔", "📬")),
+    NOTIFICHE(Color(0xFFF3E3C4), Color(0xFF5A4214)),
 
     /** Lo storico (proposte, dichiarazioni, lavori passati). */
-    STORICO(Color(0xFFEDE4D3), Color(0xFF4A3B22), listOf("📖", "🗓️")),
+    STORICO(Color(0xFFEDE4D3), Color(0xFF4A3B22)),
 
     /** I siti visitati (figlio). */
-    SITI(Color(0xFFD9E8EE), Color(0xFF1D3E4C), listOf("🌐", "🔍")),
+    SITI(Color(0xFFD9E8EE), Color(0xFF1D3E4C)),
 
     /** "Cosa vedono i tuoi genitori" (figlio). */
-    COSA_VEDE(Color(0xFFDCEEEA), Color(0xFF183F38), listOf("👀", "🔭")),
+    COSA_VEDE(Color(0xFFDCEEEA), Color(0xFF183F38)),
 
     /** Le impostazioni e il primo collegamento. */
-    IMPOSTAZIONI(Color(0xFFDDE3EA), Color(0xFF2A3644), listOf("⚙️", "🔧")),
-    ;
-
-    /** L'emoji delle pagine vuote della sezione. */
-    val emojiPrincipale: String get() = emoji.first()
+    IMPOSTAZIONI(Color(0xFFDDE3EA), Color(0xFF2A3644)),
 }
 
 /** La sezione della schermata in cui ci si trova (null = fuori da [SchermataColorata]). */
@@ -165,38 +158,17 @@ fun coloriBarra(): TopAppBarColors {
 }
 
 /**
- * Il titolo della barra in alto con, accanto, gli adesivi della sezione che
- * entrano e galleggiano (si toccano: saltano di nuovo). Il titolo sta su una
- * riga (si rimpicciolisce se serve, mai tagliato); gli adesivi non spostano
- * il titolo e TalkBack non li legge.
+ * Il titolo della barra in alto: su una riga (si rimpicciolisce se serve, mai
+ * tagliato), nell'inchiostro della sezione (lo dà [coloriBarra]).
  */
 @Composable
 fun TitoloBarra(
     testo: String,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.titleLarge,
-    adesivi: Int = 2,
 ) {
-    val sezione = LocalSezione.current
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        TestoSuUnaRiga(
-            testo = testo,
-            style = style,
-            minimo = 16.sp,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        if (sezione != null && adesivi > 0) {
-            GruppoAdesivi(emoji = sezione.emoji.take(adesivi), lato = LatoAdesivoBarra)
-        }
-    }
+    TestoSuUnaRiga(testo = testo, style = style, minimo = 16.sp, modifier = modifier)
 }
-
-/** Gli adesivi nella barra in alto: l'emoji dentro è circa metà del lato. */
-private val LatoAdesivoBarra = 40.dp
 
 /**
  * true = Android lascia muovere le cose ("Rimuovi animazioni" spento, scala

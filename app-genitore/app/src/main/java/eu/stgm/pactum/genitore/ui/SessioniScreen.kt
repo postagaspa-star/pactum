@@ -100,7 +100,7 @@ private fun ContenutoSessioni(finestra: Finestra, io: RiferimentoGenitore?, erro
         if (errore) item(key = "dati-vecchi") { RigaStato(stringResource(R.string.turno_dati_vecchi)) }
 
         if (inCorso.isEmpty() && fatte.isEmpty() && approvate.isEmpty() && nonPiuValide.isEmpty()) {
-            item(key = "nessuna") { StatoVuoto(stringResource(R.string.sessioni_nessuna), emoji = "🎯") }
+            item(key = "nessuna") { StatoVuoto(stringResource(R.string.sessioni_nessuna)) }
             return@LazyColumn
         }
 
@@ -111,7 +111,7 @@ private fun ContenutoSessioni(finestra: Finestra, io: RiferimentoGenitore?, erro
 
         item(key = "approvate-titolo") { TitoloSezione(stringResource(R.string.sessioni_approvate_titolo)) }
         if (approvate.isEmpty()) {
-            item(key = "approvate-vuoto") { StatoVuoto(stringResource(R.string.sessioni_nessuna_approvata), emoji = "🎯") }
+            item(key = "approvate-vuoto") { StatoVuoto(stringResource(R.string.sessioni_nessuna_approvata)) }
         } else {
             items(approvate, key = { "approvata-${it.id}" }) { sessione ->
                 RigaSessioneApprovata(
@@ -125,7 +125,7 @@ private fun ContenutoSessioni(finestra: Finestra, io: RiferimentoGenitore?, erro
 
         item(key = "fatte-titolo") { TitoloSezione(stringResource(R.string.sessioni_fatte_titolo)) }
         if (fatte.isEmpty()) {
-            item(key = "fatte-vuoto") { StatoVuoto(stringResource(R.string.sessioni_nessuna_svolta), emoji = "🎯") }
+            item(key = "fatte-vuoto") { StatoVuoto(stringResource(R.string.sessioni_nessuna_svolta)) }
         } else {
             items(fatte, key = { "fatta-${it.svolta.id}" }) { RigaSessioneSvolta(it, telefonoDi(it.svolta.dispositivoId)) }
         }

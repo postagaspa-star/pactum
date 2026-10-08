@@ -296,7 +296,6 @@ fun SessioniScreen(
                                     StatoVuoto(
                                         titolo = stringResource(R.string.sessioni_vuoto_titolo),
                                         testo = stringResource(R.string.sessioni_vuoto),
-                                        emoji = "🎯",
                                     )
                                 }
                             } else {

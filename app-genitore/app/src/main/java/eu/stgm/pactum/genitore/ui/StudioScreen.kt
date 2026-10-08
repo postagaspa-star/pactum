@@ -282,7 +282,7 @@ private fun ContenutoStudio(
         // --- Gli Studi fatti -------------------------------------------------------------------
         item(key = "svolti-titolo") { TitoloSezione(stringResource(R.string.studio_svolti_titolo)) }
         if (svolte.isEmpty()) {
-            item(key = "svolti-vuoto") { StatoVuoto(stringResource(R.string.studio_svolti_vuoto), emoji = "📚") }
+            item(key = "svolti-vuoto") { StatoVuoto(stringResource(R.string.studio_svolti_vuoto)) }
         }
         items(svolte, key = { "svolto-${it.id}" }) { studio ->
             CardStudioSvolto(studio = studio, io = io, nomeFiglio = nomeFiglio, adesso = adesso, titoloLavoro = titoloLavoro)

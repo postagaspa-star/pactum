@@ -413,7 +413,7 @@ internal fun LazyListScope.sezioneSessioni(
 ) {
     item(key = "sessioni-titolo") { TitoloSezione(stringResource(R.string.sezione_sessioni)) }
     if (svolte.isEmpty()) {
-        item(key = "sessioni-nessuna") { StatoVuoto(stringResource(R.string.sessioni_nessuna_svolta), emoji = "🎯") }
+        item(key = "sessioni-nessuna") { StatoVuoto(stringResource(R.string.sessioni_nessuna_svolta)) }
     } else {
         val visibili = if (tutteLeSvolte) svolte else svolte.take(SESSIONI_SVOLTE_VISIBILI)
         items(visibili, key = { "sessione-svolta-${it.svolta.id}" }) {

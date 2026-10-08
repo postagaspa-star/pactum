@@ -30,14 +30,6 @@ class VivaceTest {
     }
 
     @Test
-    fun `ogni sezione ha almeno due adesivi`() {
-        Sezione.entries.forEach { s ->
-            assertTrue(s.name, s.emoji.size >= 2)
-            assertEquals(s.emoji.first(), s.emojiPrincipale)
-        }
-    }
-
-    @Test
     fun `lo Studio ha lo stesso verde acqua delle Sessioni di studio`() {
         assertEquals(TemaSessione.STUDIO.sfondoChiaro, Sezione.STUDIO.fondo)
     }
@@ -89,25 +81,6 @@ class VivaceTest {
         assertEquals(90L, Movimento.conteggio(0, 90, 1f))
         assertEquals(90L, Movimento.conteggio(0, 90, 3f))
         assertEquals(70L, Movimento.conteggio(100, 40, 0.5f))
-    }
-
-    // --- Gli adesivi -----------------------------------------------------------------------
-
-    @Test
-    fun `gli adesivi entrano uno dopo l'altro e si fermano al loro posto`() {
-        assertEquals(0f, MotoAdesivi.entrata(0f, 0), 0.0001f)
-        assertEquals(1f, MotoAdesivi.entrata(1f, 0), 0.0001f)
-        assertEquals(1f, MotoAdesivi.entrata(1f, 2), 0.0001f)
-        assertTrue(MotoAdesivi.entrata(0.3f, 0) > MotoAdesivi.entrata(0.3f, 2))
-        // Il rimbalzo va un filo oltre e torna.
-        assertTrue((0..100).map { MotoAdesivi.rimbalzo(it / 100f) }.max() > 1f)
-    }
-
-    @Test
-    fun `il dondolio si spegne e alla fine sono fermi`() {
-        assertEquals(0f, MotoAdesivi.galleggio(0f, 1), 0f)
-        assertEquals(0f, MotoAdesivi.galleggio(1f, 1), 0f)
-        assertTrue(kotlin.math.abs(MotoAdesivi.galleggio(0.98f, 0)) <= 0.02f)
     }
 
     // --- L'anello dello Studio ------------------------------------------------------------

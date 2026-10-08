@@ -178,7 +178,7 @@ fun SitiScreen(
                 if (stato.caricamento && stato.giorni.isEmpty()) {
                     item(key = "caricamento") { Caricamento(testo = stringResource(R.string.siti_caricamento), centrato = false) }
                 } else if (stato.giorni.isEmpty()) {
-                    item(key = "vuoto") { StatoVuoto(stringResource(R.string.siti_vuoto), emoji = "🌐") }
+                    item(key = "vuoto") { StatoVuoto(stringResource(R.string.siti_vuoto)) }
                 } else {
                     // Il server manda dal più vecchio a oggi; qui oggi sta in cima.
                     // (0.15) Un elemento della lista per riga (anche 200 domini in un

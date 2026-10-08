@@ -41,8 +41,8 @@ android {
         // stato, il tempo dei giorni passati e i totali dal server.
         // 0.17 (contratto v3.9): ora del blocco sempre visibile, lavori cambiati
         // e confermati, ricerca nello storico dei lavori.
-        versionCode = 19
-        versionName = "0.19.0"
+        versionCode = 20
+        versionName = "0.20.0"
     }
 
     signingConfigs {

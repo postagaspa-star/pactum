@@ -357,7 +357,6 @@ private fun ListaDaDecidere(
                     stringResource(R.string.da_decidere_vuoto),
                     icona = Icons.Outlined.CheckCircle,
                     modifier = Modifier.padding(vertical = Spazi.s),
-                    emoji = "☕",
                 )
             }
         }

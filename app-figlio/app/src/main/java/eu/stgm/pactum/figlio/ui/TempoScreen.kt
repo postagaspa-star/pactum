@@ -102,7 +102,7 @@ fun TempoScreen(onChiudi: () -> Unit, vm: OggiViewModel = viewModel()) {
             val dispositivo = tempi.firstOrNull { it.id == dispositivoScelto && it.id != null } ?: tempi.firstOrNull()
             if (dispositivo == null) {
                 Box(modifier = Modifier.padding(padding).fillMaxSize().padding(Spazi.l + Spazi.xs)) {
-                    StatoVuoto(stringResource(R.string.oggi_vuoto), emoji = "🌱")
+                    StatoVuoto(stringResource(R.string.oggi_vuoto))
                 }
                 return@Scaffold
             }
@@ -141,7 +141,6 @@ fun TempoScreen(onChiudi: () -> Unit, vm: OggiViewModel = viewModel()) {
                         item(key = "app-vuoto") {
                             StatoVuoto(
                                 stringResource(if (dispositivo.computer) R.string.tempo_programmi_vuoto else R.string.tempo_app_vuoto),
-                                emoji = "📱",
                             )
                         }
                     } else {

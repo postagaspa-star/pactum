@@ -122,7 +122,7 @@ fun StoricoScreen(
                         if (statoProposte.caricamento) {
                             Caricamento(centrato = false)
                         } else {
-                            StatoVuoto(stringResource(R.string.proposte_storia_vuota), emoji = "📭")
+                            StatoVuoto(stringResource(R.string.proposte_storia_vuota))
                         }
                     }
                 } else {
@@ -141,7 +141,7 @@ fun StoricoScreen(
                         if (statoDiario.caricamento) {
                             Caricamento(centrato = false)
                         } else {
-                            StatoVuoto(stringResource(R.string.diario_dichiarazioni_vuoto), emoji = "📖")
+                            StatoVuoto(stringResource(R.string.diario_dichiarazioni_vuoto))
                         }
                     }
                 } else {

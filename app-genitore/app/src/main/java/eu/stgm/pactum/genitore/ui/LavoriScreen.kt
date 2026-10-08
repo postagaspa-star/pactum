@@ -495,7 +495,7 @@ private fun ElencoFaccende(
         if (faccende.isEmpty()) {
             item(key = "nessuna") {
                 Column {
-                    StatoVuoto(stringResource(R.string.faccende_nessuna), emoji = "🛋️")
+                    StatoVuoto(stringResource(R.string.faccende_nessuna))
                     Text(
                         text = spiegaFaccende(p, nomeFiglio, conApprovazione),
                         style = MaterialTheme.typography.bodyMedium,
@@ -796,7 +796,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.risultatiRicerca(
         risultati == null ->
             item(key = "ricerca-caricamento") { Caricamento(testo = stringResource(R.string.ricerca_caricamento), centrato = false) }
         risultati.isEmpty() && !ricerca.caricamento ->
-            item(key = "ricerca-vuota") { StatoVuoto(stringResource(R.string.ricerca_nessuno, ricerca.testo), emoji = "🔍") }
+            item(key = "ricerca-vuota") { StatoVuoto(stringResource(R.string.ricerca_nessuno, ricerca.testo)) }
         else -> {
             items(risultati, key = { "trovato-${it.id}" }) { faccenda ->
                 if (faccenda.stato == eu.stgm.pactum.genitore.dati.StatiFaccenda.FATTA) {

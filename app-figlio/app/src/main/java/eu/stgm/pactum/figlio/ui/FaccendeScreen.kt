@@ -304,7 +304,6 @@ fun FaccendeScreen(
                                     StatoVuoto(
                                         titolo = stringResource(R.string.faccende_vuoto),
                                         testo = stringResource(if (memoria.approvazione) R.string.faccende_intro_approvazione else R.string.faccende_intro),
-                                        emoji = "🛋️",
                                     )
                                 }
                             }
@@ -602,7 +601,7 @@ private fun RisultatiRicerca(
         null -> Unit
         is RicercaFaccende.Esito.Trovati -> {
             if (esito.faccende.isEmpty()) {
-                StatoVuoto(stringResource(R.string.faccende_cerca_nessuno, ricerca.cercato.orEmpty()), emoji = "🔍")
+                StatoVuoto(stringResource(R.string.faccende_cerca_nessuno, ricerca.cercato.orEmpty()))
             } else {
                 esito.faccende.forEach { faccenda ->
                     CardChiusa(

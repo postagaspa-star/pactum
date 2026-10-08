@@ -394,7 +394,7 @@ fun OggiScreen(
                     Column {
                         if (stato.righe.isEmpty()) {
                             if (!stato.caricamento) {
-                                StatoVuoto(stringResource(R.string.oggi_vuoto), icona = Icons.Outlined.CheckCircle, emoji = "🌱")
+                                StatoVuoto(stringResource(R.string.oggi_vuoto), icona = Icons.Outlined.CheckCircle)
                             }
                         } else {
                             ElencoApp(stato.righe.take(APP_IN_OGGI))

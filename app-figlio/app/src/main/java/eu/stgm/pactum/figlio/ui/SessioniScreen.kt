@@ -262,7 +262,7 @@ fun SessioniScreen(
                         }
                         // (0.18, contratto v4.0) La Sessione Studio, in cima alla scheda.
                         item(key = "studio") {
-                            SezioneStudio(statoStudio, studio, studioVm) { messaggio ->
+                            SezioneStudio(statoStudio, studio, studioVm, sessioni = stato.sessioni) { messaggio ->
                                 ambito.launch { snackbarHostState.showSnackbar(messaggio) }
                             }
                         }

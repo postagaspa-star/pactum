@@ -49,8 +49,8 @@ android {
         // in core-design, pagine Sessioni e Tutte le regole.
         // v0.17.0 (contratto v3.9): lavori di casa da modificare, "Segna come
         // svolto", ricerca nello storico, ora del blocco sempre visibile.
-        versionCode = 21
-        versionName = "0.21.0"
+        versionCode = 22
+        versionName = "0.22.0"
     }
 
     signingConfigs {

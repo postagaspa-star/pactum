@@ -57,6 +57,9 @@ import eu.stgm.pactum.figlio.studio.StudioSvolto
 import eu.stgm.pactum.figlio.studio.TestoStudio
 import java.time.LocalDate
 import java.time.ZoneId
+import eu.stgm.pactum.figlio.sessione.SessioneDefinita
+import eu.stgm.pactum.figlio.studio.StudioDaSessione
+import androidx.compose.runtime.remember
 
 /**
  * (0.18, contratto v4.0, parte C) In cima alla scheda Sessioni: la Sessione
@@ -65,7 +68,13 @@ import java.time.ZoneId
  * cambiarla», «Inizia adesso», lo storico e le versioni approvate.
  */
 @Composable
-fun SezioneStudio(stato: StudioViewModel.StatoStudioUi, adesso: StudioAdesso, vm: StudioViewModel, onMessaggio: (String) -> Unit) {
+fun SezioneStudio(
+    stato: StudioViewModel.StatoStudioUi,
+    adesso: StudioAdesso,
+    vm: StudioViewModel,
+    sessioni: List<SessioneDefinita> = emptyList(),
+    onMessaggio: (String) -> Unit,
+) {
     val context = LocalContext.current
     val m = adesso.memoria
     val config = m.config
@@ -73,6 +82,18 @@ fun SezioneStudio(stato: StudioViewModel.StatoStudioUi, adesso: StudioAdesso, vm
     var modulo by rememberSaveable { mutableStateOf(false) }
     var confermaAvvio by rememberSaveable { mutableStateOf(false) }
     var confermaRitiro by rememberSaveable { mutableStateOf(false) }
+    // (0.22) Le app dello Studio dalla sessione «Studio» che c'è già: proposte da sole, una volta.
+    val sessioneStudio = remember(sessioni) { StudioDaSessione.sessione(sessioni) }
+    val daSessione = StudioDaSessione.proposta(config, sessioneStudio)
+    var autoInviata by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(daSessione, sessioneStudio, stato.invioInCorso) {
+        val proposta = daSessione ?: return@LaunchedEffect
+        val sessione = sessioneStudio ?: return@LaunchedEffect
+        if (stato.invioInCorso || autoInviata || StudioDaSessione.giaMandata(context, sessione)) return@LaunchedEffect
+        if (config?.stato == StatiConfigStudio.RIFIUTATA) return@LaunchedEffect
+        autoInviata = true
+        vm.proponi(proposta)
+    }
 
     LaunchedEffect(stato.evento) {
         val evento = stato.evento ?: return@LaunchedEffect
@@ -80,7 +101,15 @@ fun SezioneStudio(stato: StudioViewModel.StatoStudioUi, adesso: StudioAdesso, vm
         when (evento) {
             is StudioViewModel.Evento.Proposta -> {
                 if (evento.esito is EsitoProposta.Fatta) modulo = false
-                onMessaggio(testoEsitoProposta(context, evento.esito, evento.ritiro))
+                val sessione = sessioneStudio
+                if (autoInviata && sessione != null && evento.esito is EsitoProposta.Fatta && !evento.ritiro) {
+                    StudioDaSessione.segnaMandata(context, sessione)
+                    autoInviata = false
+                    onMessaggio(context.getString(R.string.studio_da_sessione_mandata, sessione.nome))
+                } else {
+                    autoInviata = false
+                    onMessaggio(testoEsitoProposta(context, evento.esito, evento.ritiro))
+                }
             }
             is StudioViewModel.Evento.Avvio ->
                 onMessaggio(evento.motivo?.let { testoNoAvvio(context, it) } ?: context.getString(R.string.studio_iniziato))
@@ -148,12 +177,43 @@ fun SezioneStudio(stato: StudioViewModel.StatoStudioUi, adesso: StudioAdesso, vm
                 }
             }
         }
+        // (0.22) La lista del telefono è vuota e niente è in attesa: si dice, e si sceglie da qui.
+        if (config != null && config.inAttesa == null && config.approvata?.app?.isEmpty() == true && m.conosciuto) {
+            RigaStato(
+                testo = stringResource(R.string.studio_lista_vuota_avviso),
+                tono = Tono.Attenzione,
+                azione = if (sessioneStudio != null) {
+                    stringResource(R.string.studio_usa_sessione, sessioneStudio.nome)
+                } else {
+                    stringResource(R.string.studio_scegli_app)
+                },
+                onAzione = if (stato.invioInCorso) {
+                    null
+                } else if (daSessione != null) {
+                    {
+                        autoInviata = true
+                        vm.proponi(daSessione)
+                    }
+                } else {
+                    {
+                        vm.dimenticaEsiti()
+                        modulo = true
+                    }
+                },
+            )
+        }
         m.avvioRifiutato?.let { RigaStato(testoNoAvvio(context, it), tono = Tono.Attenzione) }
     }
 
     if (modulo && config != null) {
+        val base = config.inAttesa ?: config.approvata ?: ContenutoStudio()
         DialogoProposta(
-            iniziale = config.inAttesa ?: config.approvata ?: ContenutoStudio(),
+            // (0.22) Lista vuota: si parte dalle app della sessione «Studio», se c'è.
+            iniziale = if (base.app.isEmpty() && sessioneStudio != null) {
+                base.copy(app = sessioneStudio.app.take(RegoleStudio.APP_MASSIME), nomi = sessioneStudio.nomi)
+            } else {
+                base
+            },
             invioInCorso = stato.invioInCorso,
             esito = stato.esitoModulo,
             onAnnulla = {

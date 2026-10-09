@@ -7,4 +7,10 @@
     <string name="studio_anello_descrizione">%1$d minuti di attività su %2$d</string>
     <!-- Il gruppo delle attività che non sono compiti né lavori di casa. -->
     <string name="studio_anello_altro">Altro</string>
+    <!-- (0.22) La lista del telefono dello Studio è vuota: si dice, e si sceglie. -->
+    <string name="studio_lista_vuota_avviso">Durante lo Studio sul telefono restano solo le app sempre usabili (telefono, impostazioni, Pactum). Scegli quali app ti servono: un genitore le approva.</string>
+    <!-- Il pulsante che manda come proposta le app della sessione di studio che c'è già. -->
+    <string name="studio_usa_sessione">Usa le app di «%1$s»</string>
+    <!-- Dopo che il telefono ha proposto da solo le app della sessione di studio. -->
+    <string name="studio_da_sessione_mandata">Ho chiesto ai tuoi genitori di approvare per lo Studio le app della sessione «%1$s».</string>
 </resources>

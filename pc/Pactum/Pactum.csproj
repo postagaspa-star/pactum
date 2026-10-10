@@ -14,8 +14,8 @@
     <AssemblyName>Pactum</AssemblyName>
     <AssemblyTitle>Pactum</AssemblyTitle>
     <Product>Pactum</Product>
-    <Version>0.18.0</Version>
-    <FileVersion>0.18.0.0</FileVersion>
+    <Version>0.23.0</Version>
+    <FileVersion>0.23.0.0</FileVersion>
     <ApplicationIcon>Risorse\pactum.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <!-- Un programma che resta acceso tutto il giorno: niente thread di GC in più. -->

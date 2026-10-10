@@ -106,6 +106,15 @@ public sealed class Ponte
             // (0.18, contratto v4.0) Le firme dei programmi che girano adesso, per proporre la lista dello Studio.
             "studio-firme" => ("GET", () => Task.Run(() => new JsonObject { ["firme"] = motore.FirmeCorrenti() })),
             "serie" => ("GET", () => Task.Run(motore.SerieERecord)),
+            // (0.23) Le categorie del figlio per i programmi.
+            "categorie" => ("GET", () => Task.Run(motore.CategorieDelFiglio)),
+            "categorie-sposta" => ("POST", () =>
+            {
+                var o = Corpo(corpo);
+                return Task.Run(() => motore.SpostaProgramma(Nucleo.Json.Testo(o?["programma"]), Nucleo.Json.Testo(o?["categoria"])));
+            }),
+            "categorie-nuova" => ("POST", () => Task.Run(() => motore.NuovaCategoria(Nucleo.Json.Testo(Corpo(corpo)?["nome"])))),
+            "categorie-elimina" => ("POST", () => Task.Run(() => motore.EliminaCategoria(Nucleo.Json.Testo(Corpo(corpo)?["nome"])))),
             "abbina" => ("POST", () =>
             {
                 var o = Corpo(corpo);

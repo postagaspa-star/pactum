@@ -21,6 +21,8 @@
   const OGNI_MINUTO = 60000;
   const SEZIONI = [
     { id: 'oggi', titolo: 'Oggi', icona: 'oggi', gruppo: 1 },
+    // (0.23) Il grafico del tempo e le categorie dei programmi.
+    { id: 'tempo', titolo: 'Il mio tempo', icona: 'tempo', gruppo: 1 },
     { id: 'regole', titolo: 'Le mie regole', icona: 'regole', gruppo: 1 },
     { id: 'proposte', titolo: 'Proposte', icona: 'proposte', gruppo: 1 },
     { id: 'faccende', titolo: 'Lavori di casa', icona: 'faccende', gruppo: 1 },
@@ -51,6 +53,13 @@
     dichiarazioni: null,     // GET /server/api/dichiarazioni
     dichiarazioniOttimiste: [],
     sezione: 'oggi',
+    tempi: null,             // (0.23) GET /server/api/patto?tempi=1: i tempi di questo dispositivo e degli altri
+    tempiAlle: null,
+    tempiErrore: false,
+    tempiInCorso: false,
+    tempoScelta: null,       // (0.23) { dispositivo, giorno } scelti nel grafico
+    categorie: null,         // (0.23) GET /locale/categorie
+    nuovaCategoriaPer: null, // (0.23) il programma per cui si sta scrivendo il nome di una categoria nuova
     bonus: null,             // { regolaId, minuti, invio } mentre il pannello del bonus è aperto
     bozze: {},               // quello che si sta scrivendo nei campi, per chiave
     motivazioniAperte: {},
@@ -110,6 +119,7 @@
     computer: [['rect', { x: 3, y: 4.5, width: 18, height: 12, rx: 2 }], ['path', { d: 'M8 20h8M12 16.5V20' }]],
     telefono: [['rect', { x: 7, y: 3, width: 10, height: 18, rx: 2.5 }], ['path', { d: 'M11 18h2' }]],
     persona: [['circle', { cx: 12, cy: 7.5, r: 3.5 }], ['path', { d: 'M5 20a7 7 0 0 1 14 0' }]],
+    tempo: [['circle', { cx: 12, cy: 12, r: 8.5 }], ['path', { d: 'M12 3.5V12l6 4.2' }]],
     rete: [['path', { d: 'M4.5 9.5a11 11 0 0 1 15 0M7.3 12.7a7 7 0 0 1 9.4 0M10.1 15.8a3 3 0 0 1 3.8 0' }], ['circle', { cx: 12, cy: 18.6, r: 1.1, class: 'pieno' }]],
   };
 
@@ -541,6 +551,8 @@
         S.aggiornamento = null;
         S.ultimoGiro = Date.now();
         render();
+        // (0.23) Sul grafico: i tempi del server ogni 5 minuti (pesano: non a ogni giro).
+        if (S.sezione === 'tempo') caricaTempi(false);
       }
     })();
     return S.aggiornamento;
@@ -691,6 +703,7 @@
     if (S.revocato) parti.push(bloccoRevocato());
     switch (def.id) {
       case 'oggi': parti.push(...sezioneOggi()); break;
+      case 'tempo': parti.push(...sezioneTempo()); break;
       case 'regole': parti.push(...sezioneRegole()); break;
       case 'proposte': parti.push(...sezioneProposte()); break;
       case 'faccende': parti.push(...sezioneFaccende()); break;
@@ -1007,6 +1020,8 @@
       sezione.append(h('p', { class: 'nota-onesta' }, 'Per una parte di oggi il programma non è riuscito a leggere i siti: quelli di quel periodo non si vedono.'));
     }
     sezione.append(h('p', null, h('a', { href: '#siti', class: 'link-freccia', chiave: 'link-siti' }, 'Tutti i siti degli ultimi 8 giorni', icona('freccia'))));
+    // (0.23) Il grafico come quello dei genitori, e le categorie dei programmi.
+    sezione.append(h('p', null, h('a', { href: '#tempo', class: 'link-freccia', chiave: 'link-tempo' }, 'Il grafico e le categorie dei programmi', icona('freccia'))));
     return sezione;
   }
 
@@ -1993,6 +2008,367 @@
     return card;
   }
 
+  // --- (0.23) Il mio tempo: il grafico come quello del genitore, e le categorie dei programmi -------
+  //
+  // Richiesta di Andrea (10/10): sul computer il grafico del tempo che ha il genitore (dove è finito il
+  // tempo, giorno per giorno), e la possibilità di mettere i programmi che Pactum non conosce in una
+  // categoria, anche creata dal figlio. I dati del grafico sono quelli del server (GET /api/patto?tempi=1,
+  // contratto v3.8: identici alla finestra del genitore); per oggi su questo computer valgono quelli del
+  // motore, più freschi. Le categorie le tiene il motore (/locale/categorie*).
+
+  /** I colori delle categorie: gli stessi delle app (core-design, ColoriCategorie). */
+  const COLORI_CATEGORIE = { social: '#3F6FA6', video: '#9A5A40', giochi: '#608E49', musica: '#AA893C', altro: '#7E8894' };
+  const COLORI_RISERVA = ['#3F8A85', '#85628A', '#5B67A0', '#8F5A6B'];
+  const COLORE_RESTO = '#B8C0C8';
+
+  /**
+   * Il colore di una chiave di categoria, lo stesso delle app: per una categoria creata dal figlio,
+   * scelto dallo stesso conto di Java (hashCode della chiave), così una fetta ha la stessa tinta qui,
+   * sul telefono e nell'app del genitore.
+   */
+  function coloreCategoria(chiave) {
+    const s = String(chiave || '');
+    const nome = s.replace(/^categoria:/i, '').toLowerCase();
+    if (COLORI_CATEGORIE[nome]) return COLORI_CATEGORIE[nome];
+    let hash = 0;
+    for (let i = 0; i < s.length; i++) hash = (Math.imul(31, hash) + s.charCodeAt(i)) | 0;
+    return COLORI_RISERVA[(hash & 0x7fffffff) % COLORI_RISERVA.length];
+  }
+
+  /** Il nome di una categoria come nel grafico delle app: «Altre app» per altro. */
+  function nomeCategoria(chiave) {
+    if (String(chiave || '').toLowerCase() === 'categoria:altro') return 'Altre app';
+    return T.nomeBersaglio(chiave);
+  }
+
+  /** Legge i tempi dal server e le categorie dal motore. Al massimo una volta ogni 5 minuti, se non forzata. */
+  async function caricaTempi(forza) {
+    if (S.tempiInCorso) return;
+    if (!forza && S.tempiAlle && Date.now() - S.tempiAlle < 5 * OGNI_MINUTO) return;
+    S.tempiInCorso = true;
+    try {
+      const [tempi, categorie] = await Promise.all([Api.get('/server/api/patto?tempi=1'), Api.get('/locale/categorie')]);
+      if (tempi.ok && tempi.dati && typeof tempi.dati === 'object') {
+        S.tempi = tempi.dati;
+        S.tempiAlle = Date.now();
+        S.tempiErrore = false;
+      } else {
+        S.tempiErrore = true;
+      }
+      if (categorie.ok && categorie.dati && Array.isArray(categorie.dati.programmi)) S.categorie = categorie.dati;
+    } finally {
+      S.tempiInCorso = false;
+      render();
+    }
+  }
+
+  async function caricaCategorie() {
+    const r = await Api.get('/locale/categorie');
+    if (r.ok && r.dati && Array.isArray(r.dati.programmi)) S.categorie = r.dati;
+    return S.categorie;
+  }
+
+  /** I dispositivi del grafico: questo computer prima, poi gli altri del figlio (non revocati), coi loro 8 giorni. */
+  function dispositiviTempi() {
+    const t = S.tempi;
+    if (!t) return [];
+    const questo = t.dispositivo || questoDispositivo();
+    const lista = [];
+    if (Array.isArray(t.uso_recente) && t.uso_recente.length) {
+      lista.push({ id: questo ? questo.id : 'questo', nome: 'Questo computer', questo: true, uso: t.uso_recente, medie: t.medie });
+    }
+    (Array.isArray(t.dispositivi) ? t.dispositivi : []).forEach((d) => {
+      if (!d || d.revocato === true || (questo && d.id === questo.id)) return;
+      if (!Array.isArray(d.uso_recente) || !d.uso_recente.length) return;
+      const nome = d.nome || (d.tipo === 'telefono' ? 'Telefono' : 'Computer');
+      lista.push({ id: d.id, nome, questo: false, uso: d.uso_recente, medie: d.medie });
+    });
+    return lista;
+  }
+
+  /** "08/10" da "2026-10-08". */
+  function giornoCorto(iso) {
+    const s = String(iso || '');
+    return s.slice(8, 10) + '/' + s.slice(5, 7);
+  }
+
+  function pillola(testo, scelta, chiave, onclick) {
+    return h('button', { type: 'button', class: 'pillola', 'aria-pressed': scelta ? 'true' : 'false', chiave, onclick }, testo);
+  }
+
+  function sezioneTempo() {
+    const parti = [h('p', { class: 'intro' }, 'Dove è finito il tempo, giorno per giorno: lo stesso grafico che vedono i tuoi genitori. Sotto puoi mettere in una categoria i programmi che Pactum non conosce.')];
+    if (!S.tempi) {
+      parti.push(S.tempiErrore
+        ? rigaVuota('info', 'Adesso il server non risponde: il grafico torna appena c\'è la rete.')
+        : caricamento('Sto leggendo i tuoi tempi…'));
+    } else {
+      parti.push(...graficoTempo());
+    }
+    parti.push(bloccoCategorie());
+    return parti;
+  }
+
+  function graficoTempo() {
+    const dispositivi = dispositiviTempi();
+    if (!dispositivi.length) return [rigaVuota('info', 'Nessun dato sul tempo è ancora arrivato al patto.')];
+    const scelta = S.tempoScelta || {};
+    const scelto = dispositivi.find((d) => d.id === scelta.dispositivo) || dispositivi[0];
+    const giorni = scelto.uso;
+    const ultimo = giorni[giorni.length - 1];
+    const giorno = giorni.find((g) => g.giorno === scelta.giorno) || ultimo;
+    const eOggi = giorno === ultimo;
+    const parti = [];
+    if (dispositivi.length > 1) {
+      parti.push(h('div', { class: 'pillole', role: 'group', 'aria-label': 'Dispositivo' }, dispositivi.map((d) =>
+        pillola(d.nome, d.id === scelto.id, 'tempo-dispositivo-' + d.id, () => {
+          S.tempoScelta = { dispositivo: d.id, giorno: null };
+          render();
+        }))));
+    }
+    parti.push(h('div', { class: 'pillole', role: 'group', 'aria-label': 'Giorno' }, giorni.map((g) =>
+      pillola(g === ultimo ? 'oggi' : giornoCorto(g.giorno), g === giorno, 'tempo-giorno-' + g.giorno, () => {
+        S.tempoScelta = { dispositivo: scelto.id, giorno: g.giorno };
+        render();
+      }))));
+    parti.push(schedaGiornoTempo(giorno, eOggi, scelto.questo));
+    parti.push(schedaGiorniTempo(giorni, giorno, scelto));
+    return parti;
+  }
+
+  /** La card del giorno scelto: il totale grande, l'anello delle categorie e la legenda. */
+  function schedaGiornoTempo(giorno, eOggi, questo) {
+    let totale = T.numero(giorno.totale_minuti);
+    let categorie = Array.isArray(giorno.categorie) ? giorno.categorie : [];
+    // Oggi su questo computer: i numeri del motore, più freschi della fotografia (che parte ogni 5 minuti).
+    if (questo && eOggi && S.oggi && Array.isArray(S.oggi.categorie)) {
+      totale = T.numero(S.oggi.totale_minuti);
+      const limiti = new Map(categorie.map((c) => [String(c.chiave).toLowerCase(), c]));
+      categorie = S.oggi.categorie.map((c) => Object.assign({}, limiti.get(String(c.chiave).toLowerCase()) || {}, c));
+    }
+    const id = 'titolo-giorno-tempo';
+    const card = h('section', { class: 'card card-tempo', 'aria-labelledby': id },
+      h('p', { class: 'etichetta-tipo', id }, eOggi ? 'Oggi' : capitale(T.giornoEsteso(giorno.giorno, oggiPatto()))));
+    if (totale === null) {
+      card.append(h('p', { class: 'totale-grande' }, 'Nessun dato'),
+        h('p', { class: 'secondario' }, 'Per questo giorno non è arrivato niente: non vuol dire zero minuti.'));
+      return card;
+    }
+    card.append(h('p', { class: 'totale-grande' }, T.durata(totale)));
+    const fuori = T.numero(giorno.sessioni_minuti);
+    if (fuori && fuori > 0) card.append(h('p', { class: 'secondario' }, 'In più ' + T.durata(fuori) + ' nello Studio o in sessione, che non contano.'));
+    const fette = categorie
+      .filter((c) => (T.numero(c.minuti) || 0) >= 1)
+      .map((c) => ({ chiave: c.chiave, nome: nomeCategoria(c.chiave), minuti: T.numero(c.minuti), limite: T.numero(c.limite), colore: coloreCategoria(c.chiave) }));
+    const somma = fette.reduce((s, f) => s + f.minuti, 0);
+    if (totale - somma >= 1 && fette.length) fette.push({ chiave: null, nome: 'Non in categoria', minuti: totale - somma, limite: null, colore: COLORE_RESTO });
+    if (!fette.length) {
+      card.append(h('p', { class: 'secondario' }, totale > 0 ? 'La divisione per categorie di questo giorno non è arrivata.' : 'Nessun uso in questo giorno.'));
+      return card;
+    }
+    card.append(h('div', { class: 'grafico-tempo' }, anelloTempo(fette, totale), legendaTempo(fette)));
+    return card;
+  }
+
+  /** L'anello: una fetta per categoria, con un piccolo stacco tra l'una e l'altra. */
+  function anelloTempo(fette, totale) {
+    const lato = 168;
+    const penna = 18;
+    const raggio = (lato - penna) / 2;
+    const giro = 2 * Math.PI * raggio;
+    const somma = fette.reduce((s, f) => s + f.minuti, 0) || 1;
+    const svg = document.createElementNS(SVG, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + lato + ' ' + lato);
+    svg.setAttribute('class', 'anello-tempo');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Il tempo per categoria: ' + fette.map((f) => f.nome + ' ' + T.durata(f.minuti)).join(', '));
+    const cerchio = (attributi) => {
+      const c = document.createElementNS(SVG, 'circle');
+      Object.entries(Object.assign({ cx: lato / 2, cy: lato / 2, r: raggio, fill: 'none', 'stroke-width': penna }, attributi))
+        .forEach(([k, v]) => c.setAttribute(k, String(v)));
+      return c;
+    };
+    svg.append(cerchio({ stroke: 'var(--superficie-variante)' }));
+    const stacco = fette.length > 1 ? 3 : 0;
+    let inizio = 0;
+    fette.forEach((f) => {
+      const lunghezza = giro * f.minuti / somma;
+      const disegnata = Math.max(0.5, lunghezza - stacco);
+      svg.append(cerchio({
+        stroke: f.colore,
+        'stroke-dasharray': disegnata.toFixed(2) + ' ' + (giro - disegnata).toFixed(2),
+        'stroke-dashoffset': (-inizio).toFixed(2),
+        transform: 'rotate(-90 ' + lato / 2 + ' ' + lato / 2 + ')',
+      }));
+      inizio += lunghezza;
+    });
+    return svg;
+  }
+
+  function legendaTempo(fette) {
+    return h('ul', { class: 'legenda-tempo' }, fette.map((f) => {
+      const pallino = h('span', { class: 'pallino', 'aria-hidden': 'true' });
+      pallino.style.background = f.colore;
+      return h('li', { class: 'voce-legenda' },
+        pallino,
+        h('span', { class: 'legenda-nome' }, f.nome, f.limite ? h('span', { class: 'legenda-limite' }, 'limite ' + T.durata(f.limite)) : null),
+        h('span', { class: 'riga-numero' }, T.durata(f.minuti)));
+    }));
+  }
+
+  /** Gli 8 giorni in colonne (toccandone una si sceglie il giorno), e sotto le medie e i totali. */
+  function schedaGiorniTempo(giorni, scelto, dispositivo) {
+    const massimo = Math.max(1, ...giorni.map((g) => T.numero(g.totale_minuti) || 0));
+    const ultimo = giorni[giorni.length - 1];
+    const card = h('section', { class: 'card', 'aria-labelledby': 'titolo-otto-giorni' },
+      h('h3', { class: 'card-titolo', id: 'titolo-otto-giorni' }, 'Ultimi 8 giorni'));
+    card.append(h('div', { class: 'barre-giorni' }, giorni.map((g) => {
+      const minuti = T.numero(g.totale_minuti);
+      const etichetta = g === ultimo ? 'oggi' : giornoCorto(g.giorno);
+      const altezza = minuti === null ? 0 : Math.max(3, Math.round(96 * minuti / massimo));
+      const barra = h('span', { class: 'barra-giorno' + (minuti === null ? ' barra-vuota' : '') });
+      barra.style.height = (minuti === null ? 10 : altezza) + 'px';
+      return h('button', {
+        type: 'button', class: 'colonna-giorno', 'aria-pressed': g === scelto ? 'true' : 'false', chiave: 'tempo-barra-' + g.giorno,
+        'aria-label': etichetta + ': ' + (minuti === null ? 'nessun dato' : T.durata(minuti)),
+        onclick: () => {
+          S.tempoScelta = { dispositivo: dispositivo.id, giorno: g.giorno };
+          render();
+        },
+      }, h('span', { class: 'valore-giorno' }, minuti === null ? '–' : T.durata(minuti)), barra, h('span', { class: 'etichetta-giorno' }, etichetta));
+    })));
+    const m = dispositivo.medie || {};
+    const riga = (titolo, v) => {
+      if (!v || T.numero(v.minuti) === null) return null;
+      const giorniDati = T.numero(v.giorni);
+      return h('li', { class: 'riga-valore' },
+        h('span', { class: 'riga-nome' }, titolo, giorniDati !== null ? h('span', { class: 'piccolo secondario' }, ' · ' + giorniDati + ' ' + T.plurale(giorniDati, 'giorno', 'giorni') + ' con dati') : null),
+        h('span', { class: 'riga-numero' }, 'media ' + T.durata(T.numero(v.minuti)) + (T.numero(v.totale) !== null ? ' · in tutto ' + T.durata(T.numero(v.totale)) : '')));
+    };
+    const righe = [riga('Ultimi 7 giorni', m.settimana), riga('Ultimi 30 giorni', m.mese)].filter(Boolean);
+    if (righe.length) card.append(h('ul', { class: 'lista-righe' }, righe));
+    return card;
+  }
+
+  // Le categorie dei programmi ---------------------------------------------------------------
+
+  const ERRORI_CATEGORIE = {
+    con_limite: 'Questa categoria ha un limite: spostare il programma (o eliminarla) aggirerebbe il limite.',
+    nome_non_valido: 'Il nome non va bene: da 1 a 30 caratteri, senza due punti, e diverso dalle categorie che ci sono già (Social, Giochi, Video, Musica, Altre app).',
+    troppe_categorie: 'Hai già 30 categorie: eliminane una prima di crearne un\'altra.',
+    non_spostabile: 'Questo programma Pactum lo riconosce già: resta nella sua categoria.',
+    non_trovata: 'Questa categoria non c\'è più.',
+  };
+
+  async function azioneCategorie(percorso, corpo, fatto) {
+    const r = await Api.post(percorso, corpo);
+    const dati = r.ok && r.dati ? r.dati : null;
+    if (dati && dati.ok) {
+      if (dati.categorie) S.categorie = dati.categorie;
+      S.nuovaCategoriaPer = null;
+      const oggi = await Api.get('/locale/oggi');
+      if (oggi.ok && oggi.dati && typeof oggi.dati === 'object') S.oggi = oggi.dati;
+      render();
+      if (fatto) avviso(fatto);
+      return true;
+    }
+    avviso(dati && ERRORI_CATEGORIE[dati.errore] ? ERRORI_CATEGORIE[dati.errore] : 'Il programma non ha risposto: riprova.');
+    return false;
+  }
+
+  function opzioniCategorie(attuale) {
+    const mie = (S.categorie && S.categorie.mie) || [];
+    const opzioni = [['altro', 'Altre app'], ['social', 'Social'], ['giochi', 'Giochi'], ['video', 'Video'], ['musica', 'Musica']]
+      .concat(mie.map((m) => [m.nome, m.etichetta || capitale(m.nome)]));
+    return opzioni.map(([valore, testo]) => h('option', { value: valore, selected: valore === attuale }, testo))
+      .concat([h('option', { value: '__nuova' }, 'Nuova categoria…')]);
+  }
+
+  function bloccoCategorie() {
+    const sezione = h('section', { class: 'blocco', 'aria-labelledby': 'titolo-categorie' }, sopratitolo('LE CATEGORIE DEI PROGRAMMI', 'titolo-categorie'));
+    const c = S.categorie;
+    if (!c) {
+      sezione.append(caricamento('Sto leggendo i programmi…'));
+      return sezione;
+    }
+    sezione.append(h('p', { class: 'secondario' },
+      'I programmi che Pactum non conosce finiscono in «Altre app». Qui li metti dove vuoi: in una categoria che c\'è già o in una tua, che crei scegliendo «Nuova categoria…». ' +
+      'I tuoi genitori vedono le categorie col nome che scegli, e ci si possono mettere dei limiti come sulle altre.'));
+    const liberi = c.programmi.filter((p) => p.spostabile || p.fermo === 'con_limite');
+    const fermi = c.programmi.filter((p) => p.fermo === 'riconosciuto' || p.fermo === 'browser').length;
+    if (!liberi.length) {
+      sezione.append(rigaVuota('info', 'Negli ultimi 30 giorni non c\'è nessun programma da sistemare: Pactum li conosce già tutti.'));
+    } else {
+      sezione.append(h('ul', { class: 'lista-righe' }, liberi.map(rigaProgrammaCategoria)));
+    }
+    if (fermi) {
+      sezione.append(h('p', { class: 'piccolo secondario' }, fermi + ' ' + T.plurale(fermi, 'programma che Pactum riconosce già resta', 'programmi che Pactum riconosce già restano') +
+        ' nella sua categoria (come Steam, Discord o Spotify), così nessun limite si aggira; i browser usano la categoria del sito che guardi.'));
+    }
+    const mie = c.mie || [];
+    sezione.append(h('h3', { class: 'sottotitolo' }, 'Le tue categorie'));
+    if (!mie.length) sezione.append(h('p', { class: 'secondario' }, 'Nessuna, per ora.'));
+    else {
+      sezione.append(h('ul', { class: 'lista-righe' }, mie.map((m) => h('li', { class: 'riga-valore riga-categoria' },
+        h('span', { class: 'riga-nome' }, m.etichetta || capitale(m.nome),
+          h('span', { class: 'piccolo secondario' }, ' · ' + m.programmi + ' ' + T.plurale(m.programmi, 'programma', 'programmi')),
+          m.con_limite ? h('span', { class: 'piccolo secondario' }, ' · ha un limite') : null),
+        h('button', {
+          type: 'button', class: 'bottone compatto', chiave: 'elimina-categoria-' + m.nome, disabled: m.con_limite,
+          title: m.con_limite ? 'Ha un limite: non si può eliminare' : null,
+          onclick: () => azioneCategorie('/locale/categorie-elimina', { nome: m.nome }, 'Categoria eliminata: i suoi programmi sono tornati in «Altre app».'),
+        }, 'Elimina')))));
+    }
+    const campo = h('input', { type: 'text', class: 'campo campo-corto', id: 'nuova-categoria', maxlength: 30, chiave: 'campo-nuova-categoria', value: S.bozze['nuova-categoria'] || '',
+      oninput: (e) => { S.bozze['nuova-categoria'] = e.target.value; } });
+    sezione.append(h('div', { class: 'campo-gruppo' },
+      h('label', { class: 'etichetta-campo', for: 'nuova-categoria' }, 'Crea una categoria vuota (per esempio per darle subito un limite)'),
+      h('div', { class: 'azioni' }, campo, h('button', {
+        type: 'button', class: 'bottone tonale', chiave: 'crea-categoria',
+        onclick: async () => {
+          if (await azioneCategorie('/locale/categorie-nuova', { nome: S.bozze['nuova-categoria'] || '' }, 'Categoria creata.')) S.bozze['nuova-categoria'] = '';
+        },
+      }, 'Crea'))));
+    return sezione;
+  }
+
+  function rigaProgrammaCategoria(p) {
+    const chiave = 'categoria-di-' + p.chiave;
+    const riga = h('li', { class: 'riga-valore riga-categoria' },
+      h('span', { class: 'riga-nome' }, p.nome || T.nomeBersaglio(p.chiave, nomiProgrammi()),
+        h('span', { class: 'piccolo secondario' }, ' · ' + T.durata(p.minuti) + ' in 30 giorni')));
+    if (p.fermo === 'con_limite') {
+      riga.append(h('span', { class: 'riga-numero' }, nomeCategoria('categoria:' + p.categoria), h('span', { class: 'piccolo secondario' }, ' · ha un limite')));
+      return riga;
+    }
+    riga.append(h('select', {
+      class: 'campo campo-compatto', chiave, 'aria-label': 'Categoria di ' + (p.nome || p.chiave),
+      onchange: (e) => {
+        const valore = e.target.value;
+        if (valore === '__nuova') {
+          S.nuovaCategoriaPer = p.chiave;
+          S.fuocoDopo = 'nome-nuova-per-' + p.chiave;
+          render();
+          return;
+        }
+        azioneCategorie('/locale/categorie-sposta', { programma: p.chiave, categoria: valore }, (p.nome || 'Il programma') + ': fatto.');
+      },
+    }, opzioniCategorie(p.categoria)));
+    if (S.nuovaCategoriaPer === p.chiave) {
+      const bozza = 'nuova-per-' + p.chiave;
+      const campo = h('input', { type: 'text', class: 'campo campo-corto', maxlength: 30, chiave: 'nome-nuova-per-' + p.chiave,
+        'aria-label': 'Nome della nuova categoria', placeholder: 'Per esempio: Scuola', value: S.bozze[bozza] || '',
+        oninput: (e) => { S.bozze[bozza] = e.target.value; } });
+      riga.append(h('div', { class: 'azioni riga-nuova-categoria' }, campo,
+        h('button', { type: 'button', class: 'bottone primario compatto',
+          onclick: async () => {
+            if (await azioneCategorie('/locale/categorie-sposta', { programma: p.chiave, categoria: S.bozze[bozza] || '' }, 'Categoria creata.')) S.bozze[bozza] = '';
+          } }, 'Crea'),
+        h('button', { type: 'button', class: 'bottone compatto', onclick: () => { S.nuovaCategoriaPer = null; render(); } }, 'Annulla')));
+    }
+    return riga;
+  }
+
   // --- Cosa vede tuo padre --------------------------------------------------------------------
 
   function sezioneCosaVede() {
@@ -2604,8 +2980,13 @@
 
         function campoCategoria() {
           const gruppo = h('fieldset', { class: 'gruppo-scelte' }, h('legend', { class: 'etichetta-campo' }, 'Categoria'));
-          T.CATEGORIE.forEach((c) => {
-            const id = 'categoria-' + c.chiave.slice('categoria:'.length);
+          // (0.23) Anche le categorie create dal figlio sul computer.
+          const mie = ((S.categorie && S.categorie.mie) || []).map((m) => ({
+            chiave: m.chiave, nome: m.etichetta || capitale(m.nome),
+            esempi: 'la tua categoria · ' + m.programmi + ' ' + T.plurale(m.programmi, 'programma', 'programmi'),
+          }));
+          T.CATEGORIE.concat(mie).forEach((c) => {
+            const id = 'categoria-' + c.chiave.slice('categoria:'.length).replace(/\s+/g, '-');
             gruppo.append(h('label', { class: 'scelta', for: id },
               h('input', {
                 type: 'radio', name: 'categoria', id, value: c.chiave, checked: f.categoria === c.chiave,
@@ -2899,6 +3280,9 @@
     if (S.dom) S.dom.principale.scrollTop = 0;
     render();
     if (nuova === 'regole' && !S.visti) caricaVisti();
+    // (0.23) Il grafico e le categorie si leggono quando servono; le categorie anche per scrivere una regola.
+    if (nuova === 'tempo') caricaTempi(true);
+    if (nuova === 'regole') caricaCategorie().then(render);
   });
 
   // --- Avvio ---------------------------------------------------------------------------------------

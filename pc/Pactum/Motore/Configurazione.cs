@@ -33,6 +33,8 @@ public sealed class Percorsi
     /// <summary>(correzione 0.18) La memoria del guardiano: attività già creata una volta, ultimo <c>non_creata</c>.</summary>
     public string Guardiano => Path.Combine(Radice, "guardiano.json");
     public string Serie => Path.Combine(Radice, "serie.json");
+    /// <summary>(0.23) Le categorie del figlio per i programmi (v. Nucleo.CategorieMie).</summary>
+    public string CategorieMie => Path.Combine(Radice, "categorie.json");
     public string Log => Path.Combine(Radice, "log");
     public string WebView => Path.Combine(Radice, "WebView2");
 

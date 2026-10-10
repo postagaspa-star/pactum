@@ -54,12 +54,15 @@ public sealed partial class Motore
         var bonus = BonusOggi(adesso);
         lock (misura)
         {
-            return Risposte.Oggi(contatore.Oggi, regole, bonus, adesso, zona);
+            return Risposte.Oggi(contatore.Oggi, regole, bonus, adesso, zona, mappaMie);
         }
     }
 
     /// <summary>GET /locale/visti: programmi e siti degli ultimi 30 giorni, i più usati prima.</summary>
-    public JsonObject Visti()
+    public JsonObject Visti() => Risposte.Visti(GiorniRecenti());
+
+    /// <summary>Oggi (una copia) e i giorni salvati degli ultimi 30 giorni.</summary>
+    private List<Giornata> GiorniRecenti()
     {
         var giorni = new List<Giornata>();
         string oggi;
@@ -76,7 +79,7 @@ public sealed partial class Motore
             var g = Archivio.LeggiJson<Giornata>(file);
             if (g != null) giorni.Add(g);
         }
-        return Risposte.Visti(giorni);
+        return giorni;
     }
 
     /// <summary>GET /locale/serie: calcolata qui dalla striscia del figlio, mai mandata al server.</summary>
@@ -415,7 +418,8 @@ public sealed partial class Motore
 /// <summary>Le forme JSON per l'interfaccia, logica pura (provata nei test).</summary>
 public static class Risposte
 {
-    public static JsonObject Oggi(Giornata g, IReadOnlyList<Regola> regole, IReadOnlyDictionary<string, int> bonus, long adesso, TimeZoneInfo zona)
+    public static JsonObject Oggi(Giornata g, IReadOnlyList<Regola> regole, IReadOnlyDictionary<string, int> bonus, long adesso, TimeZoneInfo zona,
+        IReadOnlyDictionary<string, string>? mie = null)
     {
         var programmi = new JsonArray();
         foreach (var (chiave, voce) in g.Programmi.OrderByDescending(p => p.Value.Ms).ThenBy(p => p.Key, StringComparer.Ordinal))
@@ -426,7 +430,7 @@ public static class Risposte
             {
                 ["chiave"] = chiave,
                 ["nome"] = voce.Nome,
-                ["categoria"] = Categorie.DiProgramma(chiave),
+                ["categoria"] = Categorie.DiProgramma(chiave, mie),
                 ["minuti"] = minuti,
             });
         }
@@ -467,6 +471,12 @@ public static class Risposte
             ["totale_minuti"] = g.MinutiTotali,
             ["programmi"] = programmi,
             ["siti"] = siti,
+            // (0.23) I minuti per categoria di oggi (le stesse di uso_categorie): il grafico di questo computer.
+            ["categorie"] = new JsonArray(g.MsPerCategoria
+                .Where(c => Giornata.Minuti(c.Value) >= 1)
+                .OrderByDescending(c => c.Value).ThenBy(c => c.Key, StringComparer.Ordinal)
+                .Select(c => (JsonNode)new JsonObject { ["chiave"] = c.Key, ["minuti"] = Giornata.Minuti(c.Value) })
+                .ToArray()),
             ["regole"] = perRegola,
             ["fasce"] = fasce,
             ["siti_non_leggibili"] = g.SitiNonLeggibili,

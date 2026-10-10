@@ -85,6 +85,8 @@ public sealed partial class Motore : IDisposable
 
         long adesso = Tempo.AdessoUtcMs();
         contatore = new Contatore(CaricaGiorno(Tempo.GiornoDi(adesso, TimeZoneInfo.Local)), CaricaGiorno);
+        // (0.23) Le categorie del figlio per i programmi, prima di contare il tempo.
+        CaricaCategorie();
         orologio = new SentinellaOrologio(adesso, Environment.TickCount64, TimeZoneInfo.Local.Id);
     }
 

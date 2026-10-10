@@ -8,9 +8,10 @@ namespace Pactum;
 /// (0.13) Il codice del computer segue ancora quello delle app: 0.13.0 = 13 (contratto v3.6, le faccende).
 /// (0.14) 0.14.0 = 14 (contratto v3.7: "lavori di casa" nei testi, sospensione allo spegnimento più robusta).
 /// (0.18) 0.18.0 = 18, di nuovo allineato alle app (contratto v4.0: lavori approvati, guardiano, Sessione Studio).
+/// (0.23) 0.23.0 = 23: il grafico del tempo e le categorie del figlio per i programmi (le app sono alla 0.22).
 /// </summary>
 public static class Versione
 {
-    public const string Nome = "0.18.0";
-    public const int Codice = 18;
+    public const string Nome = "0.23.0";
+    public const int Codice = 23;
 }

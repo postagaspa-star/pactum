@@ -146,13 +146,22 @@ public static class Categorie
     /// <summary>La chiave di regola di una categoria: <c>categoria:social</c>.</summary>
     public static string Chiave(string categoria) => Prefisso + categoria;
 
-    /// <summary>La categoria di un programma, da <c>exe:discord.exe</c> o da <c>discord.exe</c>.</summary>
-    public static string DiProgramma(string chiaveOExe)
+    /// <summary>(0.23) Il programma (nome del file) è in una delle nostre liste?</summary>
+    public static bool ÈInUnaLista(string exe) => Programmi.ContainsKey(exe.Trim());
+
+    /// <summary>
+    /// La categoria di un programma, da <c>exe:discord.exe</c> o da <c>discord.exe</c>: quella delle nostre liste,
+    /// (0.23) se no quella scelta dal figlio in <paramref name="mie"/> (nome del file → categoria, v.
+    /// <see cref="CategorieMie"/>), se no "altro".
+    /// </summary>
+    public static string DiProgramma(string chiaveOExe, IReadOnlyDictionary<string, string>? mie = null)
     {
         var exe = chiaveOExe.StartsWith(Programma.Prefisso, StringComparison.OrdinalIgnoreCase)
             ? chiaveOExe[Programma.Prefisso.Length..]
             : chiaveOExe;
-        return Programmi.TryGetValue(exe.Trim(), out var c) ? c : Altro;
+        exe = exe.Trim();
+        if (Programmi.TryGetValue(exe, out var c)) return c;
+        return mie != null && mie.TryGetValue(exe, out var mia) ? mia : Altro;
     }
 
     /// <summary>La categoria di un sito, "altro" se non è in una lista.</summary>

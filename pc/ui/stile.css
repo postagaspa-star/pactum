@@ -1571,3 +1571,170 @@ textarea {
     outline: 2px solid Highlight;
   }
 }
+
+/* --- (0.23) Il mio tempo: il grafico come quello del genitore, e le categorie dei programmi --------- */
+
+.pillole {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pillola {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid var(--contorno-variante);
+  border-radius: 999px;
+  background: var(--contenitore-minimo);
+  color: var(--su-superficie);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pillola:hover {
+  background: var(--tocco);
+}
+
+.pillola[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--contenitore-primario);
+  color: var(--su-contenitore-primario);
+  font-weight: 600;
+}
+
+.card-tempo {
+  border-color: transparent;
+  background: var(--contenitore-primario);
+  color: var(--su-contenitore-primario);
+}
+
+.totale-grande {
+  margin: 0;
+  font-family: var(--carattere-titoli);
+  font-size: 36px;
+  line-height: 44px;
+  font-weight: 600;
+}
+
+.grafico-tempo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px;
+  margin-top: 8px;
+}
+
+.anello-tempo {
+  width: 168px;
+  height: 168px;
+  flex: none;
+}
+
+.legenda-tempo {
+  flex: 1 1 220px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.voce-legenda {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.voce-legenda .pallino {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.legenda-nome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.legenda-limite {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.barre-giorni {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.colonna-giorno {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-height: 150px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--su-superficie-variante);
+  font: inherit;
+  cursor: pointer;
+}
+
+.colonna-giorno:hover {
+  background: var(--tocco);
+}
+
+.valore-giorno,
+.etichetta-giorno {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.barra-giorno {
+  width: 22px;
+  border-radius: 7px 7px 0 0;
+  background: var(--contorno);
+}
+
+.barra-vuota {
+  border: 1px dashed var(--contorno);
+  border-radius: 4px;
+  background: transparent;
+}
+
+.colonna-giorno[aria-pressed="true"] {
+  color: var(--su-superficie);
+  font-weight: 600;
+}
+
+.colonna-giorno[aria-pressed="true"] .barra-giorno:not(.barra-vuota) {
+  background: var(--primario);
+}
+
+.riga-categoria {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.campo-compatto {
+  width: auto;
+  min-width: 170px;
+  min-height: 36px;
+  padding: 4px 8px;
+}
+
+.riga-nuova-categoria {
+  flex-basis: 100%;
+  justify-content: flex-end;
+}

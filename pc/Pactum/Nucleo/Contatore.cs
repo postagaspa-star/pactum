@@ -50,6 +50,9 @@ public sealed class EsitoGiro
 /// </summary>
 public sealed class Contatore
 {
+    /// <summary>(0.23) Le categorie scelte dal figlio (nome del file → categoria): le dà il motore.</summary>
+    public IReadOnlyDictionary<string, string> Mie { get; set; } = new Dictionary<string, string>();
+
     /// <summary>Un giro vale al massimo 2 secondi: dopo una sospensione o un blocco non si inventa tempo.</summary>
     public const long MsMassimiPerGiro = 2_000;
 
@@ -127,7 +130,7 @@ public sealed class Contatore
             }
             if (o.Percorso != null) voce.Percorso = o.Percorso;
             voce.Ms += ms;
-            categoriaProgramma = Categorie.DiProgramma(o.Programma);
+            categoriaProgramma = Categorie.DiProgramma(o.Programma, Mie);
         }
 
         string? dominioContato = null;

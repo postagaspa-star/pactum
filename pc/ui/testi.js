@@ -194,7 +194,9 @@
     if (minuscola === TOTALE) return nomeTotale(tipoDispositivo);
     if (minuscola.startsWith('categoria:')) {
       const c = CATEGORIE.find((x) => x.chiave === minuscola);
-      return c ? c.nome : k.slice('categoria:'.length);
+      // (0.23) Una categoria creata dal figlio: il suo nome con la prima lettera maiuscola ("Scuola").
+      const nome = k.slice('categoria:'.length);
+      return c ? c.nome : nome.charAt(0).toUpperCase() + nome.slice(1);
     }
     // Un nome noto (visto dal motore, o mandato dal server con la regola) vince.
     const trovato = nomi && (typeof nomi.get === 'function' ? nomi.get(minuscola) : nomi[minuscola]);

@@ -510,7 +510,7 @@
       server: S.server,
       figlio: S.abbinato ? S.figlio : null,
       dispositivo: S.abbinato ? S.computer : null,
-      versione: '0.18.0',
+      versione: '0.23.0',
       ultimo_invio_ok: S.abbinato ? isoTs(S.ultimoInvio) : null,
       rete_ok: opzioni.rete,
       patto_aggiornato: S.abbinato ? isoTs(S.pattoAggiornato) : null,
@@ -519,8 +519,104 @@
     };
   }
 
+  // --- (0.23) Il mio tempo e le categorie, finti -----------------------------------------------
+
+  const FERMI_FINTI = { 'exe:chrome.exe': 'browser', 'exe:msedge.exe': 'browser', 'exe:minecraft.exe': 'riconosciuto',
+    'exe:discord.exe': 'riconosciuto', 'exe:steam.exe': 'riconosciuto', 'exe:spotify.exe': 'riconosciuto', 'exe:robloxplayerbeta.exe': 'riconosciuto' };
+  const MINUTI_FINTI = { 'exe:chrome.exe': 1310, 'exe:minecraft.exe': 620, 'exe:discord.exe': 140, 'exe:winword.exe': 95, 'exe:steam.exe': 60,
+    'exe:spotify.exe': 210, 'exe:msedge.exe': 12, 'exe:explorer.exe': 30, 'exe:robloxplayerbeta.exe': 45, 'exe:obs64.exe': 80, 'exe:geogebra.exe': 55 };
+  const CATEGORIE_FINTE = { 'exe:minecraft.exe': 'giochi', 'exe:discord.exe': 'social', 'exe:steam.exe': 'giochi', 'exe:spotify.exe': 'musica', 'exe:robloxplayerbeta.exe': 'giochi' };
+
+  function categorieFinte() {
+    if (!S.mie) S.mie = { categorie: ['scuola'], programmi: { 'exe:geogebra.exe': 'scuola' } };
+    const conteggi = {};
+    const programmi = S.visti.programmi.map((p) => {
+      const categoria = CATEGORIE_FINTE[p.chiave] || S.mie.programmi[p.chiave] || 'altro';
+      conteggi[categoria] = (conteggi[categoria] || 0) + 1;
+      const fermo = FERMI_FINTI[p.chiave] || null;
+      return { chiave: p.chiave, nome: p.nome, categoria, minuti: MINUTI_FINTI[p.chiave] || 10, spostabile: !fermo, fermo };
+    });
+    return {
+      fisse: ['social', 'giochi', 'video', 'musica', 'altro'].map((c) => ({ nome: c, chiave: 'categoria:' + c, con_limite: c === 'giochi' })),
+      mie: S.mie.categorie.map((c) => ({ nome: c, etichetta: c.charAt(0).toUpperCase() + c.slice(1), chiave: 'categoria:' + c, programmi: conteggi[c] || 0, con_limite: false })),
+      programmi,
+    };
+  }
+
+  function nomeFinto(scritto) {
+    const n = String(scritto || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!n || n.length > 30 || n.includes(':') || ['social', 'giochi', 'video', 'musica', 'altro', 'altre app', 'totale'].includes(n)) return null;
+    return n;
+  }
+
+  function spostaFinto(corpo) {
+    categorieFinte();
+    const fisse = ['social', 'giochi', 'video', 'musica', 'altro'];
+    const scritto = String((corpo && corpo.categoria) || '').trim().toLowerCase();
+    const meta = fisse.includes(scritto) ? scritto : nomeFinto(scritto);
+    if (!meta) return risposta(200, { ok: false, errore: 'nome_non_valido' });
+    if (FERMI_FINTI[corpo.programma]) return risposta(200, { ok: false, errore: 'non_spostabile' });
+    if (!fisse.includes(meta) && !S.mie.categorie.includes(meta)) S.mie.categorie.push(meta);
+    if (meta === 'altro') delete S.mie.programmi[corpo.programma];
+    else S.mie.programmi[corpo.programma] = meta;
+    return risposta(200, { ok: true, categorie: categorieFinte() });
+  }
+
+  function nuovaFinta(corpo) {
+    categorieFinte();
+    const n = nomeFinto(corpo && corpo.nome);
+    if (!n) return risposta(200, { ok: false, errore: 'nome_non_valido' });
+    if (!S.mie.categorie.includes(n)) S.mie.categorie.push(n);
+    return risposta(200, { ok: true, nome: n, categorie: categorieFinte() });
+  }
+
+  function eliminaFinta(corpo) {
+    categorieFinte();
+    const n = nomeFinto(corpo && corpo.nome);
+    if (!n || !S.mie.categorie.includes(n)) return risposta(200, { ok: false, errore: 'non_trovata' });
+    S.mie.categorie = S.mie.categorie.filter((c) => c !== n);
+    Object.keys(S.mie.programmi).forEach((k) => { if (S.mie.programmi[k] === n) delete S.mie.programmi[k]; });
+    return risposta(200, { ok: true, categorie: categorieFinte() });
+  }
+
+  /** 8 giorni finti per un dispositivo: il totale e le categorie (oggi = l'ultimo). */
+  function usoFinto(totali, divisione) {
+    const oggi = new Date();
+    return totali.map((totale, i) => {
+      const d = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() - (totali.length - 1 - i));
+      const giorno = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (totale === null) return { giorno, totale_minuti: null, sessioni_minuti: null, app: [], categorie: [] };
+      const categorie = Object.entries(divisione).map(([chiave, quota]) => ({ chiave, minuti: Math.round(totale * quota) }))
+        .filter((c) => c.minuti > 0).sort((a, b) => b.minuti - a.minuti);
+      categorie.forEach((c) => { if (c.chiave === 'categoria:giochi') c.limite = 75; });
+      return { giorno, totale_minuti: totale, sessioni_minuti: i === totali.length - 1 ? 25 : 0, app: [], categorie };
+    });
+  }
+
+  function tempiFinti() {
+    const computer = usoFinto([95, 140, null, 75, 160, 120, 88, 131],
+      { 'categoria:altro': 0.45, 'categoria:giochi': 0.3, 'categoria:scuola': 0.15, 'categoria:social': 0.07, 'categoria:musica': 0.03 });
+    const telefono = usoFinto([150, 182, 140, 210, 135, 160, 190, 124],
+      { 'categoria:social': 0.55, 'categoria:video': 0.2, 'categoria:musica': 0.1, 'categoria:altro': 0.15 });
+    const medie = (uso) => {
+      const con = uso.filter((g) => g.totale_minuti !== null);
+      const tot = con.reduce((s, g) => s + g.totale_minuti, 0);
+      const media = Math.round(tot / con.length);
+      return { settimana: { minuti: media, giorni: con.length, totale: tot }, mese: { minuti: media + 4, giorni: 27, totale: (media + 4) * 27 } };
+    };
+    return {
+      uso_recente: computer,
+      medie: medie(computer),
+      dispositivi: [
+        Object.assign({}, S.telefono, { uso_recente: telefono, medie: medie(telefono) }),
+        Object.assign({}, S.computer, { uso_recente: computer, medie: medie(computer) }),
+      ],
+    };
+  }
+
   function oggiLocale() {
     const o = copia(S.oggi);
+    o.categorie = [{ chiave: 'categoria:altro', minuti: 59 }, { chiave: 'categoria:giochi', minuti: 48 }, { chiave: 'categoria:scuola', minuti: 15 }, { chiave: 'categoria:social', minuti: 9 }];
     o.fasce = {};
     for (const r of S.regole) {
       if (!r.attiva || r.tipo !== 'fascia_oraria' || !r.dispositivo || r.dispositivo.id !== S.computer.id) continue;
@@ -637,6 +733,11 @@
         S.record = Math.max(S.record, serie);
         return risposta(200, { serie, record: S.record });
       }
+      // (0.23) Le categorie del figlio per i programmi.
+      case 'GET /locale/categorie': return risposta(200, categorieFinte());
+      case 'POST /locale/categorie-sposta': return spostaFinto(corpo);
+      case 'POST /locale/categorie-nuova': return nuovaFinta(corpo);
+      case 'POST /locale/categorie-elimina': return eliminaFinta(corpo);
       case 'POST /locale/proponi': return proponiLocale(corpo);
       case 'POST /locale/ritira': return ritiraLocale(corpo);
       case 'POST /locale/aggiorna':
@@ -912,7 +1013,8 @@
   }
 
   function server(metodo, via, corpo, query) {
-    if (metodo === 'GET' && via === '/api/patto') return risposta(200, patto());
+    // (0.23, contratto v3.8) Con ?tempi=1 anche i tempi di questo dispositivo e degli altri.
+    if (metodo === 'GET' && via === '/api/patto') return risposta(200, query.get('tempi') === '1' ? Object.assign(patto(), tempiFinti()) : patto());
     if (metodo === 'GET' && via === '/api/regole') {
       return risposta(200, { regole: S.regole.filter((r) => r.attiva).map(pubblica) });
     }

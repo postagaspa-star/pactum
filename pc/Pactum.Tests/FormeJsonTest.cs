@@ -129,13 +129,13 @@ public class FormeJsonTest
     [Fact]
     public void La_versione_e_la_stessa_nel_programma_e_nel_file()
     {
-        Assert.Equal("0.18.0", Versione.Nome);
-        // (0.18) Il codice segue quello delle app del telefono: 0.18.0 = 18 (v. Versione).
-        Assert.Equal(18, Versione.Codice);
+        Assert.Equal("0.23.0", Versione.Nome);
+        // (0.23) 0.23.0 = 23 (v. Versione).
+        Assert.Equal(23, Versione.Codice);
         var assembly = typeof(Versione).Assembly;
-        Assert.Equal(new Version(0, 18, 0, 0), assembly.GetName().Version);
+        Assert.Equal(new Version(0, 23, 0, 0), assembly.GetName().Version);
         var file = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-        Assert.Equal("0.18.0.0", file.FileVersion);
+        Assert.Equal("0.23.0.0", file.FileVersion);
     }
 
     [Theory]
@@ -143,7 +143,8 @@ public class FormeJsonTest
     [InlineData(13, false)]
     [InlineData(14, false)]
     [InlineData(18, false)]
-    [InlineData(19, true)]
+    [InlineData(23, false)]
+    [InlineData(24, true)]
     public async Task Una_versione_nuova_si_annuncia_solo_col_codice_del_computer_piu_alto(int codiceServer, bool annunciata)
     {
         // (0.14) Il codice del computer segue quello delle app (la 0.14.0 è la 14): il programma annuncia
@@ -199,7 +200,8 @@ public class FormeJsonTest
         var bonus = new Dictionary<string, int> { ["12"] = 15 };
         var o = Risposte.Oggi(GiornataDiProva(), regole, bonus, Fuso.Ms("2026-09-23T15:00:00"), Fuso.Roma);
 
-        Assert.Equal(new[] { "fasce", "giorno", "programmi", "regole", "siti", "siti_non_leggibili", "totale_minuti" }, Chiavi(o));
+        // (0.23) In più "categorie": i minuti per categoria di oggi.
+        Assert.Equal(new[] { "categorie", "fasce", "giorno", "programmi", "regole", "siti", "siti_non_leggibili", "totale_minuti" }, Chiavi(o));
         Assert.Equal(131, Json.Intero(o["totale_minuti"]));
         var programmi = (JsonArray)o["programmi"]!;
         Assert.Equal(2, programmi.Count); // la calcolatrice ha meno di un minuto
@@ -251,7 +253,7 @@ public class FormeJsonTest
         Assert.False(Json.Booleano(s["abbinato"]));
         Assert.Null(s["figlio"]);
         Assert.Null(s["dispositivo"]);
-        Assert.Equal("0.18.0", Json.Testo(s["versione"]));
+        Assert.Equal("0.23.0", Json.Testo(s["versione"]));
     }
 
     [Theory]

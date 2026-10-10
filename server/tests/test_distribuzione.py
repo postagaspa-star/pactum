@@ -42,8 +42,8 @@ def test_versione_shape_e_default(client):
     # (v3) c'e' anche il programma per il computer, con la sua numerazione.
     # (v3.5) Le Sessioni sono solo dei telefoni: il programma del computer resta 0.10.
     assert set(dati) == {"figlio", "genitore", "computer"}
-    assert dati["computer"]["versione_code"] == 18
-    assert dati["computer"]["versione_nome"] == "0.18.0"
+    assert dati["computer"]["versione_code"] == 23
+    assert dati["computer"]["versione_nome"] == "0.23.0"
     assert dati["computer"]["url"] == "/scarica/pactum-computer.zip"
     for ruolo in ("figlio", "genitore"):
         blocco = dati[ruolo]

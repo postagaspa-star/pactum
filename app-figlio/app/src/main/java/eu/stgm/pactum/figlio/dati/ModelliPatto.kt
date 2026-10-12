@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import eu.stgm.pactum.design.GiornoPatto
+import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.design.segnaleDaStato
 import eu.stgm.pactum.figlio.faccende.BloccoDalServer
 import eu.stgm.pactum.figlio.faccende.FaccendaLocale
@@ -63,6 +64,11 @@ data class Patto(
     // (v3) La striscia di QUESTO telefono, identica a quella che il genitore
     // vede sulla sua scheda. `striscia` qui sopra resta quella del figlio.
     @SerialName("striscia_dispositivo") val strisciaDispositivo: List<GiornoStriscia> = emptyList(),
+    // (0.23, v4.1) Il bollino di QUESTO telefono: le sue regole più la vita
+    // reale. È la striscia grande di Oggi, la serie e la chiusura della sera:
+    // una regola sforata sul computer non tinge il telefono. Vuota = server
+    // di prima della v4.1 (vale `striscia_dispositivo`, poi `striscia`).
+    @SerialName("striscia_qui") val strisciaQui: List<GiornoStriscia> = emptyList(),
     // (v3) Tutti i dispositivi del figlio, ciascuno con la sua striscia: la
     // riga "Computer: 5 su 7" sotto la striscia del figlio.
     val dispositivi: List<Dispositivo> = emptyList(),
@@ -104,8 +110,22 @@ data class Patto(
     @SerialName("arrivata_il") val arrivataIl: Istante? = null,
     @SerialName("data_server") val dataServer: Long? = null,
 ) {
-    /** La striscia nel linguaggio del design system (core-design). */
-    fun giorniPatto(): List<GiornoPatto> = striscia.inGiorniPatto()
+    /**
+     * (0.23) La striscia di questo telefono nel linguaggio del design system
+     * (core-design): le sue regole e la vita reale, non quelle del computer.
+     * Su un server di prima della v4.1 quella del dispositivo, e prima della v3
+     * quella del figlio (un telefono solo: è la stessa cosa).
+     */
+    fun giorniPatto(): List<GiornoPatto> =
+        strisciaQui.ifEmpty { strisciaDispositivo }.ifEmpty { striscia }.inGiorniPatto()
+
+    /**
+     * (0.23) La riga sotto la striscia di questo telefono: i giorni fuori regola
+     * sono quelli rossi QUI (non su tutti i dispositivi), le interruzioni restano
+     * quelle del server. null = server vecchio senza `riepilogo`.
+     */
+    fun riepilogoQui(): Riepilogo? =
+        riepilogo?.copy(giorniFuoriRegola = giorniPatto().count { it.segnale == Segnale.FUORI_REGOLA })
 
     /** (0.11) Il server conosce le sessioni (v3.5): il patto porta l'elenco, anche vuoto. */
     val conosceSessioni: Boolean get() = sessioniGrezze is JsonArray

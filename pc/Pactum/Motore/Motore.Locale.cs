@@ -82,10 +82,13 @@ public sealed partial class Motore
         return giorni;
     }
 
-    /// <summary>GET /locale/serie: calcolata qui dalla striscia del figlio, mai mandata al server.</summary>
+    /// <summary>
+    /// GET /locale/serie: calcolata qui dalla striscia di questo computer (le sue
+    /// regole e la vita reale, v4.1), mai mandata al server.
+    /// </summary>
     public JsonObject SerieERecord()
     {
-        var giorni = patto?.Striscia ?? new List<GiornoPatto>();
+        var giorni = patto?.StrisciaQui ?? new List<GiornoPatto>();
         lock (stato)
         {
             var salvata = memoriaSerie.Fine != null ? new SerieSalvata(memoriaSerie.Fine, memoriaSerie.Lunghezza) : null;

@@ -55,6 +55,8 @@ import eu.stgm.pactum.genitore.ui.CollegamentoViewModel
 import eu.stgm.pactum.genitore.ui.Cornice
 import eu.stgm.pactum.genitore.ui.DaDecidereScreen
 import eu.stgm.pactum.genitore.ui.DaiLavoriScreen
+import eu.stgm.pactum.genitore.ui.DiChi
+import eu.stgm.pactum.genitore.ui.DispositivoScreen
 import eu.stgm.pactum.genitore.ui.FaccendeViewModel
 import eu.stgm.pactum.genitore.ui.FamigliaViewModel
 import eu.stgm.pactum.genitore.ui.FinestraViewModel
@@ -219,6 +221,8 @@ private fun chiaveSchermo(schermo: Schermo): String = when (schermo) {
         Pagina.TutteLeRegole -> "regole"
         is Pagina.ModificaLavoro -> "modifica-${p.faccendaId}"
         Pagina.Studio -> "studio"
+        is Pagina.Dispositivo -> "dispositivo-${p.dispositivoId}"
+        Pagina.Impegni -> "impegni"
     }
 }
 
@@ -448,6 +452,8 @@ private fun GenitoreRoot(
                             Pagina.TutteLeRegole -> TutteLeRegoleScreen()
                             is Pagina.ModificaLavoro -> ModificaLavoroScreen(faccendaId = pagina.faccendaId)
                             Pagina.Studio -> StudioScreen()
+                            is Pagina.Dispositivo -> DispositivoScreen(diChi = DiChi.Dispositivo(pagina.dispositivoId))
+                            Pagina.Impegni -> DispositivoScreen(diChi = DiChi.Impegni)
                         }
                     }
                 }

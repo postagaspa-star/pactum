@@ -51,6 +51,15 @@ sealed interface Pagina {
      * Studio vive nella Panoramica, in "Da decidere" e in questa pagina.
      */
     data object Studio : Pagina
+
+    /**
+     * (0.23) Le regole di UN dispositivo del figlio scelto: la sua striscia, le sue
+     * regole di oggi e quelle non più attive. Si apre dalla sua riga nella card del patto.
+     */
+    data class Dispositivo(val dispositivoId: Long) : Pagina
+
+    /** (0.23) Gli impegni di vita reale del figlio scelto, come la pagina di un dispositivo. */
+    data object Impegni : Pagina
 }
 
 /** Una voce della pila: una scheda o una pagina. */
@@ -138,6 +147,8 @@ private fun codificaSchermo(schermo: Schermo): String = when (schermo) {
         Pagina.TutteLeRegole -> "regole"
         is Pagina.ModificaLavoro -> "modifica:${p.faccendaId}"
         Pagina.Studio -> "studio"
+        is Pagina.Dispositivo -> "dispositivo:${p.dispositivoId}"
+        Pagina.Impegni -> "impegni"
     }
 }
 
@@ -156,6 +167,8 @@ private fun decodificaSchermo(testo: String): Schermo? {
         "regole" -> Schermo.SuPagina(Pagina.TutteLeRegole)
         "modifica" -> pezzi.getOrNull(1)?.toLongOrNull()?.let { Schermo.SuPagina(Pagina.ModificaLavoro(it)) }
         "studio" -> Schermo.SuPagina(Pagina.Studio)
+        "dispositivo" -> pezzi.getOrNull(1)?.toLongOrNull()?.let { Schermo.SuPagina(Pagina.Dispositivo(it)) }
+        "impegni" -> Schermo.SuPagina(Pagina.Impegni)
         else -> null
     }
 }
@@ -251,7 +264,7 @@ fun sezioneDi(schermo: Schermo): Sezione = when (schermo) {
         Pagina.Notifiche -> Sezione.NOTIFICHE
         is Pagina.Impostazioni -> Sezione.IMPOSTAZIONI
         Pagina.Storico -> Sezione.STORICO
-        is Pagina.Regola, Pagina.TutteLeRegole -> Sezione.REGOLE
+        is Pagina.Regola, Pagina.TutteLeRegole, is Pagina.Dispositivo, Pagina.Impegni -> Sezione.REGOLE
         Pagina.DaiLavori, is Pagina.ModificaLavoro -> Sezione.LAVORI
         Pagina.Sessioni -> Sezione.SESSIONI
         Pagina.Studio -> Sezione.STUDIO

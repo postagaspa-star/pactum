@@ -100,11 +100,14 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
          * detto cosa fare.
          */
         val scollegato: Boolean = false,
-        /** La striscia del FIGLIO, su tutti i suoi dispositivi: identica a quella del genitore. */
+        /**
+         * (0.23) La striscia di QUESTO telefono: le sue regole e la vita reale.
+         * Una regola sforata sul computer non la tinge: si vede nella riga del computer.
+         */
         val striscia: List<GiornoPatto> = emptyList(),
-        /** La riga sotto la striscia, uguale a quella del genitore. null = server vecchio. */
+        /** La riga sotto la striscia, coi giorni fuori regola di questo telefono. null = server vecchio. */
         val riepilogo: Riepilogo? = null,
-        /** (v3) Una riga per dispositivo, se il figlio ne ha più d'uno ("Computer: 5 su 7"). */
+        /** (v3) Una riga per ciascun ALTRO dispositivo del figlio ("Computer: 5 su 7"). */
         val righeDispositivi: List<RigaDispositivo> = emptyList(),
         val serie: Int = 0,
         val record: Int = 0,
@@ -201,7 +204,7 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             val (serie, record) = impostazioni.aggiornaSerie(giorni)
             // (v3) Le righe degli altri dispositivi, dalla striscia di ciascuno.
             val righeDispositivi = patto?.let {
-                RigheDispositivi.calcola(it.dispositivi, it.contestoDispositivi().questo, it.strisciaDispositivo)
+                RigheDispositivi.calcola(it.dispositivi, it.contestoDispositivi().questo)
             }.orEmpty()
 
             val adesso = System.currentTimeMillis()
@@ -270,7 +273,7 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                     datiFermiAlle = datiFermiAlle,
                     scollegato = fermi && codice == 401,
                     striscia = giorni,
-                    riepilogo = patto?.riepilogo,
+                    riepilogo = patto?.riepilogoQui(),
                     righeDispositivi = righeDispositivi,
                     serie = serie,
                     record = record,

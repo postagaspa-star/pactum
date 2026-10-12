@@ -101,6 +101,36 @@ class ModelliPattoTest {
     }
 
     @Test
+    fun `il bollino del telefono e' striscia_qui, non quella del figlio`() {
+        // (0.23, v4.1) Il computer ha sforato (striscia del figlio rossa), il telefono no.
+        val corpo = """
+            {
+              "striscia": [ { "data": "2026-09-18", "stato": "rosso" }, { "data": "2026-09-19", "stato": "rosso" } ],
+              "striscia_dispositivo": [ { "data": "2026-09-18", "stato": "verde" }, { "data": "2026-09-19", "stato": "verde" } ],
+              "striscia_qui": [ { "data": "2026-09-18", "stato": "verde" }, { "data": "2026-09-19", "stato": "rosso" } ],
+              "riepilogo": { "giorni_fuori_regola": 2, "interruzioni": 1 }
+            }
+        """.trimIndent()
+        val patto = json.decodeFromString(Patto.serializer(), corpo)
+        assertEquals(listOf(Segnale.MANTENUTA, Segnale.FUORI_REGOLA), patto.giorniPatto().map { it.segnale })
+        // I giorni fuori regola sono quelli di qui; le interruzioni restano del server.
+        assertEquals(Riepilogo(giorniFuoriRegola = 1, interruzioni = 1), patto.riepilogoQui())
+    }
+
+    @Test
+    fun `un server senza striscia_qui usa quella del dispositivo, e prima della v3 quella del figlio`() {
+        val v3 = json.decodeFromString(
+            Patto.serializer(),
+            """{ "striscia": [ { "data": "2026-09-19", "stato": "rosso" } ],
+                 "striscia_dispositivo": [ { "data": "2026-09-19", "stato": "verde" } ] }""",
+        )
+        assertEquals(listOf(Segnale.MANTENUTA), v3.giorniPatto().map { it.segnale })
+        assertNull(v3.riepilogoQui())
+        val v2 = json.decodeFromString(Patto.serializer(), """{ "striscia": [ { "data": "2026-09-19", "stato": "rosso" } ] }""")
+        assertEquals(listOf(Segnale.FUORI_REGOLA), v2.giorniPatto().map { it.segnale })
+    }
+
+    @Test
     fun `sul telefono valgono le sue regole e la vita reale, mai quelle del computer`() {
         val patto = json.decodeFromString(Patto.serializer(), pattoV3)
         assertEquals(listOf(1L, 3L), patto.regoleDiQuestoDispositivo().map { it.id })

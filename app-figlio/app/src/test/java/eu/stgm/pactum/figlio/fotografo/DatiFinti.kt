@@ -185,8 +185,8 @@ object DatiFinti {
         caricamento = false,
         striscia = striscia("vvvrvvvg").inGiorniPatto(),
         riepilogo = Riepilogo(giorniFuoriRegola = 1, interruzioni = 0),
+        // (0.23) La striscia grande è di questo telefono: sotto, solo gli altri dispositivi.
         righeDispositivi = listOf(
-            RigaDispositivo(QUESTO_TELEFONO, "Telefono di Luca", questo = true, mantenuti = 6, conDati = 7),
             RigaDispositivo(COMPUTER, "PC di Luca", questo = false, mantenuti = 5, conDati = 6),
         ),
         serie = 3,

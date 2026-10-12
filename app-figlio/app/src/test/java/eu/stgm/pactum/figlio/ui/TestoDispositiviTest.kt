@@ -163,7 +163,8 @@ class TestoDispositiviTest {
     }
 
     @Test
-    fun `telefono e computer, questo telefono per primo, contati dalla loro striscia`() {
+    fun `telefono e computer, solo il computer, contato dalla sua striscia`() {
+        // (0.23) La striscia grande è già quella di questo telefono: la sua riga non c'è.
         val righe = RigheDispositivi.calcola(
             dispositivi = listOf(
                 computer.copy(striscia = striscia("verde", "rosso", "verde", "grigio", "verde", "verde", "verde", "verde")),
@@ -172,23 +173,10 @@ class TestoDispositiviTest {
             questo = 1,
         )
         assertEquals(
-            listOf(
-                RigaDispositivo(id = 1, nome = "Telefono", questo = true, mantenuti = 7, conDati = 7),
-                // Il grigio esce dal conto, come nella frase grande: 6 su 7.
-                RigaDispositivo(id = 2, nome = "Computer", questo = false, mantenuti = 6, conDati = 7),
-            ),
+            // Il grigio esce dal conto, come nella frase grande: 6 su 7.
+            listOf(RigaDispositivo(id = 2, nome = "Computer", questo = false, mantenuti = 6, conDati = 7)),
             righe,
         )
-    }
-
-    @Test
-    fun `per questo telefono vale la striscia_dispositivo, se c'e'`() {
-        val righe = RigheDispositivi.calcola(
-            dispositivi = listOf(telefono.copy(striscia = striscia("rosso")), computer),
-            questo = 1,
-            strisciaQuesto = striscia("verde", "verde"),
-        )
-        assertEquals(RigaDispositivo(1, "Telefono", true, mantenuti = 2, conDati = 2), righe.first())
     }
 
     @Test
@@ -210,7 +198,7 @@ class TestoDispositiviTest {
             listOf(telefono, computer, portatile.copy(revocato = true, striscia = striscia("grigio"))),
             questo = 1,
         )
-        assertEquals(listOf(1L, 2L), righe.map { it.id })
+        assertEquals(listOf(2L), righe.map { it.id })
     }
 
     @Test

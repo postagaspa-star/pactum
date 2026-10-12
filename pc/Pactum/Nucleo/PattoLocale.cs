@@ -60,7 +60,23 @@ public sealed class PattoLocale
         return risultato;
     }
 
-    public List<GiornoPatto> Striscia => Serie.DaStriscia(Dati["striscia"]);
+    /// <summary>
+    /// (0.24, v4.1) La striscia di QUESTO computer: le sue regole e la vita reale
+    /// (<c>striscia_qui</c>). Una regola sforata sul telefono non la tinge. Su un
+    /// server di prima della v4.1 quella del dispositivo, poi quella del figlio.
+    /// </summary>
+    public List<GiornoPatto> StrisciaQui
+    {
+        get
+        {
+            foreach (var campo in new[] { "striscia_qui", "striscia_dispositivo", "striscia" })
+            {
+                var giorni = Serie.DaStriscia(Dati[campo]);
+                if (giorni.Count > 0) return giorni;
+            }
+            return new List<GiornoPatto>();
+        }
+    }
 
     public static TimeZoneInfo Zona(string id)
     {

@@ -318,6 +318,7 @@ fun OggiScreen(
                             serie = stato.serie,
                             record = stato.record,
                             righeDispositivi = stato.righeDispositivi,
+                            suQuestoTelefono = stato.altriDispositivi,
                         )
                     }
                 }
@@ -511,7 +512,10 @@ fun testoPermessiMancanti(mancanti: List<Permesso>): String =
 /**
  * La card del patto, in evidenza: la serie (su una riga), il record una riga
  * sotto, la striscia degli 8 giorni, "6 su 7", e in una riga ciascuno il
- * riepilogo del server e i dispositivi, se ci sono.
+ * riepilogo e gli altri dispositivi, se ci sono.
+ *
+ * (0.23) È il bollino di QUESTO telefono (le sue regole e la vita reale): con
+ * [suQuestoTelefono] lo si dice in cima, e il computer ha la sua riga sotto.
  */
 @Composable
 private fun SchedaPatto(
@@ -520,10 +524,18 @@ private fun SchedaPatto(
     serie: Int,
     record: Int,
     righeDispositivi: List<RigaDispositivo>,
+    suQuestoTelefono: Boolean,
 ) {
     // (0.19) I giorni di fila salgono contando (da 1: mai "0 giorni di fila").
     val serieVista = rememberContatore(serie).coerceAtLeast(1)
     CardEvidenza(tono = Tono.Positivo) {
+        if (suQuestoTelefono) {
+            Text(
+                text = stringResource(R.string.oggi_patto_su_questo_telefono),
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(bottom = Spazi.xs),
+            )
+        }
         // La serie non va mai a capo (B6): se non ci sta si rimpicciolisce.
         TestoSuUnaRiga(
             testo = if (serie > 0) {
@@ -567,7 +579,7 @@ private fun SchedaPatto(
         if (riepilogo != null) {
             Text(text = testoRiepilogo(riepilogo), style = MaterialTheme.typography.bodySmall)
         }
-        // (v3) I dispositivi, in una riga: "Questo telefono: 6 su 7 · Computer: 5 su 7".
+        // (v3) Gli altri dispositivi, in una riga: "Computer: 5 su 7".
         if (righeDispositivi.isNotEmpty()) {
             Text(
                 text = righeDispositivi.map { testoRigaDispositivo(it) }

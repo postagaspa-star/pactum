@@ -217,6 +217,8 @@ def quadro(
     - `semafori`: {regola_id: 8 voci} per ogni regola del figlio, eliminate comprese;
     - `striscia`: la striscia del FIGLIO (v2.4, ora su tutti i dispositivi + vita reale);
     - `strisce_dispositivi`: {dispositivo_id: striscia delle sole regole di quel dispositivo};
+    - `strisce_qui` (v4.1): {dispositivo_id: striscia delle regole di quel dispositivo
+      PIU' la vita reale}, quella che il figlio vede in grande SU quel dispositivo;
     - `riepilogo`: {"giorni_fuori_regola", "interruzioni"}, la riga sotto la striscia.
 
     Unica fonte di striscia e riepilogo per GET /api/finestra, GET /api/patto e
@@ -233,10 +235,23 @@ def quadro(
         )
         for d in dispositivi
     }
+    # (v4.1) Il bollino di un dispositivo non si tinge per le regole di un altro: il
+    # telefono dentro le sue regole e' verde anche se il computer ha sforato. La vita
+    # reale (dispositivo_id NULL) non e' di nessun dispositivo e si vede su tutti,
+    # come nell'elenco "Le tue regole": conta in ciascuno.
+    strisce_qui = {
+        d["id"]: _aggrega(
+            [voci for regola_id, voci in semafori.items()
+             if dispositivo_della_regola[regola_id] in (d["id"], None)],
+            ora,
+        )
+        for d in dispositivi
+    }
     return {
         "semafori": semafori,
         "striscia": striscia,
         "strisce_dispositivi": strisce_dispositivi,
+        "strisce_qui": strisce_qui,
         "riepilogo": {
             "giorni_fuori_regola": sum(1 for voce in striscia if voce["stato"] == "rosso"),
             "interruzioni": _interruzioni(conn, ora, figlio_id),

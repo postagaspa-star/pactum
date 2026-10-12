@@ -758,6 +758,42 @@
         <item quantity="one">%1$d giorno su %2$d dentro le regole di questo dispositivo</item>
         <item quantity="other">%1$d giorni su %2$d dentro le regole di questo dispositivo</item>
     </plurals>
+    <!-- (0.23) La card del patto: una riga per dispositivo (e una per gli impegni), si tocca per la sua pagina -->
+    <string name="patto_per_dispositivo">Regole per dispositivo</string>
+    <string name="impegni_titolo">Impegni di vita reale</string>
+    <string name="oggi_breve_nessuna_regola">Nessuna regola</string>
+    <string name="oggi_breve_senza_dati">Oggi: ancora nessun dato</string>
+    <string name="oggi_breve_tutto_dentro">Oggi: nessuna regola fuori</string>
+    <plurals name="oggi_breve_fuori">
+        <item quantity="one">Oggi: 1 regola fuori</item>
+        <item quantity="other">Oggi: %1$d regole fuori</item>
+    </plurals>
+    <string name="oggi_breve_impegni_senza_dati">Oggi: nessuna conferma per ora</string>
+    <string name="oggi_breve_impegni_tutto_dentro">Oggi: nessun impegno mancato</string>
+    <plurals name="oggi_breve_impegni_fuori">
+        <item quantity="one">Oggi: 1 impegno non riuscito</item>
+        <item quantity="other">Oggi: %1$d impegni non riusciti</item>
+    </plurals>
+    <!-- (0.23) La pagina di un dispositivo (o degli impegni) -->
+    <plurals name="dispositivo_giorni_dentro">
+        <item quantity="one">giorno dentro le regole di questo dispositivo</item>
+        <item quantity="other">giorni dentro le regole di questo dispositivo</item>
+    </plurals>
+    <plurals name="impegni_giorni_dentro">
+        <item quantity="one">giorno con gli impegni mantenuti</item>
+        <item quantity="other">giorni con gli impegni mantenuti</item>
+    </plurals>
+    <plurals name="striscia_descrizione_impegni">
+        <item quantity="one">%1$d giorno su %2$d con gli impegni mantenuti</item>
+        <item quantity="other">%1$d giorni su %2$d con gli impegni mantenuti</item>
+    </plurals>
+    <string name="dispositivo_regole_oggi">Le regole, oggi</string>
+    <string name="impegni_oggi">Gli impegni, oggi</string>
+    <string name="dispositivo_non_piu_attive">Non più attive</string>
+    <string name="dispositivo_non_trovato">Questo dispositivo non c\'è più tra quelli del figlio.</string>
+    <string name="impegni_nessuno">Nessun impegno di vita reale.</string>
+    <!-- Una regola fuori oggi, sotto la riga del dispositivo: "Instagram, 1 h al giorno · fuori regola · 15 min oltre" -->
+    <string name="regola_e_stato">%1$s · %2$s</string>
     <!-- (0.16) Il bonus di oggi nella card del patto -->
     <string name="patto_bonus">Bonus: restano %1$d min su %2$d oggi · %3$d su %4$d in settimana</string>
     <plurals name="riga_blocco_foto">

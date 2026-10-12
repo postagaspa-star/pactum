@@ -98,6 +98,31 @@
   }
 
   /**
+   * (0.24, v4.1) La striscia di QUESTO computer: le sue regole e la vita reale
+   * (`striscia_qui`). Una regola sforata sul telefono non la tinge: si legge
+   * nella riga del telefono. Su un server di prima della v4.1 quella del
+   * dispositivo, e prima della v3 quella del figlio.
+   */
+  function strisciaQui(patto) {
+    const p = patto || {};
+    for (const campo of ['striscia_qui', 'striscia_dispositivo', 'striscia']) {
+      if (Array.isArray(p[campo]) && p[campo].length) return p[campo];
+    }
+    return [];
+  }
+
+  /**
+   * (0.24) La riga sotto la striscia di questo computer: i giorni fuori regola
+   * sono quelli rossi QUI, le interruzioni restano quelle del server.
+   */
+  function riepilogoQui(patto) {
+    const r = patto && patto.riepilogo;
+    if (!r || typeof r !== 'object') return null;
+    const fuori = strisciaQui(patto).filter((g) => segnale(g && g.stato) === 'fuori').length;
+    return Object.assign({}, r, { giorni_fuori_regola: fuori });
+  }
+
+  /**
    * La serie, come sul telefono (core-design, serieDiGiorni): giorni mantenuti
    * di fila contati all'indietro; se oggi non ha ancora dati si parte da ieri.
    * Serve solo di riserva: la serie vera la calcola il motore (/locale/serie).
@@ -115,7 +140,7 @@
   }
 
   /**
-   * (v3) La riga di un dispositivo sotto la striscia del figlio, con le stesse
+   * (v3) La riga di un altro dispositivo sotto la striscia di questo computer, con le stesse
    * parole del telefono: "Telefono: 6 su 7", "Questo computer: ancora nessun
    * dato", "Telefono (non più collegato): 5 su 6". Contata dalla SUA striscia.
    */
@@ -757,7 +782,7 @@
   const T = {
     plurale, numero, durata, visite,
     segnale, contaGiorni, fraseConteggio, fraseStriscia, conteggioBreve, fraseRiepilogo,
-    serieDiGiorni, testoSerie, rigaDispositivo,
+    serieDiGiorni, testoSerie, rigaDispositivo, strisciaQui, riepilogoQui,
     CATEGORIE, APP_TELEFONO, TOTALE, nomeTotale, nomeBersaglio, tipoBersaglio, tipoDispositivoDi,
     GIORNI, GIORNI_INTERI, testoGiorni, descrizioneRegola, etichettaTipo, ordinaRegole,
     oraValida, momentoFascia, testoMomento,

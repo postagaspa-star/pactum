@@ -763,7 +763,7 @@
   function sezioneOggi() {
     const parti = [];
     const patto = S.patto;
-    if (patto && Array.isArray(patto.striscia) && patto.striscia.length) parti.push(schedaPatto(patto));
+    if (patto && T.strisciaQui(patto).length) parti.push(schedaPatto(patto));
     else if (!patto && !S.pattoNonAggiornato) parti.push(caricamento('Sto leggendo il patto…'));
 
     if (patto) parti.push(bloccoRegoleOggi(patto));
@@ -771,11 +771,26 @@
     return parti;
   }
 
-  /** L'eroe: la serie. Sotto la striscia, identica a quella del genitore. */
+  /**
+   * L'eroe: la serie. Sotto la striscia di QUESTO computer (0.24, v4.1: le sue
+   * regole e la vita reale), e una riga per ciascun altro dispositivo: una regola
+   * sforata sul telefono tinge la riga del telefono, non il bollino di qui.
+   */
   function schedaPatto(patto) {
-    const serie = S.serie && T.numero(S.serie.serie) !== null ? T.numero(S.serie.serie) : T.serieDiGiorni(patto.striscia);
+    const giorni = T.strisciaQui(patto);
+    const serie = S.serie && T.numero(S.serie.serie) !== null ? T.numero(S.serie.serie) : T.serieDiGiorni(giorni);
     const record = S.serie && T.numero(S.serie.record) !== null ? T.numero(S.serie.record) : 0;
     const scheda = h('section', { class: 'scheda-eroe', 'aria-label': 'Il tuo patto' });
+
+    const dispositivi = Array.isArray(patto.dispositivi) ? patto.dispositivi : [];
+    const questo = questoDispositivo();
+    const idQuesto = questo ? questo.id : null;
+    // Un server che non dice chi è questo computer mostra la striscia del figlio: allora tutti.
+    const altri = dispositivi.filter((d) => idQuesto == null || d.id !== idQuesto)
+      .filter((d) => d.revocato !== true || T.contaGiorni(d.striscia).conDati > 0);
+    const conAltri = idQuesto != null ? altri.length > 0 : altri.length > 1;
+    if (conAltri && idQuesto != null) scheda.append(h('p', { class: 'eroe-sotto' }, 'Su questo computer'));
+
     if (serie > 0) {
       scheda.append(h('p', { class: 'eroe' }, T.testoSerie(serie)), h('p', { class: 'eroe-sotto' }, 'dentro le tue regole'));
     } else {
@@ -784,19 +799,15 @@
     }
     if (record > 0) scheda.append(h('p', { class: 'record' }, 'il tuo record: ' + record));
 
-    const frase = T.fraseStriscia(patto.striscia);
-    scheda.append(striscia(patto.striscia, { descrizione: frase }), h('p', { class: 'frase-striscia' }, frase));
-    const riepilogo = T.fraseRiepilogo(patto.riepilogo);
+    const frase = T.fraseStriscia(giorni);
+    scheda.append(striscia(giorni, { descrizione: frase }), h('p', { class: 'frase-striscia' }, frase));
+    const riepilogo = T.fraseRiepilogo(T.riepilogoQui(patto));
     if (riepilogo) scheda.append(h('p', { class: 'riepilogo' }, riepilogo));
 
-    // (v3) Una riga per dispositivo, dalla sua striscia, con le parole del telefono: "Telefono: 6 su 7".
-    const dispositivi = Array.isArray(patto.dispositivi) ? patto.dispositivi : [];
-    if (dispositivi.length > 1) {
-      const questo = questoDispositivo();
-      const idQuesto = questo ? questo.id : null;
-      const ordinati = dispositivi.slice().sort((a, b) =>
-        (b.id === idQuesto ? 1 : 0) - (a.id === idQuesto ? 1 : 0) || (T.numero(a.id) || 0) - (T.numero(b.id) || 0));
-      scheda.append(h('ul', { class: 'righe-dispositivi', 'aria-label': 'Per dispositivo' },
+    // (v3) Gli altri dispositivi, ciascuno dalla sua striscia, con le parole del telefono: "Telefono: 6 su 7".
+    if (conAltri) {
+      const ordinati = altri.slice().sort((a, b) => (T.numero(a.id) || 0) - (T.numero(b.id) || 0));
+      scheda.append(h('ul', { class: 'righe-dispositivi', 'aria-label': 'Gli altri dispositivi' },
         ordinati.map((d) => h('li', null, T.rigaDispositivo(d, idQuesto)))));
     }
     return scheda;

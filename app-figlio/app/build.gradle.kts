@@ -41,8 +41,10 @@ android {
         // stato, il tempo dei giorni passati e i totali dal server.
         // 0.17 (contratto v3.9): ora del blocco sempre visibile, lavori cambiati
         // e confermati, ricerca nello storico dei lavori.
-        versionCode = 22
-        versionName = "0.22.0"
+        // 0.23 (contratto v4.1): il bollino di Oggi e la serie sono di questo
+        // telefono (striscia_qui); il computer ha la sua riga sotto.
+        versionCode = 23
+        versionName = "0.23.0"
     }
 
     signingConfigs {

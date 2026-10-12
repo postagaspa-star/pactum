@@ -32,6 +32,8 @@ CHIAVI_ATTESE = {
     "blocco",
     # (v4.0)
     "studio",
+    # (v4.1)
+    "striscia_qui",
 }
 
 

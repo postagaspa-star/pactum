@@ -337,6 +337,40 @@ def test_striscia_del_figlio_su_tutti_i_dispositivi(client, famiglia):
     assert _patto(client, famiglia.tel_marta)["striscia"][-1]["stato"] == "grigio"
 
 
+def test_il_bollino_di_un_dispositivo_non_si_tinge_per_un_altro(client, famiglia):
+    """(v4.1) `striscia_qui`: le regole di questo dispositivo piu' la vita reale. Il
+    computer sfora: rosso sul computer, verde sul telefono. La vita reale non e' di
+    nessun dispositivo: un impegno mancato tinge tutti e due."""
+    oggi = "2026-07-14"
+    regola(client, famiglia.tel_andrea)
+    del_pc = regola(client, famiglia.pc_andrea, parametri=MINECRAFT)
+    foto = {"giorno": oggi, "uso_minuti": {}, "totale_minuti": 20}
+    eventi(client, famiglia.tel_andrea, {"id": "foto-tel", "tipo": "uso_giornaliero", "dettagli": foto})
+    eventi(client, famiglia.pc_andrea,
+           {"id": "foto-pc", "tipo": "uso_giornaliero", "dettagli": foto},
+           {"id": "sfor-pc", "tipo": "sforamento", "dettagli": {"regola_id": del_pc["id"], "giorno": oggi}})
+    patto_tel = _patto(client, famiglia.tel_andrea)
+    patto_pc = _patto(client, famiglia.pc_andrea)
+    assert patto_tel["striscia"][-1]["stato"] == "rosso"  # quella del figlio resta su tutto
+    assert patto_tel["striscia_qui"][-1]["stato"] == "verde"
+    assert patto_pc["striscia_qui"][-1]["stato"] == "rosso"
+    assert [v["data"] for v in patto_tel["striscia_qui"]] == [v["data"] for v in patto_tel["striscia"]]
+    # Senza vita reale e' la striscia del dispositivo, quella che vede il genitore.
+    assert patto_tel["striscia_qui"] == patto_tel["striscia_dispositivo"]
+
+    vita = regola(client, famiglia.tel_andrea, tipo="vita_reale", parametri=VITA)
+    r = client.post("/api/dichiarazioni", json={"regola_id": vita["id"], "esito": "fallimento"},
+                    headers=famiglia.tel_andrea)
+    assert r.status_code == 200, r.text
+    patto_tel = _patto(client, famiglia.tel_andrea)
+    assert patto_tel["striscia_qui"][-1]["stato"] == "rosso"
+    assert _patto(client, famiglia.pc_andrea)["striscia_qui"][-1]["stato"] == "rosso"
+    # La striscia del dispositivo (quella del genitore) resta senza vita reale.
+    assert patto_tel["striscia_dispositivo"][-1]["stato"] == "verde"
+    # Marta non ne sa niente
+    assert _patto(client, famiglia.tel_marta)["striscia_qui"][-1]["stato"] == "grigio"
+
+
 def test_eventi_recenti_di_tutti_i_dispositivi_in_ordine(client, famiglia, orologio):
     """(v3.1) La finestra legge gli ultimi 20 per dispositivo e li mette in fila: gli
     sforamenti di telefono e computer si alternano e restano i 20 piu' recenti del

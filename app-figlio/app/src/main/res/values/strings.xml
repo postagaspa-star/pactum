@@ -105,6 +105,8 @@
     <string name="oggi_dispositivo_riga">%1$s: %2$d su %3$d</string>
     <string name="oggi_dispositivo_riga_senza_dati">%1$s: ancora nessun dato</string>
     <string name="oggi_questo_telefono">Questo telefono</string>
+    <!-- (0.23) In cima alla card del patto quando il figlio ha altri dispositivi: il bollino è di questo telefono. -->
+    <string name="oggi_patto_su_questo_telefono">Su questo telefono</string>
     <string name="oggi_dispositivo_senza_nome">Dispositivo</string>
     <!-- Scollegato dal genitore: la riga resta finché i suoi giorni sono negli 8. -->
     <string name="oggi_dispositivo_scollegato">%1$s (non più collegato)</string>

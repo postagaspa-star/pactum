@@ -4,7 +4,6 @@ import eu.stgm.pactum.design.contaGiorni
 import eu.stgm.pactum.figlio.dati.CambioDispositivo
 import eu.stgm.pactum.figlio.dati.ContestoDispositivi
 import eu.stgm.pactum.figlio.dati.Dispositivo
-import eu.stgm.pactum.figlio.dati.GiornoStriscia
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.TipiDispositivo
 import eu.stgm.pactum.figlio.dati.inGiorniPatto
@@ -127,7 +126,7 @@ object TestoDispositivi {
     fun maiuscola(testo: String): String = testo.replaceFirstChar { it.titlecase(Locale.ITALIAN) }
 }
 
-/** Una riga sotto la striscia del figlio: un dispositivo e i suoi giorni dentro le regole. */
+/** Una riga sotto la striscia di questo telefono: un altro dispositivo e i suoi giorni dentro le regole. */
 data class RigaDispositivo(
     val id: Long,
     val nome: String,
@@ -142,38 +141,32 @@ data class RigaDispositivo(
 object RigheDispositivi {
 
     /**
-     * Le righe sotto la striscia del figlio, SOLO se il figlio ha altri
-     * dispositivi oltre a questo (con un telefono solo la striscia del figlio è
-     * già la sua). Prima questo telefono, poi gli altri nell'ordine del server.
-     * I numeri vengono dalla striscia di ciascun dispositivo, contati come la
-     * frase grande ("6 su 7": i giorni senza dati escono dal conto). Per questo
-     * telefono vale [strisciaQuesto] (`striscia_dispositivo`) se c'è, identica
-     * a quella del genitore.
+     * Le righe sotto la striscia di questo telefono: gli ALTRI dispositivi del
+     * figlio, nell'ordine del server ("Computer: 5 su 7"). (0.23) La striscia
+     * grande è già quella di questo telefono, quindi la sua riga non c'è più:
+     * il "5 su 7" del computer non tinge il telefono e si legge qui sotto.
+     * I numeri vengono dalla striscia di ciascun dispositivo, la stessa che
+     * vede il genitore, contati come la frase grande (i giorni senza dati
+     * escono dal conto).
      *
      * Un dispositivo scollegato dal genitore resta finché ha giorni con dati
-     * negli 8 della striscia: sono giorni che contano nella striscia del
-     * figlio, e il genitore li vede. Poi esce: non ha più niente da dire.
+     * negli 8 della striscia: il genitore li vede. Poi esce: non ha più niente
+     * da dire.
+     *
+     * Un server che non dice chi è questo telefono (prima della v3) mostra la
+     * striscia del figlio: allora si vedono tutti, se sono almeno due.
      */
-    fun calcola(
-        dispositivi: List<Dispositivo>,
-        questo: Long?,
-        strisciaQuesto: List<GiornoStriscia> = emptyList(),
-    ): List<RigaDispositivo> {
+    fun calcola(dispositivi: List<Dispositivo>, questo: Long?): List<RigaDispositivo> {
         val righe = dispositivi
             .distinctBy { it.id }
-            .map { d ->
-                val suo = d.id == questo
-                riga(d, questo = suo, striscia = if (suo) strisciaQuesto.ifEmpty { d.striscia } else d.striscia)
-            }
+            .map { d -> riga(d, questo = d.id == questo) }
             .filter { !it.revocato || it.conDati > 0 }
-        val altri = righe.filter { !it.questo }
-        // Server che non dice chi è questo telefono: si vedono tutti, se sono almeno due.
-        if (altri.isEmpty() || (questo == null && righe.size < 2)) return emptyList()
-        return righe.filter { it.questo } + altri
+        if (questo == null) return if (righe.size < 2) emptyList() else righe
+        return righe.filter { !it.questo }
     }
 
-    private fun riga(d: Dispositivo, questo: Boolean, striscia: List<GiornoStriscia>): RigaDispositivo {
-        val (mantenuti, conDati) = contaGiorni(striscia.inGiorniPatto())
+    private fun riga(d: Dispositivo, questo: Boolean): RigaDispositivo {
+        val (mantenuti, conDati) = contaGiorni(d.striscia.inGiorniPatto())
         return RigaDispositivo(d.id, d.nome.trim(), questo, mantenuti, conDati, revocato = d.revocato)
     }
 }

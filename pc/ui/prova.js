@@ -318,6 +318,11 @@
     return aggrega(S.regole.filter((r) => r.dispositivo && r.dispositivo.id === dispositivo.id));
   }
 
+  /** (v4.1) Il bollino di un dispositivo: le sue regole e la vita reale. */
+  function strisciaQui(dispositivo) {
+    return aggrega(S.regole.filter((r) => r.tipo === 'vita_reale' || (r.dispositivo && r.dispositivo.id === dispositivo.id)));
+  }
+
   function segnaGiorno(regola, giorno, stato) {
     const voce = regola.semaforo.find((x) => x.data === giorno);
     if (voce) voce.stato = stato;
@@ -774,6 +779,7 @@
       figlio: S.figlio,
       dispositivo: S.computer,
       striscia_dispositivo: strisciaDi(S.computer),
+      striscia_qui: opzioni.vecchio ? undefined : strisciaQui(S.computer),
       dispositivi: [S.telefono, S.computer].map((d) => Object.assign({}, d, { striscia: strisciaDi(d) })),
       // (0.13, contratto v3.6) Un server vecchio non le manda: lì la sezione dice che va aggiornato.
       faccende: opzioni.vecchio ? undefined : faccende(),

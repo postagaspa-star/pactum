@@ -36,6 +36,28 @@ public class SerieTest
         Assert.Empty(Serie.DaStriscia(null));
     }
 
+    private static JsonArray Voci(params string[] stati) =>
+        new(stati.Select((stato, i) => (JsonNode)new JsonObject { ["data"] = "2026-09-2" + i, ["stato"] = stato }).ToArray());
+
+    [Fact]
+    public void La_serie_del_computer_e_della_striscia_qui_non_di_quella_del_figlio()
+    {
+        // (0.24, v4.1) Il telefono ha sforato (striscia del figlio rossa), il computer no.
+        var patto = new JsonObject
+        {
+            ["striscia"] = Voci("rosso", "rosso"),
+            ["striscia_dispositivo"] = Voci("rosso", "verde"),
+            ["striscia_qui"] = Voci("verde", "verde"),
+        };
+        Assert.Equal(new[] { M, M }, new PattoLocale(patto, 0).StrisciaQui.Select(g => g.Segnale));
+        // Server di prima della v4.1: quella del dispositivo; prima della v3: quella del figlio.
+        patto.Remove("striscia_qui");
+        Assert.Equal(new[] { F, M }, new PattoLocale(patto, 0).StrisciaQui.Select(g => g.Segnale));
+        patto.Remove("striscia_dispositivo");
+        Assert.Equal(new[] { F, F }, new PattoLocale(patto, 0).StrisciaQui.Select(g => g.Segnale));
+        Assert.Empty(new PattoLocale(new JsonObject(), 0).StrisciaQui);
+    }
+
     [Fact]
     public void La_serie_conta_all_indietro_da_oggi_e_si_ferma_al_primo_fuori_regola()
     {

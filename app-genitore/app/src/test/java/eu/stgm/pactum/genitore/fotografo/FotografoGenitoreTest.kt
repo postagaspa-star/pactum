@@ -245,11 +245,49 @@ class FotografoGenitoreTest {
                 dopo = { ce("TikTok: al massimo") && nonCe(s(R.string.tutte_le_regole_caricamento)) && nonCe(s(R.string.patto_ultimi_giorni)) },
             )
         }
+        // (0.23) La pagina di ciascun dispositivo e degli impegni (dalle card sotto il patto).
         due.forEach { v ->
             f.scatta(
-                "12-regola_dettaglio", "Dettaglio della regola «TikTok» (aperto dalla card del patto)", v,
+                "15-dispositivo_telefono", "Le regole del telefono di Luca: la sua striscia, le regole di oggi, le non più attive", v,
                 preparazione = luca, pagine = v == CHIARO_360, pronto = panoramicaPronta,
-                gesti = { tocca("TikTok: al massimo") },
+                gesti = {
+                    scorriFino("Telefono", esatto = true)
+                    tocca("Telefono", esatto = true)
+                },
+                dopo = { ce(s(R.string.dispositivo_regole_oggi)) && ce("TikTok: al massimo") },
+            )
+        }
+        due.forEach { v ->
+            f.scatta(
+                "15-dispositivo_computer", "Le regole del computer di Luca", v,
+                preparazione = luca, pagine = v == CHIARO_360, pronto = panoramicaPronta,
+                gesti = {
+                    scorriFino("Computer di camera", esatto = true)
+                    tocca("Computer di camera", esatto = true)
+                },
+                dopo = { ce(s(R.string.dispositivo_regole_oggi)) && ce("Minecraft") },
+            )
+        }
+        due.forEach { v ->
+            f.scatta(
+                "15-dispositivo_impegni", "Gli impegni di vita reale di Luca, a parte", v,
+                preparazione = luca, pagine = v == CHIARO_360, pronto = panoramicaPronta,
+                gesti = {
+                    scorriFino(s(R.string.impegni_titolo), esatto = true)
+                    tocca(s(R.string.impegni_titolo), esatto = true)
+                },
+                dopo = { ce(s(R.string.impegni_oggi)) },
+            )
+        }
+        due.forEach { v ->
+            f.scatta(
+                "12-regola_dettaglio", "Dettaglio della regola «TikTok» (aperto dalla pagina del telefono)", v,
+                preparazione = luca, pagine = v == CHIARO_360, pronto = panoramicaPronta,
+                gesti = {
+                    scorriFino("Telefono", esatto = true)
+                    tocca("Telefono", esatto = true)
+                    tocca("TikTok: al massimo")
+                },
                 dopo = { ce(s(R.string.regola_titolo)) && (ce(s(R.string.proposte_bottone_proponi)) || ce("già una proposta")) },
             )
         }
@@ -258,6 +296,8 @@ class FotografoGenitoreTest {
                 "12-regola-dialogo_nuova-proposta", "Dialogo «Proponi una modifica» su una regola di tempo (dal dettaglio)", v,
                 pagineDialogo = true, preparazione = luca, pronto = panoramicaPronta,
                 gesti = {
+                    scorriFino("Telefono", esatto = true)
+                    tocca("Telefono", esatto = true)
                     tocca("Tutto il telefono: al massimo")
                     aspetta("dettaglio") { ce(s(R.string.proposte_bottone_proponi)) }
                     tocca(R.string.proposte_bottone_proponi)
@@ -269,6 +309,8 @@ class FotografoGenitoreTest {
             "12-regola-dialogo_nuova-proposta-fascia", "Dialogo «Proponi una modifica» su una fascia oraria di Sara", CHIARO_360,
             pagineDialogo = true, preparazione = sara, pronto = panoramicaPronta,
             gesti = {
+                scorriFino("Telefono", esatto = true)
+                tocca("Telefono", esatto = true)
                 tocca("Niente telefono dalle 21:30")
                 aspetta("dettaglio") { ce(s(R.string.proposte_bottone_proponi)) }
                 tocca(R.string.proposte_bottone_proponi)

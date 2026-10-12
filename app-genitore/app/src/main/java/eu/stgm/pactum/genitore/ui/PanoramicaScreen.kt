@@ -91,9 +91,10 @@ import eu.stgm.pactum.design.rememberContatore
 //  1. righe compatte SOLO se c'è qualcosa (richieste da decidere, blocco dei
 //     lavori, un dispositivo silenzioso, avvisi spenti o in ritardo, dati vecchi),
 //     ciascuna porta dove si sistema;
-//  2. la card del patto: "5 su 7", la striscia con la legenda, il riepilogo, le
-//     regole di oggi (una riga ciascuna, si toccano per il dettaglio) e "Manda un
-//     segno";
+//  2. la card del patto: "5 su 7", la striscia con la legenda, il riepilogo e
+//     "Manda un segno"; (0.23) sotto, "Regole per dispositivo": una card per
+//     dispositivo (e una per gli impegni) con la sua striscia e com'è andata oggi,
+//     che apre la pagina con le sue regole (DispositivoScreen);
 //  3. i dispositivi, una riga ciascuno;
 //  4. "Da guardare insieme": le prime 3 voci, poi "Vedi tutte";
 //  5. la riga "Storico del patto".
@@ -289,6 +290,10 @@ private fun ContenutoPanoramica(
     // striscia (dal più vecchio a oggi). Senza striscia (server vecchio) niente elenco.
     val oggiDelPatto = finestra.striscia.lastOrNull()?.data
     val regoleDiOggi = remember(finestra) { oggiDelPatto?.let { regoleDelGiorno(finestra, it) }.orEmpty() }
+    // (0.23) Le regole per dispositivo: una card ciascuno sotto la card del patto,
+    // invece dell'elenco di tutte le regole di oggi dentro la card. Vuota su un
+    // server 0.7: la card resta com'era.
+    val schede = remember(finestra) { schedeDellaCard(finestra) }
 
     // Le righe in cima: solo se c'è qualcosa.
     val context = LocalContext.current
@@ -398,10 +403,11 @@ private fun ContenutoPanoramica(
                     nomeFiglio = figlio?.nome.takeIf { !famiglia.piuFigli },
                     giorni = giorni,
                     riepilogo = riepilogo,
-                    regoleDiOggi = regoleDiOggi,
+                    // (0.23) Con le card dei dispositivi le regole di oggi stanno lì.
+                    regoleDiOggi = if (schede.isEmpty()) regoleDiOggi else emptyList(),
                     giornoRegole = oggiDelPatto,
                     dispositivi = if (perDispositivo) dispositivi else emptyList(),
-                    strisceDispositivi = if (perDispositivo) strisceDeiDispositivi(dispositivi) else emptyList(),
+                    strisceDispositivi = if (perDispositivo && schede.isEmpty()) strisceDeiDispositivi(dispositivi) else emptyList(),
                     // POST /api/segno è v2.4 come la striscia: senza striscia il
                     // server è più vecchio, e il pulsante porterebbe a un errore.
                     mostraSegno = finestra.striscia.isNotEmpty(),
@@ -410,8 +416,29 @@ private fun ContenutoPanoramica(
                     onMandaSegno = onMandaSegno,
                     onApriRegola = { cornice.apri(Pagina.Regola(it.id)) },
                     onTutteLeRegole = { cornice.apri(Pagina.TutteLeRegole) },
-                    bonus = bonus,
+                    bonus = if (schede.isEmpty()) bonus else emptyList(),
                 )
+            }
+            // (0.23) Le regole per dispositivo: una card ciascuno (e una per gli
+            // impegni), con la sua striscia e com'è andata oggi; si tocca per la
+            // pagina con le sue regole.
+            if (schede.isNotEmpty()) {
+                val bonusPerId = bonus.associate { (d, stato) -> d.id to stato }
+                item(key = "per-dispositivo-titolo") { TitoloSezione(stringResource(R.string.patto_per_dispositivo)) }
+                items(schede, key = { "per-dispositivo-${it.diChi}" }) { scheda ->
+                    CardDelDispositivo(
+                        scheda = scheda,
+                        bonus = scheda.dispositivo?.let { d -> bonusPerId[d.id].takeIf { !d.revocato } },
+                        onClick = {
+                            cornice.apri(
+                                when (val chi = scheda.diChi) {
+                                    is DiChi.Dispositivo -> Pagina.Dispositivo(chi.id)
+                                    DiChi.Impegni -> Pagina.Impegni
+                                },
+                            )
+                        },
+                    )
+                }
             }
         }
 
@@ -830,7 +857,7 @@ private fun RigaSuDispositivo(dispositivo: VistaDispositivo, bonus: StatoBonus? 
 
 /** (0.16) "Bonus: restano 15 min su 30 oggi · 75 su 90 in settimana", piccola. */
 @Composable
-private fun RigaBonus(stato: StatoBonus) {
+internal fun RigaBonus(stato: StatoBonus) {
     Text(
         text = stringResource(
             R.string.patto_bonus,

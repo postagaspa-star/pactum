@@ -332,6 +332,10 @@ def patto(
         "figlio": {"id": figlio["id"], "nome": figlio["nome"]},
         "dispositivo": famiglia.riferimento(questo),
         "striscia_dispositivo": quadro["strisce_dispositivi"][questo["id"]],
+        # (v4.1) Il bollino di QUESTO dispositivo: le sue regole e la vita reale.
+        # E' quello che il figlio vede in grande qui (e la sua serie): una regola
+        # sforata sul computer non tinge il telefono.
+        "striscia_qui": quadro["strisce_qui"][questo["id"]],
         # Per la riga "sul computer 5 su 7": tutti i dispositivi del figlio, anche
         # i revocati (il genitore li vede, quindi li vede anche il figlio).
         "dispositivi": [

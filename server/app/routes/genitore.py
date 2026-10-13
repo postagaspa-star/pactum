@@ -16,7 +16,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import clock, faccende, famiglia, semaforo, siti, studio, tempi
+from .. import clock, faccende, famiglia, regole_un_giorno, semaforo, siti, studio, tempi
 from ..auth import Identita, richiede_genitore
 from ..db import accoda_notifica, get_conn, segno_mandato_oggi, stato_bonus
 from ..genitori import Firme, ancora_valido
@@ -105,6 +105,7 @@ def finestra(
     ora = clock.now()
     figlio = famiglia.figlio_scelto(conn, figlio_id)
     studio.valuta(conn, figlio["id"], ora)  # (v4.0) partenze e mezzanotti dello Studio
+    regole_un_giorno.valuta(conn, figlio["id"], ora)  # (v4.2) quelle di ieri si spengono
     firme = Firme(conn)
     # Una sola definizione degli 8 giorni (siti.giorni_finestra) per semaforo,
     # bonus_giornalieri, uso_recente e siti_recenti: cosi' le sezioni della
@@ -124,9 +125,10 @@ def finestra(
     ).fetchall()
     quadro = semaforo.quadro(conn, ora, figlio["id"], dispositivi)
     nomi = famiglia.nomi_recenti(conn, figlio["id"], giorni[-1])
+    giorni_un_giorno = regole_un_giorno.giorni_del_figlio(conn, figlio["id"])
     regole = []
     for riga in righe_regole:
-        voce = {**_riga_regola(riga, per_id), "semaforo": quadro["semafori"][riga["id"]]}
+        voce = {**_riga_regola(riga, per_id, giorni_un_giorno), "semaforo": quadro["semafori"][riga["id"]]}
         if riga["tipo"] == "limite_tempo":
             chiave = json.loads(riga["parametri"])["app_o_categoria"]
             # (S2) Le categorie le traduce l'app: il nome si allega solo ai pacchetti.

@@ -45,6 +45,7 @@ import eu.stgm.pactum.figlio.sessione.ArchivioSessioni
 import eu.stgm.pactum.figlio.sessione.PaginaSessioneActivity
 import eu.stgm.pactum.figlio.sessione.PagineSessione
 import eu.stgm.pactum.figlio.sessione.RichiestaTermine
+import eu.stgm.pactum.figlio.ui.BilancioScreen
 import eu.stgm.pactum.figlio.ui.CosaVedeScreen
 import eu.stgm.pactum.figlio.ui.FaccendeScreen
 import eu.stgm.pactum.figlio.ui.ImpostazioniScreen
@@ -180,6 +181,9 @@ class MainActivity : ComponentActivity() {
 
         /** (0.13) Le faccende: dalla barriera ("Apri Pactum") e dalle loro notifiche. */
         const val DEST_FACCENDE = "faccende"
+
+        /** (0.24) Il bilancio della sera: dalla chiusura della sera e dai promemoria delle promesse. */
+        const val DEST_BILANCIO = "bilancio"
     }
 }
 
@@ -359,6 +363,7 @@ private fun PactumRoot(
                     sulleDichiarazioni = paginaInCima == Pagina.STORICO_DICHIARAZIONI,
                 )
                 Pagina.TEMPO -> TempoScreen(onChiudi = { chiudi() })
+                Pagina.BILANCIO -> BilancioScreen(onChiudi = { chiudi() })
             }
         }
         return
@@ -426,6 +431,7 @@ private fun PactumRoot(
                         onApriPermessi = { apri(Pagina.IMPOSTAZIONI_PERMESSI) },
                         onApriLavori = { vaiA(Scheda.LAVORI) },
                         onApriTempo = { apri(Pagina.TEMPO) },
+                        onApriBilancio = { apri(Pagina.BILANCIO) },
                     )
                     Scheda.REGOLE -> RegoleScreen(
                         onApriImpostazioni = { apri(Pagina.IMPOSTAZIONI) },

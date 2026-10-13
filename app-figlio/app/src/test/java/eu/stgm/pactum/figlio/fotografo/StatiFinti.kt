@@ -1,6 +1,7 @@
 package eu.stgm.pactum.figlio.fotografo
 
 import androidx.lifecycle.ViewModelProvider
+import eu.stgm.pactum.figlio.ui.BilancioViewModel
 import eu.stgm.pactum.figlio.ui.DichiarazioniViewModel
 import eu.stgm.pactum.figlio.ui.FaccendeViewModel
 import eu.stgm.pactum.figlio.ui.OggiViewModel
@@ -26,6 +27,8 @@ data class StatiFinti(
     val faccende: FaccendeViewModel.StatoFaccende = DatiFinti.faccendeLette(),
     // (0.18) La sezione «Sessione Studio» della scheda Sessioni.
     val studio: StudioViewModel.StatoStudioUi = StudioViewModel.StatoStudioUi(),
+    // (0.24) Il bilancio della sera: null = non si finge (la pagina non si apre).
+    val bilancio: BilancioViewModel.StatoBilancio? = null,
 ) {
     class Flussi {
         lateinit var oggi: MutableStateFlow<OggiViewModel.StatoOggi>
@@ -36,6 +39,7 @@ data class StatiFinti(
         lateinit var siti: MutableStateFlow<SitiViewModel.StatoSiti>
         lateinit var faccende: MutableStateFlow<FaccendeViewModel.StatoFaccende>
         lateinit var studio: MutableStateFlow<StudioViewModel.StatoStudioUi>
+        var bilancio: MutableStateFlow<BilancioViewModel.StatoBilancio>? = null
     }
 
     val flussi = Flussi()
@@ -49,5 +53,6 @@ data class StatiFinti(
         flussi.siti = p[SitiViewModel::class.java].fingi(siti)
         flussi.faccende = p[FaccendeViewModel::class.java].fingi(faccende)
         flussi.studio = p[StudioViewModel::class.java].fingi(studio)
+        bilancio?.let { flussi.bilancio = p[BilancioViewModel::class.java].fingi(it) }
     }
 }

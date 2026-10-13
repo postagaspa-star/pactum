@@ -336,6 +336,7 @@ CHIAVI_PATTO_V37 = {
     "faccende", "blocco",
     "studio",  # (v4.0)
     "striscia_qui",  # (v4.1)
+    "regole_un_giorno",  # (v4.2)
 }
 
 
@@ -438,7 +439,7 @@ def test_su_un_registro_come_quello_vero(avvia_v35):
             assert senza.status_code == 200, senza.text
             senza = senza.json()
             contenuto_in(prima[nome], senza, nome)
-            assert set(senza) == set(prima[nome]) | {"faccende", "blocco", "studio", "striscia_qui"}, nome  # (v4.0) studio, (v4.1) striscia_qui
+            assert set(senza) == set(prima[nome]) | {"faccende", "blocco", "studio", "striscia_qui", "regole_un_giorno"}, nome  # (v4.0) studio, (v4.1) striscia_qui, (v4.2)
             assert [set(v) for v in senza["dispositivi"]] == [set(v) for v in prima[nome]["dispositivi"]], nome
             patto = _patto(c, chi)
             assert _senza_tempi(patto) == senza, nome

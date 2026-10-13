@@ -34,6 +34,8 @@ CHIAVI_ATTESE = {
     "studio",
     # (v4.1)
     "striscia_qui",
+    # (v4.2)
+    "regole_un_giorno",
 }
 
 

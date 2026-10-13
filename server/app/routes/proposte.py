@@ -391,7 +391,7 @@ def rispondi_proposta(
             # modifica_regola anche a lui. Lo storico la registra come sempre.
             avvisa_genitore = chi_risponde == "figlio"
             if parametri == MARCATORE_ELIMINA:
-                verifica_non_ultima(conn, figlio_id)  # eliminare l'ultima regola resta vietato
+                verifica_non_ultima(conn, figlio_id, riga["id"])  # eliminare l'ultima regola resta vietato
                 applica_eliminazione(conn, riga, concordata=True, ora=ora, avvisa_genitore=avvisa_genitore)
                 regola_risultante = None
             else:

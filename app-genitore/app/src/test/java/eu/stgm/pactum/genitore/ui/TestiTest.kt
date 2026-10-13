@@ -117,6 +117,14 @@ class TestiTest {
         assertEquals("Social: al massimo 2 h al giorno", descrizioneRegola(p, social))
     }
 
+    @Test
+    fun `una regola di un giorno lo dice`() {
+        // (0.24, v4.2) Una promessa del bilancio della sera che il telefono controlla.
+        assertEquals("Social: al massimo 2 h al giorno · solo il 14/10", descrizioneRegola(p, social.copy(soloIl = "2026-10-14")))
+        // Una data scritta male non si mostra: resta la regola.
+        assertEquals("Social: al massimo 2 h al giorno", descrizioneRegola(p, social.copy(soloIl = "domani")))
+    }
+
     // --- notifiche: le frasi ---------------------------------------------------------
 
     @Test

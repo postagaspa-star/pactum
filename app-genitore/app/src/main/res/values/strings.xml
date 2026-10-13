@@ -794,6 +794,8 @@
     <string name="impegni_nessuno">Nessun impegno di vita reale.</string>
     <!-- Una regola fuori oggi, sotto la riga del dispositivo: "Instagram, 1 h al giorno · fuori regola · 15 min oltre" -->
     <string name="regola_e_stato">%1$s · %2$s</string>
+    <!-- (0.24) Una regola di un giorno: «Social: al massimo 1 h al giorno · solo il 14/10» -->
+    <string name="regola_solo_il">%1$s · solo il %2$s</string>
     <!-- (0.16) Il bonus di oggi nella card del patto -->
     <string name="patto_bonus">Bonus: restano %1$d min su %2$d oggi · %3$d su %4$d in settimana</string>
     <plurals name="riga_blocco_foto">

@@ -11,9 +11,11 @@ namespace Pactum;
 /// (0.23) 0.23.0 = 23: il grafico del tempo e le categorie del figlio per i programmi (le app sono alla 0.22).
 /// (0.24) 0.24.0 = 24: il bollino di Oggi è quello di questo computer (contratto v4.1, <c>striscia_qui</c>);
 /// le app sono alla 0.23.
+/// (0.25) 0.25.0 = 25: le regole di un giorno del telefono dicono "solo il 14/10" (contratto v4.2);
+/// le app sono alla 0.24.
 /// </summary>
 public static class Versione
 {
-    public const string Nome = "0.24.0";
-    public const int Codice = 24;
+    public const string Nome = "0.25.0";
+    public const int Codice = 25;
 }

@@ -89,6 +89,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.LocalDateTime
+import eu.stgm.pactum.figlio.bilancio.ArchivioBilancio
+import eu.stgm.pactum.figlio.bilancio.PromemoriaPromesse
 
 /**
  * FGS di tipo specialUse (v. manifest: PROPERTY_SPECIAL_USE_FGS_SUBTYPE).
@@ -129,6 +132,7 @@ class PactumService : Service() {
     private var loopBattito: Job? = null
     private var loopSentinella: Job? = null
     private var loopSerale: Job? = null
+    private var loopPromesse: Job? = null
     private var loopSessione: Job? = null
     private var loopFaccende: Job? = null
     private var loopBarrieraFaccende: Job? = null
@@ -239,6 +243,7 @@ class PactumService : Service() {
         BattitoCadenzato.programma(applicationContext)
         avviaLoopSentinella()
         avviaLoopSerale()
+        avviaLoopPromesse()
         avviaLoopSessione()
         avviaLoopFaccende()
         avviaLoopBarrieraFaccende()
@@ -833,6 +838,29 @@ class PactumService : Service() {
     }
 
     /**
+     * (0.24) I promemoria delle promesse del bilancio all'ora esatta: il loop dorme
+     * fino al prossimo (al massimo 15 minuti, contro un orologio spostato) e riparte
+     * da capo a ogni cambio del diario (una promessa nuova, una risposta, un rimando).
+     */
+    private fun avviaLoopPromesse() {
+        if (loopPromesse?.isActive == true) return
+        loopPromesse = ambito.launch {
+            ArchivioBilancio.cambi.collectLatest {
+                while (isActive) {
+                    val adesso = LocalDateTime.now()
+                    val prossimo = try {
+                        PromemoriaPromesse.controlla(applicationContext, adesso)
+                    } catch (e: Exception) {
+                        null // la riserva è il worker
+                    }
+                    val attesa = prossimo?.let { Duration.between(adesso, it).toMillis() } ?: MASSIMA_ATTESA_PROMESSE_MS
+                    delay(attesa.coerceIn(1_000, MASSIMA_ATTESA_PROMESSE_MS))
+                }
+            }
+        }
+    }
+
+    /**
      * (0.14) Il battito passa da BattitoCadenzato: un solo lucchetto con la
      * sveglia dello stand-by e col worker, mai due battiti insieme. Dopo,
      * la sveglia del prossimo (se non ce n'è già una in arrivo).
@@ -908,6 +936,9 @@ class PactumService : Service() {
         private const val CANALE_TESTIMONE = "testimone"
         private const val ID_NOTIFICA = 1
         private const val INTERVALLO_BATTITO_MS = 15L * 60 * 1000
+
+        /** (0.24) Il giro dei promemoria delle promesse si risveglia almeno ogni 15 minuti. */
+        private const val MASSIMA_ATTESA_PROMESSE_MS = 15L * 60 * 1000
         private const val MINIMO_ATTESA_MS = 50L
 
         /** (0.18) Durante lo Studio il blocco dovuto si ricontrolla così spesso (parte a fine Studio). */

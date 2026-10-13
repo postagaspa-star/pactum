@@ -268,6 +268,13 @@
    * "computer" secondo il dispositivo della regola.
    */
   function descrizioneRegola(regola, opzioni) {
+    const base = descrizioneSenzaGiorno(regola, opzioni);
+    // (0.25, v4.2) Una regola di un giorno (una promessa del bilancio della sera, sul telefono).
+    const giorno = regola && typeof regola.solo_il === 'string' ? giornoDaIso(regola.solo_il) : null;
+    return giorno ? base + ' · solo il ' + String(giorno.getDate()).padStart(2, '0') + '/' + String(giorno.getMonth() + 1).padStart(2, '0') : base;
+  }
+
+  function descrizioneSenzaGiorno(regola, opzioni) {
     const o = opzioni || {};
     const p = (regola && regola.parametri) || {};
     switch (regola && regola.tipo) {

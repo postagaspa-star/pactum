@@ -255,6 +255,7 @@ def test_una_migrazione_che_non_riesce_lascia_il_database_com_era(avvia_v39, db_
             pass
     dopo = dati_v24.righe(db_v39)
     assert all(dopo.pop(tabella) == [] for tabella in TABELLE_STUDIO)  # nate con lo SCHEMA, vuote
+    assert dopo.pop("regole_un_giorno") == []  # (v4.2) anche lei
     assert dopo == prima
     (copia,) = _copie(db_v39, ".prima-v4.0-")
     monkeypatch.setattr(db, "domani_nel_patto", vera)

@@ -8,7 +8,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import clock, faccende, famiglia, semaforo, siti, studio
+from .. import clock, faccende, famiglia, regole_un_giorno, semaforo, siti, studio
 from ..auth import Identita, richiede_dispositivo
 from ..config import MINUTI_IN_UN_GIORNO, nome_fuso
 from ..db import (
@@ -52,6 +52,7 @@ def battito(
     # (anche col battito del computer): prima di scrivere questo battito, cosi' un
     # computer che torna dopo essere sparito resta nel registro.
     studio.valuta(conn, chi.figlio_id, ora)
+    regole_un_giorno.valuta(conn, chi.figlio_id, ora)  # (v4.2) quelle di ieri si spengono
     conn.execute(
         "INSERT INTO battiti"
         " (batteria, versione_app, elapsed_realtime, ts_device, ts_server, dispositivo_id)"
@@ -267,6 +268,7 @@ def patto(
     con_tempi = tempi == "1"
     ora = clock.now()
     studio.valuta(conn, chi.figlio_id, ora)  # (v4.0) partenze e mezzanotti dello Studio
+    regole_un_giorno.valuta(conn, chi.figlio_id, ora)  # (v4.2) quelle di ieri si spengono
     figlio = famiglia.figlio_o_404(conn, chi.figlio_id)
     dispositivi = famiglia.dispositivi_del_figlio(conn, chi.figlio_id)
     per_id = {d["id"]: d for d in dispositivi}
@@ -299,8 +301,9 @@ def patto(
         }
     # (v2.4) Ogni regola porta il suo semaforo, lo stesso della finestra: il
     # genitore vede la striscia regola per regola, quindi la vede anche il figlio.
+    giorni_un_giorno = regole_un_giorno.giorni_del_figlio(conn, chi.figlio_id)
     regole = [
-        {**_riga_regola(r, per_id), "semaforo": quadro["semafori"][r["id"]]}
+        {**_riga_regola(r, per_id, giorni_un_giorno), "semaforo": quadro["semafori"][r["id"]]}
         for r in righe_regole
     ]
     # (v3.5) Le etichette delle app delle sessioni: dalle fotografie dell'uso, lette una volta.
@@ -336,6 +339,12 @@ def patto(
         # E' quello che il figlio vede in grande qui (e la sua serie): una regola
         # sforata sul computer non tinge il telefono.
         "striscia_qui": quadro["strisce_qui"][questo["id"]],
+        # (v4.2) Le regole di un giorno di QUESTO dispositivo negli 8 giorni, spente
+        # comprese, col loro semaforo: le promesse del bilancio della sera che il
+        # telefono controlla, e com'e' andata anche dopo che la regola si e' spenta.
+        "regole_un_giorno": regole_un_giorno.del_dispositivo(
+            conn, questo["id"], quadro["striscia"][0]["data"], quadro["semafori"]
+        ),
         # Per la riga "sul computer 5 su 7": tutti i dispositivi del figlio, anche
         # i revocati (il genitore li vede, quindi li vede anche il figlio).
         "dispositivi": [

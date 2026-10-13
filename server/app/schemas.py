@@ -83,6 +83,8 @@ class RegolaCrea(BaseModel):
     # (v3) Su quale dispositivo del figlio: se manca, quello che chiama. Per le
     # vita_reale si ignora (sono del figlio).
     dispositivo_id: int | None = None
+    # (v4.2) YYYY-MM-DD: una regola di un giorno (regole_un_giorno.py), oggi o domani.
+    solo_il: str | None = None
 
 
 class RegolaPatch(BaseModel):

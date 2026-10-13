@@ -828,7 +828,8 @@ def test_una_migrazione_che_non_riesce_lascia_il_database_com_era(avvia_v38, db_
     # (v4.0) le tabelle nuove dello Studio nascono con lo SCHEMA, prima della migrazione che
     # si rompe: sono vuote, e un server v3.9 le ignora
     assert all(dopo.pop(tabella) == [] for tabella in
-               ("studio_config", "studio_versioni", "studio_svolte", "studio_tratti", "studio_partenze"))
+               ("studio_config", "studio_versioni", "studio_svolte", "studio_tratti", "studio_partenze",
+                "regole_un_giorno"))  # (v4.2) anche lei nasce con lo SCHEMA, vuota
     assert dopo == prima
     assert _schema(db_v38, "faccende") == schema_faccende
     (copia,) = _copie(db_v38, ".prima-v3.9-")

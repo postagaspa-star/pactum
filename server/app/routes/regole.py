@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
-from .. import clock, famiglia, lock
+from .. import clock, famiglia, lock, regole_un_giorno
 from ..auth import Identita, richiede_dispositivo, richiede_patto
 from ..config import LOCK_GIORNI
 from ..db import accoda_notifica, get_conn, registra_modifica
@@ -44,10 +44,12 @@ def _valida_o_422(tipo: str, parametri: dict, tipo_dispositivo: str | None = Non
     return validi
 
 
-def _riga_regola(riga: sqlite3.Row, dispositivi: dict) -> dict:
+def _riga_regola(riga: sqlite3.Row, dispositivi: dict, giorni: dict | None = None) -> dict:
     """La regola come la vedono le app. `dispositivi` = {id: riga} dei dispositivi
     del figlio: (v3) ogni regola porta il suo dispositivo, cosi' le app scrivono
-    "sul computer" senza un'altra chiamata (null per la vita reale)."""
+    "sul computer" senza un'altra chiamata (null per la vita reale). (v4.2) `giorni` =
+    {regola_id: giorno} delle regole di un giorno (regole_un_giorno.giorni_del_figlio):
+    `solo_il` e' quel giorno, null per le regole di sempre."""
     sblocco = datetime.fromisoformat(riga["ultima_modifica_ts"]) + timedelta(days=LOCK_GIORNI)
     dispositivo = dispositivi.get(riga["dispositivo_id"])
     return {
@@ -61,6 +63,7 @@ def _riga_regola(riga: sqlite3.Row, dispositivi: dict) -> dict:
         "figlio_id": riga["figlio_id"],
         "dispositivo_id": riga["dispositivo_id"],
         "dispositivo": famiglia.riferimento(dispositivo) if dispositivo is not None else None,
+        "solo_il": (giorni or {}).get(riga["id"]),
     }
 
 
@@ -69,7 +72,10 @@ def dispositivi_per_id(conn: sqlite3.Connection, figlio_id: int) -> dict:
 
 
 def formatta_regola(conn: sqlite3.Connection, riga: sqlite3.Row) -> dict:
-    return _riga_regola(riga, dispositivi_per_id(conn, riga["figlio_id"]))
+    giorno = regole_un_giorno.giorno_della_regola(conn, riga["id"])
+    return _riga_regola(
+        riga, dispositivi_per_id(conn, riga["figlio_id"]), {riga["id"]: giorno} if giorno else None
+    )
 
 
 def tipo_dispositivo(conn: sqlite3.Connection, regola: sqlite3.Row) -> str | None:
@@ -97,18 +103,23 @@ def regola_del_figlio_o_errore(
     return riga
 
 
-def verifica_non_ultima(conn: sqlite3.Connection, figlio_id: int) -> None:
+def verifica_non_ultima(conn: sqlite3.Connection, figlio_id: int, regola_id: int | None = None) -> None:
     # concept.md: almeno una regola obbligatoria. Vale anche per l'eliminazione
     # concordata nata da proposta accettata. (v3) Per figlio, contando le regole di
-    # tutti i suoi dispositivi. (v3.1) Solo quelle che contano ancora: le regole di
+    # tutti i suoi dispositivi. (v4.2) Le regole di un giorno no: si spengono da sole,
+    # e il patto resterebbe vuoto il giorno dopo. (v3.1) Solo quelle che contano ancora: le regole di
     # un dispositivo revocato restano nella storia ma non tengono in piedi il patto,
     # altrimenti il figlio eliminerebbe l'ultima regola viva e resterebbe senza.
     # Chi chiama ha gia' escluso la regola di un revocato (verifica_dispositivo_vivo):
-    # quella da eliminare e' tra le contate.
+    # quella da eliminare e' tra le contate. (v4.2) Togliere una regola di un giorno
+    # non svuota mai il patto: per lei il controllo non serve.
+    if regola_id is not None and regole_un_giorno.giorno_della_regola(conn, regola_id) is not None:
+        return
     attive = conn.execute(
         "SELECT COUNT(*) AS n FROM regole r LEFT JOIN dispositivi d ON d.id = r.dispositivo_id"
         " WHERE r.attiva = 1 AND r.figlio_id = ?"
-        " AND (r.dispositivo_id IS NULL OR d.revocato_ts IS NULL)",
+        " AND (r.dispositivo_id IS NULL OR d.revocato_ts IS NULL)"
+        " AND r.id NOT IN (SELECT regola_id FROM regole_un_giorno)",
         (figlio_id,),
     ).fetchone()["n"]
     if attive <= 1:
@@ -208,7 +219,7 @@ def applica_eliminazione(
         )
 
 
-def _annulla_proposte_pendenti(conn: sqlite3.Connection, riga: sqlite3.Row, ts: str) -> None:
+def annulla_proposte_pendenti(conn: sqlite3.Connection, riga: sqlite3.Row, ts: str) -> None:
     """L'eliminazione diretta di una regola annulla le sue proposte pendenti (v2.1):
     non ha senso rispondere a una proposta su una regola che non esiste piu'. Il
     genitore viene avvisato; rispondere a una annullata -> 409 proposta_non_pendente.
@@ -285,11 +296,13 @@ def elenca_regole(
         figlio = chi.figlio_id
     else:
         figlio = famiglia.figlio_scelto(conn, figlio_id)["id"]
+    regole_un_giorno.valuta(conn, figlio)  # (v4.2) quelle di ieri si spengono
     dispositivi = dispositivi_per_id(conn, figlio)
+    giorni = regole_un_giorno.giorni_del_figlio(conn, figlio)
     righe = conn.execute(
         "SELECT * FROM regole WHERE attiva = 1 AND figlio_id = ? ORDER BY id", (figlio,)
     ).fetchall()
-    return {"regole": [_riga_regola(r, dispositivi) for r in righe]}
+    return {"regole": [_riga_regola(r, dispositivi, giorni) for r in righe]}
 
 
 @router.post("/regole", status_code=201)
@@ -320,7 +333,18 @@ def crea_regola(
                 raise HTTPException(status_code=409, detail={"errore": "dispositivo_revocato"})
             dispositivo_id, tipo = dispositivo["id"], dispositivo["tipo"]
         parametri = _valida_o_422(corpo.tipo, corpo.parametri, tipo)
-        ts = clock.iso(clock.now())
+        ora = clock.now()
+        if corpo.solo_il is not None:
+            # (v4.2) Una regola di un giorno: oggi o domani, e una forma che quel
+            # giorno abbia senso (regole_un_giorno.errore_parametri).
+            if not regole_un_giorno.giorno_ammesso(corpo.solo_il, ora):
+                raise HTTPException(status_code=422, detail={"errore": "giorno_non_valido"})
+            motivo = regole_un_giorno.errore_parametri(corpo.tipo, parametri, corpo.solo_il)
+            if motivo is not None:
+                raise HTTPException(
+                    status_code=422, detail=[{"loc": ["solo_il"], "msg": motivo}]
+                )
+        ts = clock.iso(ora)
         cursore = conn.execute(
             "INSERT INTO regole"
             " (tipo, parametri, attiva, creata_ts, ultima_modifica_ts, figlio_id, dispositivo_id)"
@@ -328,12 +352,17 @@ def crea_regola(
             (corpo.tipo, json.dumps(parametri), ts, ts, chi.figlio_id, dispositivo_id),
         )
         regola_id = cursore.lastrowid
+        if corpo.solo_il is not None:
+            regole_un_giorno.registra(conn, regola_id, corpo.solo_il)
         registra_modifica(conn, regola_id, "creazione", None, None, parametri, False, ts)
+        dettagli = {"regola_id": regola_id, "azione": "creazione", "parametri": parametri}
+        if corpo.solo_il is not None:
+            dettagli["solo_il"] = corpo.solo_il  # (v4.2) il genitore sa che vale un giorno
         accoda_notifica(
             conn,
             "modifica_regola",
-            f"Nuova regola {corpo.tipo} creata",
-            {"regola_id": regola_id, "azione": "creazione", "parametri": parametri},
+            f"Nuova regola {corpo.tipo} creata" + (f" (solo il {corpo.solo_il})" if corpo.solo_il else ""),
+            dettagli,
             ts,
             figlio_id=chi.figlio_id,
             dispositivo_id=dispositivo_id,
@@ -400,7 +429,7 @@ def elimina_regola(
     try:
         riga = regola_del_figlio_o_errore(conn, regola_id, chi.figlio_id)
         verifica_dispositivo_vivo(conn, riga)  # (v3.1)
-        verifica_non_ultima(conn, chi.figlio_id)
+        verifica_non_ultima(conn, chi.figlio_id, regola_id)
 
         concordata = False
         if proposta_id is not None:
@@ -413,7 +442,7 @@ def elimina_regola(
 
         applica_eliminazione(conn, riga, concordata, ora)
         # (v2.1) le proposte pendenti su questa regola non hanno piu' oggetto.
-        _annulla_proposte_pendenti(conn, riga, clock.iso(ora))
+        annulla_proposte_pendenti(conn, riga, clock.iso(ora))
         conn.commit()
     except BaseException:
         conn.rollback()

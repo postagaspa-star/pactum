@@ -68,6 +68,7 @@
     <string name="cosa_vede_tuo_titolo">Solo tuo</string>
     <string-array name="cosa_vede_tuo">
         <item>La serie di giorni di fila e il tuo record: si calcolano sul tuo telefono (e sul computer, se usi Pactum anche lì) e non partono mai.</item>
+        <item>Il bilancio della sera e le tue promesse: restano su questo telefono, i tuoi genitori non li leggono. Se una promessa la controlla il telefono, diventa una regola di un giorno: quella la vedono, come le altre regole.</item>
     </string-array>
     <string name="cosa_vede_ho_capito">Ho capito</string>
 
@@ -202,10 +203,10 @@
     <string name="collega_codice_lungo_apri">Hai un codice lungo?</string>
     <string name="collega_codice_lungo_spiegazione">Per i telefoni collegati prima dei codici di 6 cifre: il codice lungo continua a funzionare.</string>
     <string name="collega_codice_lungo_salva">Salva il codice lungo</string>
-    <string name="impostazioni_sezione_serale">Com\'è andata oggi</string>
+    <string name="impostazioni_sezione_serale">Il bilancio della sera</string>
     <string name="impostazioni_serale_attiva">Ogni sera, una notifica</string>
     <string name="impostazioni_serale_ora">Ogni sera alle</string>
-    <string name="impostazioni_serale_spiegazione">Una notifica sola: se la giornata è stata dentro le tue regole, o dove è andata oltre. Si calcola sul telefono.</string>
+    <string name="impostazioni_serale_spiegazione">Una notifica sola: com\'è andata la giornata con le tue regole, e il bilancio della sera. Se qualcosa non ha funzionato scrivi cosa farai, e quando. Resta su questo telefono: i tuoi genitori non lo leggono.</string>
     <!-- (0.9) L'avviso a tutto schermo: il permesso di sistema è l'interruttore. -->
     <string name="azione_salva">Salva</string>
     <string name="azione_indietro">Indietro</string>
@@ -519,6 +520,93 @@
     <string name="serale_un_altra_regola">E un\'altra regola fuori.</string>
     <string name="serale_altre_regole">E altre %1$d regole fuori.</string>
     <string name="serale_domani">Domani riparte.</string>
+    <!-- (0.24) Il bilancio della sera nella notifica -->
+    <string name="serale_invito_bilancio">Tocca per il bilancio della sera.</string>
+    <string name="serale_solo_bilancio">Com\'è andata oggi? Tocca per il bilancio della sera.</string>
+
+    <!-- (0.24) Il bilancio della sera -->
+    <string name="bilancio_titolo">Il bilancio della sera</string>
+    <string name="bilancio_domanda_oggi">Com\'è andata oggi?</string>
+    <string name="bilancio_domanda_ieri">Com\'è andata ieri?</string>
+    <string name="voto_bene">Bene</string>
+    <string name="voto_cosi_cosi">Così così</string>
+    <string name="voto_male">Male</string>
+    <string name="bilancio_cosa">Cosa non ha funzionato?</string>
+    <string name="bilancio_cosa_esempio">Es. ho aperto TikTok appena tornato e non ho più smesso</string>
+    <string name="bilancio_promessa_titolo">Cosa farai la prossima volta, e quando?</string>
+    <string name="bilancio_la_segno_io">La segno io</string>
+    <string name="bilancio_la_controlla_il_telefono">La controlla il telefono</string>
+    <string name="bilancio_promessa_esempio">Es. 40 minuti di mate prima di prendere il telefono</string>
+    <string name="bilancio_quando">Quando</string>
+    <string name="giorno_domani">domani</string>
+    <string name="giorno_dopodomani">dopodomani</string>
+    <string name="bilancio_domani">Domani</string>
+    <string name="bilancio_dopodomani">Dopodomani</string>
+    <string name="bilancio_nessun_orario">Nessun orario</string>
+    <string name="bilancio_alle">Alle %1$s</string>
+    <string name="bilancio_scegli_ora">Scegli l\'ora</string>
+    <string name="bilancio_ora_spiegazione">All\'ora che scegli arriva un promemoria: «Fatto?». Senza orario te lo chiede il bilancio di domani sera.</string>
+    <string name="bilancio_misura_limite">Al massimo…</string>
+    <string name="bilancio_misura_fascia">Niente telefono…</string>
+    <string name="bilancio_misura_dalle">Dalle %1$s</string>
+    <string name="bilancio_misura_alle">alle %1$s</string>
+    <string name="bilancio_misura_minuti">%1$s</string>
+    <string name="bilancio_misura_spiegazione">Domani diventa una regola di un giorno: il telefono la controlla come le altre, i tuoi genitori la vedono come le altre, e dopodomani si spegne da sola. Una volta salvata non si toglie prima.</string>
+    <string name="bilancio_misura_fascia_non_valida">La fascia deve cominciare prima di finire, nello stesso giorno.</string>
+    <string name="bilancio_misura_server_vecchio">Per farla controllare al telefono serve il server aggiornato: per ora segnala tu.</string>
+    <string name="bilancio_salva">Salva il bilancio</string>
+    <string name="bilancio_salvato">Salvato. A domani.</string>
+    <string name="bilancio_cambia">Cambia</string>
+    <string name="bilancio_fatto_titolo">Il bilancio di stasera</string>
+    <string name="bilancio_promessa_riga">Hai promesso: «%1$s»</string>
+    <string name="bilancio_errore_cosa">Scrivi cosa non ha funzionato (almeno 3 lettere).</string>
+    <string name="bilancio_errore_promessa">Scrivi cosa farai (almeno 3 lettere).</string>
+    <string name="bilancio_errore_lungo">Al massimo 500 caratteri.</string>
+    <string name="bilancio_errore_giorno">La promessa è per un giorno che viene.</string>
+    <string name="bilancio_errore_ora">Quell\'ora è già passata: scegline un\'altra.</string>
+    <string name="bilancio_errore_rete">La regola di un giorno non è partita: serve la rete. Riprova, oppure segnala tu.</string>
+    <string name="bilancio_errore_rifiutata">Il server non ha preso la regola di un giorno. Riprova, oppure segnala tu.</string>
+    <string name="bilancio_ripetuta">Questa promessa non è riuscita le ultime 3 volte. Forse è troppo grande, o l\'orario non va: prova a cambiarla.</string>
+    <string name="bilancio_da_cambiare_titolo">Da cambiare</string>
+    <string name="bilancio_da_cambiare">«%1$s» non è riuscita 3 volte di fila. Forse è troppo grande, o l\'orario non va: la prossima volta prova una cosa più piccola, o un\'altra ora.</string>
+    <string name="bilancio_promesse_titolo">Le tue promesse</string>
+    <string name="bilancio_avevi_detto">Avevi detto: «%1$s»</string>
+    <string name="bilancio_quando_ora">%1$s alle %2$s</string>
+    <string name="bilancio_quando_senza_ora">%1$s, senza orario</string>
+    <plurals name="bilancio_rimandata">
+        <item quantity="one">rimandata una volta</item>
+        <item quantity="other">rimandata %1$d volte</item>
+    </plurals>
+    <string name="promessa_fatta">Fatto</string>
+    <string name="promessa_non_fatta">Non fatto</string>
+    <string name="promessa_rimando">Rimando</string>
+    <string name="promessa_tra_un_ora">Fra un\'ora</string>
+    <string name="bilancio_rimando_titolo">Quando, allora?</string>
+    <string name="bilancio_controlla_titolo">Le controlla il telefono</string>
+    <string name="esito_fatta">fatta</string>
+    <string name="esito_non_fatta">non riuscita</string>
+    <string name="esito_senza_dati">il telefono non ha dati</string>
+    <string name="esito_in_corso">finora dentro</string>
+    <string name="esito_da_dire">non hai detto com\'è andata</string>
+    <string name="bilancio_storia_titolo">Gli ultimi giorni</string>
+    <string name="bilancio_storia_nessuno">nessun bilancio</string>
+    <string name="bilancio_storia_riga">%1$s · %2$s</string>
+    <string name="bilancio_privato">Il bilancio e le promesse restano su questo telefono: i tuoi genitori non li leggono.</string>
+    <!-- La card in Oggi -->
+    <string name="oggi_bilancio_da_fare">Com\'è andata oggi? Un minuto per il bilancio della sera.</string>
+    <plurals name="oggi_promesse_da_dire">
+        <item quantity="one">Una promessa aspetta la tua risposta.</item>
+        <item quantity="other">%1$d promesse aspettano la tua risposta.</item>
+    </plurals>
+    <string name="oggi_promessa_di_oggi">Oggi: «%1$s»</string>
+    <string name="oggi_apri_bilancio">Apri il bilancio</string>
+    <!-- I promemoria delle promesse -->
+    <string name="canale_promesse_nome">Le tue promesse</string>
+    <string name="canale_promesse_descrizione">Il promemoria all\'ora che hai scelto nel bilancio della sera.</string>
+    <string name="promemoria_titolo">La tua promessa</string>
+    <string name="promemoria_testo">Avevi detto: «%1$s». Fatto?</string>
+    <!-- Una regola di un giorno in Regole e in Oggi -->
+    <string name="regola_solo_oggi">solo oggi</string>
 
     <!-- Manomissioni per revoca permessi (tappa 6) -->
     <string name="notifica_permesso_revocato_titolo">Pactum non può più misurare l\'uso</string>

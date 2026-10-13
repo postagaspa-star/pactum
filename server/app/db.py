@@ -462,6 +462,18 @@ COLONNE_PROPOSTE = [
     "autore", "genitore_id", "risposta_genitore_id",
 ]
 
+# (v4.2) Le regole di un giorno (regole_un_giorno.py): le promesse del bilancio della
+# sera che il telefono puo' controllare. Una riga per regola: il giorno in cui vale, e se
+# il server l'ha gia' spenta. Tabella nuova (CREATE TABLE IF NOT EXISTS): niente
+# migrazione, niente copia, come le sessioni della v3.5.
+TABELLA_REGOLE_UN_GIORNO = """
+CREATE TABLE IF NOT EXISTS regole_un_giorno (
+    regola_id INTEGER PRIMARY KEY REFERENCES regole(id),
+    giorno TEXT NOT NULL,
+    scaduta INTEGER NOT NULL DEFAULT 0 CHECK (scaduta IN (0, 1))
+);
+"""
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS patto (
     chiave TEXT PRIMARY KEY,
@@ -637,7 +649,7 @@ CREATE TABLE IF NOT EXISTS notifiche (
     figlio_id INTEGER REFERENCES figli(id),
     dispositivo_id INTEGER REFERENCES dispositivi(id)
 );
-""" + TABELLE_SESSIONI + TABELLE_GENITORI + TABELLA_FACCENDE + TABELLE_STUDIO
+""" + TABELLE_SESSIONI + TABELLE_GENITORI + TABELLA_FACCENDE + TABELLE_STUDIO + TABELLA_REGOLE_UN_GIORNO
 
 # (v3.1) Chi ha letto una notifica del figlio: ogni dispositivo per conto suo, cosi'
 # una notifica per tutto il figlio (il segno) arriva al telefono E al computer anche

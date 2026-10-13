@@ -149,6 +149,8 @@ class BattitoWorker(appContext: Context, params: WorkerParameters) :
         // Riserve del servizio: il bonus rimasto a metà e la chiusura della sera.
         runCatching { ConsegnaBonus.recupera(context) }
         runCatching { ChiusuraSerale.controlla(context) }
+        // (0.24) E i promemoria delle promesse del bilancio, se il servizio non c'era.
+        runCatching { eu.stgm.pactum.figlio.bilancio.PromemoriaPromesse.controlla(context) }
         // (0.11) E una "Termina la sessione" rimasta senza rete.
         runCatching { ConsegnaSessioni.riprovaSeServe(context, forza = true) }
         // (0.13) Le faccende a schermo spento: le foto in coda, il blocco

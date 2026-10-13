@@ -43,8 +43,10 @@ android {
         // e confermati, ricerca nello storico dei lavori.
         // 0.23 (contratto v4.1): il bollino di Oggi e la serie sono di questo
         // telefono (striscia_qui); il computer ha la sua riga sotto.
-        versionCode = 23
-        versionName = "0.23.0"
+        // 0.24 (contratto v4.2): il bilancio della sera, le promesse col loro
+        // promemoria, e quelle che controlla il telefono (regole di un giorno).
+        versionCode = 24
+        versionName = "0.24.0"
     }
 
     signingConfigs {

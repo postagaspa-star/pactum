@@ -172,6 +172,13 @@
             android:enabled="true"
             android:exported="false" />
 
+        <!-- (0.24) I pulsanti del promemoria di una promessa (Fatto · Non fatto ·
+             Fra un'ora). Interno: l'invoca solo il PendingIntent della notifica. -->
+        <receiver
+            android:name=".bilancio.RispostaPromessaReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <service
             android:name=".servizio.PactumService"
             android:exported="false"

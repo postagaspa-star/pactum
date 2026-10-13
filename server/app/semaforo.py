@@ -18,7 +18,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from . import clock, famiglia, siti
+from . import clock, famiglia, regole_un_giorno, siti
 from .config import fuso_patto
 
 # (v3.1) Il registro cresce ogni giorno: le letture per gli 8 giorni della finestra
@@ -124,6 +124,10 @@ def _semafori(
         ).fetchall()
     }
 
+    # (v4.2) Le regole di un giorno contano SOLO il loro giorno: prima (creata la sera
+    # per domani) e dopo sono grigie, come una regola che non c'e'.
+    solo_il = regole_un_giorno.giorni_del_figlio(conn, figlio_id)
+
     per_regola = {}
     dispositivo_della_regola = {}
     for riga in conn.execute(
@@ -146,6 +150,8 @@ def _semafori(
         voci = []
         for data in date_iso:
             if data < creata or (fine is not None and data > fine):
+                stato = "grigio"
+            elif riga["id"] in solo_il and data != solo_il[riga["id"]]:
                 stato = "grigio"
             elif riga["tipo"] == "vita_reale":
                 stato = _semaforo_vita(dich_per_regola[riga["id"]].get(data))

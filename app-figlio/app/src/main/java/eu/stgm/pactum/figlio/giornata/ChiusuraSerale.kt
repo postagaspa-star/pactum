@@ -4,6 +4,8 @@ import android.content.Context
 import eu.stgm.pactum.design.Segnale
 import eu.stgm.pactum.figlio.MainActivity
 import eu.stgm.pactum.figlio.R
+import eu.stgm.pactum.figlio.bilancio.ArchivioBilancio
+import eu.stgm.pactum.figlio.bilancio.LogicaBilancio
 import eu.stgm.pactum.figlio.dati.Impostazioni
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import eu.stgm.pactum.figlio.dati.zonaPatto
@@ -61,18 +63,29 @@ object ChiusuraSerale {
         // Senza permesso non si segna il giorno: se arriva stasera, parte stasera.
         if (!AvvisiLocali.puoAvvisare(context)) return
 
-        val misura = SentinellaPatto(context).misura(now) ?: return
-        val patto = misura.patto
+        // (0.24) Il bilancio della sera: se quello di stasera non c'è ancora, la
+        // notifica lo chiede e il tocco lo apre. Fatto prima (dalla pagina), resta il racconto.
+        val bilancioFatto = LogicaBilancio.bilancioDi(ArchivioBilancio.leggi(context), adesso.toLocalDate()) != null
+        val misura = SentinellaPatto(context).misura(now)
         // (v3) Le regole di questo telefono: quelle del computer le misura il computer.
-        val regoleQui = patto.regoleDiQuestoDispositivo()
+        val regoleQui = misura?.patto?.regoleDiQuestoDispositivo().orEmpty()
         val misurabili = regoleQui.any {
             it.attiva && (it.tipo == TipiRegola.LIMITE_TEMPO || it.tipo == TipiRegola.FASCIA_ORARIA)
         }
-        if (!misurabili) {
-            // Solo regole di vita reale: il telefono non ha niente di vero da dire.
-            impostazioni.registraUltimaChiusura(oggi)
+        if (misura == null || !misurabili) {
+            // Solo regole di vita reale (o niente da misurare): il telefono non ha niente
+            // di vero da raccontare, resta l'invito al bilancio.
+            val mandata = bilancioFatto || AvvisiLocali.avvisa(
+                context,
+                id = AvvisiLocali.ID_CHIUSURA_SERALE,
+                titolo = context.getString(R.string.serale_titolo),
+                testo = context.getString(R.string.serale_solo_bilancio),
+                destinazione = MainActivity.DEST_BILANCIO,
+            )
+            if (mandata) impostazioni.registraUltimaChiusura(oggi)
             return
         }
+        val patto = misura.patto
 
         val regolePerId = regoleQui.associateBy { it.id }
         val fuori = misura.sforamenti
@@ -105,13 +118,14 @@ object ChiusuraSerale {
         }
 
         val chiusura = TestoSerale.chiusura(fuori, rossoSulServer, serie, fasciaAperta)
-        val testo = TestoSerale.testo(chiusura, parole(context))
+        val racconto = TestoSerale.testo(chiusura, parole(context))
+        val testo = if (bilancioFatto) racconto else racconto + " " + context.getString(R.string.serale_invito_bilancio)
         val mandata = AvvisiLocali.avvisa(
             context,
             id = AvvisiLocali.ID_CHIUSURA_SERALE,
             titolo = context.getString(R.string.serale_titolo),
             testo = testo,
-            destinazione = MainActivity.DEST_OGGI,
+            destinazione = if (bilancioFatto) MainActivity.DEST_OGGI else MainActivity.DEST_BILANCIO,
         )
         if (mandata) impostazioni.registraUltimaChiusura(oggi)
     }

@@ -680,6 +680,9 @@ data class RegolaFinestra(
     // figlio) e sui server 0.7.
     @SerialName("dispositivo_id") val dispositivoId: Long? = null,
     val dispositivo: RiferimentoDispositivo? = null,
+    // (0.24, v4.2) YYYY-MM-DD: una regola di un giorno (una promessa del bilancio della
+    // sera del figlio, che il telefono controlla). null = di sempre, o server vecchio.
+    @SerialName("solo_il") val soloIl: String? = null,
 )
 
 object TipiRegola {

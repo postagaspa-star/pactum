@@ -15,6 +15,10 @@ import eu.stgm.pactum.figlio.dati.LetturaTempi
 import eu.stgm.pactum.figlio.dati.PattoLocale
 import eu.stgm.pactum.figlio.dati.Regola
 import eu.stgm.pactum.figlio.dati.Riepilogo
+import eu.stgm.pactum.figlio.bilancio.ArchivioBilancio
+import eu.stgm.pactum.figlio.bilancio.Diario
+import eu.stgm.pactum.figlio.bilancio.LogicaBilancio
+import eu.stgm.pactum.figlio.bilancio.Promessa
 import eu.stgm.pactum.figlio.dati.StatoBonus
 import eu.stgm.pactum.figlio.dati.TipiRegola
 import eu.stgm.pactum.figlio.dati.zonaPatto
@@ -30,6 +34,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
@@ -128,6 +133,8 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
         /** È aperta la snackbar "Ti sei dato 15 minuti · Aggiungi perché". */
         val finestraBonus: Boolean = false,
         val evento: Evento? = null,
+        /** (0.24) Il bilancio della sera in Oggi; null = niente da dire. */
+        val bilancio: BilancioInOggi? = null,
     ) {
         /** (v3) Il figlio ha altri dispositivi: i bonus e i minuti qui sotto sono di questo telefono. */
         val altriDispositivi: Boolean get() = righeDispositivi.any { !it.questo }
@@ -149,6 +156,11 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
     private var senzaReteGiaDetto = false
 
     init {
+        // (0.24) Il bilancio cambiato (salvato, una risposta dalla notifica): si ricalcola
+        // solo la sua card, senza rileggere patto e uso.
+        viewModelScope.launch {
+            ArchivioBilancio.cambi.drop(1).collect { aggiornaBilancio() }
+        }
         viewModelScope.launch {
             ConsegnaBonus.esiti.collect { esito ->
                 val daMostrare = attesaEsito && when (esito) {
@@ -179,6 +191,19 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 if (esito is EsitoBonus.Concesso) aggiorna()
             }
+        }
+    }
+
+    /** (0.24) Solo la card del bilancio della sera. */
+    fun aggiornaBilancio() {
+        viewModelScope.launch(Dispatchers.Default) {
+            val context = getApplication<Application>()
+            val bilancio = BilancioInOggi.calcola(
+                diario = ArchivioBilancio.leggi(context),
+                adesso = java.time.LocalDateTime.now(),
+                oraSerale = Impostazioni(context).leggiChiusuraSerale().takeIf { it.attiva }?.ora,
+            )
+            _stato.update { it.copy(bilancio = bilancio) }
         }
     }
 
@@ -257,6 +282,12 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
             val tempi = TempiFiglio.dispositivi(patto, uso.giorno, oggiLocale) { chiave, nomeServer, tipo ->
                 etichettaChiave(context, chiave, nomeServer, tipo)
             }
+            // (0.24) Il bilancio della sera: da fare, promesse che aspettano, la promessa di oggi.
+            val bilancio = BilancioInOggi.calcola(
+                diario = ArchivioBilancio.leggi(context),
+                adesso = java.time.LocalDateTime.now(),
+                oraSerale = impostazioni.leggiChiusuraSerale().takeIf { it.attiva }?.ora,
+            )
             val sospeso = CassettaBonus(context).leggi()
             val datiFermiAlle = if (fermi) locale.aggiornatoIl() else null
 
@@ -286,6 +317,7 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
                     tempi = tempi,
                     bonusInSospeso = if (sospeso == null && finestra) aperto else sospeso,
                     finestraBonus = finestra,
+                    bilancio = bilancio,
                 )
             }
         }
@@ -373,5 +405,26 @@ class OggiViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumaEvento() {
         _stato.update { it.copy(evento = null) }
+    }
+}
+
+/**
+ * (0.24) Il bilancio della sera in Oggi: [daFare] = quello di stasera manca e l'ora
+ * della sera è passata; [daDire] = quante promesse aspettano "Fatto?"; [diOggi] = la
+ * promessa di oggi ancora da fare, per ricordarla. Senza niente di questo, null.
+ */
+data class BilancioInOggi(val daFare: Boolean, val daDire: Int, val diOggi: Promessa?) {
+    companion object {
+        fun calcola(diario: Diario, adesso: java.time.LocalDateTime, oraSerale: java.time.LocalTime?): BilancioInOggi? {
+            val daFare = oraSerale != null && LogicaBilancio.bilancioDaChiedere(diario, adesso, oraSerale)
+            val daDire = LogicaBilancio.daRispondere(diario, adesso).size
+            val oggi = adesso.toLocalDate().toString()
+            val diOggi = diario.promesse.firstOrNull { p ->
+                p.giorno == oggi && p.esito == null &&
+                    (p.regolaId != null || LogicaBilancio.momento(p)?.isAfter(adesso) == true)
+            }
+            if (!daFare && daDire == 0 && diOggi == null) return null
+            return BilancioInOggi(daFare, daDire, diOggi)
+        }
     }
 }

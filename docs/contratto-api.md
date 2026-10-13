@@ -1624,8 +1624,48 @@ Un campo nuovo, accanto a `striscia` e `striscia_dispositivo`: 8 voci `{"data", 
 
 Un campo in più in `GET /api/patto`: le app di prima lo ignorano. Nessun cambio al database.
 
+
+## v4.2 — il bilancio della sera e le regole di un giorno (13/10/2026, richiesta di Andrea)
+
+Ogni sera, all'ora della chiusura della sera, il telefono chiede «com'è andata oggi?». Se non è andata bene: cosa non ha funzionato, e cosa farai, quando. Il bilancio e le promesse **restano sul telefono** (`bilancio.json`, mai al server): i genitori non li leggono. Niente blocchi: una promessa mancata torna nel bilancio dopo, e tre volte di fila non riuscita fanno chiedere di cambiarla.
+
+Una promessa che il telefono può controllare da solo («domani al massimo 1 h di social», «domani niente telefono dalle 15 alle 17») diventa una **regola di un giorno**: questo è l'unico pezzo che passa dal server.
+
+### `solo_il` in `POST /api/regole`
+
+Campo facoltativo, `YYYY-MM-DD`, solo col token di un dispositivo:
+
+- vale **oggi o domani** nel fuso del patto; altrimenti `422 {"errore": "giorno_non_valido"}`;
+- solo `limite_tempo` e `fascia_oraria` (`422` con `loc: ["solo_il"]` per la vita reale);
+- una fascia deve contenere il giorno della settimana di `solo_il` e non passare la mezzanotte (`dalle < alle`), altrimenti `422` con `loc: ["solo_il"]`;
+- la regola nasce come le altre (storico, notifica `modifica_regola` al genitore, con `solo_il` nei `dettagli` e «(solo il …)» nel messaggio).
+
+Tabella nuova `regole_un_giorno (regola_id, giorno, scaduta)`: niente migrazione.
+
+### Come vive una regola di un giorno
+
+- **Il semaforo** la conta solo il suo giorno: prima (scritta la sera per domani) e dopo è `grigio`. Il suo giorno conta nella striscia come ogni regola.
+- **Si spegne da sola** il giorno dopo: alla prima richiesta che riguarda il figlio (battito, patto, finestra, famiglia, elenco delle regole) diventa `attiva = 0` con `ultima_modifica_ts` = le 23:59:59 del suo giorno (fuso del patto), nello storico come eliminazione `concordata`, **senza** notifica al genitore. Le sue proposte pendenti si annullano come per un'eliminazione.
+- **Il lock** dei 4 giorni vale anche per lei: non si toglie né si allenta prima che si spenga.
+- **Non tiene in piedi il patto**: per «almeno una regola» (`ultima_regola`) contano solo le altre; e toglierla (con una proposta) non incontra mai `ultima_regola`.
+
+### Nelle risposte
+
+- Ogni regola (`/api/regole`, `/api/patto`, `/api/finestra`, la regola nata o cambiata) ha `solo_il`: il giorno, o `null`.
+- `GET /api/patto` ha `regole_un_giorno`: le regole di un giorno di **questo** dispositivo col giorno negli 8 della finestra, **spente comprese**, `[{"id", "giorno", "semaforo"}]`. Il telefono ci legge com'è andata la promessa anche dopo che la regola non è più tra le `regole`. Assente = server di prima della v4.2: allora il telefono **non offre** le promesse misurabili (una regola con `solo_il` ignorato sarebbe per sempre).
+
+### Le app
+
+- **Telefono (0.24):** il bilancio della sera (pagina sua, notifica della sera che lo apre, card in Oggi), le promesse con giorno e ora facoltativa, il promemoria all'ora detta con «Fatto · Non fatto · Fra un'ora», «Rimando», «Da cambiare» dopo tre volte, gli ultimi 7 giorni. Le promesse misurabili diventano una regola di un giorno per domani. Una regola di un giorno si valuta ed elenca solo il suo giorno, con «solo oggi».
+- **Genitore (0.24) e computer (0.25):** la regola dice «… · solo il 14/10». Il bilancio non lo vedono.
+
+### Compatibilità
+
+Un campo facoltativo in ingresso, un campo in ogni regola e uno nel patto: le app di prima li ignorano. Un server di prima della v4.2 ignorerebbe `solo_il`: per questo il telefono la manda solo se il patto ha `regole_un_giorno`, e controlla che la regola nata dica `solo_il`.
+
 ---
-**Versione: v4.1 — 12/10/2026** (richiesta di Andrea): `striscia_qui` in `GET /api/patto`, il bollino di QUESTO dispositivo (le sue regole più la vita reale): sul telefono e sul computer la striscia grande e la serie non si tingono per le regole di un altro dispositivo. Nell'app del genitore le regole per dispositivo, ciascuno con la sua pagina. Nessun cambio al database.
+**Versione: v4.2 — 13/10/2026** (richiesta di Andrea): il bilancio della sera sul telefono (resta sul telefono) e le regole di un giorno per le promesse che il telefono controlla: `solo_il` in `POST /api/regole` (oggi o domani), semaforo solo quel giorno, spente da sole il giorno dopo senza avvisare, non contano per `ultima_regola`; `solo_il` in ogni regola e `regole_un_giorno` nel patto. Una tabella nuova.
+**v4.1 — 12/10/2026** (richiesta di Andrea): `striscia_qui` in `GET /api/patto`, il bollino di QUESTO dispositivo (le sue regole più la vita reale): sul telefono e sul computer la striscia grande e la serie non si tingono per le regole di un altro dispositivo. Nell'app del genitore le regole per dispositivo, ciascuno con la sua pagina. Nessun cambio al database.
 **v4.0 — 07/10/2026** (decisioni di Andrea): i lavori di casa si sbloccano solo quando un genitore li approva (`POST /api/faccende/{id}/conferma` sblocca, idempotente per lo stesso genitore/`foto_ts`; i lavori da approvare restano in `blocco.da_fare` con `stato`/`foto_ts`; campo `da_approvare`; `foto_ts` obbligatorio dopo il 404 — 422 senza; bocciatura senza scadenza finché non approvato; foto del `da_approvare` tenute, quella approvata cancellata 30 giorni dopo l'approvazione; `faccenda_fatta` «foto da approvare» con un solo avviso aperto per lavoro; `faccende_finite` all'ultima approvazione; «sbloccati» solo se il blocco era attivo e non rimandato; `faccenda_confermata` al figlio e ai genitori; `faccende_da_approvare` in finestra e famiglia; `faccende_approvazione_dal` in `patto` per i lavori di prima, nessuna colonna nuova; il telefono non sblocca più localmente). Il programma del computer non resta chiuso: attività pianificata di utente «Pactum» ogni minuto con `--guardiano` (esce in silenzio se un'istanza c'è già; contro il mutex occupato ascolta subito in `Main`, chiede, riprova dopo 10 s, non accusa se chi tiene il mutex è un processo `Pactum.exe`, e se parte prende il mutex `.Riserva` e manda `manomissione istanza_occupata` una volta per accensione); **nessuna istanza chiude un'altra** (aggiornamento chiudendo dal menu), nessuna versione in HKCU; spegnimento annullato provato da `WM_ENDSESSION fEndSession=FALSE` (timer di 60 s di riserva, niente uscita in `SessionEnded`, segno «fine sessione» azzerato), `ripresa spegnimento_annullato`/`accesso`, `manomissione programma_chiuso` con `causa` (`spegnimento_annullato`/`disconnessione`) solo in blocco o Studio; all'avvio sente il server fino a 5 s prima di coprire; `manomissione guardiano_assente`, `chiuso_durante_studio`, e **`computer_sparito` scritta dal server** quando il computer smette di battere in blocco/Studio senza `sospensione` pulita (rete di sicurezza contro un Pactum ucciso che non riparte). La Sessione Studio (`/api/studio`): configurazione per figlio proposta dal figlio e approvata da un genitore (`studio_versioni`, orari/giorni/minimo dal giorno dopo, liste dalla partenza successiva, guardia `orari_impossibili`), partenze automatiche lun–ven alle 15:00 decise dal server con `prossime_partenze` anche senza rete (telefono 0.18 obbligatorio, altrimenti `prossime_partenze` `[]` e `studio_non_partito` ai genitori; tabella `studio_partenze`, ogni partenza una volta sola, lettura prima e `BEGIN IMMEDIATE` solo se serve), avvio a mano (`avvio_scaduto`/`troppo_tardi`/`blocco_faccende` anche in ritardo), tratti di attività di durata libera (`compiti`/`lavori_di_casa`/`altro`) cronometrati con `elapsedRealtime`, con `secondi_contati` e `minuti_attivita` come **unione** tagliata a `[conta_dal, fine]`, `conta` deciso una volta sola, `minuti_alla_chiusura` congelato; chiusura dal **solo telefono** (anche senza id: `giorno`/`chiave`) dopo le 16:00 e il minimo con dichiarazione (10–1000), chiusura del genitore con **motivo obbligatorio**, chiusura automatica a mezzanotte (`non_chiuso`, che cede a una chiusura tardiva valida del figlio); copertura **dello schermo** (barra libera), browser rifiutati in lista (elenco ampio) e non leggibili coperti, durante lo Studio una barra degli indirizzi che non si legge copre, `firme` dei programmi firmati controllate; `rimandato` e `studio` nel blocco; sessioni normali chiuse `terminata` all'`inizio_ts` e `409 studio_in_corso` durante; emendamento al patto etico dei siti sul computer. Fasce: soglia di 60 secondi scritta. Solo tabelle nuove e righe in `patto`; copia del database prima per sicurezza.
 **v3.9 — 05/10/2026** (richieste di Andrea): `PATCH /api/faccende/{id}` per modificare un lavoro da fare (titolo, nota, ora del blocco; notifica `faccenda_modificata`); `POST /api/faccende/{id}/conferma` ("svolto", `confermata_ts`/`confermata_da`, non più bocciabile, notifica `faccenda_confermata`; lo sblocco resta all'ultima foto); `GET /api/faccende?cerca=` su tutta la storia. Due colonne nuove nel database.
 **v3.8 — 05/10/2026** (richieste di Andrea): `totale` in `medie` (somma degli ultimi 7 e 30 giorni con dati); `uso_recente` e `medie` anche in `GET /api/patto?tempi=1` (questo dispositivo e `dispositivi[]`, solo su richiesta), identici alla finestra; avviso del tempo finito a 30 su 30 sul telefono, `sforamento` invariato da 31. Nessun cambio al database.

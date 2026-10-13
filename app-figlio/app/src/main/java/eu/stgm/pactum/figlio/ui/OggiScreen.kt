@@ -5,6 +5,7 @@ import eu.stgm.pactum.design.StatoVuoto
 import eu.stgm.pactum.design.Caricamento
 import eu.stgm.pactum.design.Pillola
 import eu.stgm.pactum.design.CardEvidenza
+import eu.stgm.pactum.design.CardNormale
 import eu.stgm.pactum.design.FilaPulsanti
 import eu.stgm.pactum.design.FoglioDalBasso
 import eu.stgm.pactum.design.Tono
@@ -114,6 +115,7 @@ fun OggiScreen(
     onApriPermessi: () -> Unit,
     onApriLavori: () -> Unit,
     onApriTempo: () -> Unit,
+    onApriBilancio: () -> Unit = {},
     vm: OggiViewModel = viewModel(),
     dichiarazioniVm: DichiarazioniViewModel = viewModel(),
 ) {
@@ -321,6 +323,11 @@ fun OggiScreen(
                             suQuestoTelefono = stato.altriDispositivi,
                         )
                     }
+                }
+
+                // (0.24) Il bilancio della sera: da fare, promesse che aspettano, la promessa di oggi.
+                stato.bilancio?.let { bilancio ->
+                    item(key = "bilancio") { CardBilancio(bilancio, onApriBilancio) }
                 }
 
                 // 4. Le regole di oggi, una riga per regola.
@@ -923,4 +930,38 @@ private fun testoEsitoBonus(
     is EsitoBonus.Scaduto -> context.getString(R.string.bonus_scaduto)
     // Era già partito: niente "non è partito in tempo".
     is EsitoBonus.GiornoCambiato -> context.getString(R.string.bonus_giorno_cambiato)
+}
+
+/**
+ * (0.24) Il bilancio della sera in Oggi: una card normale (non in evidenza: la serie
+ * resta l'unica), con la cosa più urgente in testa e "Apri il bilancio".
+ */
+@Composable
+private fun CardBilancio(bilancio: BilancioInOggi, onApri: () -> Unit) {
+    CardNormale(onClick = onApri) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spazi.xs)) {
+            Text(stringResource(R.string.bilancio_titolo), style = MaterialTheme.typography.titleMedium)
+            if (bilancio.daFare) {
+                Text(stringResource(R.string.oggi_bilancio_da_fare), style = MaterialTheme.typography.bodyMedium)
+            }
+            if (bilancio.daDire > 0) {
+                Text(
+                    pluralStringResource(R.plurals.oggi_promesse_da_dire, bilancio.daDire, bilancio.daDire),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            bilancio.diOggi?.let { promessa ->
+                val testo = stringResource(R.string.oggi_promessa_di_oggi, promessa.testo)
+                Text(
+                    text = promessa.ora?.let { testo + " · " + stringResource(R.string.bilancio_alle, it).lowercase() } ?: testo,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Text(
+                stringResource(R.string.oggi_apri_bilancio),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
 }

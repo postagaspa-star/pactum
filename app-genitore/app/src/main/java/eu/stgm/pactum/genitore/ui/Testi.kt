@@ -146,8 +146,13 @@ fun parametroTesto(parametri: JsonObject, nome: String): String? = campo(paramet
 @Composable
 fun descrizioneRegola(regola: RegolaFinestra): String = descrizioneRegola(parole(), regola)
 
-fun descrizioneRegola(parole: Parole, regola: RegolaFinestra): String =
-    descrizioneRegola(parole, regola.tipo, regola.parametri, regola.nome, regola.dispositivo?.tipo)
+fun descrizioneRegola(parole: Parole, regola: RegolaFinestra): String {
+    val base = descrizioneRegola(parole, regola.tipo, regola.parametri, regola.nome, regola.dispositivo?.tipo)
+    // (0.24, v4.2) Una regola di un giorno (una promessa del bilancio della sera del
+    // figlio, che il telefono controlla): vale quel giorno e poi si spegne da sola.
+    val giorno = regola.soloIl?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return base
+    return parole.testo(R.string.regola_solo_il, base, giorno.format(formatoGiornoBreve))
+}
 
 /**
  * (0.9) Lo stato di una regola in un giorno, in parole, per l'elenco della

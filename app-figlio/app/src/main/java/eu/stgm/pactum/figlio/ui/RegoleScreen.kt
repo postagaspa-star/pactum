@@ -624,6 +624,8 @@ private fun CardRegola(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         if (concordata) Pillola(stringResource(R.string.regola_concordata), tono = Tono.Positivo)
+                        // (0.24) Una promessa del bilancio che controlla il telefono: vale oggi e basta.
+                        if (regola.soloIl != null) Pillola(stringResource(R.string.regola_solo_oggi), tono = Tono.Neutro)
                     }
                     Text(
                         // (0.10) Mai il nome di un pacchetto, anche dopo un cambio di bersaglio.
@@ -634,8 +636,9 @@ private fun CardRegola(
                 MenuAzioni(voci = voci, descrizione = stringResource(R.string.regola_menu))
             }
             // Il lock asimmetrico, in chiaro: quando la regola tornerà allentabile.
+            // (0.24) Non per una regola di un giorno: domani si spegne da sola.
             istanteServer(regola.allentabileDal)
-                ?.takeIf { it.isAfter(Instant.now()) }
+                ?.takeIf { it.isAfter(Instant.now()) && regola.soloIl == null }
                 ?.let {
                     Text(
                         text = stringResource(R.string.regola_allentabile_dal, dataOraLocale(it)),

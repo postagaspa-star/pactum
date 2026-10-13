@@ -69,6 +69,11 @@ data class Patto(
     // una regola sforata sul computer non tinge il telefono. Vuota = server
     // di prima della v4.1 (vale `striscia_dispositivo`, poi `striscia`).
     @SerialName("striscia_qui") val strisciaQui: List<GiornoStriscia> = emptyList(),
+    // (0.24, v4.2) Le regole di un giorno di questo telefono negli 8 giorni, anche
+    // spente, col loro semaforo: com'è andata una promessa misurabile. Assente =
+    // server di prima della v4.2, che le regole di un giorno non le conosce: allora
+    // le promesse misurabili non si offrono (diventerebbero regole per sempre).
+    @SerialName("regole_un_giorno") val regoleUnGiorno: List<VoceRegolaUnGiorno>? = null,
     // (v3) Tutti i dispositivi del figlio, ciascuno con la sua striscia: la
     // riga "Computer: 5 su 7" sotto la striscia del figlio.
     val dispositivi: List<Dispositivo> = emptyList(),
@@ -154,7 +159,14 @@ data class Patto(
      * perché una fascia oraria del computer valutata sul telefono diventerebbe
      * uno sforamento falso nel registro.
      */
-    fun regoleDiQuestoDispositivo(): List<Regola> = regoleDelDispositivo(regole, dispositivo?.id)
+    fun regoleDiQuestoDispositivo(): List<Regola> =
+        regoleDelDispositivo(regole, dispositivo?.id).filter { valeIl(it, oggiNelPatto()) }
+
+    /** (0.24) Il giorno di oggi nel fuso del patto (quello in cui il server conta i giorni). */
+    fun oggiNelPatto(): String = java.time.LocalDate.now(zonaPatto(fuso)).toString()
+
+    /** (0.24, v4.2) Il server conosce le regole di un giorno: si possono offrire le promesse misurabili. */
+    val conosceRegoleUnGiorno: Boolean get() = regoleUnGiorno != null
 
     /** (v3) Dove sta questo telefono tra i dispositivi del figlio. */
     fun contestoDispositivi(): ContestoDispositivi =
@@ -260,6 +272,9 @@ data class Regola(
     // Il nome leggibile del bersaglio, se il server lo manda (es. "Minecraft"
     // per `exe:minecraft.exe`). Assente quasi sempre: si ripiega da soli.
     val nome: String? = null,
+    // (0.24, v4.2) YYYY-MM-DD: una regola di un giorno (una promessa del bilancio
+    // della sera che il telefono controlla). Vale solo quel giorno. null = di sempre.
+    @SerialName("solo_il") val soloIl: String? = null,
 ) {
     /** Il dispositivo della regola, dal campo o dall'oggetto: null = del figlio. */
     val idDispositivo: Long?
@@ -312,6 +327,20 @@ fun regoleDelDispositivo(regole: List<Regola>, questo: Long?): List<Regola> =
     } else {
         regole.filter { it.idDispositivo == null || it.idDispositivo == questo }
     }
+
+/**
+ * (0.24, v4.2) Una regola di un giorno vale solo il suo giorno: prima (scritta la sera
+ * per domani) e dopo non si valuta, non si elenca in Oggi né in Regole.
+ */
+fun valeIl(regola: Regola, giorno: String): Boolean = regola.soloIl == null || regola.soloIl == giorno
+
+/** (0.24, v4.2) Una voce di `regole_un_giorno` nel patto. */
+@Serializable
+data class VoceRegolaUnGiorno(
+    val id: Long = 0,
+    val giorno: String = "",
+    val semaforo: List<GiornoStriscia> = emptyList(),
+)
 
 object TipiRegola {
     const val LIMITE_TEMPO = "limite_tempo"
@@ -559,7 +588,12 @@ data class PaccoNotifiche(val notifiche: List<Notifica> = emptyList())
 
 // Corpi delle richieste (POST/PATCH del figlio).
 @Serializable
-data class CreaRegolaIn(val tipo: String, val parametri: JsonObject)
+data class CreaRegolaIn(
+    val tipo: String,
+    val parametri: JsonObject,
+    // (0.24, v4.2) Una regola di un giorno: oggi o domani. Null = di sempre (non si manda).
+    @SerialName("solo_il") val soloIl: String? = null,
+)
 
 @Serializable
 data class ModificaRegolaIn(

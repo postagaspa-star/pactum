@@ -25,6 +25,9 @@ enum class Pagina {
     STORICO,
     STORICO_DICHIARAZIONI,
     TEMPO,
+
+    /** (0.24) Il bilancio della sera (da Oggi, dalla chiusura della sera, dai promemoria). */
+    BILANCIO,
 }
 
 /**
@@ -58,6 +61,8 @@ object Navigazione {
         MainActivity.DEST_DIARIO -> Ingresso(Scheda.REGOLE, pagina = Pagina.STORICO_DICHIARAZIONI)
         MainActivity.DEST_SESSIONI -> Ingresso(Scheda.SESSIONI)
         MainActivity.DEST_FACCENDE -> Ingresso(Scheda.LAVORI)
+        // (0.24) Il bilancio della sera, sopra Oggi.
+        MainActivity.DEST_BILANCIO -> Ingresso(Scheda.OGGI, pagina = Pagina.BILANCIO)
         else -> Ingresso(Scheda.OGGI)
     }
 

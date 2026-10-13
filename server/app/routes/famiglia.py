@@ -13,7 +13,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import abbinamento, clock, faccende, famiglia, genitori, semaforo, studio
+from .. import abbinamento, clock, faccende, famiglia, genitori, regole_un_giorno, semaforo, studio
 from ..auth import Identita, richiede_genitore
 from ..db import get_conn
 from ..schemas import AbbinaIn, DispositivoIn, NomeIn
@@ -63,6 +63,7 @@ def leggi_famiglia(
     figli = []
     firme = genitori.Firme(conn)
     for figlio in conn.execute("SELECT * FROM figli ORDER BY id").fetchall():
+        regole_un_giorno.valuta(conn, figlio["id"], ora)  # (v4.2) quelle di ieri si spengono
         dispositivi = famiglia.dispositivi_del_figlio(conn, figlio["id"])
         quadro = semaforo.quadro(conn, ora, figlio["id"], dispositivi)
         non_lette = conn.execute(

@@ -321,7 +321,12 @@ fun ImpostazioniScreen(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DialogoOra(minuti: Int, onAnnulla: () -> Unit, onScegli: (Int) -> Unit) {
+internal fun DialogoOra(
+    minuti: Int,
+    onAnnulla: () -> Unit,
+    onScegli: (Int) -> Unit,
+    titolo: String = stringResource(R.string.impostazioni_serale_ora),
+) {
     val stato = rememberTimePickerState(
         initialHour = minuti / 60,
         initialMinute = minuti % 60,
@@ -330,7 +335,7 @@ private fun DialogoOra(minuti: Int, onAnnulla: () -> Unit, onScegli: (Int) -> Un
     val alto = LocalConfiguration.current.screenHeightDp >= 560
     AlertDialog(
         onDismissRequest = onAnnulla,
-        title = { Text(stringResource(R.string.impostazioni_serale_ora)) },
+        title = { Text(titolo) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),

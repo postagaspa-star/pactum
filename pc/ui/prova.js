@@ -515,7 +515,7 @@
       server: S.server,
       figlio: S.abbinato ? S.figlio : null,
       dispositivo: S.abbinato ? S.computer : null,
-      versione: '0.23.0',
+      versione: '0.25.0',
       ultimo_invio_ok: S.abbinato ? isoTs(S.ultimoInvio) : null,
       rete_ok: opzioni.rete,
       patto_aggiornato: S.abbinato ? isoTs(S.pattoAggiornato) : null,

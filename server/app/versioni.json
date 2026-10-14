@@ -1,20 +1,20 @@
 {
   "figlio": {
-    "versione_code": 22,
-    "versione_nome": "0.22.0",
+    "versione_code": 24,
+    "versione_nome": "0.24.0",
     "url": "/scarica/pactum-figlio.apk",
-    "note": "v0.22.0: se lo Studio non ha ancora app sul telefono, Pactum propone da solo ai tuoi genitori le app della tua sessione «Studio»; e in Sessioni una riga ti dice dove sceglierle."
+    "note": "v0.24.0: ogni dispositivo ha il suo bollino (un fuori regola sul computer non tinge più il telefono); nuovo «Il bilancio della sera»: ogni sera «com'è andata oggi?», e se qualcosa non ha funzionato scrivi cosa farai e quando; le promesse che il telefono può controllare diventano una regola di un giorno. Il bilancio resta sul tuo telefono: i genitori non lo leggono."
   },
   "genitore": {
-    "versione_code": 22,
-    "versione_nome": "0.22.0",
+    "versione_code": 24,
+    "versione_nome": "0.24.0",
     "url": "/scarica/pactum-genitore.apk",
-    "note": "v0.22.0: niente di nuovo per te; l'app del figlio ora propone per lo Studio le app della sua sessione «Studio»: la trovi in «Da decidere» da approvare."
+    "note": "v0.24.0: nella Panoramica una card per ogni dispositivo (e una per gli impegni), con la sua striscia e le regole di oggi; toccandola si apre la sua pagina. Le regole di un giorno del figlio si riconoscono da «solo il …»."
   },
   "computer": {
-    "versione_code": 23,
-    "versione_nome": "0.23.0",
+    "versione_code": 25,
+    "versione_nome": "0.25.0",
     "url": "/scarica/pactum-computer.zip",
-    "note": "v0.23.0: nuova sezione «Il mio tempo»: lo stesso grafico che vedono i tuoi genitori (categorie, ultimi 8 giorni, medie), anche del telefono; e puoi mettere in una categoria, anche creata da te, i programmi che Pactum non conosce. Quelli che riconosce già e i browser restano dove sono; una categoria con un limite non si svuota."
+    "note": "v0.25.0: la striscia grande, la serie e il record sono quelli di questo computer (un fuori regola sul telefono non lo tinge più); le regole di un giorno dicono «solo il …». In più tutto quello della 0.23: la sezione «Il mio tempo» e le tue categorie per i programmi."
   }
 }

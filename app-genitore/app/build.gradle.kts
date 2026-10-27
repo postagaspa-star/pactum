@@ -52,8 +52,8 @@ android {
         // v0.23.0 (contratto v4.1): le regole per dispositivo, una card ciascuno
         // sotto il patto, e la pagina di ogni dispositivo e degli impegni.
         // v0.24.0 (contratto v4.2): le regole di un giorno dicono "solo il 14/10".
-        versionCode = 24
-        versionName = "0.24.0"
+        versionCode = 25
+        versionName = "0.25.0"
     }
 
     signingConfigs {

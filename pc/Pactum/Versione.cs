@@ -13,9 +13,11 @@ namespace Pactum;
 /// le app sono alla 0.23.
 /// (0.25) 0.25.0 = 25: le regole di un giorno del telefono dicono "solo il 14/10" (contratto v4.2);
 /// le app sono alla 0.24.
+/// (0.26) 0.26.0 = 26: i lavori di casa dicono quante immagini ha allegato il genitore (contratto v4.3);
+/// le app sono alla 0.25.
 /// </summary>
 public static class Versione
 {
-    public const string Nome = "0.25.0";
-    public const int Codice = 25;
+    public const string Nome = "0.26.0";
+    public const int Codice = 26;
 }

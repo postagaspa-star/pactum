@@ -45,8 +45,8 @@ android {
         // telefono (striscia_qui); il computer ha la sua riga sotto.
         // 0.24 (contratto v4.2): il bilancio della sera, le promesse col loro
         // promemoria, e quelle che controlla il telefono (regole di un giorno).
-        versionCode = 24
-        versionName = "0.24.0"
+        versionCode = 25
+        versionName = "0.25.0"
     }
 
     signingConfigs {

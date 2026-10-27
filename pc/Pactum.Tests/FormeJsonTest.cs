@@ -129,13 +129,13 @@ public class FormeJsonTest
     [Fact]
     public void La_versione_e_la_stessa_nel_programma_e_nel_file()
     {
-        Assert.Equal("0.25.0", Versione.Nome);
-        // (0.25) 0.25.0 = 25 (v. Versione).
-        Assert.Equal(25, Versione.Codice);
+        Assert.Equal("0.26.0", Versione.Nome);
+        // (0.26) 0.26.0 = 26 (v. Versione).
+        Assert.Equal(26, Versione.Codice);
         var assembly = typeof(Versione).Assembly;
-        Assert.Equal(new Version(0, 25, 0, 0), assembly.GetName().Version);
+        Assert.Equal(new Version(0, 26, 0, 0), assembly.GetName().Version);
         var file = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-        Assert.Equal("0.25.0.0", file.FileVersion);
+        Assert.Equal("0.26.0.0", file.FileVersion);
     }
 
     [Theory]
@@ -145,7 +145,8 @@ public class FormeJsonTest
     [InlineData(18, false)]
     [InlineData(23, false)]
     [InlineData(25, false)]
-    [InlineData(26, true)]
+    [InlineData(26, false)]
+    [InlineData(27, true)]
     public async Task Una_versione_nuova_si_annuncia_solo_col_codice_del_computer_piu_alto(int codiceServer, bool annunciata)
     {
         // (0.14) Il codice del computer segue quello delle app (la 0.14.0 è la 14): il programma annuncia
@@ -254,7 +255,7 @@ public class FormeJsonTest
         Assert.False(Json.Booleano(s["abbinato"]));
         Assert.Null(s["figlio"]);
         Assert.Null(s["dispositivo"]);
-        Assert.Equal("0.25.0", Json.Testo(s["versione"]));
+        Assert.Equal("0.26.0", Json.Testo(s["versione"]));
     }
 
     [Theory]

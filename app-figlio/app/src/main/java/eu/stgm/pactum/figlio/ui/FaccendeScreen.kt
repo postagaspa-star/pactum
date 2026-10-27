@@ -101,6 +101,9 @@ import eu.stgm.pactum.design.SchermataColorata
 import eu.stgm.pactum.design.Sezione
 import eu.stgm.pactum.design.TitoloBarra
 import eu.stgm.pactum.design.coloriBarra
+import androidx.compose.ui.graphics.ImageBitmap
+import eu.stgm.pactum.design.TestiVisore
+import eu.stgm.pactum.design.VisoreImmagini
 
 /**
  * (0.13) Il telefono è bloccato dalle faccende adesso? Per le schermate: segue
@@ -317,6 +320,7 @@ fun FaccendeScreen(
                                         adesso = adesso,
                                         occupato = stato.preparazioneInCorso || scattoFaccenda != null,
                                         onScatta = { scatta(faccenda) },
+                                        caricaImmagine = vm::caricaImmagine,
                                     )
                                 }
                             }
@@ -431,6 +435,7 @@ private fun CardDaFare(
     adesso: Long,
     occupato: Boolean,
     onScatta: () -> Unit,
+    caricaImmagine: suspend (Long, Int) -> ImageBitmap?,
 ) {
     val context = LocalContext.current
     CardNormale {
@@ -443,6 +448,8 @@ private fun CardDaFare(
             faccenda.nota?.let {
                 Text(text = stringResource(R.string.faccenda_nota, it), style = MaterialTheme.typography.bodyMedium)
             }
+            // (0.25, contratto v4.3) Le immagini che il genitore ha allegato.
+            ImmaginiDelGenitore(faccenda, caricaImmagine)
             // (0.17, contratto v3.9) Da quando blocca, sempre, anche a blocco partito, in piccolo.
             Nota(testoBloccaDa(context, faccenda.bloccoDa, faccenda.creataIl, adesso))
             faccenda.ultimaBocciatura?.let { b ->
@@ -702,3 +709,29 @@ fun PassoPrimoAvvio(faccende: Boolean, etichettaResto: Int, passo: @Composable (
 
 /** L'ora sulla pagina si rilegge ogni quarto di minuto. */
 private const val INTERVALLO_ORA_MS = 15_000L
+
+/** (0.25, contratto v4.3) "Guarda le immagini (2)" e il visore a tutto schermo. */
+@Composable
+private fun ImmaginiDelGenitore(faccenda: FaccendaLocale, carica: suspend (Long, Int) -> ImageBitmap?) {
+    if (faccenda.immagini.isEmpty()) return
+    var aperto by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { aperto = true }) {
+        Text(stringResource(R.string.faccenda_immagini_guarda, faccenda.immagini.size))
+    }
+    if (aperto) {
+        val chiudi = stringResource(R.string.visore_chiudi)
+        val caricamento = stringResource(R.string.visore_caricamento)
+        val errore = stringResource(R.string.visore_errore)
+        val riprova = stringResource(R.string.visore_riprova)
+        val modello = stringResource(R.string.visore_numero)
+        VisoreImmagini(
+            titolo = faccenda.titolo.ifBlank { stringResource(R.string.faccenda_senza_titolo) },
+            numeri = faccenda.immagini,
+            testi = remember(chiudi, caricamento, errore, riprova, modello) {
+                TestiVisore(chiudi, caricamento, errore, riprova) { n, quante -> String.format(modello, n, quante) }
+            },
+            onChiudi = { aperto = false },
+            carica = { n -> carica(faccenda.id, n) },
+        )
+    }
+}

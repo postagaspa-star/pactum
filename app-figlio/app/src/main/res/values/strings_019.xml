@@ -13,4 +13,11 @@
     <string name="studio_usa_sessione">Usa le app di «%1$s»</string>
     <!-- Dopo che il telefono ha proposto da solo le app della sessione di studio. -->
     <string name="studio_da_sessione_mandata">Ho chiesto ai tuoi genitori di approvare per lo Studio le app della sessione «%1$s».</string>
+    <!-- (0.25, contratto v4.3) Le immagini che il genitore allega a un lavoro. -->
+    <string name="faccenda_immagini_guarda">Guarda le immagini (%1$d)</string>
+    <string name="visore_chiudi">Chiudi</string>
+    <string name="visore_caricamento">Carico l\'immagine…</string>
+    <string name="visore_errore">L\'immagine non si riesce a caricare: serve la rete.</string>
+    <string name="visore_riprova">Riprova</string>
+    <string name="visore_numero">Immagine %1$d di %2$d</string>
 </resources>

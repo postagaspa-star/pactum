@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.ui.graphics.ImageBitmap
+import eu.stgm.pactum.design.decodificaImmagine
 
 /**
  * (0.13) La pagina Faccende: l'elenco dal server (`GET /api/faccende`) e il
@@ -177,6 +179,15 @@ class FaccendeViewModel(application: Application) : AndroidViewModel(application
                     evento = if (immagine == null) Evento.FotoNonScaricata(nonCe = codice == 404) else it.evento,
                 )
             }
+        }
+    }
+
+    /** (0.25, contratto v4.3) Un'immagine allegata dal genitore, per il visore; null se non arriva. */
+    suspend fun caricaImmagine(faccendaId: Long, n: Int): ImageBitmap? {
+        val app = getApplication<Application>()
+        return withContext(Dispatchers.IO) {
+            PostinoClient(Impostazioni(app).leggiConfigurazione()).scaricaImmagine(faccendaId, n)
+                ?.let { decodificaImmagine(it, LATO_VISTA) }
         }
     }
 

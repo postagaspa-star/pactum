@@ -406,6 +406,28 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
         }
     }
 
+    /**
+     * (0.25, contratto v4.3) GET /api/faccende/{id}/immagini/{n}: un'immagine che il
+     * genitore ha allegato al lavoro, in memoria (al massimo 4 MB). Null se non arriva.
+     */
+    suspend fun scaricaImmagine(faccendaId: Long, n: Int): ByteArray? {
+        if (!configurazione.completa) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val richiesta = richiesta("/api/faccende/$faccendaId/immagini/$n").get().build()
+                httpFoto.newCall(richiesta).execute().use { risposta ->
+                    val corpo = risposta.body
+                    if (!risposta.isSuccessful || corpo == null) return@use null
+                    corpo.bytes().takeIf { it.isNotEmpty() && it.size <= IMMAGINE_MASSIMA_BYTE }
+                }
+            } catch (e: IOException) {
+                null
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        }
+    }
+
     // --- (0.18, v4.0) La Sessione Studio --------------------------------------
     // Un server di prima della v4.0 risponde 404 o 405: "serve aggiornare il server".
 
@@ -596,6 +618,9 @@ class PostinoClient(private val configurazione: ConfigurazionePostino) {
          * di OkHttp, prima IPv4), ma con più tempo per mandare e ricevere 2-3
          * MB su una rete mobile lenta.
          */
+        /** (0.25, v4.3) Un'immagine allegata: il server ne accetta fino a 4 MB. */
+        private const val IMMAGINE_MASSIMA_BYTE = 4 * 1024 * 1024
+
         private val httpFoto: OkHttpClient = httpMutazioni.newBuilder()
             .writeTimeout(90, TimeUnit.SECONDS)
             .readTimeout(90, TimeUnit.SECONDS)

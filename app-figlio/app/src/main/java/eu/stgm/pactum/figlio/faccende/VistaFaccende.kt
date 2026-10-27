@@ -42,6 +42,7 @@ object VistaFaccende {
                     bocciature = d.bocciature,
                     ultimaBocciatura = d.ultimaBocciatura,
                     daApprovare = d.aspettaApprovazione,
+                    immagini = d.immagini, // (0.25, v4.3)
                 )
             }
         } else {

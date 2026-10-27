@@ -90,6 +90,8 @@ data class FaccendaDaFare(
     val ultimaBocciatura: Bocciatura? = null,
     val stato: String = StatiFaccenda.DA_FARE,
     val fotoIl: Long? = null,
+    /** (0.25, contratto v4.3) I numeri (1..3) delle immagini allegate dal genitore. */
+    val immagini: List<Int> = emptyList(),
 ) {
     /** (0.18) La foto è arrivata e aspetta che un genitore la approvi: niente "Scatta la foto". */
     val aspettaApprovazione: Boolean get() = stato == StatiFaccenda.FATTA
@@ -119,6 +121,8 @@ data class FaccendaLocale(
      * un genitore: è ancora un lavoro APERTO (blocca dal suo `blocco_da`).
      */
     val daApprovare: Boolean = false,
+    /** (0.25, contratto v4.3) I numeri (1..3) delle immagini allegate dal genitore. */
+    val immagini: List<Int> = emptyList(),
 ) {
     val confermata: Boolean get() = confermataIl != null
 
@@ -205,8 +209,19 @@ object LetturaFaccende {
             // stato che non si conosce vale "da fare": mai un lavoro aperto perso.
             stato = if (testo(o["stato"])?.trim()?.lowercase() == StatiFaccenda.FATTA) StatiFaccenda.FATTA else StatiFaccenda.DA_FARE,
             fotoIl = LetturaSessioni.istante(o["foto_ts"]),
+            immagini = immagini(o["immagini"]),
         )
     }
+
+    /**
+     * (0.25, contratto v4.3) I numeri delle immagini allegate: `[{"n": 1, "ts": …}]`.
+     * Un server di prima non le manda (vuota); una voce scritta male si salta.
+     */
+    fun immagini(elemento: JsonElement?): List<Int> =
+        (elemento as? JsonArray)
+            ?.mapNotNull { voce -> intero((voce as? JsonObject)?.get("n"))?.toInt()?.takeIf { it in 1..3 } }
+            ?.distinct()?.sorted()
+            .orEmpty()
 
     fun faccenda(elemento: JsonElement?): FaccendaLocale? {
         val o = elemento as? JsonObject ?: return null
@@ -228,6 +243,7 @@ object LetturaFaccende {
             confermataIl = LetturaSessioni.istante(o["confermata_ts"]),
             confermataDa = nomeGenitore(o["confermata_da"]),
             daApprovare = (o["da_approvare"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull == true,
+            immagini = immagini(o["immagini"]),
         )
     }
 

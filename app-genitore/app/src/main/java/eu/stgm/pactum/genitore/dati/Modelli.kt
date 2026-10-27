@@ -439,7 +439,13 @@ data class Faccenda(
      * blocca. Lo calcola il server; assente (server più vecchio) = false.
      */
     @SerialName("da_approvare") val daApprovare: Boolean = false,
+    /** (0.25, contratto v4.3) Le immagini allegate dal genitore (al massimo 3); vuota se nessuna o server vecchio. */
+    val immagini: List<ImmagineFaccenda> = emptyList(),
 )
+
+/** (0.25, v4.3) Un'immagine allegata a un lavoro: il suo numero (1..3) e quando è arrivata. */
+@Serializable
+data class ImmagineFaccenda(val n: Int, val ts: String? = null)
 
 /** L'ultima bocciatura di una faccenda: quando, perché e chi. */
 @Serializable

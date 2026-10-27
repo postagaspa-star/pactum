@@ -272,6 +272,17 @@ interface FonteFaccende {
 
     /** (v3.9) GET /api/faccende?figlio_id=…&cerca=…: in tutta la storia del figlio. */
     suspend fun cercaFaccende(figlioId: Long?, testo: String): EsitoRicercaFaccende = EsitoRicercaFaccende.ServerVecchio
+
+    /** (0.25, v4.3) PUT /api/faccende/{id}/immagini/{n}: un'immagine allegata (JPEG). */
+    suspend fun allegaImmagine(faccendaId: Long, n: Int, jpeg: ByteArray): EsitoScrittura<Faccenda?> =
+        EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+
+    /** (0.25, v4.3) DELETE /api/faccende/{id}/immagini/{n}. */
+    suspend fun togliImmagine(faccendaId: Long, n: Int): EsitoScrittura<Faccenda?> =
+        EsitoScrittura.Rifiutato(CodiciErrore.SERVER_DA_AGGIORNARE)
+
+    /** (0.25, v4.3) GET /api/faccende/{id}/immagini/{n}: i byte, in memoria come la foto. */
+    suspend fun scaricaImmagine(faccendaId: Long, n: Int): EsitoFoto = EsitoFoto.Fallita
 }
 
 /** (v3.9) L'esito di una ricerca nei lavori di casa. */
@@ -399,8 +410,8 @@ class PostinoClient(
      * il nuovo. Un server più vecchio ignora il parametro e manda tutto: chi
      * chiama non deve contare su una lista corta.
      */
-    suspend fun leggiNotifiche(dopoId: Long? = null): List<Notifica>? =
-        leggi(percorsoNotifiche(dopoId))
+    suspend fun leggiNotifiche(dopoId: Long? = null, diagnosi: String? = null): List<Notifica>? =
+        leggi(percorsoNotifiche(dopoId, diagnosi))
             ?.let { decodifica(PaccoNotifiche.serializer(), it) }
             ?.notifiche
 
@@ -773,10 +784,30 @@ class PostinoClient(
      * in memoria e lì resta: niente file, niente galleria. Oltre [MASSIMO_BYTE_FOTO]
      * non si legge (il server ne tiene al massimo 4 MB).
      */
-    override suspend fun scaricaFoto(faccendaId: Long): EsitoFoto {
+    override suspend fun scaricaFoto(faccendaId: Long): EsitoFoto = scaricaJpeg("/api/faccende/$faccendaId/foto")
+
+    /** (0.25, v4.3) Un'immagine allegata a un lavoro, in memoria come la foto. */
+    override suspend fun scaricaImmagine(faccendaId: Long, n: Int): EsitoFoto =
+        scaricaJpeg("/api/faccende/$faccendaId/immagini/$n")
+
+    /** (0.25, v4.3) PUT /api/faccende/{id}/immagini/{n}: la mette o la sostituisce. Senza ritentativi, come le decisioni. */
+    override suspend fun allegaImmagine(faccendaId: Long, n: Int, jpeg: ByteArray): EsitoScrittura<Faccenda?> {
+        val risposta = richiedi("PUT", "/api/faccende/$faccendaId/immagini/$n", jpeg.toRequestBody(JPEG_MEDIA_TYPE), httpCreazioni)
+            ?: return EsitoScrittura.Fallito
+        return interpretaNuovaRotta(risposta.codice, risposta.corpo, Faccenda.serializer())
+    }
+
+    /** (0.25, v4.3) DELETE /api/faccende/{id}/immagini/{n}. */
+    override suspend fun togliImmagine(faccendaId: Long, n: Int): EsitoScrittura<Faccenda?> {
+        val risposta = richiedi("DELETE", "/api/faccende/$faccendaId/immagini/$n", null, httpCreazioni)
+            ?: return EsitoScrittura.Fallito
+        return interpretaNuovaRotta(risposta.codice, risposta.corpo, Faccenda.serializer())
+    }
+
+    private suspend fun scaricaJpeg(percorso: String): EsitoFoto {
         if (!configurazione.completa) return EsitoFoto.Fallita
         val richiesta = try {
-            richiesta("/api/faccende/$faccendaId/foto").get().build()
+            richiesta(percorso).get().build()
         } catch (e: IllegalArgumentException) {
             return EsitoFoto.Fallita
         }
@@ -955,8 +986,14 @@ class PostinoClient(
          * (v3.3) Il percorso delle notifiche, con `?dopo_id=n` solo se c'è un id
          * valido (il server rifiuta un numero negativo con un 422).
          */
-        internal fun percorsoNotifiche(dopoId: Long?): String =
-            if (dopoId == null || dopoId < 0) "/api/notifiche" else "/api/notifiche?dopo_id=$dopoId"
+        internal fun percorsoNotifiche(dopoId: Long?, diagnosi: String? = null): String {
+            val parametri = listOfNotNull(
+                dopoId?.takeIf { it >= 0 }?.let { "dopo_id=$it" },
+                // (0.25, contratto v4.3) Solo per i registri del server, che li ignora (Diagnosi).
+                diagnosi?.takeIf { it.isNotBlank() },
+            )
+            return if (parametri.isEmpty()) "/api/notifiche" else "/api/notifiche?" + parametri.joinToString("&")
+        }
 
         /**
          * GET /api/famiglia dal codice HTTP. Il 404 è il server 0.7 (la rotta non
@@ -1486,6 +1523,9 @@ class PostinoClient(
 
         private val CORPO_VUOTO = ByteArray(0).toRequestBody(null)
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+        /** (0.25, v4.3) Le immagini allegate ai lavori. */
+        private val JPEG_MEDIA_TYPE = "image/jpeg".toMediaType()
 
         /**
          * `coerceInputValues`: un `null` dove il modello ha un default (es. una

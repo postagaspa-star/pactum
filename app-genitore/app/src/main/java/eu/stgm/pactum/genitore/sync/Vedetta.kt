@@ -67,6 +67,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.LocalTime
+import eu.stgm.pactum.genitore.BuildConfig
+import eu.stgm.pactum.genitore.servizio.Diagnosi
 
 /**
  * Il giro della vedetta (0.9: estratto da VedettaWorker, uno solo per il
@@ -124,7 +126,9 @@ class Vedetta(context: Context) {
         val completo = CadenzaVedetta.giroCompletoDovuto(stato.ultimoGiroCompleto, adesso)
         val postino = PostinoClient(configurazione, perLaVedetta = true)
         val ricordo = impostazioni.leggiIdAvvisatiSeCi()
-        val notifiche = postino.leggiNotifiche(if (completo) null else dopoIdPerIlGiroVeloce(ricordo))
+        // (0.25) In più quale telefono è e, la prima volta, perché si era fermato: per i registri del server.
+        val diagnosi = Diagnosi.parametri(context, BuildConfig.VERSION_CODE)
+        val notifiche = postino.leggiNotifiche(if (completo) null else dopoIdPerIlGiroVeloce(ricordo), diagnosi)
             ?: return EsitoGiro.SERVER_MUTO // server muto: si riprova
         controlloRiuscito(configurazione, stato)
 

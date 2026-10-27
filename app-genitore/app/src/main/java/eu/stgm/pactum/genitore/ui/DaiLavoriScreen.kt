@@ -65,6 +65,7 @@ import java.time.ZonedDateTime
 import androidx.compose.ui.graphics.Color
 import eu.stgm.pactum.design.SchermataColorata
 import eu.stgm.pactum.design.Sezione
+import android.net.Uri
 
 // (0.15) "Dai lavori di casa", a pagina intera (prima era un dialogo che con la
 // tastiera aperta non entrava: B21/B36). Gli stessi campi, la stessa validazione,
@@ -84,6 +85,9 @@ private val RIFIUTI_CHE_CHIUDONO = setOf(
 
 /** Come si salva l'elenco dei lavori scritti (una rotazione non lo perde). */
 private val SalvaTitoli = listSaver<List<String>, String>(save = { it }, restore = { it })
+
+/** (0.25) Come si salvano le immagini scelte (una rotazione non le perde). */
+private val SalvaUri = listSaver<List<Uri>, String>(save = { l -> l.map { it.toString() } }, restore = { l -> l.map(Uri::parse) })
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -110,6 +114,8 @@ fun DaiLavoriScreen(
 
     var titoli by rememberSaveable(stateSaver = SalvaTitoli) { mutableStateOf(listOf("")) }
     var nota by rememberSaveable { mutableStateOf("") }
+    // (0.25, v4.3) Le immagini scelte dalla galleria, facoltative.
+    var immagini by rememberSaveable(stateSaver = SalvaUri) { mutableStateOf(emptyList<Uri>()) }
     var subito by rememberSaveable { mutableStateOf(true) }
     var minutoDelGiorno by rememberSaveable {
         mutableIntStateOf(oraProposta(LocalTime.now()).toSecondOfDay() / 60)
@@ -134,7 +140,10 @@ fun DaiLavoriScreen(
             is EventoFaccende.Date -> {
                 vm.consumaEvento()
                 famigliaVm.aggiorna()
-                cornice.messaggi.mostra(testoFaccendeDate(p, evento.quante))
+                cornice.messaggi.mostra(
+                    testoFaccendeDate(p, evento.quante) +
+                        if (evento.immaginiMancate > 0) " " + p.testo(R.string.dai_immagini_mancate) else "",
+                )
                 cornice.indietro()
             }
             is EventoFaccende.Rifiuto -> if (evento.gesto == GestoFaccende.DAI) {
@@ -258,6 +267,8 @@ fun DaiLavoriScreen(
                         maxLines = 4,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    // (0.25, contratto v4.3) Le immagini facoltative.
+                    SceltaImmagini(immagini) { immagini = it }
                     SopraTitolo(stringResource(R.string.dai_blocco), modifier = Modifier.padding(top = Spazi.s))
                     RigaScelta(selezionata = subito, testo = stringResource(R.string.dai_subito), onClick = { subito = true })
                     RigaScelta(
@@ -288,7 +299,7 @@ fun DaiLavoriScreen(
                             when (val controllo = controlloPrimaDiMandare(inizio, ora.takeIf { !subito }, adessoVero)) {
                                 is ControlloInvio.Cambiato -> adesso = adessoVero
                                 is ControlloInvio.Manda -> if (figlioId != null) {
-                                    vm.daiFaccende(figlioId, scritti, nota.ifBlank { null }, controllo.bloccoDa, famiglia.io)
+                                    vm.daiFaccende(figlioId, scritti, nota.ifBlank { null }, controllo.bloccoDa, famiglia.io, immagini)
                                 }
                             }
                         },
@@ -430,6 +441,19 @@ fun ModificaLavoroScreen(
     LaunchedEffect(stato.evento) {
         val evento = stato.evento ?: return@LaunchedEffect
         when (evento) {
+            // (0.25, v4.3) Le immagini cambiate: si resta qui, e lo si dice.
+            is EventoFaccende.ImmaginiCambiate -> {
+                vm.consumaEvento()
+                cornice.messaggi.mostra(
+                    p.testo(
+                        when {
+                            evento.serverVecchio -> R.string.immagini_server_vecchio
+                            evento.mancate > 0 -> R.string.immagini_non_partite
+                            else -> R.string.immagini_aggiornate
+                        },
+                    ),
+                )
+            }
             EventoFaccende.Modificata, EventoFaccende.NessunCambio -> {
                 vm.consumaEvento()
                 famigliaVm.aggiorna()
@@ -535,6 +559,8 @@ fun ModificaLavoroScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        // (0.25, contratto v4.3) Le immagini: ogni gesto parte subito.
+                        if (faccenda != null) ImmaginiDelLavoro(faccenda, figlioId, vm, stato.invio)
                         errore?.let {
                             Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                         }

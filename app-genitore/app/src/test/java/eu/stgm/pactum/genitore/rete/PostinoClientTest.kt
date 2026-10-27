@@ -250,6 +250,9 @@ class PostinoClientTest {
         assertEquals("/api/notifiche?dopo_id=42", PostinoClient.percorsoNotifiche(42))
         // Un negativo il server lo rifiuta (422): meglio la lista intera.
         assertEquals("/api/notifiche", PostinoClient.percorsoNotifiche(-1))
+        // (0.25, contratto v4.3) I parametri per i registri del server, che li ignora.
+        assertEquals("/api/notifiche?dopo_id=42&app=25&tel=00ab12", PostinoClient.percorsoNotifiche(42, "app=25&tel=00ab12"))
+        assertEquals("/api/notifiche?app=25&tel=00ab12", PostinoClient.percorsoNotifiche(null, "app=25&tel=00ab12"))
     }
 
     @Test

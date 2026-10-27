@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -82,6 +81,11 @@ import kotlinx.coroutines.delay
 import java.time.Instant
 import eu.stgm.pactum.design.SchermataColorata
 import eu.stgm.pactum.design.Sezione
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 
 // (0.13) I lavori di casa (contratto v3.6), per il figlio scelto in cima. (0.15)
 // Sono una scheda della barra, "Lavori" (titolo "Lavori di casa"): in alto "Dai
@@ -184,13 +188,21 @@ fun LavoriScreen(
             finestraVm.aggiorna(figlioId)
         }
         val messaggio = when (evento) {
-            is EventoFaccende.Date -> testoFaccendeDate(p, evento.quante)
+            is EventoFaccende.Date -> testoFaccendeDate(p, evento.quante) +
+                if (evento.immaginiMancate > 0) " " + p.testo(R.string.dai_immagini_mancate) else ""
             EventoFaccende.Bocciata -> p.testo(R.string.boccia_fatto)
             EventoFaccende.Annullata -> p.testo(R.string.togli_faccenda_fatto)
             EventoFaccende.Confermata -> p.testo(R.string.svolto_fatto)
             is EventoFaccende.Approvata -> testoApprovato(p, evento.effetto)
             EventoFaccende.Modificata -> p.testo(R.string.modifica_fatto)
             EventoFaccende.NessunCambio -> p.testo(R.string.modifica_nessun_cambio)
+            is EventoFaccende.ImmaginiCambiate -> p.testo(
+                when {
+                    evento.serverVecchio -> R.string.immagini_server_vecchio
+                    evento.mancate > 0 -> R.string.immagini_non_partite
+                    else -> R.string.immagini_aggiornate
+                },
+            )
             is EventoFaccende.Rifiuto -> {
                 val nome = famiglia.figli.firstOrNull { it.id == evento.figlioId }?.nome
                 messaggioRifiutoFaccende(p, evento.codice, evento.gesto, nome)
@@ -209,7 +221,11 @@ fun LavoriScreen(
         dispositiviSenzaBlocco(famiglia.figlioScelto?.dispositivi.orEmpty())
     }
 
-    androidx.compose.runtime.CompositionLocalProvider(LocalConApprovazione provides stato.conApprovazione) {
+    val caricaImmagine: suspend (Long, Int) -> ImageBitmap? = remember(vm) { { id, n -> vm.caricaImmagine(id, n) } }
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalConApprovazione provides stato.conApprovazione,
+        LocalCaricaImmagine provides caricaImmagine, // (0.25) le immagini allegate
+    ) {
     SchermataColorata(Sezione.LAVORI) {
         Scaffold(
             containerColor = Color.Transparent,
@@ -620,6 +636,8 @@ private fun TitoloENota(faccenda: Faccenda, attenuato: Boolean = false) {
             modifier = Modifier.padding(top = Spazi.xs),
         )
     }
+    // (0.25, contratto v4.3) Le immagini che il genitore ha allegato.
+    PulsanteImmagini(faccenda)
 }
 
 /** Una riga sottovoce (chi, quando, le bocciature). */
@@ -914,12 +932,18 @@ private fun VistaFoto(
     onSvolto: (Faccenda) -> Unit,
 ) {
     val p = parole()
+    // (0.25) I margini di sicurezza (barra di stato, barra di navigazione, ritaglio della
+    // fotocamera) letti FUORI dal dialogo: su alcuni telefoni (Motorola) dentro un dialogo a
+    // tutto schermo arrivano a zero, e "Approva"/"Boccia" finivano sotto la barra di
+    // navigazione, tagliati. Dentro si usa il più grande dei due.
+    val esterni = WindowInsets.safeDrawing.asPaddingValues()
     Dialog(
         onDismissRequest = onChiudi,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
+        val margini = marginiPiuGrandi(esterni, WindowInsets.safeDrawing.asPaddingValues())
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+            Column(modifier = Modifier.fillMaxSize().padding(margini)) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     IconButton(onClick = onChiudi) {
                         Icon(Icons.Filled.Close, stringResource(R.string.foto_chiudi), tint = Color.White)
@@ -1042,4 +1066,16 @@ private fun VistaFoto(
             }
         }
     }
+}
+
+/** (0.25) Lato per lato, il margine più grande tra due: quello dello schermo e quello del dialogo. */
+@Composable
+internal fun marginiPiuGrandi(a: PaddingValues, b: PaddingValues): PaddingValues {
+    val direzione = LocalLayoutDirection.current
+    return PaddingValues(
+        start = maxOf(a.calculateStartPadding(direzione), b.calculateStartPadding(direzione)),
+        top = maxOf(a.calculateTopPadding(), b.calculateTopPadding()),
+        end = maxOf(a.calculateEndPadding(direzione), b.calculateEndPadding(direzione)),
+        bottom = maxOf(a.calculateBottomPadding(), b.calculateBottomPadding()),
+    )
 }

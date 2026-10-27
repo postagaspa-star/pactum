@@ -85,6 +85,7 @@ import java.time.LocalDate
 import eu.stgm.pactum.design.SchermataColorata
 import eu.stgm.pactum.design.Sezione
 import eu.stgm.pactum.design.rememberContatore
+import eu.stgm.pactum.genitore.servizio.Fermate
 
 // (0.15) La Panoramica risponde a UNA domanda: "com'è andata, e c'è qualcosa per
 // me?". Dall'alto:
@@ -302,9 +303,13 @@ private fun ContenutoPanoramica(
     val salvato by impostazioni.ultimoControlloAvvisi.collectAsState(initial = null)
     var avvisiAccesi by remember { mutableStateOf(Vedetta.avvisiAccesi(context)) }
     var inRete by remember { mutableStateOf(Vedetta.reteDisponibile(context)) }
+    // (0.25) Se Pactum era stato chiuso del tutto (e gli avvisi fermi), si dice una volta.
+    val viste = Fermate.viste.intValue
+    var fermata by remember(viste) { mutableStateOf(Fermate.daDire(Fermate.ultima(context), System.currentTimeMillis(), Fermate.vistaFino(context))) }
     LifecycleResumeEffect(Unit) {
         avvisiAccesi = Vedetta.avvisiAccesi(context)
         inRete = Vedetta.reteDisponibile(context)
+        fermata = Fermate.daDire(Fermate.ultima(context), System.currentTimeMillis(), Fermate.vistaFino(context))
         onPauseOrDispose { }
     }
     // (0.16) "Adesso" si rilegge a ogni giro di rilettura (ogni minuto), non solo
@@ -336,6 +341,7 @@ private fun ContenutoPanoramica(
         ricevutaAlle = ricevutaAlle,
         sessioniInCorso = sessioni.inCorso,
         fotoDaApprovare = if (figlio != null) fotoApprovare else 0,
+        fermato = fermata?.quando?.let(Instant::ofEpochMilli),
     )
 
     var tuttiDaGuardare by rememberSaveable { mutableStateOf(false) }
@@ -576,6 +582,17 @@ private fun RigaInCimaVista(riga: RigaInCima) {
             azione = stringResource(R.string.avvisi_risolvi),
             onAzione = apriAvvisi,
         )
+        is RigaInCima.AvvisiFermati -> {
+            val context = LocalContext.current
+            RigaStato(
+                testo = stringResource(R.string.avvisi_fermati_panoramica, alleQuando(p, riga.quando)),
+                tono = Tono.Attenzione,
+                azione = stringResource(R.string.avvisi_fermati_ho_capito),
+                onAzione = {
+                    Fermate.ultima(context)?.let { Fermate.segnaVista(context, it) }
+                },
+            )
+        }
         is RigaInCima.AvvisiInRitardo -> RigaStato(
             testo = stringResource(R.string.avvisi_controllo_vecchio, alleQuando(p, riga.ultimoControllo)),
             azione = stringResource(R.string.avvisi_risolvi),

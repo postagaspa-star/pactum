@@ -30,9 +30,18 @@ import kotlin.coroutines.EmptyCoroutineContext
 // e il modo di trasformare i byte in un'immagine; i test gli danno un server finto.
 
 /** Un esito da dire una volta (snackbar) e poi consumare. */
+/** (0.25, v4.3) Le immagini allegate a un lavoro, al massimo (le stesse del server). */
+const val IMMAGINI_PER_LAVORO = 3
+
 sealed interface EventoFaccende {
-    /** Faccende date: quante. */
-    data class Date(val quante: Int) : EventoFaccende
+    /** Faccende date: quante. (0.25) [immaginiMancate] = le immagini che non sono partite. */
+    data class Date(val quante: Int, val immaginiMancate: Int = 0) : EventoFaccende
+
+    /**
+     * (0.25, v4.3) Le immagini di un lavoro cambiate (aggiunte o tolte); [mancate] =
+     * quelle che non sono partite; [serverVecchio] = il server non le conosce.
+     */
+    data class ImmaginiCambiate(val mancate: Int = 0, val serverVecchio: Boolean = false) : EventoFaccende
     data object Bocciata : EventoFaccende
     data object Annullata : EventoFaccende
 
@@ -249,7 +258,14 @@ class GestoreFaccende<I : Any>(
      * senza ritentativi automatici: se la rete cade si rilegge l'elenco e decide
      * [esitoDopoRispostaPersa] (con l'elenco mai letto prima: incerto).
      */
-    fun daiFaccende(figlioId: Long, titoli: List<String>, nota: String?, bloccoDa: String?, io: RiferimentoGenitore?) {
+    fun daiFaccende(
+        figlioId: Long,
+        titoli: List<String>,
+        nota: String?,
+        bloccoDa: String?,
+        io: RiferimentoGenitore?,
+        immagini: List<ByteArray> = emptyList(),
+    ) {
         if (_stato.value.invio) return
         val puliti = titoli.map { ripulisci(it) }.filter { it.isNotEmpty() }
         if (puliti.isEmpty()) return
@@ -264,12 +280,17 @@ class GestoreFaccende<I : Any>(
                 bloccoDa = bloccoDa,
             )
             when (val esito = postino.daiFaccende(corpo)) {
-                is EsitoScrittura.Riuscito -> EventoFaccende.Date(esito.dato?.size?.takeIf { it > 0 } ?: puliti.size)
+                is EsitoScrittura.Riuscito -> {
+                    // (0.25, v4.3) Le immagini, le stesse per tutti i lavori di questa volta.
+                    val date = esito.dato.orEmpty()
+                    val mancate = if (date.isEmpty()) immagini.size else allegaATutti(postino, date.map { it.id }, immagini)
+                    EventoFaccende.Date(date.size.takeIf { it > 0 } ?: puliti.size, mancate)
+                }
                 is EsitoScrittura.Rifiutato -> EventoFaccende.Rifiuto(esito.errore, GestoFaccende.DAI, figlioId)
                 EsitoScrittura.Fallito -> {
                     val dopo = (postino.leggiFaccende(figlioId) as? EsitoFaccende.Lette)?.faccende
                     when (val risultato = esitoDopoRispostaPersa(prima, dopo, puliti, io, inizio)) {
-                        is DopoRispostaPersa.Date -> EventoFaccende.Date(risultato.quante)
+                        is DopoRispostaPersa.Date -> EventoFaccende.Date(risultato.quante, immagini.size)
                         DopoRispostaPersa.Incerto ->
                             EventoFaccende.Rifiuto(CodiciErrore.ESITO_INCERTO, GestoFaccende.DAI, figlioId)
                         DopoRispostaPersa.NonDate -> EventoFaccende.Rifiuto(null, GestoFaccende.DAI, figlioId)
@@ -480,6 +501,57 @@ class GestoreFaccende<I : Any>(
 
     fun consumaEvento() {
         _stato.value = _stato.value.copy(evento = null)
+    }
+
+    /**
+     * (0.25, v4.3) Le [immagini] a ognuno dei lavori [ids], coi numeri 1, 2, 3.
+     * Restituisce quante non sono partite (un invio per lavoro e immagine).
+     */
+    private suspend fun allegaATutti(postino: FonteFaccende, ids: List<Long>, immagini: List<ByteArray>): Int {
+        var mancate = 0
+        for (id in ids) {
+            immagini.take(IMMAGINI_PER_LAVORO).forEachIndexed { i, dati ->
+                if (postino.allegaImmagine(id, i + 1, dati) !is EsitoScrittura.Riuscito) mancate++
+            }
+        }
+        return mancate
+    }
+
+    /** (0.25, v4.3) Altre immagini a un lavoro, nei numeri liberi (al massimo 3 in tutto). */
+    fun allegaImmagini(figlioId: Long?, faccenda: Faccenda, immagini: List<ByteArray>) {
+        if (immagini.isEmpty()) return
+        val liberi = (1..IMMAGINI_PER_LAVORO).filter { n -> faccenda.immagini.none { it.n == n } }
+        gesto(figlioId, GestoFaccende.MODIFICA) { postino ->
+            var mancate = 0
+            var serverVecchio = false
+            immagini.zip(liberi).forEach { (dati, n) ->
+                when (val esito = postino.allegaImmagine(faccenda.id, n, dati)) {
+                    is EsitoScrittura.Riuscito -> Unit
+                    is EsitoScrittura.Rifiutato -> {
+                        mancate++
+                        if (esito.errore == CodiciErrore.SERVER_DA_AGGIORNARE) serverVecchio = true
+                    }
+                    EsitoScrittura.Fallito -> mancate++
+                }
+            }
+            EventoFaccende.ImmaginiCambiate(mancate + (immagini.size - liberi.size).coerceAtLeast(0), serverVecchio)
+        }
+    }
+
+    /** (0.25, v4.3) Toglie l'immagine numero [n] di un lavoro. */
+    fun togliImmagine(figlioId: Long?, faccenda: Faccenda, n: Int) = gesto(figlioId, GestoFaccende.MODIFICA) { postino ->
+        when (val esito = postino.togliImmagine(faccenda.id, n)) {
+            is EsitoScrittura.Riuscito -> EventoFaccende.ImmaginiCambiate()
+            is EsitoScrittura.Rifiutato -> EventoFaccende.ImmaginiCambiate(1, esito.errore == CodiciErrore.SERVER_DA_AGGIORNARE)
+            EsitoScrittura.Fallito -> EventoFaccende.ImmaginiCambiate(1)
+        }
+    }
+
+    /** (0.25, v4.3) Un'immagine allegata, pronta da mostrare; null se non arriva. */
+    suspend fun caricaImmagine(faccendaId: Long, n: Int): I? {
+        val postino = fonte() ?: return null
+        val esito = postino.scaricaImmagine(faccendaId, n) as? EsitoFoto.Arrivata ?: return null
+        return withContext(contestoDecodifica) { decodifica(esito.byte) }
     }
 
     // --- La foto a tutto schermo ---------------------------------------------------------

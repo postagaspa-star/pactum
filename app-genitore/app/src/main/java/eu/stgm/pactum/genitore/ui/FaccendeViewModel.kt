@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
+import android.net.Uri
+import kotlinx.coroutines.withContext
 
 /**
  * (0.13) Le faccende del figlio scelto (contratto v3.6), nello scope dell'attività:
@@ -76,8 +78,37 @@ class FaccendeViewModel(application: Application) : AndroidViewModel(application
 
     fun aggiorna(figlioId: Long?) = gestore.aggiorna(figlioId)
 
-    fun daiFaccende(figlioId: Long, titoli: List<String>, nota: String?, bloccoDa: String?, io: RiferimentoGenitore?) =
-        gestore.daiFaccende(figlioId, titoli, nota, bloccoDa, io)
+    /** (0.25) Con le [immagini] scelte dalla galleria, preparate qui (fuori dal filo principale). */
+    fun daiFaccende(
+        figlioId: Long,
+        titoli: List<String>,
+        nota: String?,
+        bloccoDa: String?,
+        io: RiferimentoGenitore?,
+        immagini: List<Uri> = emptyList(),
+    ) {
+        if (immagini.isEmpty()) {
+            gestore.daiFaccende(figlioId, titoli, nota, bloccoDa, io)
+            return
+        }
+        viewModelScope.launch {
+            val dati = withContext(Dispatchers.IO) { immagini.mapNotNull { PreparaImmagine.jpeg(getApplication(), it) } }
+            gestore.daiFaccende(figlioId, titoli, nota, bloccoDa, io, dati)
+        }
+    }
+
+    /** (0.25, v4.3) Altre immagini a un lavoro, dalla galleria. */
+    fun allegaImmagini(figlioId: Long?, faccenda: Faccenda, immagini: List<Uri>) {
+        viewModelScope.launch {
+            val dati = withContext(Dispatchers.IO) { immagini.mapNotNull { PreparaImmagine.jpeg(getApplication(), it) } }
+            gestore.allegaImmagini(figlioId, faccenda, dati)
+        }
+    }
+
+    fun togliImmagine(figlioId: Long?, faccenda: Faccenda, n: Int) = gestore.togliImmagine(figlioId, faccenda, n)
+
+    /** (0.25, v4.3) Un'immagine allegata, per il visore e le miniature. */
+    suspend fun caricaImmagine(faccendaId: Long, n: Int): ImageBitmap? = gestore.caricaImmagine(faccendaId, n)
 
     fun boccia(figlioId: Long?, faccenda: Faccenda, nota: String?) = gestore.boccia(figlioId, faccenda, nota)
 

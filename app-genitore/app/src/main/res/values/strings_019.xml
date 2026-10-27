@@ -5,4 +5,22 @@
     <string name="studio_anello_di">di %1$d min</string>
     <!-- Cosa legge TalkBack sull'anello. -->
     <string name="studio_anello_descrizione">%1$d minuti di attività su %2$d</string>
+    <!-- (0.25) Pactum era stato chiuso del tutto: gli avvisi non potevano arrivare. %1$s = "alle 9:12" o "il 22/10 alle 9:12" -->
+    <string name="avvisi_fermati_panoramica">Pactum è stato chiuso del tutto %1$s (di solito succede togliendolo dalla lista delle app aperte): finché non l\'hai riaperto non ti è arrivato nessun avviso. Per non perderli, non chiuderlo da lì.</string>
+    <string name="avvisi_fermati_ho_capito">Ho capito</string>
+    <!-- (0.25, contratto v4.3) Le immagini allegate ai lavori di casa. -->
+    <string name="dai_immagini">Immagini (facoltative)</string>
+    <string name="dai_immagini_spiega">Fino a %1$d, dalla galleria: per esempio com\'è fatto bene il lavoro. Valgono per tutti i lavori di questa volta.</string>
+    <string name="dai_immagini_aggiungi">Aggiungi immagini</string>
+    <string name="dai_immagini_togli">Togli l\'immagine</string>
+    <string name="dai_immagini_mancate">Alcune immagini non sono partite: aggiungile da «Cambia» sul lavoro.</string>
+    <string name="lavoro_immagini_guarda">Guarda le immagini (%1$d)</string>
+    <string name="immagini_aggiornate">Immagini aggiornate.</string>
+    <string name="immagini_non_partite">Alcune immagini non sono partite: riprova.</string>
+    <string name="immagini_server_vecchio">Per allegare immagini serve aggiornare il server di Pactum.</string>
+    <string name="visore_chiudi">Chiudi</string>
+    <string name="visore_caricamento">Carico l\'immagine…</string>
+    <string name="visore_errore">L\'immagine non si riesce a caricare.</string>
+    <string name="visore_riprova">Riprova</string>
+    <string name="visore_numero">Immagine %1$d di %2$d</string>
 </resources>

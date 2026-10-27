@@ -54,6 +54,13 @@ sealed interface RigaInCima {
     /** Gli avvisi di Pactum sono spenti su questo telefono (→ Impostazioni, Avvisi). */
     data object AvvisiSpenti : RigaInCima
 
+    /**
+     * (0.25) Pactum era stato chiuso del tutto (dalla lista delle app aperte, o con
+     * "Arresto forzato") a [quando]: fino alla riapertura gli avvisi non potevano
+     * arrivare. Si dice una volta ("Ho capito").
+     */
+    data class AvvisiFermati(val quando: Instant) : RigaInCima
+
     /** Pactum non riesce a guardare il patto da più di 15 minuti (→ Impostazioni, Avvisi). */
     data class AvvisiInRitardo(val ultimoControllo: Instant) : RigaInCima
 
@@ -85,6 +92,8 @@ fun righeInCima(
     sessioniInCorso: List<SessioneRaccontata> = emptyList(),
     /** (0.18, v4.0) Le foto che aspettano l'approvazione di un genitore. */
     fotoDaApprovare: Int = 0,
+    /** (0.25) Quando Pactum era stato chiuso del tutto, se è da dire (Fermate.daDire). */
+    fermato: Instant? = null,
 ): List<RigaInCima> = buildList {
     if (daDecidere > 0) add(RigaInCima.DaDecidere(daDecidere))
     when {
@@ -99,6 +108,7 @@ fun righeInCima(
     silenziosi.forEach { add(RigaInCima.Silenzioso(it)) }
     when {
         !avvisiAccesi -> add(RigaInCima.AvvisiSpenti)
+        fermato != null -> add(RigaInCima.AvvisiFermati(fermato))
         inRete && ultimoControllo != null && controlloVecchio(ultimoControllo, adesso) ->
             add(RigaInCima.AvvisiInRitardo(ultimoControllo))
     }
@@ -114,6 +124,7 @@ fun chiaveRiga(riga: RigaInCima): String = when (riga) {
     is RigaInCima.Silenzioso -> "riga-silenzio-${riga.dispositivo.id}"
     RigaInCima.AvvisiSpenti -> "riga-avvisi"
     is RigaInCima.AvvisiInRitardo -> "riga-avvisi"
+    is RigaInCima.AvvisiFermati -> "riga-avvisi"
     is RigaInCima.DatiVecchi -> "riga-dati-vecchi"
     is RigaInCima.SessioneInCorso -> "riga-sessione-${riga.sessione.svolta.id}"
 }

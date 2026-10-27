@@ -1533,6 +1533,12 @@
       h('p', { class: 'descrizione', id }, f.titolo || 'Lavoro di casa'));
     if (chi) card.append(h('p', { class: 'secondario' }, 'da ' + chi));
     if (f.nota) card.append(h('p', { class: 'secondario' }, f.nota));
+    // (0.26, contratto v4.3) Le immagini allegate dal genitore: qui si dice solo quante sono.
+    const immagini = Array.isArray(f.immagini) ? f.immagini.length : 0;
+    if (immagini > 0) {
+      card.append(h('p', { class: 'piccolo secondario' },
+        (immagini === 1 ? 'C\'è un\'immagine del genitore' : 'Ci sono ' + immagini + ' immagini del genitore') + ': le vedi sul telefono.'));
+    }
     if (T.numero(f.bocciature) > 0) {
       card.append(h('p', { class: 'piccolo secondario' }, 'Il genitore l\'ha rimandato: rifallo e manda una foto nuova dal telefono.'));
     }

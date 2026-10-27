@@ -742,8 +742,10 @@ def test_dopo_la_migrazione_gli_stessi_numeri_di_prima(avvia_v38):
             elenchi = [dopo.get("faccende")] if nome.startswith(("faccende", "patto", "finestra")) else []
             for elenco in elenchi:
                 for f, di_prima in zip(elenco, prima[nome]["faccende"]):
-                    # (v4.0) in piu' da_approvare: false, le foto di prima hanno gia' sbloccato
-                    assert set(f) == set(di_prima) | {"confermata_ts", "confermata_da", "da_approvare"}, nome
+                    # (v4.0) in piu' da_approvare: false, le foto di prima hanno gia' sbloccato;
+                    # (v4.3) e le immagini, nessuna
+                    assert set(f) == set(di_prima) | {"confermata_ts", "confermata_da", "da_approvare", "immagini"}, nome
+                    assert f["immagini"] == [], nome
                     assert (f["confermata_ts"], f["confermata_da"], f["da_approvare"]) == (None, None, False)
             if nome.startswith("blocco"):
                 # il blocco di prima, voce per voce; (v4.0) in piu' rimandato e studio, e
@@ -751,7 +753,7 @@ def test_dopo_la_migrazione_gli_stessi_numeri_di_prima(avvia_v38):
                 assert set(dopo) == set(prima[nome]) | {"rimandato", "studio"}, nome
                 assert (dopo["rimandato"], dopo["studio"]) == (
                     False, {"in_corso": False, "id": None, "inizio_ts": None})
-                assert [{k: v for k, v in voce.items() if k not in ("stato", "foto_ts")}
+                assert [{k: v for k, v in voce.items() if k not in ("stato", "foto_ts", "immagini")}
                         for voce in dopo["da_fare"]] == prima[nome]["da_fare"], nome
                 assert {(voce["stato"], voce["foto_ts"]) for voce in dopo["da_fare"]} <= {("da_fare", None)}
         # le foto ci sono ancora (stanno accanto al database, la migrazione non le tocca)
@@ -829,7 +831,8 @@ def test_una_migrazione_che_non_riesce_lascia_il_database_com_era(avvia_v38, db_
     # si rompe: sono vuote, e un server v3.9 le ignora
     assert all(dopo.pop(tabella) == [] for tabella in
                ("studio_config", "studio_versioni", "studio_svolte", "studio_tratti", "studio_partenze",
-                "regole_un_giorno"))  # (v4.2) anche lei nasce con lo SCHEMA, vuota
+                "regole_un_giorno",  # (v4.2) anche lei nasce con lo SCHEMA, vuota
+                "faccende_immagini"))  # (v4.3) e lei
     assert dopo == prima
     assert _schema(db_v38, "faccende") == schema_faccende
     (copia,) = _copie(db_v38, ".prima-v3.9-")

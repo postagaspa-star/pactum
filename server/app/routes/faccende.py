@@ -43,7 +43,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
-from .. import clock, faccende, famiglia, genitori, studio
+from .. import allegati, clock, faccende, famiglia, genitori, studio
 from ..auth import Identita, richiede_dispositivo, richiede_genitore, richiede_patto
 from ..db import accoda_notifica, get_conn
 from ..faccende import (
@@ -704,3 +704,122 @@ def _consegna(
         if temporanea is not None:
             faccende.togli(temporanea)
     return faccende.una(conn, faccenda_id, Firme(conn), dove)
+
+
+# --- (v4.3) le immagini allegate dal genitore ---
+
+def _numero_o_404(n: int) -> None:
+    if not 1 <= n <= allegati.IMMAGINI_MASSIME:
+        raise HTTPException(status_code=404, detail=allegati.NON_TROVATA)
+
+
+def _cartella_allegati(request: Request) -> str:
+    return allegati.cartella(cartella(request))
+
+
+@router.get("/faccende/{faccenda_id}/immagini/{n}")
+def leggi_immagine(
+    faccenda_id: int,
+    n: int,
+    request: Request,
+    chi: Identita = Depends(richiede_patto),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """Un'immagine allegata, al genitore e ai dispositivi dello stesso figlio."""
+    _numero_o_404(n)
+    del_figlio = chi.figlio_id if chi.ruolo == "dispositivo" else None
+    faccende.faccenda_o_404(conn, faccenda_id, del_figlio)
+    riga = conn.execute(
+        "SELECT 1 FROM faccende_immagini WHERE faccenda_id = ? AND n = ?", (faccenda_id, n)
+    ).fetchone()
+    dati = allegati.leggi(_cartella_allegati(request), faccenda_id, n) if riga is not None else None
+    if dati is None:
+        raise HTTPException(status_code=404, detail=allegati.NON_TROVATA)
+    return Response(content=dati, media_type="image/jpeg", headers={"Cache-Control": "private, no-store"})
+
+
+@router.put("/faccende/{faccenda_id}/immagini/{n}")
+async def allega_immagine(
+    faccenda_id: int,
+    n: int,
+    request: Request,
+    chi: Identita = Depends(richiede_genitore),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """L'immagine numero `n` (1..3) di un lavoro aperto: la mette o la sostituisce. I
+    controlli, in quest'ordine: il numero e il lavoro (404), la misura (413), il JPEG (422
+    immagine_non_valida), il lavoro ancora aperto (409 non_modificabile). Corpo image/jpeg
+    letto a pezzi fino a 4 MB, come la foto del figlio."""
+    _numero_o_404(n)
+    await run_in_threadpool(faccende.faccenda_o_404, conn, faccenda_id)
+    troppo = HTTPException(status_code=413, detail={"errore": "immagine_troppo_grande"})
+    dichiarata = request.headers.get("content-length", "")
+    if dichiarata.isdigit() and int(dichiarata) > FOTO_MASSIMA_BYTE:
+        raise troppo
+    dati = bytearray()
+    try:
+        async for pezzo in request.stream():
+            dati += pezzo
+            if len(dati) > FOTO_MASSIMA_BYTE:
+                raise troppo
+    except ClientDisconnect:
+        return Response(status_code=400)
+
+    def pulita() -> bytes:
+        try:
+            return faccende.pulisci_jpeg(bytes(dati))
+        except FotoNonValida:
+            raise HTTPException(status_code=422, detail={"errore": "immagine_non_valida"})
+
+    immagine = await run_in_threadpool(pulita)
+    return await run_in_threadpool(_allega, conn, faccenda_id, n, chi, immagine, request)
+
+
+def _allega(conn: sqlite3.Connection, faccenda_id: int, n: int, chi: Identita, immagine: bytes, request: Request) -> dict:
+    ts = clock.iso(clock.now())
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        genitori.ancora_valido(conn, chi)
+        riga = faccende.faccenda_o_404(conn, faccenda_id)
+        aperta = riga["stato"] == "da_fare" or (riga["stato"] == "fatta" and riga["confermata_ts"] is None)
+        if not aperta:
+            raise HTTPException(status_code=409, detail={"errore": "non_modificabile"})
+        allegati.salva(_cartella_allegati(request), faccenda_id, n, immagine)
+        conn.execute(
+            "INSERT INTO faccende_immagini (faccenda_id, n, ts, genitore_id) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT (faccenda_id, n) DO UPDATE SET ts = excluded.ts, genitore_id = excluded.genitore_id",
+            (faccenda_id, n, ts, chi.genitore_id),
+        )
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    return faccende.una(conn, faccenda_id, Firme(conn), cartella(request))
+
+
+@router.delete("/faccende/{faccenda_id}/immagini/{n}")
+def togli_immagine(
+    faccenda_id: int,
+    n: int,
+    request: Request,
+    chi: Identita = Depends(richiede_genitore),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """Toglie l'immagine numero `n` di un lavoro (404 se non c'e'); le altre restano col
+    loro numero."""
+    _numero_o_404(n)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        genitori.ancora_valido(conn, chi)
+        faccende.faccenda_o_404(conn, faccenda_id)
+        tolta = conn.execute(
+            "DELETE FROM faccende_immagini WHERE faccenda_id = ? AND n = ?", (faccenda_id, n)
+        ).rowcount
+        if not tolta:
+            raise HTTPException(status_code=404, detail=allegati.NON_TROVATA)
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    allegati.togli(_cartella_allegati(request), faccenda_id, n)
+    return faccende.una(conn, faccenda_id, Firme(conn), cartella(request))

@@ -67,7 +67,7 @@ def test_la_foto_non_sblocca_aspetta_l_approvazione(client, famiglia, orologio):
     assert blocco == {
         "attivo": True, "dal": ORA, "prossimo": None, **SENZA_STUDIO,
         "da_fare": [{"id": letto["id"], "titolo": "Letto", "nota": None, "blocco_da": ORA, "creata_da": MAMMA,
-                     "bocciature": 0, "ultima_bocciatura": None, "stato": "fatta", "foto_ts": _t(10)}],
+                     "bocciature": 0, "ultima_bocciatura": None, "stato": "fatta", "foto_ts": _t(10), "immagini": []}],
     }
     # uguale dal computer, nel patto, nella finestra e in GET /api/faccende (che ha il blocco)
     for headers in (FIGLIO, famiglia.pc):

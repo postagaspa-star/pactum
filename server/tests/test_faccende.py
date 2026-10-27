@@ -178,6 +178,7 @@ def test_dare_faccende(client, famiglia):
         "chiusa_ts": None, "annullata_da": None,
         "confermata_ts": None, "confermata_da": None,  # (v3.9)
         "da_approvare": False,  # (v4.0)
+        "immagini": [],  # (v4.3)
         "storia": [{"tipo": "data", "ts": ORA, "genitore": MAMMA}],
     }
     # l'avviso arriva a tutti i dispositivi di Luca, e a nessun altro
@@ -283,12 +284,12 @@ def test_il_blocco_si_vede_uguale_dappertutto(client, famiglia, orologio):
         "attivo": True, "dal": ORA, "prossimo": None, **SENZA_STUDIO,  # (v4.0)
         "da_fare": [  # (v4.0) con stato e foto_ts
             {"id": lavatrice["id"], "titolo": "Lavatrice", "nota": "i bianchi", "blocco_da": ORA, "creata_da": MAMMA,
-             "bocciature": 0, "ultima_bocciatura": None, "stato": "da_fare", "foto_ts": None},
+             "bocciature": 0, "ultima_bocciatura": None, "stato": "da_fare", "foto_ts": None, "immagini": []},
             {"id": letto["id"], "titolo": "Letto", "nota": None, "blocco_da": ORA, "creata_da": MAMMA,
-             "bocciature": 0, "ultima_bocciatura": None, "stato": "da_fare", "foto_ts": None},
+             "bocciature": 0, "ultima_bocciatura": None, "stato": "da_fare", "foto_ts": None, "immagini": []},
             {"id": cane["id"], "titolo": "Cane", "nota": None, "blocco_da": "2026-07-14T16:00:00+00:00",
              "creata_da": GENITORE_1, "bocciature": 0, "ultima_bocciatura": None, "stato": "da_fare",
-             "foto_ts": None},
+             "foto_ts": None, "immagini": []},  # (v4.3) immagini
         ],
     }
     elenco = _elenco(client)

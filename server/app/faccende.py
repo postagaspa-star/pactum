@@ -38,6 +38,7 @@ from datetime import datetime, timedelta
 from fastapi import HTTPException
 
 from . import clock
+from . import allegati
 from .controllo_corpo import INTERO_MASSIMO, INTERO_MINIMO
 from .genitori import Firme
 
@@ -393,7 +394,8 @@ def _ultima_bocciatura(riga: sqlite3.Row, firme: Firme) -> dict | None:
 
 
 def formatta(
-    riga: sqlite3.Row, firme: Firme, cartella: str, storia: list | None = None, dal: str = _MAI
+    riga: sqlite3.Row, firme: Firme, cartella: str, storia: list | None = None, dal: str = _MAI,
+    immagini: list | None = None,
 ) -> dict:
     """La faccenda come la vedono le app. `storia`: quella gia' letta da chi formatta un
     elenco (storie); senza, la si legge qui. (v4.0) `dal`: `faccende_approvazione_dal`,
@@ -421,6 +423,8 @@ def formatta(
         # (v4.0) fatta, con la foto dalla v4.0, e nessun genitore l'ha ancora approvata
         "da_approvare": da_approvare(riga, dal),
         "storia": storia,
+        # (v4.3) le immagini allegate dal genitore: [{"n", "ts"}], vuota se nessuna
+        "immagini": immagini if immagini is not None else [],
     }
 
 
@@ -453,7 +457,8 @@ def faccende_del_figlio(
         (figlio_id, approvazione, dal),
     ).fetchall()
     storia = storie(conn, [r["id"] for r in righe], firme)
-    return [formatta(r, firme, cartella, storia[r["id"]], approvazione) for r in righe]
+    immagini = allegati.elenco(conn, [r["id"] for r in righe])
+    return [formatta(r, firme, cartella, storia[r["id"]], approvazione, immagini[r["id"]]) for r in righe]
 
 
 # (v3.9) Le lettere che Unicode non scompone in base + segno: per la ricerca valgono la
@@ -497,14 +502,16 @@ def cerca(
     righe = righe[:RISULTATI_RICERCA]
     storia = storie(conn, [r["id"] for r in righe], firme)
     approvazione = approvazione_dal(conn)
-    return [formatta(r, firme, cartella, storia[r["id"]], approvazione) for r in righe], altre
+    immagini = allegati.elenco(conn, [r["id"] for r in righe])
+    return [formatta(r, firme, cartella, storia[r["id"]], approvazione, immagini[r["id"]]) for r in righe], altre
 
 
 def una(conn: sqlite3.Connection, faccenda_id: int, firme: Firme, cartella: str) -> dict:
     """Una faccenda sola, con la sua storia: la risposta delle scritture."""
     riga = faccenda_o_404(conn, faccenda_id)
     return formatta(
-        riga, firme, cartella, storie(conn, [faccenda_id], firme)[faccenda_id], approvazione_dal(conn)
+        riga, firme, cartella, storie(conn, [faccenda_id], firme)[faccenda_id], approvazione_dal(conn),
+        allegati.elenco(conn, [faccenda_id])[faccenda_id],
     )
 
 
@@ -563,6 +570,7 @@ def blocco(conn: sqlite3.Connection, figlio_id: int, ora: datetime, firme: Firme
     bloccano = [r["blocco_da"] for r in righe if r["blocco_da"] <= adesso]
     future = [r["blocco_da"] for r in righe if r["blocco_da"] > adesso]
     in_corso = studio_in_corso(conn, figlio_id)
+    immagini = allegati.elenco(conn, [r["id"] for r in righe])
     return {
         "attivo": bool(bloccano),
         "dal": min(bloccano) if bloccano else None,
@@ -584,6 +592,7 @@ def blocco(conn: sqlite3.Connection, figlio_id: int, ora: datetime, firme: Firme
                 "ultima_bocciatura": _ultima_bocciatura(r, firme),
                 "stato": r["stato"],  # (v4.0) da_fare | fatta (da approvare)
                 "foto_ts": r["foto_ts"],  # (v4.0) null per un lavoro da fare
+                "immagini": immagini[r["id"]],  # (v4.3) le immagini allegate dal genitore
             }
             for r in righe
         ],

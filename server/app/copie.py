@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from . import clock, config, faccende
+from . import allegati
 from .config import Settings
 
 log = logging.getLogger("uvicorn.error")
@@ -254,7 +255,10 @@ class PuliziaFoto:
 
     def _pulisci(self, ora: datetime) -> int | None:
         try:
-            return faccende.pulisci_foto(self.db_path, ora)
+            tolti = faccende.pulisci_foto(self.db_path, ora)
+            # (v4.3) Anche le immagini dei lavori, nella loro sottocartella.
+            tolti += allegati.pulisci(self.db_path, faccende.cartella_foto(self.db_path), ora)
+            return tolti
         except Exception as errore:
             log.error("pulizia delle foto NON riuscita: %s. Riprovo domani dopo le 03:00.", errore)
             return None

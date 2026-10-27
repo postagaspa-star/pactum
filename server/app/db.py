@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import Request
 
 from . import clock, config
+from . import allegati as _allegati  # (v4.3) le immagini dei lavori
 
 # Lo stesso logger di main.py: uvicorn lo manda nel log del container.
 log = logging.getLogger("uvicorn.error")
@@ -649,7 +650,7 @@ CREATE TABLE IF NOT EXISTS notifiche (
     figlio_id INTEGER REFERENCES figli(id),
     dispositivo_id INTEGER REFERENCES dispositivi(id)
 );
-""" + TABELLE_SESSIONI + TABELLE_GENITORI + TABELLA_FACCENDE + TABELLE_STUDIO + TABELLA_REGOLE_UN_GIORNO
+""" + TABELLE_SESSIONI + TABELLE_GENITORI + TABELLA_FACCENDE + TABELLE_STUDIO + TABELLA_REGOLE_UN_GIORNO + _allegati.TABELLA
 
 # (v3.1) Chi ha letto una notifica del figlio: ogni dispositivo per conto suo, cosi'
 # una notifica per tutto il figlio (il segno) arriva al telefono E al computer anche
